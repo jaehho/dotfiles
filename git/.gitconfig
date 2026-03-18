@@ -1,9 +1,23 @@
-[credential "https://github.com"]
-	helper = 
-	helper = !/usr/bin/gh auth git-credential
-[credential "https://gist.github.com"]
-	helper = 
-	helper = !/usr/bin/gh auth git-credential
 [user]
 	email = jaeho2025@gmail.com
-	name = Jaeho
+	name = Jaeho Cho
+[init]
+	defaultBranch = main
+[credential "https://github.com"]
+	helper = !/usr/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = !/usr/bin/gh auth git-credential
+[core]
+	editor = nvim
+	hooksPath = ~/.git-hooks
+[pull]
+	rebase = false
+[push]
+	autoSetupRemote = true
+[alias]
+	co = checkout
+	br = branch
+	ci = commit
+	st = !git fetch --all && git status
+	unstage = reset HEAD --
+	lg = log --all --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(auto)%d%C(reset)'

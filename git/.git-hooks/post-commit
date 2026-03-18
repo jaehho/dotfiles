@@ -1,0 +1,10 @@
+#!/bin/sh
+commit_hash=$(git rev-parse --short HEAD)
+if command -v wl-copy >/dev/null 2>&1; then
+    echo -n "$commit_hash" | wl-copy
+elif command -v xclip >/dev/null 2>&1; then
+    echo -n "$commit_hash" | xclip -selection clipboard
+else
+    echo "No clipboard tool found; skipping copy"
+fi
+echo "Commit hash copied to clipboard: $commit_hash"
