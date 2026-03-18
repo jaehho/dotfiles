@@ -1,0 +1,48 @@
+# Mako notification daemon — Catppuccin Mocha theme
+
+# Appearance
+font=JetBrainsMono Nerd Font 11
+background-color=#1e1e2eE6
+text-color=#cdd6f4
+border-color=#89b4faCC
+border-size=2
+border-radius=12
+width=380
+padding=12
+margin=10
+
+# Behavior
+default-timeout=5000
+layer=overlay
+anchor=top-right
+icons=1
+icon-path=/usr/share/icons/Papirus-Dark
+max-icon-size=48
+
+# Grouping
+group-by=app-name
+
+# Progress bar (volume/brightness OSD)
+progress-color=source #89b4fa
+
+# Do-not-disturb mode
+[mode=do-not-disturb]
+invisible=1
+
+# Urgency overrides
+[urgency=low]
+border-color=#a6e3a1CC
+default-timeout=3000
+
+[urgency=normal]
+border-color=#89b4faCC
+default-timeout=5000
+
+[urgency=high]
+border-color=#f38ba8CC
+default-timeout=0
+
+# Persistent normal notification (blue border, no timeout)
+# Usage: notify-send -c persistent "Title" "Body"
+[category=persistent]
+default-timeout=0

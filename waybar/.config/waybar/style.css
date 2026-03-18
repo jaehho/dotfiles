@@ -1,0 +1,252 @@
+* {
+    font-family: "JetBrainsMono Nerd Font", "Noto Sans", monospace;
+    font-size: 13px;
+    min-height: 0;
+}
+
+window#waybar {
+    background-color: rgba(30, 30, 46, 0.9);
+    color: #cdd6f4;
+    border-bottom: 2px solid rgba(137, 180, 250, 0.3);
+}
+
+/* ── Base pill styling for all modules ── */
+#workspaces,
+#window,
+#mpris,
+#clock,
+#tray,
+#idle_inhibitor,
+#cpu,
+#memory,
+#temperature,
+#pulseaudio,
+#backlight,
+#battery,
+#bluetooth,
+#network,
+#custom-power {
+    background-color: rgba(49, 50, 68, 0.6);
+    padding: 0 10px;
+    margin: 4px 0;
+    transition: all 0.3s ease;
+}
+
+/* ── Pill group border-radius ── */
+
+/* Standalone pills */
+#workspaces,
+#window,
+#mpris,
+#clock,
+#custom-power {
+    border-radius: 12px;
+}
+
+/* Utilities group: tray + idle_inhibitor */
+#tray {
+    border-radius: 12px 0 0 12px;
+    border-right: 1px solid rgba(108, 112, 134, 0.3);
+}
+#idle_inhibitor {
+    border-radius: 0 12px 12px 0;
+}
+
+/* System group: cpu + memory + temperature */
+#cpu {
+    border-radius: 12px 0 0 12px;
+    border-right: 1px solid rgba(108, 112, 134, 0.3);
+}
+#memory {
+    border-radius: 0;
+    border-right: 1px solid rgba(108, 112, 134, 0.3);
+}
+#temperature {
+    border-radius: 0 12px 12px 0;
+}
+
+/* A/V group: pulseaudio + backlight */
+#pulseaudio {
+    border-radius: 12px 0 0 12px;
+    border-right: 1px solid rgba(108, 112, 134, 0.3);
+}
+#backlight {
+    border-radius: 0 12px 12px 0;
+}
+
+/* Connectivity group: battery + bluetooth + network */
+#battery {
+    border-radius: 12px 0 0 12px;
+    border-right: 1px solid rgba(108, 112, 134, 0.3);
+}
+#bluetooth {
+    border-radius: 0;
+    border-right: 1px solid rgba(108, 112, 134, 0.3);
+}
+#network {
+    border-radius: 0 12px 12px 0;
+}
+
+/* ── Hover effect for interactive modules ── */
+#workspaces button:hover,
+#window:hover,
+#mpris:hover,
+#clock:hover,
+#tray:hover,
+#idle_inhibitor:hover,
+#cpu:hover,
+#memory:hover,
+#temperature:hover,
+#pulseaudio:hover,
+#backlight:hover,
+#battery:hover,
+#bluetooth:hover,
+#network:hover,
+#custom-power:hover {
+    background-color: rgba(69, 71, 90, 0.8);
+}
+
+/* ── Workspaces ── */
+#workspaces button {
+    padding: 0 8px;
+    color: #6c7086;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+#workspaces button.active {
+    color: #89b4fa;
+    border-bottom: 2px solid #89b4fa;
+}
+
+#workspaces button.urgent {
+    color: #f38ba8;
+}
+
+/* ── Window ── */
+#window {
+    color: #a6adc8;
+}
+
+/* ── Clock ── */
+#clock {
+    color: #cdd6f4;
+    font-weight: bold;
+}
+
+/* ── CPU ── */
+#cpu {
+    color: #fab387;
+}
+
+/* ── Memory ── */
+#memory {
+    color: #cba6f7;
+}
+
+/* ── Temperature ── */
+#temperature {
+    color: #89b4fa;
+}
+
+#temperature.warning {
+    color: #eba0ac;
+}
+
+#temperature.critical {
+    color: #f38ba8;
+    animation: blink 0.5s linear infinite alternate;
+}
+
+/* ── MPRIS ── */
+#mpris {
+    color: #b4befe;
+}
+
+#mpris.paused {
+    color: #6c7086;
+}
+
+/* ── Bluetooth ── */
+#bluetooth {
+    color: #89b4fa;
+}
+
+#bluetooth.off {
+    color: #6c7086;
+}
+
+/* ── Battery ── */
+#battery {
+    color: #a6e3a1;
+}
+
+#battery.charging {
+    color: #a6e3a1;
+}
+
+#battery.warning:not(.charging) {
+    color: #fab387;
+}
+
+#battery.critical:not(.charging) {
+    color: #f38ba8;
+    animation: blink 0.5s linear infinite alternate;
+}
+
+@keyframes blink {
+    to {
+        color: #ffffff;
+    }
+}
+
+/* ── Network ── */
+#network {
+    color: #89dceb;
+}
+
+#network.disconnected {
+    color: #f38ba8;
+}
+
+/* ── Pulseaudio ── */
+#pulseaudio {
+    color: #f9e2af;
+}
+
+#pulseaudio.muted {
+    color: #6c7086;
+}
+
+/* ── Backlight ── */
+#backlight {
+    color: #f9e2af;
+}
+
+/* ── Idle inhibitor ── */
+#idle_inhibitor {
+    color: #6c7086;
+}
+
+#idle_inhibitor.activated {
+    color: #f9e2af;
+}
+
+/* ── Tray ── */
+#tray {
+    /* padding handled by pill base */
+}
+
+/* ── Power ── */
+#custom-power {
+    color: #f38ba8;
+    font-size: 16px;
+}
+
+/* ── Tooltip ── */
+tooltip {
+    background-color: #1e1e2e;
+    border: 1px solid #89b4fa;
+    border-radius: 8px;
+}
