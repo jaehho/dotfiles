@@ -224,13 +224,15 @@ vim.keymap.set('n', '<leader>tp', function()
   end
 
   local src = vim.api.nvim_buf_get_name(0)
-  local pdf = src:gsub('%.typ$', '.pdf')
+  local build_dir = vim.fn.fnamemodify(src, ':h') .. '/build'
+  vim.fn.mkdir(build_dir, 'p')
+  local pdf = build_dir .. '/' .. vim.fn.fnamemodify(src, ':t'):gsub('%.typ$', '.pdf')
   -- Compile once so the PDF exists before zathura opens
-  vim.system({ 'typst', 'compile', src }):wait()
+  vim.system({ 'typst', 'compile', src, pdf }):wait()
   -- Open typst watch in a small tmux pane below
   local result = vim.system({
-    'tmux', 'split-window', '-v', '-d', '-l', '10', '-P', '-F', '#{pane_id}',
-    'typst watch ' .. vim.fn.shellescape(src),
+    'tmux', 'split-window', '-v', '-d', '-l', '6', '-P', '-F', '#{pane_id}',
+    'typst watch ' .. vim.fn.shellescape(src) .. ' ' .. vim.fn.shellescape(pdf),
   }):wait()
   local pane_id = vim.trim(result.stdout or '')
   local zathura_id = vim.fn.jobstart({ 'zathura', pdf }, {
