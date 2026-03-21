@@ -79,6 +79,10 @@
       }
     ]
   },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "effortLevel": "high",
   "skipDangerousModePermissionPrompt": true,
   "statusLine": {
