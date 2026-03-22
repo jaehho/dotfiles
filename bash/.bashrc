@@ -19,6 +19,8 @@ export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
 
 # Aliases
 alias ls='ls --color=auto'
+alias la='ls -a --color=auto'
+alias ll='ls -la --color=auto'
 alias grep='grep --color=auto'
 
 # ── Hyprland auto-start on TTY1 ────────────────────────────────────────────────

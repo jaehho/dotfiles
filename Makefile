@@ -6,7 +6,7 @@ SHELL := /bin/bash
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # All stow packages (top-level dirs that contain dotfiles mirroring $HOME)
-STOW_PACKAGES := bash git tmux nvim claude hypr mako rofi waybar
+STOW_PACKAGES := bash git tmux nvim claude hypr mako rofi waybar rclone
 
 ## General
 help: ## Show this help message
@@ -39,6 +39,25 @@ system-install: ## Symlink system configs and enable services
 	sudo systemctl enable --now keyd
 	@echo "System configs installed."
 
+## Rclone
+rclone-setup: stow-rclone ## Install rclone, configure OneDrive remote, and enable mount
+	@command -v rclone >/dev/null 2>&1 || { echo "Installing rclone..."; sudo pacman -S --needed --noconfirm rclone; }
+	@if ! rclone listremotes 2>/dev/null | grep -q '^onedrive:'; then \
+		echo "No 'onedrive' remote found. Starting interactive config..."; \
+		echo "  -> Choose 'onedrive' type, leave client_id/secret blank, auto-config: yes"; \
+		rclone config; \
+	else \
+		echo "Remote 'onedrive' already configured."; \
+	fi
+	@mkdir -p ~/OneDrive
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now rclone-onedrive
+	@echo "OneDrive mounted at ~/OneDrive"
+
+rclone-unmount: ## Unmount OneDrive and disable service
+	@systemctl --user disable --now rclone-onedrive 2>/dev/null || true
+	@echo "OneDrive unmounted and service disabled."
+
 ## Status
 status: ## Show current dotfiles state
 	@echo "Stow packages:"
@@ -68,8 +87,13 @@ status: ## Show current dotfiles state
 	done
 	@echo ""
 	@echo "Services:"
-	@for svc in keyd; do \
-		if systemctl is-active "$$svc" >/dev/null 2>&1; then \
+	@for svc in keyd rclone-onedrive; do \
+		if [ "$$svc" = "rclone-onedrive" ]; then \
+			active=$$(systemctl --user is-active "$$svc" 2>/dev/null); \
+		else \
+			active=$$(systemctl is-active "$$svc" 2>/dev/null); \
+		fi; \
+		if [ "$$active" = "active" ]; then \
 			echo "  $$svc: active"; \
 		else \
 			echo "  $$svc: inactive"; \
