@@ -1,10 +1,10 @@
-# Mako notification daemon — Catppuccin Mocha theme
+# Mako notification daemon — Catppuccin Frappe theme
 
 # Appearance
 font=JetBrainsMono Nerd Font 11
-background-color=#1e1e2eE6
-text-color=#cdd6f4
-border-color=#89b4faCC
+background-color=#303446E6
+text-color=#c6d0f5
+border-color=#8caaeeCC
 border-size=2
 border-radius=12
 width=380
@@ -23,7 +23,7 @@ max-icon-size=48
 group-by=app-name
 
 # Progress bar (volume/brightness OSD)
-progress-color=source #89b4fa
+progress-color=source #8caaee
 
 # Do-not-disturb mode
 [mode=do-not-disturb]
@@ -31,15 +31,15 @@ invisible=1
 
 # Urgency overrides
 [urgency=low]
-border-color=#a6e3a1CC
+border-color=#a6d189CC
 default-timeout=3000
 
 [urgency=normal]
-border-color=#89b4faCC
+border-color=#8caaeeCC
 default-timeout=5000
 
 [urgency=high]
-border-color=#f38ba8CC
+border-color=#e78284CC
 default-timeout=0
 
 # Persistent normal notification (blue border, no timeout)

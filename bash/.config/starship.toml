@@ -1,19 +1,19 @@
-# Two-line prompt — Catppuccin Mocha palette
+# Two-line prompt — Catppuccin Frappe palette
 format = """$directory$git_branch$git_status
 $character"""
 
 [directory]
-style = "bold #89b4fa"
+style = "bold #8caaee"
 truncation_length = 3
 truncate_to_repo = true
 
 [git_branch]
 format = " on [$symbol$branch]($style)"
-style = "#a6adc8"
+style = "#a5adce"
 
 [git_status]
 format = " [$all_status$ahead_behind]($style)"
-style = "#f9e2af"
+style = "#e5c890"
 modified = "!"
 untracked = "?"
 staged = "+"
@@ -21,5 +21,5 @@ ahead = "⇡"
 behind = "⇣"
 
 [character]
-success_symbol = "[❯](#a6e3a1)"
-error_symbol = "[❯](#f38ba8)"
+success_symbol = "[❯](#a6d189)"
+error_symbol = "[❯](#e78284)"

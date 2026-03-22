@@ -5,9 +5,9 @@
 }
 
 window#waybar {
-    background-color: rgba(30, 30, 46, 0.9);
-    color: #cdd6f4;
-    border-bottom: 2px solid rgba(137, 180, 250, 0.3);
+    background-color: rgba(48, 52, 70, 0.9);
+    color: #c6d0f5;
+    border-bottom: 2px solid rgba(140, 170, 238, 0.3);
 }
 
 /* ── Base pill styling for all modules ── */
@@ -26,7 +26,7 @@ window#waybar {
 #bluetooth,
 #network,
 #custom-power {
-    background-color: rgba(49, 50, 68, 0.6);
+    background-color: rgba(65, 69, 89, 0.6);
     padding: 0 10px;
     margin: 4px 0;
     transition: all 0.3s ease;
@@ -46,7 +46,7 @@ window#waybar {
 /* Utilities group: tray + idle_inhibitor */
 #tray {
     border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(108, 112, 134, 0.3);
+    border-right: 1px solid rgba(115, 121, 148, 0.3);
 }
 #idle_inhibitor {
     border-radius: 0 12px 12px 0;
@@ -55,11 +55,11 @@ window#waybar {
 /* System group: cpu + memory + temperature */
 #cpu {
     border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(108, 112, 134, 0.3);
+    border-right: 1px solid rgba(115, 121, 148, 0.3);
 }
 #memory {
     border-radius: 0;
-    border-right: 1px solid rgba(108, 112, 134, 0.3);
+    border-right: 1px solid rgba(115, 121, 148, 0.3);
 }
 #temperature {
     border-radius: 0 12px 12px 0;
@@ -68,7 +68,7 @@ window#waybar {
 /* A/V group: pulseaudio + backlight */
 #pulseaudio {
     border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(108, 112, 134, 0.3);
+    border-right: 1px solid rgba(115, 121, 148, 0.3);
 }
 #backlight {
     border-radius: 0 12px 12px 0;
@@ -77,11 +77,11 @@ window#waybar {
 /* Connectivity group: battery + bluetooth + network */
 #battery {
     border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(108, 112, 134, 0.3);
+    border-right: 1px solid rgba(115, 121, 148, 0.3);
 }
 #bluetooth {
     border-radius: 0;
-    border-right: 1px solid rgba(108, 112, 134, 0.3);
+    border-right: 1px solid rgba(115, 121, 148, 0.3);
 }
 #network {
     border-radius: 0 12px 12px 0;
@@ -103,95 +103,95 @@ window#waybar {
 #bluetooth:hover,
 #network:hover,
 #custom-power:hover {
-    background-color: rgba(69, 71, 90, 0.8);
+    background-color: rgba(81, 87, 109, 0.8);
 }
 
 /* ── Workspaces ── */
 #workspaces button {
     padding: 0 8px;
-    color: #6c7086;
+    color: #737994;
     background: transparent;
     border: none;
     border-radius: 0;
 }
 
 #workspaces button.active {
-    color: #89b4fa;
-    border-bottom: 2px solid #89b4fa;
+    color: #8caaee;
+    border-bottom: 2px solid #8caaee;
 }
 
 #workspaces button.urgent {
-    color: #f38ba8;
+    color: #e78284;
 }
 
 /* ── Window ── */
 #window {
-    color: #a6adc8;
+    color: #a5adce;
 }
 
 /* ── Clock ── */
 #clock {
-    color: #cdd6f4;
+    color: #c6d0f5;
     font-weight: bold;
 }
 
 /* ── CPU ── */
 #cpu {
-    color: #fab387;
+    color: #ef9f76;
 }
 
 /* ── Memory ── */
 #memory {
-    color: #cba6f7;
+    color: #ca9ee6;
 }
 
 /* ── Temperature ── */
 #temperature {
-    color: #89b4fa;
+    color: #8caaee;
 }
 
 #temperature.warning {
-    color: #eba0ac;
+    color: #ea999c;
 }
 
 #temperature.critical {
-    color: #f38ba8;
+    color: #e78284;
     animation: blink 0.5s linear infinite alternate;
 }
 
 /* ── MPRIS ── */
 #mpris {
-    color: #b4befe;
+    color: #babbf1;
 }
 
 #mpris.paused {
-    color: #6c7086;
+    color: #737994;
 }
 
 /* ── Bluetooth ── */
 #bluetooth {
-    color: #89b4fa;
+    color: #8caaee;
 }
 
 #bluetooth.off {
-    color: #6c7086;
+    color: #737994;
 }
 
 /* ── Battery ── */
 #battery {
-    color: #a6e3a1;
+    color: #a6d189;
 }
 
 #battery.charging {
-    color: #a6e3a1;
+    color: #a6d189;
 }
 
 #battery.warning:not(.charging) {
-    color: #fab387;
+    color: #ef9f76;
 }
 
 #battery.critical:not(.charging) {
-    color: #f38ba8;
+    color: #e78284;
     animation: blink 0.5s linear infinite alternate;
 }
 
@@ -203,34 +203,34 @@ window#waybar {
 
 /* ── Network ── */
 #network {
-    color: #89dceb;
+    color: #99d1db;
 }
 
 #network.disconnected {
-    color: #f38ba8;
+    color: #e78284;
 }
 
 /* ── Pulseaudio ── */
 #pulseaudio {
-    color: #f9e2af;
+    color: #e5c890;
 }
 
 #pulseaudio.muted {
-    color: #6c7086;
+    color: #737994;
 }
 
 /* ── Backlight ── */
 #backlight {
-    color: #f9e2af;
+    color: #e5c890;
 }
 
 /* ── Idle inhibitor ── */
 #idle_inhibitor {
-    color: #6c7086;
+    color: #737994;
 }
 
 #idle_inhibitor.activated {
-    color: #f9e2af;
+    color: #e5c890;
 }
 
 /* ── Tray ── */
@@ -240,13 +240,13 @@ window#waybar {
 
 /* ── Power ── */
 #custom-power {
-    color: #f38ba8;
+    color: #e78284;
     font-size: 16px;
 }
 
 /* ── Tooltip ── */
 tooltip {
-    background-color: #1e1e2e;
-    border: 1px solid #89b4fa;
+    background-color: #303446;
+    border: 1px solid #8caaee;
     border-radius: 8px;
 }

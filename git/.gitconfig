@@ -10,10 +10,23 @@
 [core]
 	editor = nvim
 	hooksPath = ~/.git-hooks
+	pager = /usr/share/git/diff-highlight/diff-highlight | less
 [pull]
 	rebase = false
 [push]
 	autoSetupRemote = true
+[diff]
+	colorMoved = default
+[color "diff"]
+	meta = 111
+	old = 174
+	new = 150
+	frag = 183 bold
+[color "diff-highlight"]
+	oldNormal = 174
+	oldHighlight = 174 bold 52
+	newNormal = 150
+	newHighlight = 150 bold 22
 [alias]
 	co = checkout
 	br = branch
