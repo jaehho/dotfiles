@@ -1,0 +1,6 @@
+status is-interactive; or return
+
+function fish_user_key_bindings
+    # Ctrl+Z to resume last background job (toggle suspend/resume)
+    bind \cz 'fg 2>/dev/null; commandline -f repaint'
+end
