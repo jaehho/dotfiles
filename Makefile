@@ -45,13 +45,25 @@ system-install: ## Copy boot configs and symlink runtime configs
 	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default
 	sudo ln -sf $(REPO_ROOT)/keyd/default.conf /etc/keyd/default.conf
 	sudo ln -sf $(REPO_ROOT)/libinput/local-overrides.quirks /etc/libinput/local-overrides.quirks
-	@for pair in $(SYSTEM_COPIES); do \
+	@changed=""; \
+	for pair in $(SYSTEM_COPIES); do \
 		src=$${pair%%:*}; dst=$${pair##*:}; \
+		if [ -f "$$dst" ] && ! diff -q "$(REPO_ROOT)/$$src" "$$dst" >/dev/null 2>&1; then \
+			sudo cp "$$dst" "$${dst}.bak"; \
+			echo "  backed up $$dst -> $${dst}.bak"; \
+		fi; \
 		sudo cp "$(REPO_ROOT)/$$src" "$$dst"; \
 		echo "  copied $$src -> $$dst"; \
-	done
-	sudo systemctl enable --now keyd
-	@echo "System configs installed."
+		changed="$$changed $$dst"; \
+	done; \
+	sudo systemctl enable --now keyd; \
+	echo "System configs installed."; \
+	case "$$changed" in \
+		*/grub*)       echo "  -> Run: sudo grub-mkconfig -o /boot/grub/grub.cfg" ;; \
+	esac; \
+	case "$$changed" in \
+		*/mkinitcpio*) echo "  -> Run: sudo mkinitcpio -P" ;; \
+	esac
 
 system-diff: ## Show differences between repo and system configs
 	@dirty=0; \
