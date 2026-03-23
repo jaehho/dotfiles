@@ -32,18 +32,55 @@ unstow-%: ## Unstow a single package (e.g., make unstow-nvim)
 	stow -d $(REPO_ROOT) -t ~ -D $*
 
 ## System configs (require sudo)
-system-install: ## Symlink system configs and enable services
+# Boot-critical configs (grub, mkinitcpio, modprobe) are COPIED, not symlinked,
+# so they survive broken /home mounts and work in rescue/chroot environments.
+# keyd and libinput are symlinked (non-boot-critical, read at runtime).
+SYSTEM_COPIES := \
+	grub/grub:/etc/default/grub \
+	modprobe/nvidia.conf:/etc/modprobe.d/nvidia.conf \
+	modprobe/intel-sof-hp-leds.conf:/etc/modprobe.d/intel-sof-hp-leds.conf \
+	mkinitcpio/mkinitcpio.conf:/etc/mkinitcpio.conf
+
+system-install: ## Copy boot configs and symlink runtime configs
 	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default
 	sudo ln -sf $(REPO_ROOT)/keyd/default.conf /etc/keyd/default.conf
 	sudo ln -sf $(REPO_ROOT)/libinput/local-overrides.quirks /etc/libinput/local-overrides.quirks
-	sudo ln -sf $(REPO_ROOT)/modprobe/nvidia.conf /etc/modprobe.d/nvidia.conf
-	sudo ln -sf $(REPO_ROOT)/modprobe/intel-sof-hp-leds.conf /etc/modprobe.d/intel-sof-hp-leds.conf
-	sudo ln -sf $(REPO_ROOT)/grub/grub /etc/default/grub
-	sudo ln -sf $(REPO_ROOT)/mkinitcpio/mkinitcpio.conf /etc/mkinitcpio.conf
+	@for pair in $(SYSTEM_COPIES); do \
+		src=$${pair%%:*}; dst=$${pair##*:}; \
+		sudo cp "$(REPO_ROOT)/$$src" "$$dst"; \
+		echo "  copied $$src -> $$dst"; \
+	done
 	sudo systemctl enable --now keyd
 	@echo "System configs installed."
-	@echo "NOTE: Run 'sudo grub-mkconfig -o /boot/grub/grub.cfg' after GRUB changes."
-	@echo "NOTE: Run 'sudo mkinitcpio -P' after mkinitcpio changes."
+
+system-diff: ## Show differences between repo and system configs
+	@dirty=0; \
+	for pair in $(SYSTEM_COPIES); do \
+		src=$${pair%%:*}; dst=$${pair##*:}; \
+		if [ -f "$$dst" ]; then \
+			if ! diff -q "$(REPO_ROOT)/$$src" "$$dst" >/dev/null 2>&1; then \
+				echo "\033[33m$$dst differs from repo:\033[0m"; \
+				diff --color=auto -u "$(REPO_ROOT)/$$src" "$$dst" || true; \
+				dirty=1; \
+			fi; \
+		else \
+			echo "\033[31m$$dst: missing on system\033[0m"; \
+			dirty=1; \
+		fi; \
+	done; \
+	if [ "$$dirty" = 0 ]; then echo "\033[32mAll system configs match repo.\033[0m"; fi
+
+system-pull: ## Pull system configs into repo (overwrite repo copies)
+	@for pair in $(SYSTEM_COPIES); do \
+		src=$${pair%%:*}; dst=$${pair##*:}; \
+		if [ -f "$$dst" ]; then \
+			cp "$$dst" "$(REPO_ROOT)/$$src"; \
+			echo "  pulled $$dst -> $$src"; \
+		else \
+			echo "  $$dst: missing, skipped"; \
+		fi; \
+	done
+	@echo "Run 'git diff' to review changes."
 
 ## Rclone
 rclone-setup: stow-rclone ## Install rclone, configure OneDrive remote, and enable mount
@@ -81,16 +118,27 @@ status: ## Show current dotfiles state
 		fi; \
 	done
 	@echo ""
-	@echo "System configs:"
-	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks \
-		/etc/modprobe.d/nvidia.conf /etc/modprobe.d/intel-sof-hp-leds.conf \
-		/etc/default/grub /etc/mkinitcpio.conf; do \
+	@echo "System configs (symlinked):"
+	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks; do \
 		if [ -L "$$f" ]; then \
 			echo "  $$f: linked"; \
 		elif [ -f "$$f" ]; then \
 			echo "  $$f: exists (not linked)"; \
 		else \
 			echo "  $$f: missing"; \
+		fi; \
+	done
+	@echo "System configs (copied):"
+	@for pair in $(SYSTEM_COPIES); do \
+		src=$${pair%%:*}; dst=$${pair##*:}; \
+		if [ -f "$$dst" ]; then \
+			if diff -q "$(REPO_ROOT)/$$src" "$$dst" >/dev/null 2>&1; then \
+				echo "  $$dst: synced"; \
+			else \
+				echo "  $$dst: \033[33mout of sync\033[0m"; \
+			fi; \
+		else \
+			echo "  $$dst: missing"; \
 		fi; \
 	done
 	@echo ""
