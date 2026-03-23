@@ -17,6 +17,10 @@ truncate() {
   fi
 }
 
+play_sound() {
+  ffplay -nodisp -autoexit -loglevel quiet -f lavfi "sine=f=800:d=0.15" &>/dev/null &
+}
+
 case "$EVENT" in
 
   # ── Stop: Claude finished responding ──────────────────────────────
@@ -33,6 +37,7 @@ case "$EVENT" in
     TITLE="Claude finished"
     BODY="${SUMMARY:-Response complete.}"
     URGENCY="normal"
+    play_sound
     ;;
 
   # ── Notification: generic Claude Code notification ────────────────
@@ -46,11 +51,13 @@ case "$EVENT" in
         TITLE="Permission needed"
         BODY="${MSG:-Claude needs your approval.}"
         URGENCY="high"
+        play_sound
         ;;
       idle_prompt)
         TITLE="Claude is waiting"
         BODY="${MSG:-Waiting for your input.}"
         URGENCY="normal"
+        play_sound
         ;;
       *)
         TITLE="${NOTIF_TITLE:-Claude Code}"

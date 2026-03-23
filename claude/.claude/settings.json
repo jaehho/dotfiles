@@ -1,4 +1,8 @@
 {
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "hooks": {
     "Stop": [
       {
@@ -79,14 +83,10 @@
       }
     ]
   },
-  "attribution": {
-    "commit": "",
-    "pr": ""
-  },
-  "effortLevel": "high",
-  "skipDangerousModePermissionPrompt": true,
   "statusLine": {
     "type": "command",
     "command": "node \"/home/jaeho/.claude/hooks/gsd-statusline.js\""
-  }
+  },
+  "effortLevel": "high",
+  "skipDangerousModePermissionPrompt": true
 }
