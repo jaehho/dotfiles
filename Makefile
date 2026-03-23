@@ -6,7 +6,7 @@ SHELL := /bin/bash
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # All stow packages (top-level dirs that contain dotfiles mirroring $HOME)
-STOW_PACKAGES := bash git tmux nvim claude hypr mako rofi waybar rclone
+STOW_PACKAGES := fish git tmux nvim claude hypr mako rofi waybar rclone
 
 ## General
 help: ## Show this help message
