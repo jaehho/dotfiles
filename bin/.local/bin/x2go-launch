@@ -31,6 +31,7 @@ export DISPLAY="$XEPHYR_DISPLAY"
 export QT_QPA_PLATFORM=xcb
 unset WAYLAND_DISPLAY
 
-exec x2goclient
+cleanup() { kill "$XEPHYR_PID" 2>/dev/null; }
+trap cleanup EXIT
 
-kill "$XEPHYR_PID" 2>/dev/null
+x2goclient 2>/dev/null
