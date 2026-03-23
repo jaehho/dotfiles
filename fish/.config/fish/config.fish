@@ -9,3 +9,6 @@ fish_add_path ~/.local/bin ~/.npm-global/bin
 if command -q Hyprland; and test -z "$DISPLAY"; and test -z "$WAYLAND_DISPLAY"; and test (tty) = /dev/tty1
     exec /usr/bin/start-hyprland
 end
+
+# OpenClaw Completion
+source "/home/jaeho/.openclaw/completions/openclaw.fish"

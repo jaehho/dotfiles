@@ -6,7 +6,7 @@ SHELL := /bin/bash
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # All stow packages (top-level dirs that contain dotfiles mirroring $HOME)
-STOW_PACKAGES := fish git tmux nvim claude hypr mako rofi waybar rclone
+STOW_PACKAGES := fish git tmux nvim claude hypr mako rofi waybar rclone bin
 
 ## General
 help: ## Show this help message
@@ -33,11 +33,17 @@ unstow-%: ## Unstow a single package (e.g., make unstow-nvim)
 
 ## System configs (require sudo)
 system-install: ## Symlink system configs and enable services
-	sudo mkdir -p /etc/keyd /etc/libinput
+	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default
 	sudo ln -sf $(REPO_ROOT)/keyd/default.conf /etc/keyd/default.conf
 	sudo ln -sf $(REPO_ROOT)/libinput/local-overrides.quirks /etc/libinput/local-overrides.quirks
+	sudo ln -sf $(REPO_ROOT)/modprobe/nvidia.conf /etc/modprobe.d/nvidia.conf
+	sudo ln -sf $(REPO_ROOT)/modprobe/intel-sof-hp-leds.conf /etc/modprobe.d/intel-sof-hp-leds.conf
+	sudo ln -sf $(REPO_ROOT)/grub/grub /etc/default/grub
+	sudo ln -sf $(REPO_ROOT)/mkinitcpio/mkinitcpio.conf /etc/mkinitcpio.conf
 	sudo systemctl enable --now keyd
 	@echo "System configs installed."
+	@echo "NOTE: Run 'sudo grub-mkconfig -o /boot/grub/grub.cfg' after GRUB changes."
+	@echo "NOTE: Run 'sudo mkinitcpio -P' after mkinitcpio changes."
 
 ## Rclone
 rclone-setup: stow-rclone ## Install rclone, configure OneDrive remote, and enable mount
@@ -76,7 +82,9 @@ status: ## Show current dotfiles state
 	done
 	@echo ""
 	@echo "System configs:"
-	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks; do \
+	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks \
+		/etc/modprobe.d/nvidia.conf /etc/modprobe.d/intel-sof-hp-leds.conf \
+		/etc/default/grub /etc/mkinitcpio.conf; do \
 		if [ -L "$$f" ]; then \
 			echo "  $$f: linked"; \
 		elif [ -f "$$f" ]; then \

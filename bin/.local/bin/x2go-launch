@@ -1,0 +1,36 @@
+#!/bin/bash
+# Launch x2goclient inside Xephyr to isolate X11 from Hyprland
+
+RESOLUTION="${1:-1920x1080}"
+XEPHYR_DISPLAY=":1"
+
+# Check dependencies
+for cmd in Xephyr x2goclient; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo "Missing: $cmd" >&2
+        exit 1
+    fi
+done
+
+# Kill stale Xephyr on same display
+if [ -e "/tmp/.X${XEPHYR_DISPLAY#:}-lock" ]; then
+    echo "Display $XEPHYR_DISPLAY already in use, trying :2"
+    XEPHYR_DISPLAY=":2"
+fi
+
+Xephyr -br -ac -noreset -screen "${RESOLUTION}x24" -dpi 96 -resizeable "$XEPHYR_DISPLAY" &
+XEPHYR_PID=$!
+sleep 1
+
+if ! kill -0 "$XEPHYR_PID" 2>/dev/null; then
+    echo "Xephyr failed to start" >&2
+    exit 1
+fi
+
+export DISPLAY="$XEPHYR_DISPLAY"
+export QT_QPA_PLATFORM=xcb
+unset WAYLAND_DISPLAY
+
+exec x2goclient
+
+kill "$XEPHYR_PID" 2>/dev/null
