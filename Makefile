@@ -71,16 +71,16 @@ system-diff: ## Show differences between repo and system configs
 		src=$${pair%%:*}; dst=$${pair##*:}; \
 		if [ -f "$$dst" ]; then \
 			if ! diff -q "$(REPO_ROOT)/$$src" "$$dst" >/dev/null 2>&1; then \
-				echo "\033[33m$$dst differs from repo:\033[0m"; \
+				printf '\033[33m%s differs from repo:\033[0m\n' "$$dst"; \
 				diff --color=auto -u "$(REPO_ROOT)/$$src" "$$dst" || true; \
 				dirty=1; \
 			fi; \
 		else \
-			echo "\033[31m$$dst: missing on system\033[0m"; \
+			printf '\033[31m%s: missing on system\033[0m\n' "$$dst"; \
 			dirty=1; \
 		fi; \
 	done; \
-	if [ "$$dirty" = 0 ]; then echo "\033[32mAll system configs match repo.\033[0m"; fi
+	if [ "$$dirty" = 0 ]; then printf '\033[32mAll system configs match repo.\033[0m\n'; fi
 
 system-pull: ## Pull system configs into repo (overwrite repo copies)
 	@for pair in $(SYSTEM_COPIES); do \
@@ -147,7 +147,7 @@ status: ## Show current dotfiles state
 			if diff -q "$(REPO_ROOT)/$$src" "$$dst" >/dev/null 2>&1; then \
 				echo "  $$dst: synced"; \
 			else \
-				echo "  $$dst: \033[33mout of sync\033[0m"; \
+				printf '  %s: \033[33mout of sync\033[0m\n' "$$dst"; \
 			fi; \
 		else \
 			echo "  $$dst: missing"; \
