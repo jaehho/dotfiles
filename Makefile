@@ -162,8 +162,10 @@ ifeq ($(DISTRO),arch)
 	sudo pacman -S --needed - < $(REPO_ROOT)/pkglist.txt
 	@command -v paru >/dev/null 2>&1 || { echo "paru not found — install it first for AUR packages."; exit 1; }
 	paru -S --needed - < $(REPO_ROOT)/pkglist-aur.txt
+else ifeq ($(DISTRO),ubuntu)
+	sudo apt-get install -y $$(grep -v '^#' $(REPO_ROOT)/pkglist-ubuntu.txt | grep -v '^$$')
 else
-	@echo "Skipped: not Arch Linux."
+	@echo "Skipped: unsupported distro ($(DISTRO))."
 endif
 
 ## Status

@@ -1,0 +1,23 @@
+# Packages needed for common stow configs to work on Ubuntu.
+# Install with: make pkg-install (on Ubuntu/Debian)
+#
+# Tools not in apt (install manually):
+#   eza        — https://github.com/eza-community/eza
+#   zoxide     — https://github.com/ajeetdsouza/zoxide
+#   bat        — available as 'batcat' in apt; symlink to 'bat' yourself
+
+fish
+git
+tmux
+neovim
+stow
+fzf
+direnv
+jq
+ripgrep
+fd-find
+curl
+gcc
+make
+nodejs
+npm
