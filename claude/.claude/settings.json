@@ -3,6 +3,7 @@
     "commit": "",
     "pr": ""
   },
+  "model": "sonnet",
   "hooks": {
     "SessionStart": [
       {
@@ -87,6 +88,5 @@
     "type": "command",
     "command": "node \"/home/jaeho/.claude/hooks/gsd-statusline.js\""
   },
-  "skipDangerousModePermissionPrompt": true,
-  "model": "sonnet"
+  "skipDangerousModePermissionPrompt": true
 }
