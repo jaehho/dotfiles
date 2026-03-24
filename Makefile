@@ -5,8 +5,16 @@ SHELL := /bin/bash
 
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-# All stow packages (top-level dirs that contain dotfiles mirroring $HOME)
-STOW_PACKAGES := fish git tmux nvim claude hypr mako rofi waybar rclone bin
+# Stow packages split by distro
+COMMON_PACKAGES := fish git tmux nvim claude rclone bin
+ARCH_PACKAGES   := hypr mako rofi waybar
+
+DISTRO := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
+ifeq ($(DISTRO),arch)
+  STOW_PACKAGES := $(COMMON_PACKAGES) $(ARCH_PACKAGES)
+else
+  STOW_PACKAGES := $(COMMON_PACKAGES)
+endif
 
 ## General
 help: ## Show this help message
@@ -24,6 +32,16 @@ stow-all: ## Stow all packages
 		stow -d $(REPO_ROOT) -t ~ --no-folding --adopt $$pkg; \
 	done
 	@echo "All packages stowed."
+	@echo ""
+	@echo "To reload without restarting:"
+	@echo "  fish     exec fish"
+	@echo "  tmux     tmux source-file ~/.tmux.conf"
+	@echo "  nvim     :source \$$MYVIMRC"
+	@if echo "$(STOW_PACKAGES)" | grep -qw hypr; then \
+		echo "  hypr     hyprctl reload"; \
+		echo "  mako     makoctl reload"; \
+		echo "  waybar   killall -SIGUSR2 waybar"; \
+	fi
 
 stow-%: ## Stow a single package (e.g., make stow-nvim)
 	stow -d $(REPO_ROOT) -t ~ --no-folding --adopt $*
@@ -35,11 +53,18 @@ unstow-%: ## Unstow a single package (e.g., make unstow-nvim)
 # Boot-critical configs (grub, mkinitcpio, modprobe) are COPIED, not symlinked,
 # so they survive broken /home mounts and work in rescue/chroot environments.
 # keyd and libinput are symlinked (non-boot-critical, read at runtime).
-SYSTEM_COPIES := \
+COMMON_SYSTEM_COPIES := \
+	modprobe/nvidia.conf:/etc/modprobe.d/nvidia.conf
+
+ARCH_SYSTEM_COPIES := \
 	grub/grub:/etc/default/grub \
-	modprobe/nvidia.conf:/etc/modprobe.d/nvidia.conf \
-	modprobe/intel-sof-hp-leds.conf:/etc/modprobe.d/intel-sof-hp-leds.conf \
 	mkinitcpio/mkinitcpio.conf:/etc/mkinitcpio.conf
+
+ifeq ($(DISTRO),arch)
+  SYSTEM_COPIES := $(COMMON_SYSTEM_COPIES) $(ARCH_SYSTEM_COPIES)
+else
+  SYSTEM_COPIES := $(COMMON_SYSTEM_COPIES)
+endif
 
 system-install: ## Copy boot configs and symlink runtime configs
 	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default
@@ -96,7 +121,16 @@ system-pull: ## Pull system configs into repo (overwrite repo copies)
 
 ## Rclone
 rclone-setup: stow-rclone ## Install rclone, configure OneDrive remote, and enable mount
-	@command -v rclone >/dev/null 2>&1 || { echo "Installing rclone..."; sudo pacman -S --needed --noconfirm rclone; }
+	@command -v rclone >/dev/null 2>&1 || { \
+		echo "Installing rclone..."; \
+		if command -v pacman >/dev/null 2>&1; then \
+			sudo pacman -S --needed --noconfirm rclone; \
+		elif command -v apt-get >/dev/null 2>&1; then \
+			sudo apt-get install -y rclone; \
+		else \
+			echo "No supported package manager found"; exit 1; \
+		fi; \
+	}
 	@if ! rclone listremotes 2>/dev/null | grep -q '^onedrive:'; then \
 		echo "No 'onedrive' remote found. Starting interactive config..."; \
 		echo "  -> Choose 'onedrive' type, leave client_id/secret blank, auto-config: yes"; \
