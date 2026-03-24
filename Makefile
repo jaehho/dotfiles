@@ -42,6 +42,11 @@ stow-all: ## Stow all packages
 		echo "  mako     makoctl reload"; \
 		echo "  waybar   killall -SIGUSR2 waybar"; \
 	fi
+	@if [ "$$SHELL" != "/usr/bin/fish" ]; then \
+		echo ""; \
+		echo "To set fish as your default shell:"; \
+		echo "  chsh -s /usr/bin/fish"; \
+	fi
 
 stow-%: ## Stow a single package (e.g., make stow-nvim)
 	stow -d $(REPO_ROOT) -t ~ --no-folding --adopt $*
