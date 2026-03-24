@@ -351,6 +351,49 @@ require('lazy').setup({
         topdelete = { text = '‾' }, ---@diagnostic disable-line: missing-fields
         changedelete = { text = '~' }, ---@diagnostic disable-line: missing-fields
       },
+      on_attach = function(bufnr)
+        local gs = require 'gitsigns'
+        local map = function(mode, l, r, desc)
+          vim.keymap.set(mode, l, r, { buffer = bufnr, desc = desc })
+        end
+
+        -- Navigation
+        map('n', ']c', function()
+          if vim.wo.diff then
+            vim.cmd.normal { ']c', bang = true }
+          else
+            gs.nav_hunk 'next'
+          end
+        end, 'Next [C]hange hunk')
+        map('n', '[c', function()
+          if vim.wo.diff then
+            vim.cmd.normal { '[c', bang = true }
+          else
+            gs.nav_hunk 'prev'
+          end
+        end, 'Prev [C]hange hunk')
+
+        -- Actions
+        map('n', '<leader>hs', gs.stage_hunk, '[H]unk [S]tage')
+        map('n', '<leader>hr', gs.reset_hunk, '[H]unk [R]eset')
+        map('v', '<leader>hs', function() gs.stage_hunk { vim.fn.line '.', vim.fn.line 'v' } end, '[H]unk [S]tage')
+        map('v', '<leader>hr', function() gs.reset_hunk { vim.fn.line '.', vim.fn.line 'v' } end, '[H]unk [R]eset')
+        map('n', '<leader>hS', gs.stage_buffer, '[H]unk [S]tage buffer')
+        map('n', '<leader>hR', gs.reset_buffer, '[H]unk [R]eset buffer')
+        map('n', '<leader>hu', gs.undo_stage_hunk, '[H]unk [U]ndo stage')
+        map('n', '<leader>hp', gs.preview_hunk, '[H]unk [P]review')
+        map('n', '<leader>hi', gs.preview_hunk_inline, '[H]unk [I]nline preview')
+        map('n', '<leader>hb', function() gs.blame_line { full = true } end, '[H]unk [B]lame line')
+        map('n', '<leader>hd', gs.diffthis, '[H]unk [D]iff')
+        map('n', '<leader>hD', function() gs.diffthis '~' end, '[H]unk [D]iff ~HEAD')
+
+        -- Toggles
+        map('n', '<leader>tb', gs.toggle_current_line_blame, '[T]oggle [B]lame line')
+        map('n', '<leader>tw', gs.toggle_word_diff, '[T]oggle [W]ord diff')
+
+        -- Text object
+        map({ 'o', 'x' }, 'ih', ':<C-U>Gitsigns select_hunk<CR>', 'inner hunk')
+      end,
     },
   },
 
