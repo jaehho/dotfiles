@@ -147,6 +147,25 @@ rclone-unmount: ## Unmount OneDrive and disable service
 	@systemctl --user disable --now rclone-onedrive 2>/dev/null || true
 	@echo "OneDrive unmounted and service disabled."
 
+## Packages (Arch only)
+pkg-dump: ## Save list of explicitly installed packages
+ifeq ($(DISTRO),arch)
+	pacman -Qqen > $(REPO_ROOT)/pkglist.txt
+	pacman -Qqem > $(REPO_ROOT)/pkglist-aur.txt
+	@echo "Saved $$(wc -l < $(REPO_ROOT)/pkglist.txt) official + $$(wc -l < $(REPO_ROOT)/pkglist-aur.txt) AUR packages."
+else
+	@echo "Skipped: not Arch Linux."
+endif
+
+pkg-install: ## Install packages from saved lists
+ifeq ($(DISTRO),arch)
+	sudo pacman -S --needed - < $(REPO_ROOT)/pkglist.txt
+	@command -v paru >/dev/null 2>&1 || { echo "paru not found — install it first for AUR packages."; exit 1; }
+	paru -S --needed - < $(REPO_ROOT)/pkglist-aur.txt
+else
+	@echo "Skipped: not Arch Linux."
+endif
+
 ## Status
 status: ## Show current dotfiles state
 	@echo "Stow packages:"

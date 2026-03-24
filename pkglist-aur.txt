@@ -1,0 +1,9 @@
+google-cloud-cli
+kakaotalk
+microsoft-edge-stable-bin
+paru
+paru-debug
+signal-cli
+x2goclient
+zotero-bin
+zotero-extension-scihub
