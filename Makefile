@@ -142,7 +142,7 @@ system-pull: ## Pull system configs into repo (overwrite repo copies)
 	@echo "Run 'git diff' to review changes."
 
 ## Rclone
-rclone-setup: stow-rclone ## Install rclone, configure OneDrive remote, and enable mount
+rclone-onedrive-setup: stow-rclone ## Configure OneDrive remote and enable mount
 	@command -v rclone >/dev/null 2>&1 || { \
 		echo "Installing rclone..."; \
 		if command -v pacman >/dev/null 2>&1; then \
@@ -165,9 +165,41 @@ rclone-setup: stow-rclone ## Install rclone, configure OneDrive remote, and enab
 	@systemctl --user enable --now rclone-onedrive
 	@echo "OneDrive mounted at ~/OneDrive"
 
-rclone-unmount: ## Unmount OneDrive and disable service
+rclone-onedrive-unmount: ## Unmount OneDrive and disable service
 	@systemctl --user disable --now rclone-onedrive 2>/dev/null || true
 	@echo "OneDrive unmounted and service disabled."
+
+rclone-cooper-setup: stow-rclone ## Configure Cooper SFTP remote and enable mount
+	@command -v rclone >/dev/null 2>&1 || { \
+		echo "Installing rclone..."; \
+		if command -v pacman >/dev/null 2>&1; then \
+			sudo pacman -S --needed --noconfirm rclone; \
+		elif command -v apt-get >/dev/null 2>&1; then \
+			sudo apt-get install -y rclone; \
+		else \
+			echo "No supported package manager found"; exit 1; \
+		fi; \
+	}
+	@if ! rclone listremotes 2>/dev/null | grep -q '^cooper:'; then \
+		echo "Creating 'cooper' SFTP remote..."; \
+		read -sp "Cooper password for jaeho.cho: " pw; echo; \
+		obscured=$$(rclone obscure "$$pw"); \
+		rclone config create cooper sftp \
+			host ice00.ee.cooper.edu \
+			port 31415 \
+			user jaeho.cho \
+			pass "$$obscured"; \
+	else \
+		echo "Remote 'cooper' already configured."; \
+	fi
+	@mkdir -p ~/Cooper
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now rclone-cooper
+	@echo "Cooper SFTP mounted at ~/Cooper"
+
+rclone-cooper-unmount: ## Unmount Cooper SFTP and disable service
+	@systemctl --user disable --now rclone-cooper 2>/dev/null || true
+	@echo "Cooper SFTP unmounted and service disabled."
 
 ## Packages (Arch only)
 pkg-dump: ## Save list of explicitly installed packages
@@ -232,11 +264,10 @@ status: ## Show current dotfiles state
 	done
 	@echo ""
 	@echo "Services:"
-	@for svc in keyd rclone-onedrive; do \
-		if [ "$$svc" = "rclone-onedrive" ]; then \
-			active=$$(systemctl --user is-active "$$svc" 2>/dev/null); \
-		else \
-			active=$$(systemctl is-active "$$svc" 2>/dev/null); \
+	@for svc in keyd rclone-onedrive rclone-cooper; do \
+		case "$$svc" in rclone-*) \
+			active=$$(systemctl --user is-active "$$svc" 2>/dev/null);; *) \
+			active=$$(systemctl is-active "$$svc" 2>/dev/null);; esac; \
 		fi; \
 		if [ "$$active" = "active" ]; then \
 			echo "  $$svc: active"; \

@@ -14,8 +14,8 @@ function fish_prompt
     echo -n (prompt_pwd --full-length-dirs 1 -d 3)
     set_color normal
 
-    # Git info
-    if command -q git; and git rev-parse --is-inside-work-tree &>/dev/null
+    # Git info (skip on FUSE/rclone mounts — git commands hang)
+    if command -q git; and not mountpoint -q -- (pwd); and git rev-parse --is-inside-work-tree &>/dev/null
         set -l branch (git branch --show-current 2>/dev/null; or git rev-parse --short HEAD 2>/dev/null)
         set_color $overlay
         echo -n " on $branch"
