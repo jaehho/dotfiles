@@ -10,7 +10,7 @@
 [core]
 	editor = nvim
 	hooksPath = ~/.git-hooks
-	pager = /usr/share/git/diff-highlight/diff-highlight | less
+	pager = diff-highlight | less
 [pull]
 	rebase = false
 [push]

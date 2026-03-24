@@ -31,6 +31,7 @@ stow-all: ## Stow all packages
 		echo "Stowing $$pkg..."; \
 		stow -d $(REPO_ROOT) -t ~ --no-folding --adopt $$pkg; \
 	done
+	@git -C $(REPO_ROOT) checkout -- .
 	@echo "All packages stowed."
 	@echo ""
 	@echo "To reload without restarting:"

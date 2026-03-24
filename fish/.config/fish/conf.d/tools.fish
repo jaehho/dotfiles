@@ -1,7 +1,7 @@
 status is-interactive; or return
 
 # ── fzf ──────────────────────────────────────────────────────────────────────
-if command -q fzf
+if command -q fzf; and fzf --fish &>/dev/null
     fzf --fish | source
 end
 

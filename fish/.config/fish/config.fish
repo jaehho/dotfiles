@@ -6,4 +6,6 @@ set -gx VISUAL nvim
 fish_add_path ~/.local/bin ~/.npm-global/bin
 
 # OpenClaw Completion
-source "/home/jaeho/.openclaw/completions/openclaw.fish"
+if test -f "$HOME/.openclaw/completions/openclaw.fish"
+    source "$HOME/.openclaw/completions/openclaw.fish"
+end

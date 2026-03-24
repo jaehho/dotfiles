@@ -1,0 +1,11 @@
+#!/bin/sh
+# Wrapper that finds diff-highlight across distros.
+# Arch: /usr/share/git/diff-highlight/diff-highlight
+# Ubuntu: needs to be built from /usr/share/doc/git/contrib/diff-highlight/
+for dh in \
+    /usr/share/git/diff-highlight/diff-highlight \
+    /usr/share/doc/git/contrib/diff-highlight/diff-highlight; do
+    [ -x "$dh" ] && exec "$dh" "$@"
+done
+# diff-highlight not available; pass through unchanged
+exec cat
