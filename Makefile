@@ -73,6 +73,12 @@ else
 endif
 
 system-install: ## Copy boot configs and symlink runtime configs
+	@if [ ! -d "$(HOME)/.tmux/plugins/tpm" ]; then \
+		echo "Installing TPM..."; \
+		git clone https://github.com/tmux-plugins/tpm "$(HOME)/.tmux/plugins/tpm"; \
+	else \
+		echo "TPM already installed."; \
+	fi
 	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default
 	sudo ln -sf $(REPO_ROOT)/keyd/default.conf /etc/keyd/default.conf
 	sudo ln -sf $(REPO_ROOT)/libinput/local-overrides.quirks /etc/libinput/local-overrides.quirks
@@ -87,7 +93,17 @@ system-install: ## Copy boot configs and symlink runtime configs
 		echo "  copied $$src -> $$dst"; \
 		changed="$$changed $$dst"; \
 	done; \
-	sudo systemctl enable --now keyd; \
+	if ! command -v keyd >/dev/null 2>&1 && [ "$(DISTRO)" = "ubuntu" ]; then \
+		echo "Installing keyd from source..."; \
+		tmp=$$(mktemp -d); \
+		git clone https://github.com/rvaiya/keyd "$$tmp/keyd"; \
+		make -C "$$tmp/keyd"; \
+		sudo make -C "$$tmp/keyd" install; \
+		rm -rf "$$tmp"; \
+	fi; \
+	if command -v keyd >/dev/null 2>&1; then \
+		sudo systemctl enable --now keyd; \
+	fi; \
 	echo "System configs installed."; \
 	case "$$changed" in \
 		*/grub*)       echo "  -> Run: sudo grub-mkconfig -o /boot/grub/grub.cfg" ;; \
