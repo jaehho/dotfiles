@@ -21,3 +21,5 @@ gcc
 make
 nodejs
 npm
+libnotify-bin
+ffmpeg
