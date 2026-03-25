@@ -118,9 +118,6 @@ case "$EVENT" in
 esac
 
 # Add click hint and send notification (backgrounded since --action implies --wait)
-HINT_BODY="$BODY
-<small><i>click or Super+N to focus</i></small>"
-
 (
   ACTION=$(notify-send \
     --app-name "Claude Code" \
@@ -128,7 +125,7 @@ HINT_BODY="$BODY
     --category "$(if [[ $URGENCY == "high" ]]; then echo persistent; fi)" \
     --action="default=Focus" \
     "$TITLE" \
-    "$HINT_BODY" 2>/dev/null) || true
+    "$BODY" 2>/dev/null) || true
 
   if [[ "$ACTION" == "default" && -n "${WINDOW_ADDR:-}" ]]; then
     hyprctl dispatch focuswindow "address:$WINDOW_ADDR" >/dev/null 2>&1
