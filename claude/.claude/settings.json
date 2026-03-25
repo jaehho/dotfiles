@@ -86,7 +86,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "node \"/home/jaeho/.claude/hooks/gsd-statusline.js\""
+    "command": "node \"/home/jaeho/.claude/hooks/statusline.js\""
   },
   "skipDangerousModePermissionPrompt": true
 }

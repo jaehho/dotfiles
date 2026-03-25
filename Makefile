@@ -6,7 +6,7 @@ SHELL := /bin/bash
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # Stow packages split by distro
-COMMON_PACKAGES := fish git tmux nvim claude rclone bin
+COMMON_PACKAGES := fish git tmux nvim claude rclone bin kitty
 ARCH_PACKAGES   := hypr mako rofi waybar
 
 DISTRO := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
@@ -26,12 +26,11 @@ help: ## Show this help message
 		     /^[a-zA-Z_%-]+:/ {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 ## Stow
-stow-all: ## Stow all packages
+stow-all: ## Stow all packages (idempotent — safe to re-run after adding files)
 	@for pkg in $(STOW_PACKAGES); do \
 		echo "Stowing $$pkg..."; \
-		stow -d $(REPO_ROOT) -t ~ --no-folding --adopt $$pkg; \
+		stow -d $(REPO_ROOT) -t ~ --no-folding $$pkg; \
 	done
-	@git -C $(REPO_ROOT) checkout -- .
 	@echo "All packages stowed."
 	@echo ""
 	@echo "To reload without restarting:"
@@ -50,7 +49,7 @@ stow-all: ## Stow all packages
 	fi
 
 stow-%: ## Stow a single package (e.g., make stow-nvim)
-	stow -d $(REPO_ROOT) -t ~ --no-folding --adopt $*
+	stow -d $(REPO_ROOT) -t ~ --no-folding $*
 
 unstow-%: ## Unstow a single package (e.g., make unstow-nvim)
 	stow -d $(REPO_ROOT) -t ~ -D $*

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Briefly show labels on the Claude Code statusline (auto-expires after 30s)
+date +%s > /tmp/claude-statusline-hints

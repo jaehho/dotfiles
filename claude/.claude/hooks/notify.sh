@@ -21,6 +21,24 @@ play_sound() {
   ffplay -nodisp -autoexit -loglevel quiet -f lavfi "sine=f=800:d=0.15" &>/dev/null &
 }
 
+# Find the Hyprland window containing this terminal by walking up the process tree
+find_terminal_window() {
+  local clients pid addr
+  clients=$(hyprctl clients -j 2>/dev/null) || return
+  pid=$$
+  while [[ $pid -gt 1 ]]; do
+    addr=$(echo "$clients" | jq -r --argjson pid "$pid" \
+      '.[] | select(.pid == $pid) | .address' 2>/dev/null)
+    if [[ -n "$addr" && "$addr" != "null" ]]; then
+      echo "$addr"
+      return
+    fi
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+  done
+}
+
+WINDOW_ADDR=$(find_terminal_window || true)
+
 case "$EVENT" in
 
   # ── Stop: Claude finished responding ──────────────────────────────
@@ -99,12 +117,22 @@ case "$EVENT" in
     ;;
 esac
 
-# Send the notification
-notify-send \
-  --app-name "Claude Code" \
-  --urgency "$URGENCY" \
-  --category "$(if [[ $URGENCY == "high" ]]; then echo persistent; fi)" \
-  "$TITLE" \
-  "$BODY"
+# Add click hint and send notification (backgrounded since --action implies --wait)
+HINT_BODY="$BODY
+<small><i>click or Super+N to focus</i></small>"
+
+(
+  ACTION=$(notify-send \
+    --app-name "Claude Code" \
+    --urgency "$URGENCY" \
+    --category "$(if [[ $URGENCY == "high" ]]; then echo persistent; fi)" \
+    --action="default=Focus" \
+    "$TITLE" \
+    "$HINT_BODY" 2>/dev/null) || true
+
+  if [[ "$ACTION" == "default" && -n "${WINDOW_ADDR:-}" ]]; then
+    hyprctl dispatch focuswindow "address:$WINDOW_ADDR" >/dev/null 2>&1
+  fi
+) &
 
 exit 0

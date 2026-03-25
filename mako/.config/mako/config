@@ -46,3 +46,8 @@ default-timeout=0
 # Usage: notify-send -c persistent "Title" "Body"
 [category=persistent]
 default-timeout=0
+
+# Click Claude Code notifications to focus the terminal running Claude
+[app-name="Claude Code"]
+on-button-left=invoke-default-action
+default-timeout=15000

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Invoke default action on the current notification (like clicking it).
+# Used by SUPER+N keybind.
+makoctl invoke >/dev/null 2>&1
