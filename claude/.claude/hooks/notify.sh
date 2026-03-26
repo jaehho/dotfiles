@@ -117,19 +117,31 @@ case "$EVENT" in
     ;;
 esac
 
-# Add click hint and send notification (backgrounded since --action implies --wait)
-(
-  ACTION=$(notify-send \
-    --app-name "Claude Code" \
-    --urgency "$URGENCY" \
-    --category "$(if [[ $URGENCY == "high" ]]; then echo persistent; fi)" \
-    --action="default=Focus" \
-    "$TITLE" \
-    "$BODY" 2>/dev/null) || true
+# ── Dispatch notification ─────────────────────────────────────────────────────
+# Use notify-send (desktop) when a display is available, otherwise ntfy.sh (remote/SSH)
+if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+  (
+    ACTION=$(notify-send \
+      --app-name "Claude Code" \
+      --urgency "$URGENCY" \
+      --category "$(if [[ $URGENCY == "high" ]]; then echo persistent; fi)" \
+      --action="default=Focus" \
+      "$TITLE" \
+      "$BODY" 2>/dev/null) || true
 
-  if [[ "$ACTION" == "default" && -n "${WINDOW_ADDR:-}" ]]; then
-    hyprctl dispatch focuswindow "address:$WINDOW_ADDR" >/dev/null 2>&1
-  fi
-) &
+    if [[ "$ACTION" == "default" && -n "${WINDOW_ADDR:-}" ]]; then
+      hyprctl dispatch focuswindow "address:$WINDOW_ADDR" >/dev/null 2>&1
+    fi
+  ) &
+else
+  NTFY_PRIORITY="default"
+  [[ "$URGENCY" == "high" ]] && NTFY_PRIORITY="high"
+  [[ "$URGENCY" == "low" ]] && NTFY_PRIORITY="low"
+  curl -s -o /dev/null \
+    -H "Title: $TITLE" \
+    -H "Priority: $NTFY_PRIORITY" \
+    -d "$BODY" \
+    ntfy.sh/jaeho &
+fi
 
 exit 0

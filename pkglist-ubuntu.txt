@@ -1,25 +1,46 @@
-# Packages needed for common stow configs to work on Ubuntu.
-# Install with: make pkg-install (on Ubuntu/Debian)
+# Packages needed for common stow configs to work on Ubuntu/Debian.
+# Install with: make pkg-install
 #
-# Tools not in apt (install manually):
-#   eza        — https://github.com/eza-community/eza
+# Tools not in apt — bootstrap.sh handles these:
+#   eza        — https://github.com/eza-community/eza (in apt on Ubuntu 24.10+)
 #   zoxide     — https://github.com/ajeetdsouza/zoxide
-#   bat        — available as 'batcat' in apt; symlink to 'bat' yourself
+#   bat        — available as 'batcat'; bootstrap.sh symlinks ~/.local/bin/bat
+#   fd         — available as 'fdfind'; bootstrap.sh symlinks ~/.local/bin/fd
 
+# Shell
 fish
+
+# Core tools
 git
+curl
+stow
 tmux
 neovim
-stow
+
+# File tools
 fzf
+fd-find
+ripgrep
+bat
+
+# Dev
 direnv
 jq
-ripgrep
-fd-find
-curl
 gcc
 make
 nodejs
 npm
+python3
+python3-pip
+luarocks
+
+# Keyd build deps (no apt package — built from source by make system-install)
+libudev-dev
+
+# Misc
+rclone
+sshpass
 libnotify-bin
 ffmpeg
+openssh-client
+unzip

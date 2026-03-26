@@ -64,7 +64,6 @@ sddm
 slurp
 sof-firmware
 sshpass
-starship
 stow
 sudo
 thunar

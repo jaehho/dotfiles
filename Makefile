@@ -206,8 +206,11 @@ ifeq ($(DISTRO),arch)
 	pacman -Qqen > $(REPO_ROOT)/pkglist.txt
 	pacman -Qqem > $(REPO_ROOT)/pkglist-aur.txt
 	@echo "Saved $$(wc -l < $(REPO_ROOT)/pkglist.txt) official + $$(wc -l < $(REPO_ROOT)/pkglist-aur.txt) AUR packages."
+else ifeq ($(DISTRO),ubuntu)
+	apt-mark showmanual | sort > $(REPO_ROOT)/pkglist-ubuntu.txt
+	@echo "Saved $$(wc -l < $(REPO_ROOT)/pkglist-ubuntu.txt) manually installed packages."
 else
-	@echo "Skipped: not Arch Linux."
+	@echo "Skipped: unsupported distro ($(DISTRO))."
 endif
 
 pkg-install: ## Install packages from saved lists

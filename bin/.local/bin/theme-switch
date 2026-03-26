@@ -95,14 +95,16 @@ echo "$FLAVOR" > "$STATE_FILE"
 # ── Reload services ──
 echo "Reloading..."
 
-# Hyprland
-hyprctl reload 2>/dev/null || true
+# Hyprland (only if running)
+if pgrep -x Hyprland >/dev/null 2>&1; then
+    hyprctl reload 2>/dev/null || true
 
-# Waybar
-pkill waybar 2>/dev/null; sleep 0.3; waybar &disown 2>/dev/null
+    # Waybar
+    pkill waybar 2>/dev/null; sleep 0.3; waybar &disown 2>/dev/null
 
-# Mako
-makoctl reload 2>/dev/null || true
+    # Mako
+    makoctl reload 2>/dev/null || true
+fi
 
 # Kitty (reload all running instances)
 for sock in /tmp/kitty-*; do
