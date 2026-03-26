@@ -83,10 +83,11 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
   NOTIFY_ARGS=(--app-name="Claude Code" -u "${URGENCY:-normal}")
   [[ -n "${CATEGORY:-}" ]] && NOTIFY_ARGS+=(-c "$CATEGORY")
   NOTIFY_ARGS+=(--action=default=Focus)
-  (
-    action=$(notify-send "${NOTIFY_ARGS[@]}" "$TITLE" "$BODY")
+  # setsid detaches from hook process group so Claude doesn't wait for dismiss
+  setsid bash -c '
+    action=$(notify-send "$@")
     [[ "$action" == "default" ]] && ~/.local/bin/hypr-focus-notification
-  ) &
+  ' _ "${NOTIFY_ARGS[@]}" "$TITLE" "$BODY" </dev/null &>/dev/null &
 else
   "$HOME/.local/bin/notify" "$TITLE" "$BODY" &
 fi
@@ -94,7 +95,7 @@ fi
 # Mobile: ntfy.sh (always, so you get notified even away from desk)
 NTFY_PRIORITY="default"
 [[ "${URGENCY:-normal}" == "high" ]] && NTFY_PRIORITY="high"
-curl -s -o /dev/null \
+curl -s -o /dev/null --connect-timeout 5 --max-time 10 \
   -H "Title: $TITLE" \
   -H "Priority: $NTFY_PRIORITY" \
   -d "${NTFY_BODY:-$BODY}" \
