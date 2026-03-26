@@ -19,12 +19,21 @@
         "memory",
         "pulseaudio",
         "backlight",
-        "battery",
-        "power-profiles-daemon",
+        "group/power",
         "bluetooth",
         "network",
         "custom/power"
     ],
+
+    "group/power": {
+        "orientation": "horizontal",
+        "drawer": {
+            "transition-duration": 500,
+            "children-class": "drawer-child",
+            "transition-left-to-right": false
+        },
+        "modules": ["battery", "power-profiles-daemon"]
+    },
 
     "hyprland/workspaces": {
         "format": "{id} {windows}",
@@ -107,7 +116,7 @@
         "format-connected-battery": "󰂱 {device_alias} {device_battery_percentage}%",
         "format-off": "󰂲",
         "on-click": "blueman-manager",
-        "on-click-right": "bluetoothctl power toggle",
+        "on-click-right": "kitty --class floating-tui -e bluetui",
         "tooltip-format": "{controller_alias}\t{controller_address}",
         "tooltip-format-connected": "{controller_alias}\t{controller_address}\n\n{device_enumerate}",
         "tooltip-format-enumerate-connected": "{device_alias}\t{device_address}"
@@ -123,7 +132,7 @@
         "format-plugged": "󰚥 {capacity}%",
         "format-alt": "{icon} {time}",
         "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
-        "tooltip-format": "{timeTo}\n{power:.1f}W"
+        "tooltip-format": "{timeTo}\n{power:.1f}W\nHealth: {health}%"
     },
 
     "power-profiles-daemon": {
@@ -144,7 +153,7 @@
         "format-disconnected": "󰤭 Disconnected",
         "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ifname} via {gwaddr}\n{ipaddr}/{cidr}\n↑ {bandwidthUpBits} ↓ {bandwidthDownBits}",
         "tooltip-format": "{ifname} via {gwaddr}\n{ipaddr}/{cidr}",
-        "on-click": "nm-connection-editor"
+        "on-click": "kitty --class floating-tui -e nmtui"
     },
 
     "pulseaudio": {

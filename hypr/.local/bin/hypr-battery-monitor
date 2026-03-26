@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Battery monitor — sends notifications at low/critical thresholds
+# Runs as background process via exec-once
+
+WARN=20
+CRIT=10
+INTERVAL=60
+
+# Find battery path
+for bat in /sys/class/power_supply/BAT*; do
+    [[ -f "$bat/capacity" ]] && BAT_PATH="$bat" && break
+done
+[[ -z "$BAT_PATH" ]] && exit 0
+
+warned=false
+critical=false
+
+while true; do
+    capacity=$(< "$BAT_PATH/capacity")
+    status=$(< "$BAT_PATH/status")
+
+    if [[ "$status" == "Discharging" ]]; then
+        if (( capacity <= CRIT )) && [[ "$critical" == false ]]; then
+            notify-send -u critical " Battery Critical" "${capacity}% — plug in now!"
+            critical=true
+        elif (( capacity <= WARN )) && [[ "$warned" == false ]]; then
+            notify-send -u normal " Battery Low" "${capacity}% remaining"
+            warned=true
+        fi
+    else
+        warned=false
+        critical=false
+    fi
+
+    sleep "$INTERVAL"
+done

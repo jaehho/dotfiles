@@ -63,13 +63,10 @@ window#waybar {
     border-radius: 0 12px 12px 0;
 }
 
-/* Power group: battery + power-profiles */
-#battery {
-    border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(115, 121, 148, 0.3);
-}
+/* Power group: battery + power-profiles (drawer — profiles expand on hover) */
+#battery,
 #power-profiles-daemon {
-    border-radius: 0 12px 12px 0;
+    border-radius: 12px;
 }
 
 /* Connectivity group: bluetooth + network */

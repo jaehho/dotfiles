@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Emoji picker via rofimoji — types and copies the selected emoji
+
+if ! command -v rofimoji &>/dev/null; then
+    notify-send "Emoji Picker" "Install: sudo pacman -S rofimoji" -u normal
+    exit 1
+fi
+
+rofimoji --action type copy --skin-tone neutral
