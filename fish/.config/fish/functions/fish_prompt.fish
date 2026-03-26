@@ -10,6 +10,14 @@ function fish_prompt
     set -l red e78284
 
     # ── Line 1: directory + git + duration ───────────────────────────────────
+
+    # SSH: show user@host when remote
+    if set -q SSH_CONNECTION
+        set_color $yellow
+        echo -n $USER@(prompt_hostname)" "
+        set_color normal
+    end
+
     set_color --bold $blue
     echo -n (prompt_pwd --full-length-dirs 1 -d 3)
     set_color normal

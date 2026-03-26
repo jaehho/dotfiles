@@ -1,9 +1,10 @@
 status is-interactive; or return
 
 # ── tmux auto-launch ─────────────────────────────────────────────────────────
-# Auto-launch tmux in graphical terminals only — skip bare TTYs (where
-# arch.fish may exec Hyprland) and skip if already inside tmux.
-if command -q tmux; and not set -q TMUX; and test -n "$DISPLAY" -o -n "$WAYLAND_DISPLAY"
+# Auto-launch tmux in graphical terminals and SSH sessions — skip bare TTYs
+# (where arch.fish may exec Hyprland) and skip if already inside tmux.
+if command -q tmux; and not set -q TMUX
+    and begin; test -n "$DISPLAY" -o -n "$WAYLAND_DISPLAY"; or set -q SSH_CONNECTION; end
     exec tmux
 end
 
