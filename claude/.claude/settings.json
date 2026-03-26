@@ -88,5 +88,8 @@
     "type": "command",
     "command": "node \"/home/jaeho/.claude/hooks/statusline.js\""
   },
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+  "enabledPlugins": {
+    "clangd-lsp@claude-plugins-official": true
+  }
 }

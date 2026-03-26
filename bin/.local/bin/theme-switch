@@ -1,0 +1,124 @@
+#!/bin/bash
+# Switch Catppuccin flavor across all dotfiles
+# Usage: theme-switch [latte|frappe|macchiato|mocha]
+
+set -euo pipefail
+
+FLAVOR="${1:-}"
+VALID="latte frappe macchiato mocha"
+DOTFILES="$HOME/dotfiles"
+STATE_FILE="$HOME/.config/catppuccin-flavor"
+
+# Current flavor
+CURRENT=$(cat "$STATE_FILE" 2>/dev/null || echo "frappe")
+
+if [ -z "$FLAVOR" ]; then
+    echo "Current: $CURRENT"
+    echo "Usage: theme-switch [latte|frappe|macchiato|mocha]"
+    exit 0
+fi
+
+if ! echo "$VALID" | grep -qw "$FLAVOR"; then
+    echo "Invalid flavor: $FLAVOR (choose: $VALID)"
+    exit 1
+fi
+
+if [ "$FLAVOR" = "$CURRENT" ]; then
+    echo "Already using $FLAVOR"
+    exit 0
+fi
+
+# ── Color palettes ──
+# Format: base mantle crust text subtext1 subtext0 surface0 surface1 surface2
+#         overlay0 overlay1 overlay2 blue lavender sapphire sky teal green
+#         yellow peach maroon red mauve pink flamingo rosewater
+declare -A PALETTE
+
+PALETTE[latte]="eff1f5 e6e9ef dce0e8 4c4f69 5c5f77 6c6f85 ccd0da bcc0cc acb0be 9ca0b0 8c8fa1 7c7f93 1e66f5 7287fd 209fb5 04a5e5 179299 40a02b df8e1d fe640b e64553 d20f39 8839ef ea76cb dd7878 dc8a78"
+PALETTE[frappe]="303446 292c3c 232634 c6d0f5 b5bfe2 a5adce 414559 51576d 626880 737994 838ba7 949cbb 8caaee babbf1 85c1dc 99d1db 81c8be a6d189 e5c890 ef9f76 ea999c e78284 ca9ee6 f4b8e4 eebebe f2d5cf"
+PALETTE[macchiato]="24273a 1e2030 181926 cad3f5 b8c0e0 a5adcb 363a4f 494d64 5b6078 6e738d 8087a2 939ab7 8aadf4 b7bdf8 7dc4e4 91d7e3 8bd5ca a6da95 eed49f f5a97f ee99a0 ed8796 c6a0f6 f5bde6 f0c6c6 f4dbd6"
+PALETTE[mocha]="1e1e2e 181825 11111b cdd6f4 bac2de a6adc8 313244 45475a 585b70 6c7086 7f849c 9399b2 89b4fa b4befe 74c7ec 89dceb 94e2d5 a6e3a1 f9e2af fab387 eba0ac f38ba8 cba6f7 f5c2e7 f2cdcd f5e0dc"
+
+ROLES=(base mantle crust text subtext1 subtext0 surface0 surface1 surface2 overlay0 overlay1 overlay2 blue lavender sapphire sky teal green yellow peach maroon red mauve pink flamingo rosewater)
+
+# Build old→new color maps
+declare -A OLD NEW
+i=0
+for role in "${ROLES[@]}"; do
+    OLD[$role]=$(echo "${PALETTE[$CURRENT]}" | cut -d' ' -f$((i+1)))
+    NEW[$role]=$(echo "${PALETTE[$FLAVOR]}" | cut -d' ' -f$((i+1)))
+    ((i++))
+done
+
+# ── Replace colors in config files ──
+replace_colors() {
+    local file="$1"
+    if [ ! -f "$file" ]; then return; fi
+
+    for role in "${ROLES[@]}"; do
+        if [ "${OLD[$role]}" != "${NEW[$role]}" ]; then
+            sed -i "s/${OLD[$role]}/${NEW[$role]}/gi" "$file"
+        fi
+    done
+}
+
+echo "Switching: $CURRENT → $FLAVOR"
+
+# Hyprland
+replace_colors "$DOTFILES/hypr/.config/hypr/hyprland.conf"
+replace_colors "$DOTFILES/hypr/.config/hypr/hyprlock.conf"
+
+# Waybar
+replace_colors "$DOTFILES/waybar/.config/waybar/style.css"
+
+# Rofi
+replace_colors "$DOTFILES/rofi/.config/rofi/config.rasi"
+
+# Mako
+replace_colors "$DOTFILES/mako/.config/mako/config"
+
+# Kitty
+replace_colors "$DOTFILES/kitty/.config/kitty/kitty.conf"
+
+# Tmux — swap flavor name
+sed -i "s/@catppuccin_flavor \"$CURRENT\"/@catppuccin_flavor \"$FLAVOR\"/" \
+    "$DOTFILES/tmux/.tmux.conf"
+
+# Neovim — swap flavor name
+sed -i "s/flavour = '$CURRENT'/flavour = '$FLAVOR'/" \
+    "$DOTFILES/nvim/.config/nvim/init.lua"
+
+# Save new state
+mkdir -p "$(dirname "$STATE_FILE")"
+echo "$FLAVOR" > "$STATE_FILE"
+
+# ── Reload services ──
+echo "Reloading..."
+
+# Hyprland
+hyprctl reload 2>/dev/null || true
+
+# Waybar
+pkill waybar 2>/dev/null; sleep 0.3; waybar &disown 2>/dev/null
+
+# Mako
+makoctl reload 2>/dev/null || true
+
+# Kitty (reload all running instances)
+for sock in /tmp/kitty-*; do
+    kitty @ --to "unix:$sock" set-colors --all --configured \
+        "$DOTFILES/kitty/.config/kitty/kitty.conf" 2>/dev/null || true
+done
+
+# Tmux
+tmux source-file ~/.tmux.conf 2>/dev/null || true
+
+# Neovim — signal all instances to reload colorscheme
+for addr in $(find /run/user/"$(id -u)"/ /tmp/ -name 'nvim.*' -type s 2>/dev/null); do
+    nvim --server "$addr" --remote-send \
+        ":lua require('catppuccin').setup{flavour='$FLAVOR'} vim.cmd.colorscheme'catppuccin'<CR>" \
+        2>/dev/null || true
+done
+
+notify-send -u low "Theme" "Switched to Catppuccin $FLAVOR"
+echo "Done — switched to $FLAVOR"

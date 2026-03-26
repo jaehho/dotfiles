@@ -1,0 +1,10 @@
+#!/bin/bash
+# Toggle night light (blue light filter) via hyprsunset
+
+if pgrep hyprsunset >/dev/null 2>&1; then
+    pkill hyprsunset
+    notify-send -u low "Night Light" "OFF"
+else
+    notify-send -u low "Night Light" "ON (4000K)"
+    nohup hyprsunset -t 4000 >/dev/null 2>&1 &
+fi

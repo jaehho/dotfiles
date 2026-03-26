@@ -16,52 +16,41 @@ window#waybar {
 #mpris,
 #clock,
 #tray,
-#idle_inhibitor,
+#custom-dnd,
 #cpu,
 #memory,
-#temperature,
 #pulseaudio,
 #backlight,
 #battery,
+#power-profiles-daemon,
 #bluetooth,
 #network,
 #custom-power {
     background-color: rgba(65, 69, 89, 0.6);
     padding: 0 10px;
-    margin: 4px 0;
+    margin: 4px 2px;
     transition: all 0.3s ease;
 }
 
-/* ── Pill group border-radius ── */
+/* ── Pill shapes ── */
 
 /* Standalone pills */
 #workspaces,
 #window,
 #mpris,
 #clock,
+#tray,
+#custom-dnd,
 #custom-power {
     border-radius: 12px;
 }
 
-/* Utilities group: tray + idle_inhibitor */
-#tray {
-    border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(115, 121, 148, 0.3);
-}
-#idle_inhibitor {
-    border-radius: 0 12px 12px 0;
-}
-
-/* System group: cpu + memory + temperature */
+/* System group: cpu + memory */
 #cpu {
     border-radius: 12px 0 0 12px;
     border-right: 1px solid rgba(115, 121, 148, 0.3);
 }
 #memory {
-    border-radius: 0;
-    border-right: 1px solid rgba(115, 121, 148, 0.3);
-}
-#temperature {
     border-radius: 0 12px 12px 0;
 }
 
@@ -74,32 +63,37 @@ window#waybar {
     border-radius: 0 12px 12px 0;
 }
 
-/* Connectivity group: battery + bluetooth + network */
+/* Power group: battery + power-profiles */
 #battery {
     border-radius: 12px 0 0 12px;
     border-right: 1px solid rgba(115, 121, 148, 0.3);
 }
+#power-profiles-daemon {
+    border-radius: 0 12px 12px 0;
+}
+
+/* Connectivity group: bluetooth + network */
 #bluetooth {
-    border-radius: 0;
+    border-radius: 12px 0 0 12px;
     border-right: 1px solid rgba(115, 121, 148, 0.3);
 }
 #network {
     border-radius: 0 12px 12px 0;
 }
 
-/* ── Hover effect for interactive modules ── */
+/* ── Hover ── */
 #workspaces button:hover,
 #window:hover,
 #mpris:hover,
 #clock:hover,
 #tray:hover,
-#idle_inhibitor:hover,
+#custom-dnd:hover,
 #cpu:hover,
 #memory:hover,
-#temperature:hover,
 #pulseaudio:hover,
 #backlight:hover,
 #battery:hover,
+#power-profiles-daemon:hover,
 #bluetooth:hover,
 #network:hover,
 #custom-power:hover {
@@ -107,16 +101,22 @@ window#waybar {
 }
 
 /* ── Workspaces ── */
+#workspaces {
+    padding: 0 4px;
+}
+
 #workspaces button {
     padding: 0 8px;
     color: #737994;
     background: transparent;
     border: none;
-    border-radius: 0;
+    border-radius: 8px;
+    margin: 2px 1px;
 }
 
 #workspaces button.active {
     color: #8caaee;
+    background-color: rgba(140, 170, 238, 0.15);
     border-bottom: 2px solid #8caaee;
 }
 
@@ -143,20 +143,6 @@ window#waybar {
 /* ── Memory ── */
 #memory {
     color: #ca9ee6;
-}
-
-/* ── Temperature ── */
-#temperature {
-    color: #8caaee;
-}
-
-#temperature.warning {
-    color: #ea999c;
-}
-
-#temperature.critical {
-    color: #e78284;
-    animation: blink 0.5s linear infinite alternate;
 }
 
 /* ── MPRIS ── */
@@ -201,6 +187,11 @@ window#waybar {
     }
 }
 
+/* ── Power Profiles ── */
+#power-profiles-daemon {
+    color: #81c8be;
+}
+
 /* ── Network ── */
 #network {
     color: #99d1db;
@@ -224,13 +215,13 @@ window#waybar {
     color: #e5c890;
 }
 
-/* ── Idle inhibitor ── */
-#idle_inhibitor {
+/* ── DND ── */
+#custom-dnd {
     color: #737994;
 }
 
-#idle_inhibitor.activated {
-    color: #e5c890;
+#custom-dnd.on {
+    color: #e78284;
 }
 
 /* ── Tray ── */

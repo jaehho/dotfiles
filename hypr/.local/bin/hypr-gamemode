@@ -1,0 +1,26 @@
+#!/bin/bash
+# Toggle game mode — disables compositor effects for performance
+
+GAMEMODE=$(hyprctl getoption animations:enabled -j | jq '.int')
+
+if [ "$GAMEMODE" = 1 ]; then
+    hyprctl --batch "\
+        keyword animations:enabled 0;\
+        keyword decoration:shadow:enabled 0;\
+        keyword decoration:blur:enabled 0;\
+        keyword decoration:rounding 0;\
+        keyword general:gaps_in 0;\
+        keyword general:gaps_out 0;\
+        keyword general:border_size 1"
+    notify-send -u low "Game Mode" "ON — effects disabled"
+else
+    hyprctl --batch "\
+        keyword animations:enabled 1;\
+        keyword decoration:shadow:enabled 1;\
+        keyword decoration:blur:enabled 1;\
+        keyword decoration:rounding 10;\
+        keyword general:gaps_in 5;\
+        keyword general:gaps_out 20;\
+        keyword general:border_size 2"
+    notify-send -u low "Game Mode" "OFF — effects restored"
+fi

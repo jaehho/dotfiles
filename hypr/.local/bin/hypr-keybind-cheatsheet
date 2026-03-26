@@ -1,0 +1,115 @@
+#!/bin/bash
+# Show keybind cheatsheet — auto-parsed from config files and running apps
+
+HYPR_CONFIG="$HOME/.config/hypr/hyprland.conf"
+KITTY_DEFAULTS="/usr/share/doc/kitty/kitty.conf"
+KITTY_CONFIG="$HOME/.config/kitty/kitty.conf"
+CUSTOM="$HOME/.config/hypr/cheatsheet.conf"
+
+{
+    echo "── Hyprland ──"
+
+    # Parse bind lines with submap awareness
+    awk '
+    /^submap\s*=/ {
+        sub(/^submap\s*=\s*/, "")
+        gsub(/^ +| +$/, "")
+        if ($0 == "reset") {
+            submap = ""
+        } else {
+            submap = $0
+        }
+        next
+    }
+    /^bind/ {
+        sub(/^bind[elmd]*\s*=\s*/, "")
+        n = split($0, parts, ",")
+        if (n < 2) next
+
+        mod = parts[1]; gsub(/^ +| +$/, "", mod)
+        key = parts[2]; gsub(/^ +| +$/, "", key)
+
+        action = ""
+        for (i = 3; i <= n; i++) {
+            gsub(/^ +| +$/, "", parts[i])
+            action = action (action ? ", " : "") parts[i]
+        }
+
+        if (key == "catchall" || action ~ /submap.*reset/) next
+        gsub(/\$mainMod/, "SUPER", mod)
+
+        prefix = ""
+        if (submap != "") prefix = "[" submap "] "
+
+        if (mod != "")
+            printf "  %-35s  %s%s\n", mod " + " key, prefix, action
+        else
+            printf "  %-35s  %s%s\n", key, prefix, action
+    }
+    ' "$HYPR_CONFIG" | sort
+
+    # Tmux — live keybinds (defaults + custom)
+    if tmux info >/dev/null 2>&1; then
+        echo ""
+        echo "── Tmux ──"
+        tmux list-keys 2>/dev/null | awk '
+        {
+            table = $3
+            key = $4
+            if (key ~ /Mouse|Wheel/) next
+
+            cmd = ""
+            for (i = 5; i <= NF; i++) cmd = cmd (cmd ? " " : "") $i
+
+            if (table == "prefix")
+                printf "  %-35s  %s\n", "Prefix + " key, cmd
+            else if (table == "root")
+                printf "  %-35s  %s\n", key " (no prefix)", cmd
+            else if (table == "copy-mode-vi")
+                printf "  %-35s  %s\n", key " [vi-copy]", cmd
+        }
+        ' | sort -u
+    fi
+
+    # Kitty — defaults from shipped config + user overrides
+    echo ""
+    echo "── Kitty (kitty_mod = Ctrl+Shift) ──"
+    {
+        # Defaults: commented-out map lines (skip macOS cmd+ binds)
+        if [ -f "$KITTY_DEFAULTS" ]; then
+            grep -E '^\s*#\s*map\s+' "$KITTY_DEFAULTS" | grep -v '#:' | \
+                sed 's/^\s*#\s*map\s*//' | grep -v '^cmd+\|^opt+\|^shift+cmd'
+        fi
+        # User overrides
+        if [ -f "$KITTY_CONFIG" ]; then
+            grep -E '^map\s' "$KITTY_CONFIG" | sed 's/^map\s*//'
+        fi
+    } | awk '
+    {
+        key = $1
+        sub(/^\S+\s*/, "")
+        action = $0
+        # Deduplicate by key (user overrides win since they come last)
+        keys[key] = action
+    }
+    END {
+        for (k in keys) {
+            printf "  %-35s  %s\n", k, keys[k]
+        }
+    }
+    ' | sort
+
+    # Append custom cheatsheet if it exists
+    if [ -f "$CUSTOM" ]; then
+        echo ""
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^#\ (.+) ]]; then
+                echo "── ${BASH_REMATCH[1]} ──"
+            elif [[ -n "$line" && ! "$line" =~ ^# ]]; then
+                echo "  $line"
+            fi
+        done < "$CUSTOM"
+    fi
+
+} | rofi -dmenu -i -p "Keybinds" \
+    -theme-str 'listview { lines: 25; } window { width: 900px; } element-text { font: "JetBrainsMono Nerd Font 11"; }'

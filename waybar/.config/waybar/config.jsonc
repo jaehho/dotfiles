@@ -14,22 +14,49 @@
     ],
     "modules-right": [
         "tray",
-        "idle_inhibitor",
+        "custom/dnd",
         "cpu",
         "memory",
-        "temperature",
         "pulseaudio",
         "backlight",
         "battery",
+        "power-profiles-daemon",
         "bluetooth",
         "network",
         "custom/power"
     ],
 
     "hyprland/workspaces": {
-        "format": "{id}",
+        "format": "{id} {windows}",
+        "format-window-separator": " ",
         "on-click": "activate",
-        "sort-by-number": true
+        "sort-by-number": true,
+        "window-rewrite-default": "󰏗",
+        "window-rewrite": {
+            "kitty": "󰄛",
+            "foot": "󰄛",
+            "Alacritty": "󰄛",
+            "firefox.*": "󰈹",
+            "chromium": "󰊯",
+            "brave-browser": "󰊯",
+            "thunar": "󰉋",
+            "nautilus": "󰉋",
+            "spotify": "󰓇",
+            "discord": "󰙯",
+            "vesktop": "󰙯",
+            "code.*": "󰨞",
+            "neovide": "",
+            "obsidian": "󰎞",
+            "steam.*": "󰓓",
+            "mpv": "󰐌",
+            "vlc": "󰐌",
+            "org.telegram.*": "󰔁",
+            "Slack": "󰒱",
+            "zoom": "󰍫",
+            "blueman.*": "󰂯",
+            "pavucontrol": "󰕾",
+            "org.gnome.Calculator": "󰃬"
+        }
     },
 
     "hyprland/window": {
@@ -45,20 +72,15 @@
     "cpu": {
         "interval": 5,
         "format": "CPU {usage}%",
+        "tooltip-format": "{avg_frequency} GHz\n{usage}% usage",
         "on-click": "kitty -e htop"
     },
 
     "memory": {
         "interval": 10,
         "format": "RAM {percentage}%",
+        "tooltip-format": "{used:0.1f} GiB / {total:0.1f} GiB\n{swapUsed:0.1f} GiB swap",
         "on-click": "kitty -e htop"
-    },
-
-    "temperature": {
-        "warning-threshold": 60,
-        "critical-threshold": 80,
-        "format": "{temperatureC}°C {icon}",
-        "format-icons": ["󰹔", "󰔏", "󰸃"]
     },
 
     "mpris": {
@@ -67,9 +89,12 @@
         "format-stopped": "",
         "max-length": 40,
         "player-icons": {
-            "default": "🎵",
+            "default": "▶",
             "firefox": "󰈹",
-            "spotify": "󰓇"
+            "firefox-developer-edition": "󰈹",
+            "spotify": "󰓇",
+            "chromium": "󰊯",
+            "mpv": "󰐌"
         },
         "on-click": "playerctl play-pause",
         "on-scroll-up": "playerctl next",
@@ -93,48 +118,60 @@
             "warning": 30,
             "critical": 15
         },
-        "format": "{capacity}% {icon}",
-        "format-charging": "{capacity}% 󰂄",
-        "format-plugged": "{capacity}% 󰚥",
-        "format-alt": "{time} {icon}",
-        "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]
+        "format": "{icon} {capacity}%",
+        "format-charging": "󰂄 {capacity}%",
+        "format-plugged": "󰚥 {capacity}%",
+        "format-alt": "{icon} {time}",
+        "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
+        "tooltip-format": "{timeTo}\n{power:.1f}W"
+    },
+
+    "power-profiles-daemon": {
+        "format": "{icon}",
+        "tooltip-format": "Profile: {profile}\nDriver: {driver}",
+        "format-icons": {
+            "default": "󰗑",
+            "performance": "󱐋",
+            "balanced": "󰗑",
+            "power-saver": "󰌪"
+        }
     },
 
     "network": {
-        "format-wifi": "{essid} ({signalStrength}%) 󰤨",
-        "format-ethernet": "{ipaddr}/{cidr} 󰈀",
-        "format-linked": "{ifname} (No IP) 󰈀",
-        "format-disconnected": "Disconnected 󰤭",
+        "format-wifi": "󰤨 {essid}",
+        "format-ethernet": "󰈀 {ipaddr}/{cidr}",
+        "format-linked": "󰈀 {ifname} (No IP)",
+        "format-disconnected": "󰤭 Disconnected",
+        "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ifname} via {gwaddr}\n{ipaddr}/{cidr}\n↑ {bandwidthUpBits} ↓ {bandwidthDownBits}",
         "tooltip-format": "{ifname} via {gwaddr}\n{ipaddr}/{cidr}",
-        "on-click": "networkmanager_dmenu",
-        "on-click-right": "nm-connection-editor"
+        "on-click": "nm-connection-editor"
     },
 
     "pulseaudio": {
-        "format": "{volume}% {icon}",
-        "format-bluetooth": "{volume}% 󰂯",
-        "format-muted": "󰝟",
+        "format": "{icon} {volume}%",
+        "format-bluetooth": "󰂰 {volume}%",
+        "format-muted": "󰝟 Muted",
         "format-icons": {
             "default": ["󰕿", "󰖀", "󰕾"]
         },
         "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+        "on-click-right": "pavucontrol",
         "on-scroll-up": "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+",
         "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
     },
 
     "backlight": {
-        "format": "{percent}% {icon}",
-        "format-icons": ["󰃞", "󰃟", "󰃠"]
+        "format": "{icon} {percent}%",
+        "format-icons": ["󰃞", "󰃟", "󰃠"],
+        "on-scroll-up": "brightnessctl -e4 -n2 set 5%+",
+        "on-scroll-down": "brightnessctl -e4 -n2 set 5%-"
     },
 
-    "idle_inhibitor": {
-        "format": "{icon}",
-        "format-icons": {
-            "activated": "󰅶",
-            "deactivated": "󰾪"
-        },
-        "tooltip-format-activated": "Idle inhibitor: ON",
-        "tooltip-format-deactivated": "Idle inhibitor: OFF"
+    "custom/dnd": {
+        "exec": "if makoctl mode | grep -q do-not-disturb; then echo '{\"text\": \"󰂛\", \"tooltip\": \"Do Not Disturb: ON\", \"class\": \"on\"}'; else echo '{\"text\": \"󰂚\", \"tooltip\": \"Do Not Disturb: OFF\", \"class\": \"off\"}'; fi",
+        "return-type": "json",
+        "interval": 2,
+        "on-click": "~/.local/bin/hypr-dnd-toggle"
     },
 
     "tray": {
@@ -144,6 +181,6 @@
     "custom/power": {
         "format": "⏻",
         "tooltip": false,
-        "on-click": "rofi -dmenu -p 'Power' <<< $'Lock\nSuspend\nReboot\nShutdown' | xargs -I {} sh -c 'case \"{}\" in Lock) loginctl lock-session;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'"
+        "on-click": "rofi -dmenu -p 'Power' -theme-str 'listview { lines: 5; }' <<< $'Lock\nLogout\nSuspend\nReboot\nShutdown' | xargs -I {} sh -c 'case \"{}\" in Lock) loginctl lock-session;; Logout) hyprctl dispatch exit;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'"
     }
 }

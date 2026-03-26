@@ -1,7 +1,5 @@
 function fish_greeting
-    if test -z "$TMUX"; and command -q tmux
-        set_color brblack
-        echo "tmux: attach (-a) | new (-s name) | list (ls)"
-        set_color normal
+    if test -z "$TMUX"; and test -n "$WAYLAND_DISPLAY"; and command -q tmux; and status is-interactive
+        exec tmux
     end
 end

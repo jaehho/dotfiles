@@ -260,6 +260,63 @@ vim.keymap.set('n', '<leader>tp', function()
   })
 end, { desc = '[T]ypst [P]review (toggle)' })
 
+-- LaTeX preview: compile with latexmk, then watch in tmux pane + open zathura (toggle)
+vim.keymap.set('n', '<leader>lp', function()
+  if vim.bo.filetype ~= 'tex' then
+    vim.notify('Not a LaTeX file', vim.log.levels.WARN)
+    return
+  end
+
+  local bufnr = vim.api.nvim_get_current_buf()
+
+  local function stop_preview()
+    local ok, preview = pcall(function() return vim.b[bufnr].latex_preview end)
+    if not ok or not preview then return end
+    if preview.pane_id and preview.pane_id ~= '' then
+      vim.system({ 'tmux', 'kill-pane', '-t', preview.pane_id })
+    end
+    if preview.zathura_id then
+      pcall(vim.fn.jobstop, preview.zathura_id)
+    end
+    pcall(function() vim.b[bufnr].latex_preview = nil end)
+    pcall(vim.api.nvim_del_augroup_by_name, 'LaTeXPreview' .. bufnr)
+  end
+
+  -- Toggle: if preview is running, stop it
+  if vim.b.latex_preview then
+    stop_preview()
+    vim.notify('LaTeX preview stopped', vim.log.levels.INFO)
+    return
+  end
+
+  local src = vim.api.nvim_buf_get_name(0)
+  local src_dir = vim.fn.fnamemodify(src, ':h')
+  local build_dir = src_dir .. '/build'
+  vim.fn.mkdir(build_dir, 'p')
+  local pdf = build_dir .. '/' .. vim.fn.fnamemodify(src, ':t'):gsub('%.tex$', '.pdf')
+  -- Compile once so the PDF exists before zathura opens
+  vim.system({ 'latexmk', '-pdf', '-g', '-interaction=nonstopmode', '-output-directory=' .. build_dir, src }):wait()
+  -- Open latexmk -pvc in a small tmux pane below
+  local result = vim.system({
+    'tmux', 'split-window', '-v', '-d', '-l', '6', '-P', '-F', '#{pane_id}',
+    'latexmk -pdf -pvc -g -interaction=nonstopmode -output-directory=' .. vim.fn.shellescape(build_dir) .. ' ' .. vim.fn.shellescape(src),
+  }):wait()
+  local pane_id = vim.trim(result.stdout or '')
+  local zathura_id = vim.fn.jobstart({ 'zathura', pdf }, {
+    on_exit = function()
+      vim.schedule(function() stop_preview() end)
+    end,
+  })
+  vim.b.latex_preview = { pane_id = pane_id, zathura_id = zathura_id }
+  -- Clean up on buffer delete or Neovim exit
+  local augroup = vim.api.nvim_create_augroup('LaTeXPreview' .. bufnr, { clear = true })
+  vim.api.nvim_create_autocmd({ 'BufDelete', 'VimLeavePre' }, {
+    group = augroup,
+    buffer = bufnr,
+    callback = function() stop_preview() end,
+  })
+end, { desc = '[L]aTeX [P]review (toggle)' })
+
 -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
 -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
 -- is not what someone will guess without a bit more experience.

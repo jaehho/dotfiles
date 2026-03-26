@@ -1,0 +1,438 @@
+#!/bin/bash
+# Unified wallpaper manager — SQLite-backed, quality-gated, time-aware
+# Usage:
+#   hypr-wallpaper menu      # rofi GUI
+#   hypr-wallpaper fetch     # fetch new wallpaper from online
+#   hypr-wallpaper next      # next eligible wallpaper from collection
+#   hypr-wallpaper like      # like current wallpaper
+#   hypr-wallpaper dislike   # dislike current + show next
+#   hypr-wallpaper source    # open source URL in browser
+#   hypr-wallpaper restore   # restore last wallpaper (autostart)
+#   hypr-wallpaper cleanup   # remove disliked files older than 7 days
+
+set -uo pipefail
+
+WALLDIR="$HOME/Pictures/wallpapers"
+DATADIR="$HOME/.cache/wallpaper-data"
+DBFILE="$DATADIR/wallpapers.db"
+STATEFILE="$DATADIR/current"
+TRANSITION="--transition-type grow --transition-duration 1.5 --transition-fps 60"
+UA="hypr-wallpaper/1.0"
+LIKED_RESHOW_DAYS=14
+MAX_RETRIES=3
+
+mkdir -p "$WALLDIR" "$DATADIR"
+
+# ── Initialize SQLite database ──
+init_db() {
+    sqlite3 "$DBFILE" "
+    CREATE TABLE IF NOT EXISTS wallpapers (
+        filename     TEXT PRIMARY KEY,
+        image_url    TEXT,
+        source_url   TEXT,
+        source       TEXT,
+        topic        TEXT,
+        status       TEXT DEFAULT 'unseen',
+        fetch_date   TEXT,
+        last_shown   TEXT,
+        width        INTEGER,
+        height       INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_status ON wallpapers(status);
+    "
+}
+init_db
+
+# ── DB helpers ──
+db_query() { sqlite3 -separator $'\t' "$DBFILE" "$1"; }
+db_exec()  { sqlite3 "$DBFILE" "$1"; }
+
+db_get_field() {
+    # $1=filename, $2=column
+    db_query "SELECT $2 FROM wallpapers WHERE filename = '$(sql_escape "$1")' LIMIT 1;"
+}
+
+sql_escape() { echo "${1//\'/\'\'}"; }
+
+db_add() {
+    # $1=filename $2=image_url $3=source_url $4=source $5=topic
+    db_exec "INSERT OR IGNORE INTO wallpapers (filename, image_url, source_url, source, topic, status, fetch_date)
+             VALUES ('$(sql_escape "$1")', '$(sql_escape "$2")', '$(sql_escape "$3")', '$(sql_escape "$4")', '$(sql_escape "$5")', 'unseen', '$(date +%Y-%m-%d)');"
+}
+
+db_set_status() {
+    db_exec "UPDATE wallpapers SET status = '$(sql_escape "$2")' WHERE filename = '$(sql_escape "$1")';"
+}
+
+db_set_last_shown() {
+    db_exec "UPDATE wallpapers SET last_shown = '$(date +%Y-%m-%d)' WHERE filename = '$(sql_escape "$1")';"
+}
+
+db_url_exists() {
+    local count
+    count=$(db_query "SELECT COUNT(*) FROM wallpapers WHERE image_url = '$(sql_escape "$1")';")
+    [ "$count" -gt 0 ]
+}
+
+current_file()     { cat "$STATEFILE" 2>/dev/null; }
+current_basename() { local c; c=$(current_file); [ -n "$c" ] && basename "$c"; }
+
+# ── Time-aware topic selection ──
+pick_topic() {
+    local hour
+    hour=$(date +%H)
+
+    # Learned topics from likes (query DB)
+    local learned
+    learned=$(db_query "SELECT topic FROM wallpapers WHERE status = 'liked' AND topic != '' ORDER BY RANDOM() LIMIT 5;" | tr '\n' '|')
+
+    local day=("landscape" "mountains" "coast" "architecture" "forest" "lake" "valley" "meadow" "ocean" "cliffs")
+    local evening=("sunset" "golden hour" "aurora" "twilight" "city skyline" "bridge" "harbor")
+    local night=("stars" "moonlight" "milky way" "northern lights" "night city" "neon" "observatory")
+
+    local pool=()
+    if [ "$hour" -ge 6 ] && [ "$hour" -lt 17 ]; then
+        pool=("${day[@]}")
+    elif [ "$hour" -ge 17 ] && [ "$hour" -lt 21 ]; then
+        pool=("${evening[@]}")
+    else
+        pool=("${night[@]}")
+    fi
+
+    # Add learned topics with double weight
+    IFS='|' read -ra ltopics <<< "$learned"
+    for t in "${ltopics[@]}"; do
+        [ -n "$t" ] && pool+=("$t" "$t")
+    done
+
+    echo "${pool[$((RANDOM % ${#pool[@]}))]}"
+}
+
+# ── Fetch: Reddit (top all-time, paginated, quality-gated) ──
+fetch_reddit() {
+    local topic="$1"
+    local sub
+    case "$topic" in
+        *architecture*|*city*|*bridge*|*harbor*|*neon*|*skyline*) sub="ArchitecturePorn" ;;
+        *stars*|*aurora*|*milky*|*northern*|*moon*|*observatory*) sub="SkyPorn" ;;
+        *sunset*|*golden*|*twilight*) sub="EarthPorn" ;;
+        *night*) sub="CityPorn" ;;
+        *) sub="EarthPorn" ;;
+    esac
+
+    local after_file="$DATADIR/reddit-${sub}.after"
+    local after=""
+    [ -f "$after_file" ] && after="&after=$(cat "$after_file")"
+
+    local json
+    json=$(curl -sf --max-time 15 \
+        "https://www.reddit.com/r/$sub/top.json?t=all&limit=50${after}" \
+        -H "User-Agent: $UA") || return 1
+
+    # Save pagination for next fetch
+    local next_after
+    next_after=$(echo "$json" | jq -r '.data.after // empty')
+    if [ -n "$next_after" ]; then
+        echo "$next_after" > "$after_file"
+    else
+        rm -f "$after_file"
+    fi
+
+    # Parse all eligible posts
+    local posts
+    posts=$(echo "$json" | jq -c '
+        [.data.children[].data
+         | select(.post_hint == "image")
+         | select(.score >= 500)
+         | select(.url | test("\\.(jpg|jpeg|png)$"; "i"))
+         | select((.preview.images[0].source.width // 0) >= 1920)
+         | { url: .url, source: ("https://reddit.com" + .permalink),
+             w: .preview.images[0].source.width, h: .preview.images[0].source.height }
+        ] | .[]') || return 1
+
+    # Find first URL not already in DB
+    while IFS= read -r post; do
+        [ -z "$post" ] && continue
+        local url
+        url=$(echo "$post" | jq -r '.url')
+        if ! db_url_exists "$url"; then
+            echo "$post" | jq -r '[.url, .source, .w, .h] | @tsv'
+            return 0
+        fi
+    done <<< "$posts"
+
+    return 1
+}
+
+# ── Fetch: Wallhaven (toplist, paginated, quality-gated) ──
+fetch_wallhaven() {
+    local topic="$1"
+    local query="${topic// /+}"
+
+    local page_file="$DATADIR/wallhaven-${query}.page"
+    local page=1
+    [ -f "$page_file" ] && page=$(cat "$page_file")
+
+    local json
+    json=$(curl -sf --max-time 15 \
+        "https://wallhaven.cc/api/v1/search?q=$query&sorting=toplist&topRange=1y&atleast=1920x1080&purity=100&ratios=16x9%2C16x10&page=$page") || return 1
+
+    # Advance page
+    local last_page
+    last_page=$(echo "$json" | jq -r '.meta.last_page // 1')
+    echo "$(( page % last_page + 1 ))" > "$page_file"
+
+    local posts
+    posts=$(echo "$json" | jq -c '
+        [.data[]
+         | select(.favorites >= 30)
+         | { url: .path, source: .url,
+             w: .dimension_x, h: .dimension_y }
+        ] | .[]') || return 1
+
+    while IFS= read -r post; do
+        [ -z "$post" ] && continue
+        local url
+        url=$(echo "$post" | jq -r '.url')
+        if ! db_url_exists "$url"; then
+            echo "$post" | jq -r '[.url, .source, .w, .h] | @tsv'
+            return 0
+        fi
+    done <<< "$posts"
+
+    return 1
+}
+
+# ── Fetch: Unsplash ──
+fetch_unsplash() {
+    local topic="$1"
+    local key="${UNSPLASH_ACCESS_KEY:-}"
+    [ -z "$key" ] && return 1
+
+    local query="${topic// /+}"
+    local json
+    json=$(curl -sf --max-time 15 \
+        "https://api.unsplash.com/photos/random?query=$query&orientation=landscape&client_id=$key") || return 1
+
+    local url source_url w h
+    url=$(echo "$json" | jq -r '.urls.full // empty')
+    source_url=$(echo "$json" | jq -r '.links.html // empty')
+    w=$(echo "$json" | jq -r '.width // 0')
+    h=$(echo "$json" | jq -r '.height // 0')
+    [ -z "$url" ] && return 1
+
+    if ! db_url_exists "$url"; then
+        printf '%s\t%s\t%s\t%s\n' "$url" "$source_url" "$w" "$h"
+        return 0
+    fi
+    return 1
+}
+
+# ── Download and register ──
+do_fetch() {
+    local attempt=0
+    while [ "$attempt" -lt "$MAX_RETRIES" ]; do
+        ((attempt++))
+        local topic
+        topic=$(pick_topic)
+
+        local sources=("reddit" "wallhaven")
+        [ -n "${UNSPLASH_ACCESS_KEY:-}" ] && sources+=("unsplash")
+
+        local result="" source_name=""
+        for src in $(printf '%s\n' "${sources[@]}" | shuf); do
+            case $src in
+                reddit)    result=$(fetch_reddit "$topic" 2>/dev/null) ;;
+                wallhaven) result=$(fetch_wallhaven "$topic" 2>/dev/null) ;;
+                unsplash)  result=$(fetch_unsplash "$topic" 2>/dev/null) ;;
+            esac
+            if [ -n "$result" ]; then
+                source_name=$src
+                break
+            fi
+        done
+
+        [ -n "$result" ] && break
+    done
+
+    if [ -z "$result" ]; then
+        notify-send -u normal "Wallpaper" "Failed to fetch after $MAX_RETRIES attempts"
+        return 1
+    fi
+
+    local img_url source_url w h
+    IFS=$'\t' read -r img_url source_url w h <<< "$result"
+
+    local ext="${img_url##*.}"
+    ext="${ext%%\?*}"
+    [[ "$ext" =~ ^(jpg|jpeg|png|webp)$ ]] || ext="jpg"
+    local filename="$(date +%Y%m%d-%H%M%S)-${source_name}.${ext}"
+    local filepath="$WALLDIR/$filename"
+
+    if ! curl -sf --max-time 30 -o "$filepath" "$img_url"; then
+        notify-send -u normal "Wallpaper" "Download failed"
+        return 1
+    fi
+
+    db_add "$filename" "$img_url" "$source_url" "$source_name" "$topic"
+    db_exec "UPDATE wallpapers SET width=${w:-0}, height=${h:-0} WHERE filename='$(sql_escape "$filename")';"
+    set_wallpaper "$filepath"
+    notify-send -u low "Wallpaper" "$topic ($source_name)"
+}
+
+# ── Set wallpaper via awww ──
+set_wallpaper() {
+    local filepath="$1"
+    pgrep -x awww-daemon >/dev/null || { awww-daemon 2>/dev/null & sleep 0.5; }
+    eval awww img "\"$filepath\"" $TRANSITION
+    echo "$filepath" > "$STATEFILE"
+    db_set_last_shown "$(basename "$filepath")"
+}
+
+# ── Next eligible wallpaper ──
+do_next() {
+    local current_name
+    current_name=$(current_basename)
+    local esc_current
+    esc_current=$(sql_escape "$current_name")
+
+    # Priority 1: unseen wallpapers
+    local pick
+    pick=$(db_query "SELECT filename FROM wallpapers
+                     WHERE status = 'unseen' AND filename != '$esc_current'
+                     ORDER BY RANDOM() LIMIT 1;")
+
+    # Priority 2: liked wallpapers not shown recently
+    if [ -z "$pick" ]; then
+        pick=$(db_query "SELECT filename FROM wallpapers
+                         WHERE status = 'liked' AND filename != '$esc_current'
+                           AND (last_shown IS NULL OR last_shown <= date('now', '-$LIKED_RESHOW_DAYS days'))
+                         ORDER BY RANDOM() LIMIT 1;")
+    fi
+
+    # Priority 3: fetch new
+    if [ -z "$pick" ] || [ ! -f "$WALLDIR/$pick" ]; then
+        do_fetch
+        return
+    fi
+
+    set_wallpaper "$WALLDIR/$pick"
+    notify-send -u low "Wallpaper" "$pick"
+}
+
+# ── Rofi menu ──
+do_menu() {
+    local current
+    current=$(current_basename)
+    local status
+    status=$(db_get_field "$current" "status")
+    [ -z "$status" ] && status="untracked"
+
+    local choice
+    choice=$(printf '%s\n' \
+        "  Like" \
+        "  Dislike" \
+        "  Skip to next" \
+        "  Fetch new online" \
+        "  Open source" \
+        "  Browse collection" \
+        | rofi -dmenu -i -p "Wallpaper ($status)" \
+            -theme-str 'listview { lines: 6; } window { width: 400px; }')
+
+    case "$choice" in
+        *"Like"*)     do_like ;;
+        *"Dislike"*)  do_dislike ;;
+        *"Skip"*)     do_next ;;
+        *"Fetch"*)    do_fetch ;;
+        *"source"*)   do_source ;;
+        *"Browse"*)   do_browse ;;
+    esac
+}
+
+do_like() {
+    local name
+    name=$(current_basename)
+    [ -z "$name" ] && return
+    db_set_status "$name" "liked"
+    notify-send -u low "Wallpaper  " "Liked — will rotate back in after ${LIKED_RESHOW_DAYS} days"
+}
+
+do_dislike() {
+    local name
+    name=$(current_basename)
+    [ -z "$name" ] && return
+    db_set_status "$name" "disliked"
+    notify-send -u low "Wallpaper  " "Disliked — won't show again"
+    do_next
+}
+
+do_source() {
+    local name
+    name=$(current_basename)
+    [ -z "$name" ] && return
+    local url
+    url=$(db_get_field "$name" "source_url")
+    if [ -n "$url" ]; then
+        xdg-open "$url" &disown
+    else
+        notify-send -u low "Wallpaper" "No source URL available"
+    fi
+}
+
+do_browse() {
+    local pick
+    pick=$(db_query "SELECT filename || '  [' || status || ']  ' || COALESCE(topic,'') || CASE WHEN source != '' THEN '  (' || source || ')' ELSE '' END
+                     FROM wallpapers WHERE status != 'disliked' ORDER BY fetch_date DESC;" \
+        | rofi -dmenu -i -p "Browse" \
+            -theme-str 'listview { lines: 15; } window { width: 800px; }')
+
+    [ -z "$pick" ] && return
+    local filename="${pick%%  \[*}"
+    [ -f "$WALLDIR/$filename" ] && set_wallpaper "$WALLDIR/$filename"
+}
+
+do_restore() {
+    pgrep -x awww-daemon >/dev/null || { awww-daemon 2>/dev/null & sleep 0.5; }
+    local last
+    last=$(current_file)
+    if [ -n "$last" ] && [ -f "$last" ]; then
+        awww img "$last" --transition-type none
+    fi
+}
+
+do_cleanup() {
+    # Delete disliked wallpaper files older than 7 days (keep DB records)
+    local files
+    files=$(db_query "SELECT filename FROM wallpapers
+                      WHERE status = 'disliked' AND fetch_date <= date('now', '-7 days');")
+    while IFS= read -r fname; do
+        [ -n "$fname" ] && rm -f "$WALLDIR/$fname"
+    done <<< "$files"
+}
+
+# ── Migrate from old TSV if it exists ──
+migrate_tsv() {
+    local old="$DATADIR/db.tsv"
+    [ -f "$old" ] || return
+    while IFS=$'\t' read -r fname source_url status topic fetch_date last_shown; do
+        [ -z "$fname" ] && continue
+        db_exec "INSERT OR IGNORE INTO wallpapers (filename, source_url, status, topic, fetch_date, last_shown, source)
+                 VALUES ('$(sql_escape "$fname")', '$(sql_escape "$source_url")', '$(sql_escape "$status")', '$(sql_escape "$topic")', '$(sql_escape "$fetch_date")', '$(sql_escape "$last_shown")', '');"
+    done < "$old"
+    mv "$old" "$old.migrated"
+}
+migrate_tsv 2>/dev/null
+
+# ── Main ──
+case "${1:-menu}" in
+    menu)    do_menu ;;
+    fetch)   do_fetch ;;
+    next)    do_next ;;
+    like)    do_like ;;
+    dislike) do_dislike ;;
+    source)  do_source ;;
+    browse)  do_browse ;;
+    restore) do_restore ;;
+    cleanup) do_cleanup ;;
+    *)       echo "Usage: hypr-wallpaper {menu|fetch|next|like|dislike|source|browse|restore|cleanup}" ;;
+esac
