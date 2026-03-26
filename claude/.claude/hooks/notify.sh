@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Claude Code notification hook — desktop notifications via notify-send (mako)
-# Handles: Stop (response complete), Notification (permission/idle prompts)
+# Handles: Stop (response complete), Notification (permission prompts)
 
 set -euo pipefail
 
 INPUT=$(cat)
 EVENT=$(echo "$INPUT" | jq -r '.hook_event_name // empty')
+
 
 truncate() {
   local text="$1" max="${2:-200}"
@@ -30,6 +31,7 @@ case "$EVENT" in
     BODY=$(truncate "$FULL_MSG" 300)
     NTFY_BODY=$(truncate "$FULL_MSG" 4000)
     URGENCY="normal"
+    CATEGORY="persistent"
     play_sound
     ;;
 
@@ -44,9 +46,6 @@ case "$EVENT" in
         URGENCY="normal"
         CATEGORY="persistent"
         play_sound
-        ;;
-      idle_prompt)
-        exit 0
         ;;
       *)
         TITLE=$(echo "$INPUT" | jq -r '.title // "Claude Code"')
@@ -83,7 +82,11 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
   save_window_address
   NOTIFY_ARGS=(--app-name="Claude Code" -u "${URGENCY:-normal}")
   [[ -n "${CATEGORY:-}" ]] && NOTIFY_ARGS+=(-c "$CATEGORY")
-  notify-send "${NOTIFY_ARGS[@]}" "$TITLE" "$BODY" &
+  NOTIFY_ARGS+=(--action=default=Focus)
+  (
+    action=$(notify-send "${NOTIFY_ARGS[@]}" "$TITLE" "$BODY")
+    [[ "$action" == "default" ]] && ~/.local/bin/hypr-focus-notification
+  ) &
 else
   "$HOME/.local/bin/notify" "$TITLE" "$BODY" &
 fi
