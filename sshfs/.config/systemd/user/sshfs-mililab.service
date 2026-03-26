@@ -5,8 +5,9 @@ After=network-online.target
 [Service]
 Type=forking
 ExecStart=/usr/bin/sshfs mililab:/ %h/mililab \
-  -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3
-ExecStop=/bin/fusermount -u %h/mililab
+  -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 \
+  -o dir_cache=no,no_readahead
+ExecStop=/bin/fusermount3 -uz %h/mililab
 Restart=on-failure
 RestartSec=10
 

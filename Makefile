@@ -78,9 +78,10 @@ system-install: ## Copy boot configs and symlink runtime configs
 	else \
 		echo "TPM already installed."; \
 	fi
-	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default
+	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default /etc/systemd
 	sudo ln -sf $(REPO_ROOT)/keyd/default.conf /etc/keyd/default.conf
 	sudo ln -sf $(REPO_ROOT)/libinput/local-overrides.quirks /etc/libinput/local-overrides.quirks
+	sudo ln -sf $(REPO_ROOT)/systemd/sleep.conf /etc/systemd/sleep.conf
 	@changed=""; \
 	for pair in $(SYSTEM_COPIES); do \
 		src=$${pair%%:*}; dst=$${pair##*:}; \
@@ -232,7 +233,7 @@ status: ## Show current dotfiles state
 	done
 	@echo ""
 	@echo "System configs (symlinked):"
-	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks; do \
+	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks /etc/systemd/sleep.conf; do \
 		if [ -L "$$f" ]; then \
 			echo "  $$f: linked"; \
 		elif [ -f "$$f" ]; then \

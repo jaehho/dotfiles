@@ -6,8 +6,9 @@ After=network-online.target
 Type=forking
 ExecStart=/usr/bin/sshfs ice:/ %h/ice \
   -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 \
+  -o dir_cache=no,no_readahead \
   -o ssh_command=sshpass\ -f\ %h/.ssh/jump_pass\ ssh
-ExecStop=/bin/fusermount -u %h/ice
+ExecStop=/bin/fusermount3 -uz %h/ice
 Restart=on-failure
 RestartSec=10
 
