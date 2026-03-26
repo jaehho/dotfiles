@@ -39,7 +39,7 @@ case "$EVENT" in
       permission_prompt)
         TITLE="Permission needed"
         BODY="${MSG:-Claude needs your approval.}"
-        URGENCY="high"
+        URGENCY="normal"
         CATEGORY="persistent"
         play_sound
         ;;
@@ -60,9 +60,34 @@ case "$EVENT" in
   *) exit 0 ;;
 esac
 
+# ── Resolve source window (for SUPER+. focus) ────────────────────────────────
+save_window_address() {
+  local pid
+  pid=$(tmux display-message -p '#{client_pid}' 2>/dev/null) || pid=$$
+  while [ "$pid" -gt 1 ] 2>/dev/null; do
+    if [[ "$(cat /proc/"$pid"/comm 2>/dev/null)" == "kitty" ]]; then
+      local addr
+      addr=$(hyprctl clients -j 2>/dev/null \
+        | jq -r --argjson p "$pid" '.[] | select(.pid == $p) | .address' 2>/dev/null)
+      if [[ -n "$addr" ]]; then
+        echo "$addr" > "${XDG_RUNTIME_DIR:-/tmp}/claude-notify-window"
+      fi
+      return
+    fi
+    pid=$(awk '/^PPid:/{print $2}' /proc/"$pid"/status 2>/dev/null) || return
+  done
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
-# Desktop: OSC 99 via Kitty (works locally, through tmux, and over SSH)
-"$HOME/.local/bin/notify" "$TITLE" "$BODY" &
+# Desktop: notify-send (mako) on local Wayland; OSC 99 for SSH/remote
+if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]; then
+  save_window_address
+  NOTIFY_ARGS=(--app-name="Claude Code" -u "${URGENCY:-normal}")
+  [[ -n "${CATEGORY:-}" ]] && NOTIFY_ARGS+=(-c "$CATEGORY")
+  notify-send "${NOTIFY_ARGS[@]}" "$TITLE" "$BODY" &
+else
+  "$HOME/.local/bin/notify" "$TITLE" "$BODY" &
+fi
 
 # Mobile: ntfy.sh (always, so you get notified even away from desk)
 NTFY_PRIORITY="default"

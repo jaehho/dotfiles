@@ -37,13 +37,8 @@ dcs_osc99() {
 }
 
 if [ -n "${TMUX:-}" ]; then
-    if [ -n "${SSH_CONNECTION:-}" ]; then
-        # Remote tmux: write to SSH pty, bypassing remote tmux
-        dcs_osc99 > "$(tmux display-message -p '#{client_tty}')"
-    else
-        # Local tmux: DCS passthrough to Kitty
-        dcs_osc99
-    fi
+    # Write to tmux client tty so OSC 99 reaches Kitty even from background processes
+    dcs_osc99 > "$(tmux display-message -p '#{client_tty}')"
 elif [ -t 1 ]; then
     # Bare terminal (no tmux): raw OSC 99
     osc99
