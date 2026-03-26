@@ -21,33 +21,46 @@ DBFILE="$DATADIR/wallpapers.db"
 STATEFILE="$DATADIR/current"
 MODEFILE="$DATADIR/mode"
 HISTFILE_WP="$DATADIR/history"
-CONFFILE="${XDG_CONFIG_HOME:-$HOME/.config}/hypr-wallpaper/config"
+CONFDIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr-wallpaper"
+CONFFILE="$CONFDIR/config"
+RULESFILE="$CONFDIR/rules.toml"
 
 mkdir -p "$WALLDIR" "$DATADIR"
 
 # ── Defaults ──
-TRANSITION="--transition-type simple"
-MIN_WIDTH=2560
-REDDIT_MIN_SCORE=500
-WALLHAVEN_MIN_FAVORITES=30
-WALLHAVEN_EXCLUDE_TAGS=women
-LIKED_RESHOW_DAYS=14
-MAX_RETRIES=3
-EXPLORE_HISTORY=3
-LIKED_HISTORY=50
 UA="hypr-wallpaper/1.0"
 
-DAY_TOPICS="landscape,mountains,coast,architecture,forest,lake,valley,meadow,ocean,cliffs"
-EVENING_TOPICS="sunset,golden hour,aurora,twilight,city skyline,bridge,harbor"
-NIGHT_TOPICS="stars,moonlight,milky way,northern lights,night city,neon,observatory"
-SPRING_TOPICS=""
-SUMMER_TOPICS=""
-AUTUMN_TOPICS=""
-WINTER_TOPICS=""
+# ── Logging ──
+LOGFILE="$DATADIR/hypr-wallpaper.log"
+if [ -f "$LOGFILE" ]; then
+    tail -n "${LOG_MAX_LINES:-500}" "$LOGFILE" > "$LOGFILE.tmp" && mv "$LOGFILE.tmp" "$LOGFILE"
+fi
+_c_reset='\033[0m'
+_c_dim='\033[2m'
+_c_bold='\033[1m'
+_c_green='\033[32m'
+_c_yellow='\033[33m'
+_c_red='\033[31m'
+_c_cyan='\033[36m'
+_c_magenta='\033[35m'
+
+_log_file() { printf "[%s] %s %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$1" "$(echo -e "$2" | sed 's/\x1b\[[0-9;]*m//g')" >> "$LOGFILE"; }
+
+log_step()  { printf "  ${_c_cyan}%s${_c_reset} %b\n" "$1" "$2"; _log_file "$1" "$2"; }
+log_ok()    { printf "  ${_c_green}%s${_c_reset} %b\n" "$1" "$2"; _log_file "$1" "$2"; }
+log_warn()  { printf "  ${_c_yellow}%s${_c_reset} %b\n" "$1" "$2"; _log_file "$1" "$2"; }
+log_fail()  { printf "  ${_c_red}%s${_c_reset} %b\n" "$1" "$2"; _log_file "$1" "$2"; }
+log_dim()   { printf "  ${_c_dim}%b${_c_reset}\n" "$1"; _log_file "-" "$1"; }
+
+# Notification that replaces itself (mako tag)
+notify_progress() {
+    notify-send -u low -h "string:x-canonical-private-synchronous:hypr-wallpaper" "Wallpaper" "$1"
+}
 
 # ── Load user config ──
 # shellcheck disable=SC1090
 [ -f "$CONFFILE" ] && source "$CONFFILE"
+[ -f "$HOME/.env" ] && source "$HOME/.env"
 
 # ── Initialize SQLite database ──
 init_db() {
@@ -58,7 +71,7 @@ init_db() {
         source_url   TEXT,
         source       TEXT,
         topic        TEXT,
-        status       TEXT DEFAULT 'unseen',
+        status       TEXT DEFAULT 'unrated',
         fetch_date   TEXT,
         last_shown   TEXT,
         width        INTEGER,
@@ -68,6 +81,7 @@ init_db() {
     "
 }
 init_db
+db_exec "UPDATE wallpapers SET status = 'unrated' WHERE status = 'unseen';" 2>/dev/null
 
 # ── DB helpers ──
 db_query() { sqlite3 -separator $'\t' "$DBFILE" "$1"; }
@@ -81,7 +95,7 @@ sql_escape() { echo "${1//\'/\'\'}"; }
 
 db_add() {
     db_exec "INSERT OR IGNORE INTO wallpapers (filename, image_url, source_url, source, topic, status, fetch_date)
-             VALUES ('$(sql_escape "$1")', '$(sql_escape "$2")', '$(sql_escape "$3")', '$(sql_escape "$4")', '$(sql_escape "$5")', 'unseen', '$(date +%Y-%m-%d)');"
+             VALUES ('$(sql_escape "$1")', '$(sql_escape "$2")', '$(sql_escape "$3")', '$(sql_escape "$4")', '$(sql_escape "$5")', 'unrated', '$(date +%Y-%m-%d)');"
 }
 
 db_set_status() {
@@ -156,41 +170,71 @@ do_prev() {
     done
 }
 
-# ── Time-aware topic selection with seasonal pools ──
+# ── Rule-based topic selection ──
+# Reads rules.toml — each section has an optional condition (shell command)
+# and a topics list. All matching rules' topics are pooled together.
+# Sections with no condition always match (defaults/fallbacks).
 pick_topic() {
-    local hour month
-    hour=$(date +%H)
-    month=$(date +%m)
-
-    IFS=',' read -ra day <<< "$DAY_TOPICS"
-    IFS=',' read -ra evening <<< "$EVENING_TOPICS"
-    IFS=',' read -ra night <<< "$NIGHT_TOPICS"
-
-    local pool=()
-    if [ "$hour" -ge 6 ] && [ "$hour" -lt 17 ]; then
-        pool=("${day[@]}")
-    elif [ "$hour" -ge 17 ] && [ "$hour" -lt 21 ]; then
-        pool=("${evening[@]}")
-    else
-        pool=("${night[@]}")
+    if [ ! -f "$RULESFILE" ]; then
+        log_warn "!" "No rules file, using fallback"
+        echo "landscape"
+        return
     fi
 
-    local seasonal=""
-    case "$month" in
-        03|04|05) seasonal="$SPRING_TOPICS" ;;
-        06|07|08) seasonal="$SUMMER_TOPICS" ;;
-        09|10|11) seasonal="$AUTUMN_TOPICS" ;;
-        12|01|02) seasonal="$WINTER_TOPICS" ;;
-    esac
-    if [ -n "$seasonal" ]; then
-        IFS=',' read -ra stopics <<< "$seasonal"
-        pool+=("${stopics[@]}")
+    local rules rule_names
+    rule_names=$(tomlq -r 'keys[]' "$RULESFILE" 2>/dev/null)
+    [ -z "$rule_names" ] && { log_warn "!" "Empty rules file"; echo "landscape"; return; }
+
+    log_step "~" "Evaluating rules..." >&2
+
+    local pool=() matched_names=()
+    while IFS= read -r name; do
+        [ -z "$name" ] && continue
+        local condition topics_json
+        condition=$(tomlq -r ".\"$name\".condition // \"\"" "$RULESFILE")
+        topics_json=$(tomlq -r ".\"$name\".topics // [] | .[]" "$RULESFILE")
+
+        [ -z "$topics_json" ] && continue
+
+        local match=false
+        if [ -z "$condition" ]; then
+            match=true
+        elif timeout "$RULE_TIMEOUT" bash -c "$condition" >/dev/null 2>&1; then
+            match=true
+        fi
+
+        if [ "$match" = true ]; then
+            matched_names+=("$name")
+            local rule_topics=()
+            while IFS= read -r t; do
+                [ -n "$t" ] && { pool+=("$t"); rule_topics+=("$t"); }
+            done <<< "$topics_json"
+            log_ok "+" "$name" >&2
+            log_dim "      $(printf '%s, ' "${rule_topics[@]}" | sed 's/, $//')" >&2
+        else
+            log_dim "- $name" >&2
+        fi
+    done <<< "$rule_names"
+
+    if [ ${#pool[@]} -eq 0 ]; then
+        log_warn "!" "No rules matched, using fallback" >&2
+        echo "landscape"
+        return
     fi
 
-    echo "${pool[$((RANDOM % ${#pool[@]}))]}"
+    if [ ${#matched_names[@]} -gt 1 ]; then
+        echo "" >&2
+        log_step "=" "${#pool[@]} topics combined from: ${_c_bold}${matched_names[*]}${_c_reset}" >&2
+    fi
+
+    local pick="${pool[$((RANDOM % ${#pool[@]}))]}"
+    echo "" >&2
+    log_step "*" "Selected: ${_c_bold}$pick${_c_reset}" >&2
+    echo "$pick"
 }
 
 # ── Fetch: Reddit ──
+# Exit codes: 1 = API/network error, 2 = no quality matches, 3 = all already seen
 fetch_reddit() {
     local topic="$1"
     local sub
@@ -217,7 +261,9 @@ fetch_reddit() {
          | select((.preview.images[0].source.width // 0) > (.preview.images[0].source.height // 0))
          | { url: .url, source: ("https://reddit.com" + .permalink),
              w: .preview.images[0].source.width, h: .preview.images[0].source.height }
-        ] | .[]') || return 1
+        ] | .[]') || return 2
+
+    [ -z "$posts" ] && return 2
 
     while IFS= read -r post; do
         [ -z "$post" ] && continue
@@ -229,7 +275,7 @@ fetch_reddit() {
         fi
     done <<< "$posts"
 
-    return 1
+    return 3
 }
 
 # ── Fetch: Wallhaven ──
@@ -237,7 +283,10 @@ fetch_wallhaven() {
     local topic="$1"
     local query="${topic// /+}"
     local exclude=""
-    [ -n "$WALLHAVEN_EXCLUDE_TAGS" ] && exclude="+-${WALLHAVEN_EXCLUDE_TAGS//,/+-}"
+    if [ -n "$WALLHAVEN_EXCLUDE_TAGS" ]; then
+        local tags="${WALLHAVEN_EXCLUDE_TAGS// /}"
+        exclude="+-${tags//,/+-}"
+    fi
 
     local json
     json=$(curl -sf --max-time 15 \
@@ -249,7 +298,9 @@ fetch_wallhaven() {
          | select(.favorites >= $min_fav)
          | { url: .path, source: .url,
              w: .dimension_x, h: .dimension_y }
-        ] | .[]') || return 1
+        ] | .[]') || return 2
+
+    [ -z "$posts" ] && return 2
 
     while IFS= read -r post; do
         [ -z "$post" ] && continue
@@ -261,7 +312,7 @@ fetch_wallhaven() {
         fi
     done <<< "$posts"
 
-    return 1
+    return 3
 }
 
 # ── Fetch: Unsplash ──
@@ -280,78 +331,137 @@ fetch_unsplash() {
     source_url=$(echo "$json" | jq -r '.links.html // empty')
     w=$(echo "$json" | jq -r '.width // 0')
     h=$(echo "$json" | jq -r '.height // 0')
-    [ -z "$url" ] && return 1
+    [ -z "$url" ] && return 2
 
     if ! db_url_exists "$url"; then
         printf '%s\t%s\t%s\t%s\n' "$url" "$source_url" "$w" "$h"
         return 0
     fi
-    return 1
+    return 3
 }
 
 # ── Download and register ──
 do_fetch() {
+    printf "\n  ${_c_bold}Wallpaper Fetch${_c_reset}\n\n"
+
     local attempt=0
-    local result="" source_name=""
     while [ "$attempt" -lt "$MAX_RETRIES" ]; do
         ((attempt++))
-        local topic
+        [ "$attempt" -gt 1 ] && echo "" && log_warn "~" "Retry $attempt/$MAX_RETRIES..."
+
+        local topic result="" source_name=""
         topic=$(pick_topic)
+        notify_progress "Searching for \"$topic\"..."
 
-        local sources=("reddit" "wallhaven")
-        [ -n "${UNSPLASH_ACCESS_KEY:-}" ] && sources+=("unsplash")
+        IFS=',' read -ra sources <<< "${SOURCES:-reddit,wallhaven,unsplash}"
+        # Filter out unsplash if no API key
+        local filtered=()
+        for s in "${sources[@]}"; do
+            s="${s// /}"
+            [ "$s" = "unsplash" ] && [ -z "${UNSPLASH_ACCESS_KEY:-}" ] && continue
+            filtered+=("$s")
+        done
+        sources=("${filtered[@]}")
+        # Shuffle if configured
+        if [ "${SOURCE_ORDER:-ordered}" = "random" ]; then
+            local i j tmp
+            for ((i=${#sources[@]}-1; i>0; i--)); do
+                j=$((RANDOM % (i+1)))
+                tmp="${sources[$i]}"
+                sources[$i]="${sources[$j]}"
+                sources[$j]="$tmp"
+            done
+        fi
 
+        echo ""
         for src in "${sources[@]}"; do
+            log_step ">" "Trying $src..."
+            notify_progress "Trying $src for \"$topic\"..."
+            local rc=0
             case $src in
-                reddit)    result=$(fetch_reddit "$topic" 2>/dev/null) ;;
-                wallhaven) result=$(fetch_wallhaven "$topic" 2>/dev/null) ;;
-                unsplash)  result=$(fetch_unsplash "$topic" 2>/dev/null) ;;
+                reddit)    result=$(fetch_reddit "$topic" 2>/dev/null) || rc=$? ;;
+                wallhaven) result=$(fetch_wallhaven "$topic" 2>/dev/null) || rc=$? ;;
+                unsplash)  result=$(fetch_unsplash "$topic" 2>/dev/null) || rc=$? ;;
             esac
             if [ -n "$result" ]; then
                 source_name=$src
+                log_ok "+" "Found on $src"
                 break
+            else
+                case $rc in
+                    1) log_fail "x" "$src: API request failed (network/timeout)" ;;
+                    2) log_warn "-" "$src: no results for \"$topic\" (quality gate)" ;;
+                    3) log_warn "-" "$src: all results already seen" ;;
+                    *) log_dim "  - $src: no match" ;;
+                esac
             fi
         done
 
-        [ -n "$result" ] && break
+        [ -z "$result" ] && continue
+
+        # ── Download ──
+        local img_url source_url w h
+        IFS=$'\t' read -r img_url source_url w h <<< "$result"
+
+        local ext="${img_url##*.}"
+        ext="${ext%%\?*}"
+        [[ "$ext" =~ ^(jpg|jpeg|png|webp)$ ]] || ext="jpg"
+        local filename="$(date +%Y%m%d-%H%M%S)-${source_name}.${ext}"
+        local filepath="$WALLDIR/$filename"
+
+        echo ""
+        log_step ">" "Downloading ${w}x${h} from $source_name..."
+        notify_progress "Downloading ${w}x${h} from $source_name..."
+        local curl_out
+        if ! curl_out=$(curl -sf --max-time 30 -w "%{http_code}" -o "$filepath" "$img_url" 2>&1); then
+            local http_code="${curl_out: -3}"
+            rm -f "$filepath"
+            local dl_err=""
+            case "$http_code" in
+                000) dl_err="connection timeout" ;;
+                403) dl_err="access denied (403)" ;;
+                404) dl_err="image not found (404)" ;;
+                429) dl_err="rate limited (429)" ;;
+                *)   dl_err="HTTP $http_code" ;;
+            esac
+            log_fail "x" "Download failed: $dl_err"
+            notify_progress "Download failed: $dl_err, retrying..."
+            continue
+        fi
+
+        # ── Success ──
+        db_add "$filename" "$img_url" "$source_url" "$source_name" "$topic"
+        db_exec "UPDATE wallpapers SET width=${w:-0}, height=${h:-0} WHERE filename='$(sql_escape "$filename")';"
+
+        local cur; cur=$(current_file)
+        [ -n "$cur" ] && [ -f "$cur" ] && history_push "$cur"
+
+        log_step ">" "Applying..."
+        set_wallpaper "$filepath"
+
+        echo ""
+        log_ok "#" "${_c_bold}$topic${_c_reset}  ${_c_dim}($source_name, ${w}x${h})${_c_reset}"
+        echo ""
+        notify_progress "$topic ($source_name, ${w}x${h})"
+        return 0
     done
 
-    # Offline fallback: try a liked wallpaper
-    if [ -z "$result" ]; then
-        local fallback
-        fallback=$(db_query "SELECT filename FROM wallpapers WHERE status = 'liked' ORDER BY RANDOM() LIMIT 1;")
-        if [ -n "$fallback" ] && [ -f "$WALLDIR/$fallback" ]; then
-            local cur; cur=$(current_file)
-            [ -n "$cur" ] && [ -f "$cur" ] && history_push "$cur"
-            set_wallpaper "$WALLDIR/$fallback"
-            notify-send -u low "Wallpaper" "Offline — $fallback"
-            return
-        fi
-        notify-send -u normal "Wallpaper" "Failed to fetch and no liked wallpapers available"
-        return 1
+    # ── All retries exhausted — offline fallback ──
+    local fallback
+    fallback=$(db_query "SELECT filename FROM wallpapers WHERE status = 'liked' ORDER BY RANDOM() LIMIT 1;")
+    if [ -n "$fallback" ] && [ -f "$WALLDIR/$fallback" ]; then
+        local cur; cur=$(current_file)
+        [ -n "$cur" ] && [ -f "$cur" ] && history_push "$cur"
+        set_wallpaper "$WALLDIR/$fallback"
+        echo ""
+        log_warn "#" "Using liked wallpaper: $fallback"
+        notify_progress "Offline — $fallback"
+        return 0
     fi
-
-    local img_url source_url w h
-    IFS=$'\t' read -r img_url source_url w h <<< "$result"
-
-    local ext="${img_url##*.}"
-    ext="${ext%%\?*}"
-    [[ "$ext" =~ ^(jpg|jpeg|png|webp)$ ]] || ext="jpg"
-    local filename="$(date +%Y%m%d-%H%M%S)-${source_name}.${ext}"
-    local filepath="$WALLDIR/$filename"
-
-    if ! curl -sf --max-time 30 -o "$filepath" "$img_url"; then
-        notify-send -u normal "Wallpaper" "Download failed"
-        return 1
-    fi
-
-    db_add "$filename" "$img_url" "$source_url" "$source_name" "$topic"
-    db_exec "UPDATE wallpapers SET width=${w:-0}, height=${h:-0} WHERE filename='$(sql_escape "$filename")';"
-
-    local cur; cur=$(current_file)
-    [ -n "$cur" ] && [ -f "$cur" ] && history_push "$cur"
-    set_wallpaper "$filepath"
-    notify-send -u low "Wallpaper" "$topic ($source_name)"
+    echo ""
+    log_fail "x" "All $MAX_RETRIES attempts failed and no liked wallpapers available"
+    notify-send -u normal "Wallpaper" "Failed to fetch wallpaper"
+    return 1
 }
 
 # ── Cleanup outgoing wallpaper if not liked or in history ──
@@ -428,10 +538,77 @@ do_toggle_mode() {
     fi
 }
 
+# ── Status icon for wallpaper state ──
+status_icon() {
+    case "$1" in
+        liked)    echo "♥" ;;
+        disliked) echo "✗" ;;
+        *)        echo "○" ;;
+    esac
+}
+
+# ── Menu status info ──
+menu_status() {
+    local name topic source status liked_count icon
+    name=$(current_basename)
+
+    if [ -n "$name" ]; then
+        topic=$(db_get_field "$name" "topic")
+        source=$(db_get_field "$name" "source")
+        status=$(db_get_field "$name" "status")
+        icon=$(status_icon "$status")
+    fi
+
+    # Active rules
+    local active_rules=()
+    if [ -f "$RULESFILE" ]; then
+        local rule_names
+        rule_names=$(tomlq -r 'keys[]' "$RULESFILE" 2>/dev/null)
+        while IFS= read -r rname; do
+            [ -z "$rname" ] && continue
+            local condition
+            condition=$(tomlq -r ".\"$rname\".condition // \"\"" "$RULESFILE")
+            if [ -z "$condition" ] || timeout "$RULE_TIMEOUT" bash -c "$condition" >/dev/null 2>&1; then
+                active_rules+=("$rname")
+            fi
+        done <<< "$rule_names"
+    fi
+
+    local lines=()
+    [ -n "$topic" ] && lines+=("$icon $topic ($source)")
+    [ ${#active_rules[@]} -gt 0 ] && lines+=("Active: ${active_rules[*]}")
+    printf '%s\n' "${lines[@]}"
+}
+
+# ── More menu ──
+do_more() {
+    local items=(
+        "  Edit rules"
+        "  Edit settings"
+        "  View log"
+    )
+
+    local choice
+    choice=$(printf '%s\n' "${items[@]}" \
+        | rofi -dmenu -i -p "More" \
+            -theme-str "listview { lines: ${#items[@]}; } window { width: 400px; }")
+
+    case "$choice" in
+        *"rules"*)    kitty --title "Wallpaper Rules" -- "${EDITOR:-nvim}" "$RULESFILE" &disown ;;
+        *"settings"*) kitty --title "Wallpaper Settings" -- "${EDITOR:-nvim}" "$CONFFILE" &disown ;;
+        *"log"*)      kitty --title "Wallpaper Log" -- "${EDITOR:-nvim}" -R "+$" "$LOGFILE" &disown ;;
+    esac
+}
+
 # ── Rofi menu ──
 do_menu() {
     local mode
     mode=$(current_mode)
+
+    local status_lines
+    status_lines=$(menu_status)
+    local mesg_flag=()
+    [ -n "$status_lines" ] && mesg_flag=(-mesg "$status_lines")
 
     local items=()
     if [ "$mode" = "explore" ]; then
@@ -442,6 +619,7 @@ do_menu() {
             "  Dislike"
             "  Switch to liked mode"
             "  Open source"
+            "  More"
         )
     else
         items+=(
@@ -451,12 +629,14 @@ do_menu() {
             "  Dislike"
             "  Switch to explore mode"
             "  Open source"
+            "  More"
         )
     fi
 
     local choice
     choice=$(printf '%s\n' "${items[@]}" \
         | rofi -dmenu -i -p "Wallpaper ($mode)" \
+            "${mesg_flag[@]}" \
             -theme-str "listview { lines: ${#items[@]}; } window { width: 400px; }")
 
     case "$choice" in
@@ -467,6 +647,7 @@ do_menu() {
         *"Browse"*)     do_browse_liked ;;
         *"Switch"*)     do_toggle_mode ;;
         *"source"*)     do_source ;;
+        *"More"*)       do_more ;;
     esac
 }
 

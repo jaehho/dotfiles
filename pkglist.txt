@@ -109,6 +109,7 @@ wtype
 xdg-desktop-portal-hyprland
 xorg-server-xephyr
 xorg-xhost
+yq
 zathura
 zathura-pdf-mupdf
 zoxide

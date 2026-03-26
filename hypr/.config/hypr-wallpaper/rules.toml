@@ -1,0 +1,48 @@
+# Wallpaper topic rules
+#
+# All matching rules are combined into one pool, then a random topic is picked.
+#
+# Fields:
+#   condition  - Shell command (exit 0 = match). Omit to always match.
+#                Killed after RULE_TIMEOUT seconds (default: 3).
+#   topics     - Search terms for fetching wallpapers.
+#
+# Conditions are standard shell tests — check result with:
+#   [ $(date +%H) -ge 17 ] && echo "match" || echo "skip"
+#
+# Examples:
+#   [rainy]
+#   condition = "curl -sf wttr.in/?format=%C | grep -qi rain"
+#   topics = ["rain", "mist", "foggy forest", "cabin"]
+#
+#   [weekend]
+#   condition = "[ $(date +%u) -ge 6 ]"   # %u: 1=Mon, 7=Sun
+#   topics = ["abstract", "minimal", "retro"]
+
+# ── Time of day (%H = hour 00-23) ──
+
+[day]
+condition = "[ $(date +%H) -ge 6 ] && [ $(date +%H) -lt 17 ]"
+topics = ["nature", "mountains", "coast", "architecture", "forest", "lake", "valley", "meadow", "ocean", "cliffs"]
+
+[evening]
+condition = "[ $(date +%H) -ge 17 ] && [ $(date +%H) -lt 21 ]"
+topics = ["sunset", "golden hour", "twilight", "city skyline", "bridge", "harbor"]
+
+[night]
+condition = "[ $(date +%H) -ge 21 ] || [ $(date +%H) -lt 6 ]"
+topics = ["night city", "observatory"]
+
+# ── Seasons (%m = month 01-12, merged into the active time-of-day pool) ──
+
+[spring]
+condition = "[ $(date +%m) -ge 3 ] && [ $(date +%m) -le 5 ]"
+topics = ["cherry blossom", "spring"]
+
+[autumn]
+condition = "[ $(date +%m) -ge 9 ] && [ $(date +%m) -le 11 ]"
+topics = ["autumn forest", "fall colors", "harvest"]
+
+[winter]
+condition = "[ $(date +%m) -eq 12 ] || [ $(date +%m) -le 2 ]"
+topics = ["snow", "winter"]
