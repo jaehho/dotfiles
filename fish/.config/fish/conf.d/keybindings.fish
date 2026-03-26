@@ -6,4 +6,5 @@ function fish_user_key_bindings
 
     # Shift+Enter to insert newline (multi-line editing)
     bind shift-enter 'commandline -i \n'
+    bind \e\[13\;2u 'commandline -i \n'
 end
