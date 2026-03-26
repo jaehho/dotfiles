@@ -1,6 +1,6 @@
 google-cloud-cli
-kakaotalk
 microsoft-edge-stable-bin
+overskride-bin
 paru
 paru-debug
 signal-cli
