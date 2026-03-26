@@ -1,3 +1,7 @@
+configuration {
+    vim-nav: true;
+}
+
 * {
   /* Catppuccin Frappe palette */
   rosewater: #f2d5cf;
