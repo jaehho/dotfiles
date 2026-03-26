@@ -46,10 +46,7 @@ case "$EVENT" in
         play_sound
         ;;
       idle_prompt)
-        TITLE="Claude is waiting"
-        BODY="${MSG:-Waiting for your input.}"
-        URGENCY="normal"
-        play_sound
+        exit 0
         ;;
       *)
         TITLE=$(echo "$INPUT" | jq -r '.title // "Claude Code"')
