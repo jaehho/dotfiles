@@ -1,0 +1,15 @@
+[Unit]
+Description=SSHFS mount ice
+After=network-online.target
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/sshfs ice:/ %h/ice \
+  -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 \
+  -o ssh_command=sshpass\ -f\ %h/.ssh/jump_pass\ ssh
+ExecStop=/bin/fusermount -u %h/ice
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=SSHFS mount mililab
+After=network-online.target
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/sshfs mililab:/ %h/mililab \
+  -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3
+ExecStop=/bin/fusermount -u %h/mililab
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

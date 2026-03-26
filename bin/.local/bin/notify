@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Desktop notification via Kitty OSC 99 — works locally and through SSH + tmux.
+# Falls back to notify-send only when not in a terminal.
+#
+# Usage: notify "message"
+#        notify "title" "message"
+#        long-command; notify "done"
+
+set -euo pipefail
+
+if [ $# -ge 2 ]; then
+    title="$1"; body="$2"
+elif [ $# -eq 1 ]; then
+    title=""; body="$1"
+else
+    echo "Usage: notify [title] message" >&2
+    exit 1
+fi
+
+# Raw OSC 99 (bare Kitty, no tmux)
+osc99() {
+    if [ -n "$title" ]; then
+        printf '\e]99;i=1:d=0:p=title;%s\a\e]99;i=1:p=body;%s\a' "$title" "$body"
+    else
+        printf '\e]99;i=1:p=body;%s\a' "$body"
+    fi
+}
+
+# OSC 99 wrapped in DCS tmux passthrough
+dcs_osc99() {
+    if [ -n "$title" ]; then
+        printf '\ePtmux;\e\e]99;i=1:d=0:p=title;%s\a\e\\\ePtmux;\e\e]99;i=1:p=body;%s\a\e\\' \
+            "$title" "$body"
+    else
+        printf '\ePtmux;\e\e]99;i=1:p=body;%s\a\e\\' "$body"
+    fi
+}
+
+if [ -n "${TMUX:-}" ]; then
+    if [ -n "${SSH_CONNECTION:-}" ]; then
+        # Remote tmux: write to SSH pty, bypassing remote tmux
+        dcs_osc99 > "$(tmux display-message -p '#{client_tty}')"
+    else
+        # Local tmux: DCS passthrough to Kitty
+        dcs_osc99
+    fi
+elif [ -t 1 ]; then
+    # Bare terminal (no tmux): raw OSC 99
+    osc99
+else
+    # Not in a terminal: fall back to notify-send
+    if [ -n "$title" ]; then
+        notify-send "$title" "$body"
+    else
+        notify-send "$body"
+    fi
+fi

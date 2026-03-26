@@ -6,7 +6,7 @@ SHELL := /bin/bash
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # Stow packages split by distro
-COMMON_PACKAGES := fish git tmux nvim claude rclone bin kitty ssh mime
+COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime
 ARCH_PACKAGES   := hypr mako rofi waybar
 
 DISTRO := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
@@ -168,37 +168,27 @@ rclone-onedrive-unmount: ## Unmount OneDrive and disable service
 	@systemctl --user disable --now rclone-onedrive 2>/dev/null || true
 	@echo "OneDrive unmounted and service disabled."
 
-rclone-cooper-setup: stow-rclone ## Configure Cooper SFTP remote and enable mount
-	@command -v rclone >/dev/null 2>&1 || { \
-		echo "Installing rclone..."; \
+sshfs-setup: stow-sshfs ## Install sshfs and enable ice + mililab mounts
+	@command -v sshfs >/dev/null 2>&1 || { \
+		echo "Installing sshfs..."; \
 		if command -v pacman >/dev/null 2>&1; then \
-			sudo pacman -S --needed --noconfirm rclone; \
+			sudo pacman -S --needed --noconfirm sshfs; \
 		elif command -v apt-get >/dev/null 2>&1; then \
-			sudo apt-get install -y rclone; \
+			sudo apt-get install -y sshfs; \
 		else \
 			echo "No supported package manager found"; exit 1; \
 		fi; \
 	}
-	@if ! rclone listremotes 2>/dev/null | grep -q '^cooper:'; then \
-		echo "Creating 'cooper' SFTP remote..."; \
-		read -sp "Cooper password for jaeho.cho: " pw; echo; \
-		obscured=$$(rclone obscure "$$pw"); \
-		rclone config create cooper sftp \
-			host ice00.ee.cooper.edu \
-			port 31415 \
-			user jaeho.cho \
-			pass "$$obscured"; \
-	else \
-		echo "Remote 'cooper' already configured."; \
-	fi
-	@mkdir -p ~/Cooper
+	@mkdir -p ~/ice ~/mililab
 	@systemctl --user daemon-reload
-	@systemctl --user enable --now rclone-cooper
-	@echo "Cooper SFTP mounted at ~/Cooper"
+	@systemctl --user enable --now sshfs-ice
+	@systemctl --user enable --now sshfs-mililab
+	@echo "ice mounted at ~/ice, mililab mounted at ~/mililab"
 
-rclone-cooper-unmount: ## Unmount Cooper SFTP and disable service
-	@systemctl --user disable --now rclone-cooper 2>/dev/null || true
-	@echo "Cooper SFTP unmounted and service disabled."
+sshfs-unmount: ## Unmount ice + mililab SSHFS and disable services
+	@systemctl --user disable --now sshfs-ice 2>/dev/null || true
+	@systemctl --user disable --now sshfs-mililab 2>/dev/null || true
+	@echo "SSHFS mounts unmounted and services disabled."
 
 ## Packages (Arch only)
 pkg-dump: ## Save list of explicitly installed packages
@@ -266,7 +256,7 @@ status: ## Show current dotfiles state
 	done
 	@echo ""
 	@echo "Services:"
-	@for svc in keyd rclone-onedrive rclone-cooper; do \
+	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab; do \
 		case "$$svc" in rclone-*) \
 			active=$$(systemctl --user is-active "$$svc" 2>/dev/null);; *) \
 			active=$$(systemctl is-active "$$svc" 2>/dev/null);; esac; \

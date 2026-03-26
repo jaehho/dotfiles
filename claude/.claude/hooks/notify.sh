@@ -61,39 +61,16 @@ case "$EVENT" in
 esac
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
-if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
-  # Find terminal window in Hyprland for focus-on-click
-  find_terminal_window() {
-    local pid="${KITTY_PID:-}"
-    [[ -z "$pid" ]] && return
-    hyprctl clients -j 2>/dev/null | jq -r --argjson pid "$pid" \
-      '.[] | select(.pid == $pid) | .address' 2>/dev/null
-  }
+# Desktop: OSC 99 via Kitty (works locally, through tmux, and over SSH)
+"$HOME/.local/bin/notify" "$TITLE" "$BODY" &
 
-  WINDOW_ADDR=$(find_terminal_window || true)
-
-  (
-    ACTION=$(notify-send \
-      --app-name "Claude Code" \
-      --urgency "$URGENCY" \
-      ${CATEGORY:+--category "$CATEGORY"} \
-      --action="default=Focus" \
-      "$TITLE" \
-      "$BODY" 2>/dev/null) || true
-
-    if [[ "$ACTION" == "default" && -n "${WINDOW_ADDR:-}" ]]; then
-      hyprctl dispatch focuswindow "address:$WINDOW_ADDR" &>/dev/null
-    fi
-  ) &
-else
-  # Fallback: ntfy.sh for remote/SSH sessions
-  NTFY_PRIORITY="default"
-  [[ "$URGENCY" == "high" ]] && NTFY_PRIORITY="high"
-  curl -s -o /dev/null \
-    -H "Title: $TITLE" \
-    -H "Priority: $NTFY_PRIORITY" \
-    -d "$BODY" \
-    ntfy.sh/jaeho &
-fi
+# Mobile: ntfy.sh (always, so you get notified even away from desk)
+NTFY_PRIORITY="default"
+[[ "${URGENCY:-normal}" == "high" ]] && NTFY_PRIORITY="high"
+curl -s -o /dev/null \
+  -H "Title: $TITLE" \
+  -H "Priority: $NTFY_PRIORITY" \
+  -d "$BODY" \
+  ntfy.sh/jaeho &
 
 exit 0
