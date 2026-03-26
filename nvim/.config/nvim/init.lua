@@ -181,6 +181,8 @@ vim.o.sessionoptions = 'blank,buffers,curdir,folds,help,tabpages,winsize,winpos,
 -- Navigate by visual lines (includes wrapped lines)
 vim.keymap.set({ 'n', 'v' }, 'j', function() return vim.v.count == 0 and 'gj' or 'j' end, { expr = true })
 vim.keymap.set({ 'n', 'v' }, 'k', function() return vim.v.count == 0 and 'gk' or 'k' end, { expr = true })
+vim.keymap.set('i', '<Down>', '<C-o>gj')
+vim.keymap.set('i', '<Up>', '<C-o>gk')
 
 -- Clear highlights on search when pressing <Esc> in normal mode
 --  See `:help hlsearch`

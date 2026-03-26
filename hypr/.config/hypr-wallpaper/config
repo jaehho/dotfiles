@@ -1,0 +1,31 @@
+# hypr-wallpaper configuration
+# Uncomment and modify values to override defaults.
+
+# ── Display ──
+# TRANSITION="--transition-type simple"
+# For animated transitions, add params e.g.:
+# TRANSITION="--transition-type grow --transition-duration 1.5 --transition-fps 60"
+# Options: none|simple|fade|left|right|top|bottom|wipe|wave|grow|center|any|outer|random
+
+# ── Quality gates ──
+# MIN_WIDTH=2560             # Minimum image width in pixels
+# REDDIT_MIN_SCORE=500       # Minimum Reddit post score
+# WALLHAVEN_MIN_FAVORITES=30 # Minimum Wallhaven favorites
+# WALLHAVEN_EXCLUDE_TAGS=women  # Comma-separated tags to exclude
+
+# ── Behavior ──
+# LIKED_RESHOW_DAYS=14       # Days before liked wallpaper can reshow
+# MAX_RETRIES=3              # Fetch retry attempts
+# EXPLORE_HISTORY=3          # Undo depth in explore mode (files kept on disk)
+# LIKED_HISTORY=50           # Undo depth in liked mode
+
+# ── Time-of-day topics (comma-separated) ──
+DAY_TOPICS="landscape,mountains,coast,architecture,forest,lake,valley,meadow,ocean,cliffs"
+EVENING_TOPICS="sunset,golden hour,aurora,twilight,city skyline,bridge,harbor"
+NIGHT_TOPICS="stars,moonlight,milky way,northern lights,night city,neon,observatory"
+
+# ── Seasonal topics (added to all time-of-day pools during that season) ──
+# SPRING_TOPICS="cherry blossom,spring meadow,tulip fields"
+# SUMMER_TOPICS="tropical beach,coral reef,waterfall"
+# AUTUMN_TOPICS="autumn forest,fall colors,harvest"
+# WINTER_TOPICS="snow mountain,frozen lake,winter forest"

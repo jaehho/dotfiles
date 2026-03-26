@@ -1,27 +1,53 @@
 #!/bin/bash
-# Unified wallpaper manager — SQLite-backed, quality-gated, time-aware
+# hypr-wallpaper — SQLite-backed, quality-gated, time-aware wallpaper manager
 # Usage:
-#   hypr-wallpaper menu      # rofi GUI
-#   hypr-wallpaper fetch     # fetch new wallpaper from online
-#   hypr-wallpaper next      # next eligible wallpaper from collection
+#   hypr-wallpaper menu      # rofi GUI (mode-aware)
+#   hypr-wallpaper next      # next wallpaper (mode-aware)
+#   hypr-wallpaper prev      # previous wallpaper (undo)
+#   hypr-wallpaper fetch     # fetch new from online
 #   hypr-wallpaper like      # like current wallpaper
 #   hypr-wallpaper dislike   # dislike current + show next
 #   hypr-wallpaper source    # open source URL in browser
-#   hypr-wallpaper restore   # restore last wallpaper (autostart)
-#   hypr-wallpaper cleanup   # remove disliked files older than 7 days
+#   hypr-wallpaper mode      # toggle explore/liked mode
+#   hypr-wallpaper restore   # restore last wallpaper
+#   hypr-wallpaper watch     # watch for new monitors and reapply
 
 set -uo pipefail
 
+# ── Paths ──
 WALLDIR="$HOME/Pictures/wallpapers"
 DATADIR="$HOME/.cache/wallpaper-data"
 DBFILE="$DATADIR/wallpapers.db"
 STATEFILE="$DATADIR/current"
-TRANSITION="--transition-type grow --transition-duration 1.5 --transition-fps 60"
-UA="hypr-wallpaper/1.0"
-LIKED_RESHOW_DAYS=14
-MAX_RETRIES=3
+MODEFILE="$DATADIR/mode"
+HISTFILE_WP="$DATADIR/history"
+CONFFILE="${XDG_CONFIG_HOME:-$HOME/.config}/hypr-wallpaper/config"
 
 mkdir -p "$WALLDIR" "$DATADIR"
+
+# ── Defaults ──
+TRANSITION="--transition-type simple"
+MIN_WIDTH=2560
+REDDIT_MIN_SCORE=500
+WALLHAVEN_MIN_FAVORITES=30
+WALLHAVEN_EXCLUDE_TAGS=women
+LIKED_RESHOW_DAYS=14
+MAX_RETRIES=3
+EXPLORE_HISTORY=3
+LIKED_HISTORY=50
+UA="hypr-wallpaper/1.0"
+
+DAY_TOPICS="landscape,mountains,coast,architecture,forest,lake,valley,meadow,ocean,cliffs"
+EVENING_TOPICS="sunset,golden hour,aurora,twilight,city skyline,bridge,harbor"
+NIGHT_TOPICS="stars,moonlight,milky way,northern lights,night city,neon,observatory"
+SPRING_TOPICS=""
+SUMMER_TOPICS=""
+AUTUMN_TOPICS=""
+WINTER_TOPICS=""
+
+# ── Load user config ──
+# shellcheck disable=SC1090
+[ -f "$CONFFILE" ] && source "$CONFFILE"
 
 # ── Initialize SQLite database ──
 init_db() {
@@ -48,14 +74,12 @@ db_query() { sqlite3 -separator $'\t' "$DBFILE" "$1"; }
 db_exec()  { sqlite3 "$DBFILE" "$1"; }
 
 db_get_field() {
-    # $1=filename, $2=column
     db_query "SELECT $2 FROM wallpapers WHERE filename = '$(sql_escape "$1")' LIMIT 1;"
 }
 
 sql_escape() { echo "${1//\'/\'\'}"; }
 
 db_add() {
-    # $1=filename $2=image_url $3=source_url $4=source $5=topic
     db_exec "INSERT OR IGNORE INTO wallpapers (filename, image_url, source_url, source, topic, status, fetch_date)
              VALUES ('$(sql_escape "$1")', '$(sql_escape "$2")', '$(sql_escape "$3")', '$(sql_escape "$4")', '$(sql_escape "$5")', 'unseen', '$(date +%Y-%m-%d)');"
 }
@@ -74,21 +98,73 @@ db_url_exists() {
     [ "$count" -gt 0 ]
 }
 
+# ── State helpers ──
 current_file()     { cat "$STATEFILE" 2>/dev/null; }
 current_basename() { local c; c=$(current_file); [ -n "$c" ] && basename "$c"; }
+current_mode()     { cat "$MODEFILE" 2>/dev/null || echo "explore"; }
 
-# ── Time-aware topic selection ──
+# ── History ──
+history_push() {
+    local filepath="$1"
+    [ -z "$filepath" ] || [ ! -f "$filepath" ] && return
+    echo "$filepath" >> "$HISTFILE_WP"
+
+    local mode
+    mode=$(current_mode)
+    local max_hist
+    if [ "$mode" = "liked" ]; then
+        max_hist=$LIKED_HISTORY
+    else
+        max_hist=$EXPLORE_HISTORY
+    fi
+
+    local count
+    count=$(wc -l < "$HISTFILE_WP" 2>/dev/null || echo 0)
+    if [ "$count" -gt "$max_hist" ]; then
+        local trim_count=$((count - max_hist))
+        head -n "$trim_count" "$HISTFILE_WP" | while IFS= read -r old; do
+            [ -z "$old" ] && continue
+            local old_name
+            old_name=$(basename "$old")
+            local status
+            status=$(db_get_field "$old_name" "status")
+            if [ "$status" != "liked" ] && [ -f "$old" ]; then
+                rm -f "$old"
+            fi
+        done
+        tail -n "$max_hist" "$HISTFILE_WP" > "$HISTFILE_WP.tmp"
+        mv "$HISTFILE_WP.tmp" "$HISTFILE_WP"
+    fi
+}
+
+do_prev() {
+    [ ! -f "$HISTFILE_WP" ] && { notify-send -u low "Wallpaper" "No history"; return; }
+
+    while true; do
+        local prev
+        prev=$(tail -1 "$HISTFILE_WP" 2>/dev/null)
+        [ -z "$prev" ] && { notify-send -u low "Wallpaper" "No more history"; return; }
+
+        # Pop last entry
+        head -n -1 "$HISTFILE_WP" > "$HISTFILE_WP.tmp" && mv "$HISTFILE_WP.tmp" "$HISTFILE_WP"
+
+        if [ -f "$prev" ]; then
+            set_wallpaper "$prev"
+            notify-send -u low "Wallpaper" "$(basename "$prev")"
+            return
+        fi
+    done
+}
+
+# ── Time-aware topic selection with seasonal pools ──
 pick_topic() {
-    local hour
+    local hour month
     hour=$(date +%H)
+    month=$(date +%m)
 
-    # Learned topics from likes (query DB)
-    local learned
-    learned=$(db_query "SELECT topic FROM wallpapers WHERE status = 'liked' AND topic != '' ORDER BY RANDOM() LIMIT 5;" | tr '\n' '|')
-
-    local day=("landscape" "mountains" "coast" "architecture" "forest" "lake" "valley" "meadow" "ocean" "cliffs")
-    local evening=("sunset" "golden hour" "aurora" "twilight" "city skyline" "bridge" "harbor")
-    local night=("stars" "moonlight" "milky way" "northern lights" "night city" "neon" "observatory")
+    IFS=',' read -ra day <<< "$DAY_TOPICS"
+    IFS=',' read -ra evening <<< "$EVENING_TOPICS"
+    IFS=',' read -ra night <<< "$NIGHT_TOPICS"
 
     local pool=()
     if [ "$hour" -ge 6 ] && [ "$hour" -lt 17 ]; then
@@ -99,16 +175,22 @@ pick_topic() {
         pool=("${night[@]}")
     fi
 
-    # Add learned topics with double weight
-    IFS='|' read -ra ltopics <<< "$learned"
-    for t in "${ltopics[@]}"; do
-        [ -n "$t" ] && pool+=("$t" "$t")
-    done
+    local seasonal=""
+    case "$month" in
+        03|04|05) seasonal="$SPRING_TOPICS" ;;
+        06|07|08) seasonal="$SUMMER_TOPICS" ;;
+        09|10|11) seasonal="$AUTUMN_TOPICS" ;;
+        12|01|02) seasonal="$WINTER_TOPICS" ;;
+    esac
+    if [ -n "$seasonal" ]; then
+        IFS=',' read -ra stopics <<< "$seasonal"
+        pool+=("${stopics[@]}")
+    fi
 
     echo "${pool[$((RANDOM % ${#pool[@]}))]}"
 }
 
-# ── Fetch: Reddit (top all-time, paginated, quality-gated) ──
+# ── Fetch: Reddit ──
 fetch_reddit() {
     local topic="$1"
     local sub
@@ -120,37 +202,23 @@ fetch_reddit() {
         *) sub="EarthPorn" ;;
     esac
 
-    local after_file="$DATADIR/reddit-${sub}.after"
-    local after=""
-    [ -f "$after_file" ] && after="&after=$(cat "$after_file")"
-
     local json
     json=$(curl -sf --max-time 15 \
-        "https://www.reddit.com/r/$sub/top.json?t=all&limit=50${after}" \
+        "https://www.reddit.com/r/$sub/top.json?t=all&limit=50" \
         -H "User-Agent: $UA") || return 1
 
-    # Save pagination for next fetch
-    local next_after
-    next_after=$(echo "$json" | jq -r '.data.after // empty')
-    if [ -n "$next_after" ]; then
-        echo "$next_after" > "$after_file"
-    else
-        rm -f "$after_file"
-    fi
-
-    # Parse all eligible posts
     local posts
-    posts=$(echo "$json" | jq -c '
+    posts=$(echo "$json" | jq -c --argjson min_score "$REDDIT_MIN_SCORE" --argjson min_w "$MIN_WIDTH" '
         [.data.children[].data
-         | select(.post_hint == "image")
-         | select(.score >= 500)
-         | select(.url | test("\\.(jpg|jpeg|png)$"; "i"))
-         | select((.preview.images[0].source.width // 0) >= 1920)
+         | select(.over_18 != true)
+         | select(.score >= $min_score)
+         | select(.url | test("\\.(jpg|jpeg|png|webp|gif)$"; "i"))
+         | select((.preview.images[0].source.width // 0) >= $min_w)
+         | select((.preview.images[0].source.width // 0) > (.preview.images[0].source.height // 0))
          | { url: .url, source: ("https://reddit.com" + .permalink),
              w: .preview.images[0].source.width, h: .preview.images[0].source.height }
         ] | .[]') || return 1
 
-    # Find first URL not already in DB
     while IFS= read -r post; do
         [ -z "$post" ] && continue
         local url
@@ -164,28 +232,21 @@ fetch_reddit() {
     return 1
 }
 
-# ── Fetch: Wallhaven (toplist, paginated, quality-gated) ──
+# ── Fetch: Wallhaven ──
 fetch_wallhaven() {
     local topic="$1"
     local query="${topic// /+}"
-
-    local page_file="$DATADIR/wallhaven-${query}.page"
-    local page=1
-    [ -f "$page_file" ] && page=$(cat "$page_file")
+    local exclude=""
+    [ -n "$WALLHAVEN_EXCLUDE_TAGS" ] && exclude="+-${WALLHAVEN_EXCLUDE_TAGS//,/+-}"
 
     local json
     json=$(curl -sf --max-time 15 \
-        "https://wallhaven.cc/api/v1/search?q=$query&sorting=toplist&topRange=1y&atleast=1920x1080&purity=100&ratios=16x9%2C16x10&page=$page") || return 1
-
-    # Advance page
-    local last_page
-    last_page=$(echo "$json" | jq -r '.meta.last_page // 1')
-    echo "$(( page % last_page + 1 ))" > "$page_file"
+        "https://wallhaven.cc/api/v1/search?q=${query}${exclude}&sorting=favorites&atleast=${MIN_WIDTH}x$((MIN_WIDTH * 9 / 16))&purity=100&page=1") || return 1
 
     local posts
-    posts=$(echo "$json" | jq -c '
+    posts=$(echo "$json" | jq -c --argjson min_fav "$WALLHAVEN_MIN_FAVORITES" '
         [.data[]
-         | select(.favorites >= 30)
+         | select(.favorites >= $min_fav)
          | { url: .path, source: .url,
              w: .dimension_x, h: .dimension_y }
         ] | .[]') || return 1
@@ -231,6 +292,7 @@ fetch_unsplash() {
 # ── Download and register ──
 do_fetch() {
     local attempt=0
+    local result="" source_name=""
     while [ "$attempt" -lt "$MAX_RETRIES" ]; do
         ((attempt++))
         local topic
@@ -239,8 +301,7 @@ do_fetch() {
         local sources=("reddit" "wallhaven")
         [ -n "${UNSPLASH_ACCESS_KEY:-}" ] && sources+=("unsplash")
 
-        local result="" source_name=""
-        for src in $(printf '%s\n' "${sources[@]}" | shuf); do
+        for src in "${sources[@]}"; do
             case $src in
                 reddit)    result=$(fetch_reddit "$topic" 2>/dev/null) ;;
                 wallhaven) result=$(fetch_wallhaven "$topic" 2>/dev/null) ;;
@@ -255,8 +316,18 @@ do_fetch() {
         [ -n "$result" ] && break
     done
 
+    # Offline fallback: try a liked wallpaper
     if [ -z "$result" ]; then
-        notify-send -u normal "Wallpaper" "Failed to fetch after $MAX_RETRIES attempts"
+        local fallback
+        fallback=$(db_query "SELECT filename FROM wallpapers WHERE status = 'liked' ORDER BY RANDOM() LIMIT 1;")
+        if [ -n "$fallback" ] && [ -f "$WALLDIR/$fallback" ]; then
+            local cur; cur=$(current_file)
+            [ -n "$cur" ] && [ -f "$cur" ] && history_push "$cur"
+            set_wallpaper "$WALLDIR/$fallback"
+            notify-send -u low "Wallpaper" "Offline — $fallback"
+            return
+        fi
+        notify-send -u normal "Wallpaper" "Failed to fetch and no liked wallpapers available"
         return 1
     fi
 
@@ -276,77 +347,154 @@ do_fetch() {
 
     db_add "$filename" "$img_url" "$source_url" "$source_name" "$topic"
     db_exec "UPDATE wallpapers SET width=${w:-0}, height=${h:-0} WHERE filename='$(sql_escape "$filename")';"
+
+    local cur; cur=$(current_file)
+    [ -n "$cur" ] && [ -f "$cur" ] && history_push "$cur"
     set_wallpaper "$filepath"
     notify-send -u low "Wallpaper" "$topic ($source_name)"
+}
+
+# ── Cleanup outgoing wallpaper if not liked or in history ──
+cleanup_current() {
+    local name
+    name=$(current_basename)
+    [ -z "$name" ] && return
+    local status
+    status=$(db_get_field "$name" "status")
+    [ "$status" = "liked" ] && return
+    local cur
+    cur=$(current_file)
+    if [ -f "$HISTFILE_WP" ] && grep -qF "$cur" "$HISTFILE_WP"; then
+        return
+    fi
+    rm -f "$WALLDIR/$name"
 }
 
 # ── Set wallpaper via awww ──
 set_wallpaper() {
     local filepath="$1"
+    cleanup_current
     pgrep -x awww-daemon >/dev/null || { awww-daemon 2>/dev/null & sleep 0.5; }
     eval awww img "\"$filepath\"" $TRANSITION
     echo "$filepath" > "$STATEFILE"
     db_set_last_shown "$(basename "$filepath")"
 }
 
-# ── Next eligible wallpaper ──
+# ── Next wallpaper (mode-aware) ──
 do_next() {
+    local mode
+    mode=$(current_mode)
+    if [ "$mode" = "liked" ]; then
+        do_next_liked
+    else
+        do_fetch
+    fi
+}
+
+do_next_liked() {
     local current_name
     current_name=$(current_basename)
     local esc_current
     esc_current=$(sql_escape "$current_name")
 
-    # Priority 1: unseen wallpapers
     local pick
     pick=$(db_query "SELECT filename FROM wallpapers
-                     WHERE status = 'unseen' AND filename != '$esc_current'
+                     WHERE status = 'liked' AND filename != '$esc_current'
                      ORDER BY RANDOM() LIMIT 1;")
 
-    # Priority 2: liked wallpapers not shown recently
-    if [ -z "$pick" ]; then
-        pick=$(db_query "SELECT filename FROM wallpapers
-                         WHERE status = 'liked' AND filename != '$esc_current'
-                           AND (last_shown IS NULL OR last_shown <= date('now', '-$LIKED_RESHOW_DAYS days'))
-                         ORDER BY RANDOM() LIMIT 1;")
-    fi
-
-    # Priority 3: fetch new
     if [ -z "$pick" ] || [ ! -f "$WALLDIR/$pick" ]; then
-        do_fetch
+        notify-send -u low "Wallpaper" "No liked wallpapers available"
         return
     fi
 
+    local cur; cur=$(current_file)
+    [ -n "$cur" ] && [ -f "$cur" ] && history_push "$cur"
     set_wallpaper "$WALLDIR/$pick"
     notify-send -u low "Wallpaper" "$pick"
 }
 
+# ── Mode toggle ──
+do_toggle_mode() {
+    local mode
+    mode=$(current_mode)
+    if [ "$mode" = "explore" ]; then
+        echo "liked" > "$MODEFILE"
+        notify-send -u low "Wallpaper" "Switched to liked mode"
+        do_next_liked
+    else
+        echo "explore" > "$MODEFILE"
+        notify-send -u low "Wallpaper" "Switched to explore mode"
+        do_fetch
+    fi
+}
+
 # ── Rofi menu ──
 do_menu() {
-    local current
-    current=$(current_basename)
-    local status
-    status=$(db_get_field "$current" "status")
-    [ -z "$status" ] && status="untracked"
+    local mode
+    mode=$(current_mode)
+
+    local items=()
+    if [ "$mode" = "explore" ]; then
+        items+=(
+            "  Next"
+            "  Prev"
+            "  Like"
+            "  Dislike"
+            "  Switch to liked mode"
+            "  Open source"
+        )
+    else
+        items+=(
+            "  Next"
+            "  Prev"
+            "  Browse"
+            "  Dislike"
+            "  Switch to explore mode"
+            "  Open source"
+        )
+    fi
 
     local choice
-    choice=$(printf '%s\n' \
-        "  Like" \
-        "  Dislike" \
-        "  Skip to next" \
-        "  Fetch new online" \
-        "  Open source" \
-        "  Browse collection" \
-        | rofi -dmenu -i -p "Wallpaper ($status)" \
-            -theme-str 'listview { lines: 6; } window { width: 400px; }')
+    choice=$(printf '%s\n' "${items[@]}" \
+        | rofi -dmenu -i -p "Wallpaper ($mode)" \
+            -theme-str "listview { lines: ${#items[@]}; } window { width: 400px; }")
 
     case "$choice" in
-        *"Like"*)     do_like ;;
-        *"Dislike"*)  do_dislike ;;
-        *"Skip"*)     do_next ;;
-        *"Fetch"*)    do_fetch ;;
-        *"source"*)   do_source ;;
-        *"Browse"*)   do_browse ;;
+        *"Next"*)       do_next ;;
+        *"Prev"*)       do_prev ;;
+        *"Like"*)       do_like ;;
+        *"Dislike"*)    do_dislike ;;
+        *"Browse"*)     do_browse_liked ;;
+        *"Switch"*)     do_toggle_mode ;;
+        *"source"*)     do_source ;;
     esac
+}
+
+# ── Browse liked with rofi preview ──
+do_browse_liked() {
+    local liked_files
+    liked_files=$(db_query "SELECT filename FROM wallpapers WHERE status = 'liked' ORDER BY fetch_date DESC;")
+    [ -z "$liked_files" ] && { notify-send -u low "Wallpaper" "No liked wallpapers"; return; }
+
+    local pick
+    pick=$(while IFS= read -r fname; do
+        [ -z "$fname" ] && continue
+        [ ! -f "$WALLDIR/$fname" ] && continue
+        local topic
+        topic=$(db_get_field "$fname" "topic")
+        printf '%s — %s\0icon\x1f%s\n' "$fname" "$topic" "$WALLDIR/$fname"
+    done <<< "$liked_files" \
+        | rofi -dmenu -i -p "Liked" -show-icons \
+            -theme-str 'listview { lines: 8; } window { width: 600px; } element-icon { size: 80px; }')
+
+    [ -z "$pick" ] && return
+    local filename="${pick%% — *}"
+
+    if [ -f "$WALLDIR/$filename" ]; then
+        local cur; cur=$(current_file)
+        [ -n "$cur" ] && [ -f "$cur" ] && history_push "$cur"
+        set_wallpaper "$WALLDIR/$filename"
+    fi
 }
 
 do_like() {
@@ -354,7 +502,7 @@ do_like() {
     name=$(current_basename)
     [ -z "$name" ] && return
     db_set_status "$name" "liked"
-    notify-send -u low "Wallpaper  " "Liked — will rotate back in after ${LIKED_RESHOW_DAYS} days"
+    notify-send -u low "Wallpaper" "Liked"
 }
 
 do_dislike() {
@@ -362,7 +510,7 @@ do_dislike() {
     name=$(current_basename)
     [ -z "$name" ] && return
     db_set_status "$name" "disliked"
-    notify-send -u low "Wallpaper  " "Disliked — won't show again"
+    notify-send -u low "Wallpaper" "Disliked"
     do_next
 }
 
@@ -379,18 +527,6 @@ do_source() {
     fi
 }
 
-do_browse() {
-    local pick
-    pick=$(db_query "SELECT filename || '  [' || status || ']  ' || COALESCE(topic,'') || CASE WHEN source != '' THEN '  (' || source || ')' ELSE '' END
-                     FROM wallpapers WHERE status != 'disliked' ORDER BY fetch_date DESC;" \
-        | rofi -dmenu -i -p "Browse" \
-            -theme-str 'listview { lines: 15; } window { width: 800px; }')
-
-    [ -z "$pick" ] && return
-    local filename="${pick%%  \[*}"
-    [ -f "$WALLDIR/$filename" ] && set_wallpaper "$WALLDIR/$filename"
-}
-
 do_restore() {
     pgrep -x awww-daemon >/dev/null || { awww-daemon 2>/dev/null & sleep 0.5; }
     local last
@@ -400,14 +536,16 @@ do_restore() {
     fi
 }
 
-do_cleanup() {
-    # Delete disliked wallpaper files older than 7 days (keep DB records)
-    local files
-    files=$(db_query "SELECT filename FROM wallpapers
-                      WHERE status = 'disliked' AND fetch_date <= date('now', '-7 days');")
-    while IFS= read -r fname; do
-        [ -n "$fname" ] && rm -f "$WALLDIR/$fname"
-    done <<< "$files"
+# ── Watch for new monitors ──
+do_watch() {
+    socat -U - "UNIX-CONNECT:${XDG_RUNTIME_DIR}/hypr/${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock" | while read -r event; do
+        case "$event" in
+            monitoradded*)
+                sleep 1
+                do_restore
+                ;;
+        esac
+    done
 }
 
 # ── Migrate from old TSV if it exists ──
@@ -426,13 +564,14 @@ migrate_tsv 2>/dev/null
 # ── Main ──
 case "${1:-menu}" in
     menu)    do_menu ;;
-    fetch)   do_fetch ;;
     next)    do_next ;;
+    prev)    do_prev ;;
+    fetch)   do_fetch ;;
     like)    do_like ;;
     dislike) do_dislike ;;
     source)  do_source ;;
-    browse)  do_browse ;;
+    mode)    do_toggle_mode ;;
     restore) do_restore ;;
-    cleanup) do_cleanup ;;
-    *)       echo "Usage: hypr-wallpaper {menu|fetch|next|like|dislike|source|browse|restore|cleanup}" ;;
+    watch)   do_watch ;;
+    *)       echo "Usage: hypr-wallpaper {menu|next|prev|fetch|like|dislike|source|mode|restore|watch}" ;;
 esac

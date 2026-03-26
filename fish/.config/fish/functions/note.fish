@@ -22,11 +22,11 @@ function note --description "Quick notes with Notion sync"
                 set has_notes 1
                 set -l name (basename $f)
                 set -l lines (wc -l <$f | string trim)
-                set -l status ""
+                set -l sync_tag ""
                 if test -f $synced_file; and grep -qxF $name $synced_file
-                    set status " [synced]"
+                    set sync_tag " [synced]"
                 end
-                printf "  %s  (%s lines)%s\n" $name $lines $status
+                printf "  %s  (%s lines)%s\n" $name $lines $sync_tag
             end
             if test $has_notes -eq 0
                 echo "No notes yet. Run 'note' to create one."
