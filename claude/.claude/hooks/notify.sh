@@ -26,7 +26,9 @@ case "$EVENT" in
     [[ $(echo "$INPUT" | jq -r '.stop_hook_active // false') == "true" ]] && exit 0
 
     TITLE="Claude finished"
-    BODY=$(truncate "$(echo "$INPUT" | jq -r '.last_assistant_message // "Response complete."')" 300)
+    FULL_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // "Response complete."')
+    BODY=$(truncate "$FULL_MSG" 300)
+    NTFY_BODY=$(truncate "$FULL_MSG" 4000)
     URGENCY="normal"
     play_sound
     ;;
@@ -95,7 +97,7 @@ NTFY_PRIORITY="default"
 curl -s -o /dev/null \
   -H "Title: $TITLE" \
   -H "Priority: $NTFY_PRIORITY" \
-  -d "$BODY" \
+  -d "${NTFY_BODY:-$BODY}" \
   ntfy.sh/jaeho &
 
 exit 0
