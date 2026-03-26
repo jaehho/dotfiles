@@ -60,8 +60,10 @@ set_default_shell_fish() {
         echo "==> Setting fish as default shell..."
         grep -qxF "$fish_path" /etc/shells || echo "$fish_path" | sudo tee -a /etc/shells
         chsh -s "$fish_path"
+        FISH_CHANGED=1
     else
         echo "  default shell: already fish, skipping"
+        FISH_CHANGED=0
     fi
 }
 
@@ -78,7 +80,11 @@ if [ "$DISTRO" = "arch" ]; then
 
     set_default_shell_fish
 
-    echo "==> Done. Log out and back in for fish to take effect."
+    if [ "$FISH_CHANGED" = "1" ]; then
+        echo "==> Done. Log out and back in for fish to take effect."
+    else
+        echo "==> Done."
+    fi
     exit 0
 fi
 
@@ -158,4 +164,8 @@ make -C "$REPO_ROOT" system-install
 set_default_shell_fish
 
 echo ""
-echo "==> Bootstrap complete. Log out and back in for fish to take effect."
+if [ "$FISH_CHANGED" = "1" ]; then
+    echo "==> Bootstrap complete. Log out and back in for fish to take effect."
+else
+    echo "==> Bootstrap complete."
+fi
