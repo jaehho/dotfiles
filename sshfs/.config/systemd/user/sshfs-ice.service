@@ -1,15 +1,18 @@
 [Unit]
 Description=SSHFS mount ice
+Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=forking
+ExecStartPre=-/usr/bin/fusermount3 -uz %h/ice
+ExecStartPre=/usr/bin/mkdir -p %h/ice
 ExecStart=/usr/bin/sshfs ice:/ %h/ice \
   -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 \
   -o dir_cache=no,no_readahead \
-  -o ssh_command=sshpass\ -f\ %h/.ssh/jump_pass\ ssh
-ExecStop=/bin/fusermount3 -uz %h/ice
-Restart=on-failure
+  -o "ssh_command=sshpass -f %h/.ssh/jump_pass ssh"
+ExecStop=/usr/bin/fusermount3 -uz %h/ice
+Restart=always
 RestartSec=10
 
 [Install]
