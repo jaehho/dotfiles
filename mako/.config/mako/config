@@ -19,9 +19,6 @@ icons=1
 icon-path=/usr/share/icons/Papirus-Dark
 max-icon-size=48
 
-# Grouping
-group-by=app-name
-
 # Progress bar (volume/brightness OSD)
 progress-color=source #8caaee
 

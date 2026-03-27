@@ -56,18 +56,14 @@ case "$EVENT" in
   *) exit 0 ;;
 esac
 
-# ── Resolve source window (for SUPER+. focus) ────────────────────────────────
-save_window_address() {
+# ── Resolve source window + tmux pane (for notification focus) ────────────────
+resolve_window_address() {
   local pid
   pid=$(tmux display-message -p '#{client_pid}' 2>/dev/null) || pid=$$
   while [ "$pid" -gt 1 ] 2>/dev/null; do
     if [[ "$(cat /proc/"$pid"/comm 2>/dev/null)" == "kitty" ]]; then
-      local addr
-      addr=$(hyprctl clients -j 2>/dev/null \
-        | jq -r --argjson p "$pid" '.[] | select(.pid == $p) | .address' 2>/dev/null)
-      if [[ -n "$addr" ]]; then
-        echo "$addr" > "${XDG_RUNTIME_DIR:-/tmp}/claude-notify-window"
-      fi
+      hyprctl clients -j 2>/dev/null \
+        | jq -r --argjson p "$pid" '.[] | select(.pid == $p) | .address' 2>/dev/null
       return
     fi
     pid=$(awk '/^PPid:/{print $2}' /proc/"$pid"/status 2>/dev/null) || return
@@ -77,15 +73,40 @@ save_window_address() {
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 # Desktop: notify-send (mako) on local Wayland; OSC 99 for SSH/remote
 if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]; then
-  save_window_address
+  WINDOW_ADDR=$(resolve_window_address)
+  TMUX_SOCKET="${TMUX%%,*}"
+  TMUX_TARGET=""
+  if [[ -n "${TMUX_PANE:-}" ]]; then
+    TMUX_TARGET=$(tmux display-message -t "$TMUX_PANE" \
+      -p '#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null) || true
+  fi
+
   NOTIFY_ARGS=(--app-name="Claude Code" -u "${URGENCY:-normal}")
   [[ -n "${CATEGORY:-}" ]] && NOTIFY_ARGS+=(-c "$CATEGORY")
   NOTIFY_ARGS+=(--action=default=Focus)
-  # setsid detaches from hook process group so Claude doesn't wait for dismiss
+
+  # setsid detaches from hook process group so Claude doesn't wait for dismiss.
+  # Each process captures its own window address + tmux target in the closure,
+  # so multiple concurrent notifications each focus the correct terminal + pane.
   setsid bash -c '
+    WINDOW_ADDR="$1"; TMUX_SOCKET="$2"; TMUX_TARGET="$3"; shift 3
     action=$(notify-send "$@")
-    [[ "$action" == "default" ]] && ~/.local/bin/hypr-focus-notification
-  ' _ "${NOTIFY_ARGS[@]}" "$TITLE" "$BODY" </dev/null &>/dev/null &
+    if [[ "$action" == "default" ]]; then
+      # Focus the kitty window
+      if [[ -n "$WINDOW_ADDR" ]] && hyprctl clients -j 2>/dev/null \
+           | jq -e --arg a "$WINDOW_ADDR" ".[] | select(.address == \$a)" >/dev/null 2>&1; then
+        hyprctl dispatch focuswindow "address:$WINDOW_ADDR" >/dev/null 2>&1
+      else
+        hyprctl dispatch focuswindow "class:kitty" >/dev/null 2>&1
+      fi
+      # Switch to the exact tmux pane
+      if [[ -n "$TMUX_TARGET" ]]; then
+        tmux -S "$TMUX_SOCKET" select-window -t "${TMUX_TARGET%.*}" 2>/dev/null
+        tmux -S "$TMUX_SOCKET" select-pane -t "$TMUX_TARGET" 2>/dev/null
+      fi
+    fi
+  ' _ "${WINDOW_ADDR:-}" "${TMUX_SOCKET:-}" "${TMUX_TARGET:-}" \
+    "${NOTIFY_ARGS[@]}" "$TITLE" "$BODY" </dev/null &>/dev/null &
 else
   "$HOME/.local/bin/notify" "$TITLE" "$BODY" &
 fi

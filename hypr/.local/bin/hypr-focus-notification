@@ -1,15 +1,7 @@
 #!/usr/bin/env bash
-# Dismiss the top notification and focus the terminal that sent it.
-# Falls back to the most recent Kitty window if no saved address.
+# Invoke the top notification's action (or dismiss if no action).
+# Works for all notification types: Claude → focuses terminal + tmux pane,
+# Teams → opens Firefox tab, etc.
 # Used by SUPER+. keybind.
 
-makoctl dismiss >/dev/null 2>&1
-
-STATE="${XDG_RUNTIME_DIR:-/tmp}/claude-notify-window"
-ADDR=$(cat "$STATE" 2>/dev/null)
-
-if [[ -n "$ADDR" ]] && hyprctl clients -j 2>/dev/null | jq -e --arg a "$ADDR" '.[] | select(.address == $a)' >/dev/null 2>&1; then
-  hyprctl dispatch focuswindow "address:$ADDR" >/dev/null 2>&1
-else
-  hyprctl dispatch focuswindow "class:kitty" >/dev/null 2>&1
-fi
+makoctl invoke >/dev/null 2>&1 || makoctl dismiss >/dev/null 2>&1
