@@ -1,0 +1,52 @@
+#!/bin/bash
+# Read visible screen content aloud using AI TTS (edge-tts → mpv)
+# In terminal with tmux: captures the visible pane (works in copy mode)
+# Any other app: screenshots the active window, OCRs it, reads the text
+# Press keybind again to stop (toggle)
+# Falls back to espeak-ng if edge-tts or mpv unavailable / offline
+
+LOCK=/tmp/_hypr-read-screen.lock
+VOICE="en-US-AndrewNeural"
+
+# Toggle: stop if already speaking
+if [ -f "$LOCK" ]; then
+    pgid=$(cat "$LOCK")
+    kill -- -"$pgid" 2>/dev/null
+    rm -f "$LOCK"
+    notify-send -a "Read Screen" -i audio-speakers "Stopped" -t 1000
+    exit 0
+fi
+
+# Capture screen text
+active_class=$(hyprctl activewindow -j | jq -r '.class')
+
+if [[ "$active_class" =~ ^(kitty|foot|Alacritty|wezterm|ghostty)$ ]] && tmux list-sessions &>/dev/null; then
+    text=$(tmux capture-pane -p 2>/dev/null)
+else
+    # Screenshot active window → OCR
+    geom=$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
+    grim -g "$geom" /tmp/_hypr-read-screen.png
+    text=$(tesseract /tmp/_hypr-read-screen.png - 2>/dev/null)
+    rm -f /tmp/_hypr-read-screen.png
+fi
+
+# Strip empty lines and collapse whitespace
+text=$(echo "$text" | sed '/^[[:space:]]*$/d')
+
+[ -z "$text" ] && exit 0
+
+notify-send -a "Read Screen" -i audio-speakers "Reading screen..." -t 2000
+
+# Speak in a new process group (so toggle can kill the whole pipeline)
+if command -v edge-tts &>/dev/null && command -v mpv &>/dev/null; then
+    setsid bash -c '
+        echo $$ > '"$LOCK"'
+        edge-tts --voice "'"$VOICE"'" --text "$1" \
+            --write-media /dev/stdout 2>/dev/null \
+            | mpv --no-video --really-quiet -
+        rm -f '"$LOCK"'
+    ' _ "$text" &
+else
+    # Fallback: espeak-ng (robotic but works offline with no deps)
+    echo "$text" | espeak-ng &
+fi
