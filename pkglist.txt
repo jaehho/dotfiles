@@ -52,6 +52,7 @@ networkmanager
 nm-connection-editor
 nodejs
 noto-fonts-cjk
+noto-fonts-emoji
 npm
 nss-mdns
 nvidia-open

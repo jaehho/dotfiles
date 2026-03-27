@@ -48,9 +48,7 @@ case "$EVENT" in
         play_sound
         ;;
       *)
-        TITLE=$(echo "$INPUT" | jq -r '.title // "Claude Code"')
-        BODY="${MSG:-$TYPE}"
-        URGENCY="normal"
+        exit 0
         ;;
     esac
     ;;
