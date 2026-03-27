@@ -41,31 +41,34 @@ function note --description "Quick notes with git sync"
                 end
             end
 
-            set -l input (_note_list $ls_args)
-            if test (count $input) -eq 0
+            set -l files (command ls $ls_args $notes_dir/*.md 2>/dev/null)
+            if test (count $files) -eq 0
                 echo "No notes yet. Run 'note' to create one."
                 return
             end
 
-            set -l reload_cmd "_note_list $ls_args"
+            set -l reload_cmd "command ls $ls_args $notes_dir/*.md 2>/dev/null"
+            set -l mode_file /tmp/note-mode-$fish_pid
+            set -l query_file /tmp/note-query-$fish_pid
+            rm -f $mode_file $query_file
 
-            printf '%s\n' $input | fzf \
-                --reverse \
-                --delimiter '\t' --with-nth 2 --nth 2,3 \
+            printf '%s\n' $files | fzf \
+                --disabled --reverse \
+                --delimiter / --with-nth -1 \
                 --prompt '> ' \
-                --bind 'start:disable-search+unbind(y,n)' \
+                --bind 'start:unbind(y,n)' \
+                --bind "change:transform[echo {q} > $query_file; switch (cat $mode_file 2>/dev/null); case content; echo 'reload~rg -Fli -e (cat $query_file) --glob \"*.md\" $notes_dir 2>/dev/null; or true~'; case name; echo 'reload~command ls $notes_dir/*.md 2>/dev/null | while read f; basename \$f | grep -Fiq (cat $query_file); and echo \$f; end; or true~'; case '*'; echo clear-query; end]" \
                 --bind 'j:down,k:up,g:first,G:last,q:abort' \
-                --bind "x:transform~printf 'change-prompt(Delete %s? [y/N] )+unbind(j,k,g,G,q,x,/)+rebind(y,n)' {2}~" \
-                --bind "y:execute-silent(rm {1})+reload($reload_cmd)+change-prompt(> )+rebind(j,k,g,G,q,x,/)+unbind(y,n)+disable-search" \
-                --bind "n:change-prompt(> )+rebind(j,k,g,G,q,x,/)+unbind(y,n)" \
-                --bind '/:unbind(j,k,g,G,q,x)+enable-search+change-prompt(/)' \
-                --bind 'esc:rebind(j,k,g,G,q,x,/)+unbind(y,n)+disable-search+clear-query+change-prompt(> )' \
+                --bind "x:transform~printf 'change-prompt(Delete %s? [y/N] )+unbind(j,k,g,G,q,x,/,f)+rebind(y,n)' {-1}~" \
+                --bind "y:execute-silent(rm {})+reload($reload_cmd)+change-prompt(> )+rebind(j,k,g,G,q,x,/,f)+unbind(y,n)" \
+                --bind "n:change-prompt(> )+rebind(j,k,g,G,q,x,/,f)+unbind(y,n)" \
+                --bind "/:execute-silent(echo content > $mode_file)+unbind(j,k,g,G,q,x,f)+change-prompt(/)" \
+                --bind "f:execute-silent(echo name > $mode_file)+unbind(j,k,g,G,q,x,/)+change-prompt(name/)" \
+                --bind "esc:execute-silent(rm -f $mode_file)+rebind(j,k,g,G,q,x,/,f)+unbind(y,n)+clear-query+change-prompt(> )+reload($reload_cmd)" \
                 --bind 'ctrl-d:preview-half-page-down,ctrl-u:preview-half-page-up' \
-                --preview 'bat --color=always --style=plain {1}' | read -l line
-            and begin
-                set -l selected (string split '\t' $line)[1]
-                _note_open $selected
-            end
+                --preview "test (cat $mode_file 2>/dev/null) = content; and rg --color=always --passthru -Fn -e (cat $query_file) {} 2>/dev/null; or bat --color=always --style=plain {}" | read -l selected
+            and _note_open $selected
+            rm -f $mode_file $query_file
             _note_git_sync $notes_dir
         case init
             if not test -d $notes_dir/.git
@@ -95,7 +98,7 @@ function note --description "Quick notes with git sync"
             echo ""
             echo "  note                Open persistent scratch note"
             echo "  note <title>        Open/create a titled note"
-            echo "  note ls             Browse notes (j/k, x delete, / search, q quit)"
+            echo "  note ls             Browse notes (j/k, x delete, / content, f name, q quit)"
             echo "  note ls --name      Sort alphabetically"
             echo "  note ls --old       Sort oldest first"
             echo "  note init           Set up git sync with GitHub"
