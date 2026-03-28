@@ -65,7 +65,14 @@
             "blueman.*": "󰂯",
             "pavucontrol": "󰕾",
             "org.gnome.Calculator": "󰃬",
-            "org.pwmt.zathura": "󰈙"
+            "org.pwmt.zathura": "󰈙",
+            "Zotero": "󱉟",
+            "microsoft-edge.*": "󰇩",
+            "libreoffice.*": "󰈙",
+            "com.gabm.satty": "󰄀",
+            "x2goclient": "󰢹",
+            "spotify_player": "󰓇",
+            "wiremix": "󰕾"
         }
     },
 
