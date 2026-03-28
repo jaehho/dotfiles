@@ -9,7 +9,8 @@
 #   hypr-wallpaper dislike   # dislike current + show next
 #   hypr-wallpaper source    # open source URL in browser
 #   hypr-wallpaper mode      # toggle explore/liked mode
-#   hypr-wallpaper restore   # restore last wallpaper
+#   hypr-wallpaper restore   # restore last wallpaper (per-monitor aware)
+#   hypr-wallpaper fill      # fill each monitor with a different liked wallpaper
 #   hypr-wallpaper watch     # watch for new monitors and reapply
 
 set -uo pipefail
@@ -24,8 +25,27 @@ HISTFILE_WP="$DATADIR/history"
 CONFDIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr-wallpaper"
 CONFFILE="$CONFDIR/config"
 RULESFILE="$CONFDIR/rules.toml"
+MONITOR_STATE_DIR="$DATADIR/monitors"
 
-mkdir -p "$WALLDIR" "$DATADIR"
+mkdir -p "$WALLDIR" "$DATADIR" "$MONITOR_STATE_DIR"
+
+# ── Resolve active Hyprland instance ──
+# HYPRLAND_INSTANCE_SIGNATURE can go stale after a session restart.
+# Auto-detect the active instance by finding the directory with .socket.sock.
+resolve_hyprland_instance() {
+    if hyprctl monitors -j >/dev/null 2>&1; then
+        return
+    fi
+    local hypr_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr"
+    for dir in "$hypr_dir"/*/; do
+        if [ -S "${dir}.socket.sock" ]; then
+            export HYPRLAND_INSTANCE_SIGNATURE
+            HYPRLAND_INSTANCE_SIGNATURE="$(basename "$dir")"
+            return
+        fi
+    done
+}
+resolve_hyprland_instance
 
 # ── Defaults ──
 UA="hypr-wallpaper/1.0"
@@ -116,6 +136,45 @@ db_url_exists() {
 current_file()     { cat "$STATEFILE" 2>/dev/null; }
 current_basename() { local c; c=$(current_file); [ -n "$c" ] && basename "$c"; }
 current_mode()     { cat "$MODEFILE" 2>/dev/null || echo "explore"; }
+
+# ── Per-monitor helpers ──
+get_outputs() { hyprctl monitors -j 2>/dev/null | jq -r '.[].name'; }
+get_focused_output() { hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused) | .name'; }
+save_monitor_state() { echo "$2" > "$MONITOR_STATE_DIR/$1"; }
+
+pick_random_liked_excluding() {
+    local exclude_clause=""
+    for name in "$@"; do
+        [ -z "$name" ] && continue
+        exclude_clause+=" AND filename != '$(sql_escape "$name")'"
+    done
+    db_query "SELECT filename FROM wallpapers WHERE status = 'liked' $exclude_clause ORDER BY RANDOM() LIMIT 1;"
+}
+
+fill_other_monitors() {
+    local primary_path="$1"
+    local outputs
+    mapfile -t outputs < <(get_outputs)
+    [ ${#outputs[@]} -le 1 ] && return
+
+    local focused
+    focused=$(get_focused_output)
+    local used=("$(basename "$primary_path")")
+
+    for output in "${outputs[@]}"; do
+        [ "$output" = "$focused" ] && continue
+        local pick
+        pick=$(pick_random_liked_excluding "${used[@]}")
+        if [ -n "$pick" ] && [ -f "$WALLDIR/$pick" ]; then
+            awww img "$WALLDIR/$pick" -o "$output" --transition-type none
+            save_monitor_state "$output" "$WALLDIR/$pick"
+            used+=("$pick")
+        else
+            awww img "$primary_path" -o "$output" --transition-type none
+            save_monitor_state "$output" "$primary_path"
+        fi
+    done
+}
 
 # ── History ──
 history_push() {
@@ -485,7 +544,20 @@ set_wallpaper() {
     local filepath="$1"
     cleanup_current
     pgrep -x awww-daemon >/dev/null || { awww-daemon 2>/dev/null & sleep 0.5; }
-    eval awww img "\"$filepath\"" $TRANSITION
+
+    local outputs
+    mapfile -t outputs < <(get_outputs)
+
+    if [ ${#outputs[@]} -le 1 ]; then
+        eval awww img "\"$filepath\"" $TRANSITION
+    else
+        local focused
+        focused=$(get_focused_output)
+        eval awww img "\"$filepath\"" -o "\"$focused\"" $TRANSITION
+        save_monitor_state "$focused" "$filepath"
+        fill_other_monitors "$filepath"
+    fi
+
     echo "$filepath" > "$STATEFILE"
     db_set_last_shown "$(basename "$filepath")"
 }
@@ -710,10 +782,31 @@ do_source() {
 
 do_restore() {
     pgrep -x awww-daemon >/dev/null || { awww-daemon 2>/dev/null & sleep 0.5; }
-    local last
-    last=$(current_file)
-    if [ -n "$last" ] && [ -f "$last" ]; then
-        awww img "$last" --transition-type none
+
+    local outputs
+    mapfile -t outputs < <(get_outputs)
+    local restored=false
+
+    if [ ${#outputs[@]} -gt 1 ] && [ -d "$MONITOR_STATE_DIR" ]; then
+        for output in "${outputs[@]}"; do
+            local state_file="$MONITOR_STATE_DIR/$output"
+            if [ -f "$state_file" ]; then
+                local wp
+                wp=$(cat "$state_file")
+                if [ -n "$wp" ] && [ -f "$wp" ]; then
+                    awww img "$wp" -o "$output" --transition-type none
+                    restored=true
+                fi
+            fi
+        done
+    fi
+
+    if [ "$restored" = false ]; then
+        local last
+        last=$(current_file)
+        if [ -n "$last" ] && [ -f "$last" ]; then
+            awww img "$last" --transition-type none
+        fi
     fi
 }
 
@@ -723,10 +816,52 @@ do_watch() {
         case "$event" in
             monitoradded*)
                 sleep 1
-                do_restore
+                local new_output="${event#monitoradded>>}"
+                pgrep -x awww-daemon >/dev/null || { awww-daemon 2>/dev/null & sleep 0.5; }
+                # Check for saved state first
+                if [ -f "$MONITOR_STATE_DIR/$new_output" ]; then
+                    local saved_wp
+                    saved_wp=$(cat "$MONITOR_STATE_DIR/$new_output")
+                    if [ -n "$saved_wp" ] && [ -f "$saved_wp" ]; then
+                        awww img "$saved_wp" -o "$new_output" --transition-type none
+                        continue
+                    fi
+                fi
+                # No saved state — pick a random liked wallpaper
+                local pick
+                pick=$(db_query "SELECT filename FROM wallpapers WHERE status = 'liked' ORDER BY RANDOM() LIMIT 1;")
+                if [ -n "$pick" ] && [ -f "$WALLDIR/$pick" ]; then
+                    awww img "$WALLDIR/$pick" -o "$new_output" --transition-type none
+                    save_monitor_state "$new_output" "$WALLDIR/$pick"
+                else
+                    do_restore
+                fi
                 ;;
         esac
     done
+}
+
+# ── Fill all monitors with different liked wallpapers ──
+do_fill_monitors() {
+    pgrep -x awww-daemon >/dev/null || { awww-daemon 2>/dev/null & sleep 0.5; }
+    local outputs
+    mapfile -t outputs < <(get_outputs)
+    if [ ${#outputs[@]} -le 1 ]; then
+        notify-send -u low "Wallpaper" "Only one monitor — nothing to fill"
+        return
+    fi
+
+    local used=()
+    for output in "${outputs[@]}"; do
+        local pick
+        pick=$(pick_random_liked_excluding "${used[@]}")
+        if [ -n "$pick" ] && [ -f "$WALLDIR/$pick" ]; then
+            awww img "$WALLDIR/$pick" -o "$output" --transition-type none
+            save_monitor_state "$output" "$WALLDIR/$pick"
+            used+=("$pick")
+        fi
+    done
+    notify-send -u low "Wallpaper" "Filled ${#outputs[@]} monitors"
 }
 
 # ── Migrate from old TSV if it exists ──
@@ -753,6 +888,7 @@ case "${1:-menu}" in
     source)  do_source ;;
     mode)    do_toggle_mode ;;
     restore) do_restore ;;
+    fill)    do_fill_monitors ;;
     watch)   do_watch ;;
-    *)       echo "Usage: hypr-wallpaper {menu|next|prev|fetch|like|dislike|source|mode|restore|watch}" ;;
+    *)       echo "Usage: hypr-wallpaper {menu|next|prev|fetch|like|dislike|source|mode|restore|fill|watch}" ;;
 esac
