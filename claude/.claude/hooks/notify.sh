@@ -85,21 +85,72 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
   [[ -n "${CATEGORY:-}" ]] && NOTIFY_ARGS+=(-c "$CATEGORY")
   NOTIFY_ARGS+=(--action=default=Focus)
 
-  # setsid detaches from hook process group so Claude doesn't wait for dismiss.
-  # Each process captures its own window address + tmux target in the closure,
-  # so multiple concurrent notifications each focus the correct terminal + pane.
+  # setsid detaches so Claude doesn't wait. Single FIFO carries notify-send
+  # stdout: line 1 = notification ID (--print-id), line 2 = action on click.
+  # Each setsid captures its own window address + tmux target in the closure,
+  # so concurrent notifications independently focus the correct terminal + pane.
+  # A background watcher auto-dismisses if the source dies or user is looking.
   setsid bash -c '
     WINDOW_ADDR="$1"; TMUX_SOCKET="$2"; TMUX_TARGET="$3"; shift 3
-    action=$(notify-send "$@")
+
+    tmpdir=$(mktemp -d) || exit 1
+    mkfifo "$tmpdir/out"
+    trap "rm -rf \"$tmpdir\"" EXIT
+
+    notify-send --print-id "$@" > "$tmpdir/out" &
+    NS_PID=$!
+
+    exec 3< "$tmpdir/out"
+    read -r NOTIF_ID <&3 2>/dev/null
+
+    # Watcher: dismiss when source dies OR user is already looking at the pane
+    if [[ -n "$NOTIF_ID" ]]; then
+      (
+        focused_count=0
+        while kill -0 "$NS_PID" 2>/dev/null; do
+          sleep 5
+          # Source liveness check
+          alive=false
+          if [[ -n "$TMUX_TARGET" ]]; then
+            tmux -S "$TMUX_SOCKET" display-message -t "$TMUX_TARGET" -p "" 2>/dev/null && alive=true
+          elif [[ -n "$WINDOW_ADDR" ]]; then
+            hyprctl clients -j 2>/dev/null \
+              | jq -e --arg a "$WINDOW_ADDR" ".[] | select(.address == \$a)" >/dev/null 2>&1 && alive=true
+          else
+            alive=true
+          fi
+          "$alive" || { makoctl dismiss -n "$NOTIF_ID" 2>/dev/null; break; }
+
+          # Focus check: dismiss after ~10s of the user looking at the source pane
+          pane_focused=false
+          active_addr=$(hyprctl activewindow -j 2>/dev/null | jq -r ".address // empty" 2>/dev/null)
+          if [[ -n "$TMUX_TARGET" && "$active_addr" == "$WINDOW_ADDR" ]]; then
+            [[ "$(tmux -S "$TMUX_SOCKET" display-message -t "$TMUX_TARGET" \
+              -p "#{pane_active}" 2>/dev/null)" == "1" ]] && pane_focused=true
+          elif [[ -z "$TMUX_TARGET" && "$active_addr" == "$WINDOW_ADDR" ]]; then
+            pane_focused=true
+          fi
+          if "$pane_focused"; then
+            (( ++focused_count ))
+            (( focused_count >= 1 )) && { makoctl dismiss -n "$NOTIF_ID" 2>/dev/null; break; }
+          else
+            focused_count=0
+          fi
+        done
+      ) &
+      WATCHER=$!
+    fi
+
+    read -r action <&3 2>/dev/null
+    exec 3<&-
+    wait "$NS_PID" 2>/dev/null
+    [[ -n "${WATCHER:-}" ]] && kill "$WATCHER" 2>/dev/null && wait "$WATCHER" 2>/dev/null
+
     if [[ "$action" == "default" ]]; then
-      # Focus the kitty window
       if [[ -n "$WINDOW_ADDR" ]] && hyprctl clients -j 2>/dev/null \
            | jq -e --arg a "$WINDOW_ADDR" ".[] | select(.address == \$a)" >/dev/null 2>&1; then
         hyprctl dispatch focuswindow "address:$WINDOW_ADDR" >/dev/null 2>&1
-      else
-        hyprctl dispatch focuswindow "class:kitty" >/dev/null 2>&1
       fi
-      # Switch to the exact tmux pane
       if [[ -n "$TMUX_TARGET" ]]; then
         tmux -S "$TMUX_SOCKET" select-window -t "${TMUX_TARGET%.*}" 2>/dev/null
         tmux -S "$TMUX_SOCKET" select-pane -t "$TMUX_TARGET" 2>/dev/null
