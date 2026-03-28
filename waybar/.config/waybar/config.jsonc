@@ -64,7 +64,8 @@
             "zoom": "󰍫",
             "blueman.*": "󰂯",
             "pavucontrol": "󰕾",
-            "org.gnome.Calculator": "󰃬"
+            "org.gnome.Calculator": "󰃬",
+            "org.pwmt.zathura": "󰈙"
         }
     },
 
