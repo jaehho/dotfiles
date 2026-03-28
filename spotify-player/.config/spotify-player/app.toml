@@ -1,0 +1,35 @@
+client_port = 8180
+
+theme = "catppuccin-mocha"
+
+# Kitty terminal image protocol for album art
+cover_img_backend = "Kitty"
+cover_img_width = 5
+cover_img_length = 9
+
+# UI
+border_type = "Rounded"
+progress_bar_type = "Line"
+play_icon = ""
+pause_icon = ""
+liked_icon = "♥"
+seek_duration_secs = 5
+
+# Notifications
+enable_notify = true
+notify_timeout_in_secs = 5
+notify_transient = true
+
+[notify_format]
+summary = "{track} - {artists}"
+body = "{album}"
+
+# Audio — max quality
+[device]
+name = "spotify-player"
+device_type = "speaker"
+volume = 70
+bitrate = 320
+audio_cache = true
+normalization = true
+autoplay = true

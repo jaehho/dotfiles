@@ -107,7 +107,8 @@
             "chromium": "󰊯",
             "mpv": "󰐌"
         },
-        "on-click": "playerctl play-pause",
+        "on-click": "spotify-focus",
+        "on-click-middle": "playerctl play-pause",
         "on-scroll-up": "playerctl next",
         "on-scroll-down": "playerctl previous"
     },

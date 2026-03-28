@@ -48,3 +48,9 @@ default-timeout=0
 [app-name="Claude Code"]
 on-button-left=invoke-default-action
 default-timeout=0
+
+# Spotify — green border, group track changes so skips replace not stack
+[app-name=spotify_player]
+default-timeout=5000
+border-color=#a6d189CC
+group-by=app-name

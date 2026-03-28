@@ -1,0 +1,7 @@
+#!/bin/bash
+# Focus existing spotify_player window, or launch a new one
+if hyprctl clients -j | jq -e '.[] | select(.class == "spotify_player")' >/dev/null 2>&1; then
+    hyprctl dispatch focuswindow "class:spotify_player"
+else
+    kitty --class spotify_player -e spotify_player &
+fi

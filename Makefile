@@ -7,7 +7,7 @@ REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # Stow packages split by distro
 COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime
-ARCH_PACKAGES   := hypr mako rofi waybar
+ARCH_PACKAGES   := hypr mako rofi waybar spotify-player
 
 DISTRO := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
 ifeq ($(DISTRO),arch)
@@ -78,20 +78,21 @@ system-install: ## Copy boot configs and symlink runtime configs
 	else \
 		echo "TPM already installed."; \
 	fi
-	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default /etc/systemd
+	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default /etc/systemd /etc/alsa/conf.d
 	sudo ln -sf $(REPO_ROOT)/keyd/default.conf /etc/keyd/default.conf
 	sudo ln -sf $(REPO_ROOT)/libinput/local-overrides.quirks /etc/libinput/local-overrides.quirks
 	sudo ln -sf $(REPO_ROOT)/systemd/sleep.conf /etc/systemd/sleep.conf
+	sudo ln -sf /usr/share/alsa/alsa.conf.d/99-pipewire-default.conf /etc/alsa/conf.d/99-pipewire-default.conf
 	@changed=""; \
 	for pair in $(SYSTEM_COPIES); do \
 		src=$${pair%%:*}; dst=$${pair##*:}; \
 		if [ -f "$$dst" ] && ! diff -q "$(REPO_ROOT)/$$src" "$$dst" >/dev/null 2>&1; then \
 			sudo cp "$$dst" "$${dst}.bak"; \
 			echo "  backed up $$dst -> $${dst}.bak"; \
+			changed="$$changed $$dst"; \
 		fi; \
 		sudo cp "$(REPO_ROOT)/$$src" "$$dst"; \
 		echo "  copied $$src -> $$dst"; \
-		changed="$$changed $$dst"; \
 	done; \
 	if ! command -v keyd >/dev/null 2>&1 && [ "$(DISTRO)" = "ubuntu" ]; then \
 		echo "Installing keyd from source..."; \
@@ -233,7 +234,7 @@ status: ## Show current dotfiles state
 	done
 	@echo ""
 	@echo "System configs (symlinked):"
-	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks /etc/systemd/sleep.conf; do \
+	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks /etc/systemd/sleep.conf /etc/alsa/conf.d/99-pipewire-default.conf; do \
 		if [ -L "$$f" ]; then \
 			echo "  $$f: linked"; \
 		elif [ -f "$$f" ]; then \
@@ -257,11 +258,10 @@ status: ## Show current dotfiles state
 	done
 	@echo ""
 	@echo "Services:"
-	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab; do \
-		case "$$svc" in rclone-*) \
-			active=$$(systemctl --user is-active "$$svc" 2>/dev/null);; *) \
-			active=$$(systemctl is-active "$$svc" 2>/dev/null);; esac; \
-		fi; \
+	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab spotify-player-daemon; do \
+		case "$$svc" in keyd) \
+			active=$$(systemctl is-active "$$svc" 2>/dev/null);; *) \
+			active=$$(systemctl --user is-active "$$svc" 2>/dev/null);; esac; \
 		if [ "$$active" = "active" ]; then \
 			echo "  $$svc: active"; \
 		else \
