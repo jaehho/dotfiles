@@ -1,0 +1,151 @@
+#!/bin/bash
+# hypr-monitor-hotplug — dynamic workspace distribution based on connected monitors
+#
+# Scenarios:
+#   Laptop only (1 monitor):       WS 1-10 on eDP-1
+#   Laptop + 1 external (2 mon):   WS 1-5 on external, WS 6-10 on laptop
+#   Laptop + 2 externals (3 mon):  WS 1-3 on ext1, WS 4-7 on ext2, WS 8-10 on laptop
+#
+# Usage:
+#   hypr-monitor-hotplug assign   — redistribute workspaces now
+#   hypr-monitor-hotplug watch    — listen for hotplug events and auto-redistribute
+
+LAPTOP_PATTERN="BOE"
+
+get_monitors() {
+    hyprctl monitors -j | jq -r '.[].name'
+}
+
+is_laptop() {
+    local mon="$1"
+    hyprctl monitors -j | jq -r --arg name "$mon" \
+        '.[] | select(.name == $name) | .description' | grep -qi "$LAPTOP_PATTERN"
+}
+
+assign_workspaces() {
+    local laptop_mon=""
+    local -a ext_mons=()
+
+    while IFS= read -r mon; do
+        if is_laptop "$mon"; then
+            laptop_mon="$mon"
+        else
+            ext_mons+=("$mon")
+        fi
+    done < <(get_monitors)
+
+    # Fallback: if no laptop detected, treat first monitor as "laptop"
+    if [[ -z "$laptop_mon" ]]; then
+        laptop_mon="${ext_mons[0]}"
+        ext_mons=("${ext_mons[@]:1}")
+    fi
+
+    local count=$(( ${#ext_mons[@]} + 1 ))
+
+    case $count in
+        1)
+            # All workspaces on single monitor
+            for ws in $(seq 1 10); do
+                hyprctl keyword workspace "$ws,monitor:$laptop_mon" >/dev/null
+            done
+            hyprctl keyword workspace "1,monitor:$laptop_mon,default:true" >/dev/null
+            ;;
+        2)
+            local ext="${ext_mons[0]}"
+            # External: WS 1-5 (primary work), Laptop: WS 6-10
+            for ws in 1 2 3 4 5; do
+                hyprctl keyword workspace "$ws,monitor:$ext" >/dev/null
+                hyprctl dispatch moveworkspacetomonitor "$ws $ext" >/dev/null 2>&1
+            done
+            hyprctl keyword workspace "1,monitor:$ext,default:true" >/dev/null
+            for ws in 6 7 8 9 10; do
+                hyprctl keyword workspace "$ws,monitor:$laptop_mon" >/dev/null
+                hyprctl dispatch moveworkspacetomonitor "$ws $laptop_mon" >/dev/null 2>&1
+            done
+            hyprctl keyword workspace "6,monitor:$laptop_mon,default:true" >/dev/null
+            ;;
+        3)
+            local ext1="${ext_mons[0]}"
+            local ext2="${ext_mons[1]}"
+            # Ext1: WS 1-3, Ext2: WS 4-7, Laptop: WS 8-10
+            for ws in 1 2 3; do
+                hyprctl keyword workspace "$ws,monitor:$ext1" >/dev/null
+                hyprctl dispatch moveworkspacetomonitor "$ws $ext1" >/dev/null 2>&1
+            done
+            hyprctl keyword workspace "1,monitor:$ext1,default:true" >/dev/null
+            for ws in 4 5 6 7; do
+                hyprctl keyword workspace "$ws,monitor:$ext2" >/dev/null
+                hyprctl dispatch moveworkspacetomonitor "$ws $ext2" >/dev/null 2>&1
+            done
+            hyprctl keyword workspace "4,monitor:$ext2,default:true" >/dev/null
+            for ws in 8 9 10; do
+                hyprctl keyword workspace "$ws,monitor:$laptop_mon" >/dev/null
+                hyprctl dispatch moveworkspacetomonitor "$ws $laptop_mon" >/dev/null 2>&1
+            done
+            hyprctl keyword workspace "8,monitor:$laptop_mon,default:true" >/dev/null
+            ;;
+        *)
+            # 4+ monitors: distribute evenly, externals first
+            local all_mons=("${ext_mons[@]}" "$laptop_mon")
+            local per=$((10 / count))
+            local extra=$((10 % count))
+            local ws=1
+            for ((i=0; i<count; i++)); do
+                local mon="${all_mons[$i]}"
+                local n=$per
+                ((i < extra)) && ((n++))
+                local first=$ws
+                for ((j=0; j<n && ws<=10; j++, ws++)); do
+                    hyprctl keyword workspace "$ws,monitor:$mon" >/dev/null
+                    hyprctl dispatch moveworkspacetomonitor "$ws $mon" >/dev/null 2>&1
+                done
+                hyprctl keyword workspace "$first,monitor:$mon,default:true" >/dev/null
+            done
+            ;;
+    esac
+
+    notify-send -u low -t 3000 \
+        -h "string:x-canonical-private-synchronous:hypr-hotplug" \
+        "Monitors: $count" "Workspaces redistributed"
+}
+
+case "${1:-assign}" in
+    assign)
+        assign_workspaces
+        ;;
+    watch)
+        # Initial assignment
+        assign_workspaces
+        # Listen for monitor events via Hyprland socket2
+        local sock="${XDG_RUNTIME_DIR}/hypr/${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock"
+        if command -v socat &>/dev/null; then
+            socat -U - "UNIX-CONNECT:$sock"
+        else
+            # Fallback: raw bash socket read (no socat needed)
+            exec 3< <(cat < <(exec 4<>"$sock"; cat <&4))
+            cat <&3
+        fi | {
+            local last_event=0
+            while IFS= read -r line; do
+                case "$line" in
+                    monitoradded*|monitorremoved*)
+                        local now
+                        now=$(date +%s)
+                        # Debounce: skip if last event was <3s ago
+                        if ((now - last_event >= 3)); then
+                            last_event=$now
+                            sleep 2
+                            assign_workspaces
+                        fi
+                        ;;
+                esac
+            done
+        }
+        ;;
+    *)
+        echo "Usage: $(basename "$0") [assign|watch]"
+        echo "  assign  — redistribute workspaces now (default)"
+        echo "  watch   — listen for hotplug events and auto-redistribute"
+        exit 1
+        ;;
+esac

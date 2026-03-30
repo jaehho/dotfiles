@@ -36,7 +36,7 @@
     },
 
     "hyprland/workspaces": {
-        "format": "{id} {windows}",
+        "format": "{name} {windows}",
         "format-window-separator": " ",
         "on-click": "activate",
         "sort-by-number": true,
@@ -72,6 +72,8 @@
             "com.gabm.satty": "󰄀",
             "x2goclient": "󰢹",
             "spotify_player": "󰓇",
+            "teams-for-linux": "󰊻",
+            "thunderbird": "󰺻",
             "wiremix": "󰕾"
         }
     },
