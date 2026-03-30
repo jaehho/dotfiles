@@ -18,7 +18,7 @@ truncate() {
 }
 
 play_sound() {
-  ffplay -nodisp -autoexit -loglevel quiet -f lavfi "sine=f=800:d=0.15" &>/dev/null &
+  setsid ffplay -nodisp -autoexit -loglevel quiet -f lavfi "sine=f=800:d=0.15" </dev/null &>/dev/null &
 }
 
 case "$EVENT" in
@@ -55,6 +55,10 @@ case "$EVENT" in
 
   *) exit 0 ;;
 esac
+
+# ── ntfy.sh priority ────────────────────────────────────────────────────────
+NTFY_PRIORITY="default"
+[[ "${URGENCY:-normal}" == "high" ]] && NTFY_PRIORITY="high"
 
 # ── Resolve source window + tmux pane (for notification focus) ────────────────
 resolve_window_address() {
@@ -158,17 +162,28 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
     fi
   ' _ "${WINDOW_ADDR:-}" "${TMUX_SOCKET:-}" "${TMUX_TARGET:-}" \
     "${NOTIFY_ARGS[@]}" "$TITLE" "$BODY" </dev/null &>/dev/null &
+
+  # Mobile: ntfy.sh delayed — only send if user hasn't seen the desktop notification
+  # setsid detaches from hook's process group so Claude doesn't wait 90s
+  setsid bash -c '
+    sleep 90
+    if makoctl list 2>/dev/null | grep -q "App name: Claude Code"; then
+      curl -s -o /dev/null --connect-timeout 5 --max-time 10 \
+        -H "Title: $1" \
+        -H "Priority: $2" \
+        -d "$3" \
+        ntfy.sh/jaeho
+    fi
+  ' _ "$TITLE" "$NTFY_PRIORITY" "${NTFY_BODY:-$BODY}" </dev/null &>/dev/null &
 else
   "$HOME/.local/bin/notify" "$TITLE" "$BODY" &
-fi
 
-# Mobile: ntfy.sh (always, so you get notified even away from desk)
-NTFY_PRIORITY="default"
-[[ "${URGENCY:-normal}" == "high" ]] && NTFY_PRIORITY="high"
-curl -s -o /dev/null --connect-timeout 5 --max-time 10 \
-  -H "Title: $TITLE" \
-  -H "Priority: $NTFY_PRIORITY" \
-  -d "${NTFY_BODY:-$BODY}" \
-  ntfy.sh/jaeho &
+  # Mobile: always send ntfy as fallback (OSC 99 passthrough may fail silently)
+  setsid curl -s -o /dev/null --connect-timeout 5 --max-time 10 \
+    -H "Title: $TITLE" \
+    -H "Priority: $NTFY_PRIORITY" \
+    -d "${NTFY_BODY:-$BODY}" \
+    ntfy.sh/jaeho </dev/null &>/dev/null &
+fi
 
 exit 0
