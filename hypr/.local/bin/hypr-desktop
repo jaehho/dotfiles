@@ -1,0 +1,599 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# hypr-desktop — Virtual desktop manager for Hyprland
+#
+# Each desktop owns 10 workspaces: (desk-1)*10+1 … desk*10.
+# Workspaces round-robin across monitors in canonical order
+# (external monitors sorted by x, laptop eDP/LVDS last):
+#   ws 1,4,7,10 → mon[0];  ws 2,5,8 → mon[1];  ws 3,6,9 → mon[2].
+#
+# A background daemon (watch) listens for workspace changes and auto-switches
+# the desktop context when a workspace in another desktop is focused.
+
+PERSIST_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-desktops"
+RUNTIME_DIR="/tmp/hypr-desktops-$(id -u)"
+
+DESKTOP_FILE="$PERSIST_DIR/desktops"
+CURRENT_FILE="$RUNTIME_DIR/current"
+LAYOUT_FILE="$RUNTIME_DIR/layout"
+LOCK_FILE="$RUNTIME_DIR/lock"
+
+DESKTOP_OFFSET=10
+
+# ── helpers ──────────────────────────────────────────────────────────
+
+_init() {
+    mkdir -p "$PERSIST_DIR" "$RUNTIME_DIR"
+    [[ -f "$DESKTOP_FILE" ]] || echo "1:Default" > "$DESKTOP_FILE"
+    [[ -f "$CURRENT_FILE" ]] || echo "1" > "$CURRENT_FILE"
+    [[ -f "$LAYOUT_FILE" ]] || touch "$LAYOUT_FILE"
+    # Enforce correct workspace-monitor mapping for current desktop
+    local mon_data
+    mon_data=$(_monitors_json 2>/dev/null) || return 0
+    _ensure_mapping "$(_current_id)" "$mon_data"
+}
+
+_current_id() {
+    read -r id < "$CURRENT_FILE" 2>/dev/null && echo "$id" || echo "1"
+}
+
+_desk_name() {
+    local id=$1
+    local name
+    name=$(grep "^${id}:" "$DESKTOP_FILE" 2>/dev/null | head -1 | cut -d: -f2- || true)
+    echo "${name:-Desktop $id}"
+}
+
+_next_id() {
+    local max
+    max=$(cut -d: -f1 "$DESKTOP_FILE" | sort -n | tail -1)
+    echo $(( max + 1 ))
+}
+
+_ws_id() {
+    # desktop $1, local slot $2 (1-10) → global workspace id
+    echo $(( ($1 - 1) * DESKTOP_OFFSET + $2 ))
+}
+
+_ws_to_desktop() {
+    # global workspace id → desktop id
+    echo $(( ($1 - 1) / DESKTOP_OFFSET + 1 ))
+}
+
+_monitors_json() {
+    hyprctl monitors -j
+}
+
+_ordered_monitors() {
+    # Returns monitor names in canonical round-robin order:
+    # external monitors sorted by x, then laptop (eDP/LVDS) last.
+    # This must match the workspace assignment order in workspaces.conf.
+    local mon_data="$1"
+    local laptop=""
+    local -a externals=()
+
+    while IFS= read -r name; do
+        if [[ "$name" == eDP-* || "$name" == LVDS-* ]]; then
+            laptop="$name"
+        else
+            externals+=("$name")
+        fi
+    done < <(echo "$mon_data" | jq -r 'sort_by(.x) | .[].name')
+
+    [[ ${#externals[@]} -gt 0 ]] && printf '%s\n' "${externals[@]}"
+    [[ -n "$laptop" ]] && echo "$laptop"
+}
+
+_signal_waybar() {
+    pkill -RTMIN+8 waybar 2>/dev/null || true
+}
+
+_lock()   { touch "$LOCK_FILE"; }
+_unlock() { rm -f "$LOCK_FILE"; }
+_locked() { [[ -f "$LOCK_FILE" ]]; }
+
+# ── workspace-monitor mapping ───────────────────────────────────────
+
+_ensure_mapping() {
+    # Dispatch moveworkspacetomonitor for every slot so the round-robin is enforced.
+    local desk=$1
+    local mon_data=$2
+    local batch=""
+    local -a mons=()
+
+    while IFS= read -r m; do
+        mons+=("$m")
+    done < <(_ordered_monitors "$mon_data")
+
+    local mon_count=${#mons[@]}
+    (( mon_count == 0 )) && return
+
+    for slot in $(seq 1 10); do
+        local ws mon_idx
+        ws=$(_ws_id "$desk" "$slot")
+        mon_idx=$(( (slot - 1) % mon_count ))
+        batch+="dispatch moveworkspacetomonitor ${ws} ${mons[$mon_idx]}; "
+    done
+
+    hyprctl --batch "$batch" >/dev/null 2>&1
+}
+
+# ── save / restore monitor→workspace layout ─────────────────────────
+
+_save_layout() {
+    # Save per-monitor active workspace for a desktop.
+    # skip_mon (optional): preserve the existing entry for this monitor
+    # instead of overwriting it (used by watch daemon when the focused
+    # monitor's workspace has already changed to another desktop).
+    local desk=$1
+    local mon_data=$2
+    local skip_mon="${3:-}"
+
+    if [[ -n "$skip_mon" ]]; then
+        # Delete all entries except skip_mon's workspace entry
+        sed -i "/^${desk}|_focus|/d" "$LAYOUT_FILE"
+        echo "$mon_data" | jq -r '.[].name' | while IFS= read -r m; do
+            [[ "$m" == "$skip_mon" ]] && continue
+            sed -i "/^${desk}|${m}|/d" "$LAYOUT_FILE"
+        done
+    else
+        sed -i "/^${desk}|/d" "$LAYOUT_FILE"
+    fi
+
+    # Save focused monitor
+    local focused
+    focused=$(echo "$mon_data" | jq -r '.[] | select(.focused) | .name')
+    echo "${desk}|_focus|${focused}" >> "$LAYOUT_FILE"
+
+    # Save active workspace per monitor
+    echo "$mon_data" | jq -r '.[] | "\(.name)|\(.activeWorkspace.id)"' \
+    | while IFS='|' read -r mon ws; do
+        [[ -n "$skip_mon" && "$mon" == "$skip_mon" ]] && continue
+        echo "${desk}|${mon}|${ws}" >> "$LAYOUT_FILE"
+    done
+}
+
+_restore_layout() {
+    local desk=$1
+    local mon_data=$2
+    local skip_mon="${3:-}"   # optional: leave this monitor untouched
+    local batch=""
+    local idx=0
+
+    while IFS= read -r mon; do
+        idx=$((idx + 1))
+        if [[ -n "$skip_mon" && "$mon" == "$skip_mon" ]]; then
+            continue
+        fi
+        local saved default target
+        saved=$(grep "^${desk}|${mon}|" "$LAYOUT_FILE" 2>/dev/null | tail -1 | cut -d'|' -f3 || true)
+        default=$(_ws_id "$desk" "$idx")
+        target="${saved:-$default}"
+        batch+="dispatch moveworkspacetomonitor ${target} ${mon}; dispatch focusmonitor ${mon}; dispatch workspace ${target}; "
+    done < <(_ordered_monitors "$mon_data")
+
+    # Restore focus
+    if [[ -n "$skip_mon" ]]; then
+        batch+="dispatch focusmonitor ${skip_mon}; "
+    else
+        local focus_mon
+        focus_mon=$(grep "^${desk}|_focus|" "$LAYOUT_FILE" 2>/dev/null | tail -1 | cut -d'|' -f3 || true)
+        [[ -n "${focus_mon:-}" ]] && batch+="dispatch focusmonitor ${focus_mon}; "
+    fi
+
+    [[ -n "$batch" ]] && hyprctl --batch "$batch" >/dev/null 2>&1
+}
+
+# ── commands ─────────────────────────────────────────────────────────
+
+cmd_switch() {
+    local target="${1:-}"
+
+    if [[ -z "$target" ]]; then
+        # Build rofi menu — desktop list only
+        local current_id entries
+        current_id=$(_current_id)
+        entries=""
+        while IFS=: read -r id name; do
+            if [[ "$id" == "$current_id" ]]; then
+                entries+="▸ ${id}: ${name}"$'\n'
+            else
+                entries+="  ${id}: ${name}"$'\n'
+            fi
+        done < "$DESKTOP_FILE"
+        entries+="  + New desktop"
+
+        local chosen
+        chosen=$(printf '%s' "$entries" | rofi -dmenu -i -p " Desktop" \
+            -theme-str 'window { width: 350px; }') || return
+        [[ -z "$chosen" ]] && return
+
+        if [[ "$chosen" == *"+ New desktop"* ]]; then
+            cmd_create
+            return
+        fi
+        target=$(echo "$chosen" | sed 's/^[▸ ]*//' | cut -d: -f1 | tr -d ' ')
+    fi
+
+    # Resolve name → id
+    if [[ ! "$target" =~ ^[0-9]+$ ]]; then
+        local resolved
+        resolved=$(grep -i ":${target}$" "$DESKTOP_FILE" 2>/dev/null | head -1 | cut -d: -f1 || true)
+        [[ -z "$resolved" ]] && { echo "Desktop '$target' not found" >&2; return 1; }
+        target=$resolved
+    fi
+
+    local current
+    current=$(_current_id)
+    [[ "$target" == "$current" ]] && return
+
+    # Verify target exists
+    grep -q "^${target}:" "$DESKTOP_FILE" 2>/dev/null \
+        || { echo "Desktop $target not found" >&2; return 1; }
+
+    local mon_data
+    mon_data=$(_monitors_json)
+
+    _save_layout "$current" "$mon_data"
+    echo "$target" > "$CURRENT_FILE"
+    _restore_layout "$target" "$mon_data"
+    _signal_waybar
+}
+
+cmd_next() {
+    local current ids next
+    current=$(_current_id)
+    ids=$(cut -d: -f1 "$DESKTOP_FILE" | sort -n)
+    next=$(echo "$ids" | grep -A1 "^${current}$" | tail -1)
+    [[ "$next" == "$current" ]] && next=$(echo "$ids" | head -1)
+    cmd_switch "$next"
+}
+
+cmd_prev() {
+    local current ids prev
+    current=$(_current_id)
+    ids=$(cut -d: -f1 "$DESKTOP_FILE" | sort -n)
+    prev=$(echo "$ids" | grep -B1 "^${current}$" | head -1)
+    [[ "$prev" == "$current" ]] && prev=$(echo "$ids" | tail -1)
+    cmd_switch "$prev"
+}
+
+cmd_ws() {
+    local target
+    target=$(( ($(_current_id) - 1) * DESKTOP_OFFSET + $1 ))
+    exec hyprctl dispatch workspace "$target"
+}
+
+cmd_movews() {
+    local target
+    target=$(( ($(_current_id) - 1) * DESKTOP_OFFSET + $1 ))
+    exec hyprctl dispatch movetoworkspace "$target"
+}
+
+cmd_movesilent() {
+    local target
+    target=$(( ($(_current_id) - 1) * DESKTOP_OFFSET + $1 ))
+    exec hyprctl dispatch movetoworkspacesilent "$target"
+}
+
+cmd_moveall() {
+    local desk target
+    desk=$(_current_id)
+    target=$(_ws_id "$desk" "$1")
+    if [[ -x "$HOME/.local/bin/hypr-move-all-to-workspace" ]]; then
+        exec "$HOME/.local/bin/hypr-move-all-to-workspace" "$target"
+    fi
+    # Inline fallback
+    local current_ws
+    current_ws=$(hyprctl activewindow -j 2>/dev/null | jq -r '.workspace.id')
+    hyprctl clients -j | jq -r ".[] | select(.workspace.id == $current_ws) | .address" \
+    | while read -r addr; do
+        [[ -z "$addr" ]] && continue
+        hyprctl dispatch movetoworkspacesilent "$target,address:$addr" >/dev/null 2>&1
+    done
+}
+
+cmd_create() {
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        name=$(rofi -dmenu -p " New desktop name" \
+            -theme-str 'window { width: 350px; }') || return
+        [[ -z "$name" ]] && return
+    fi
+    local id
+    id=$(_next_id)
+    echo "${id}:${name}" >> "$DESKTOP_FILE"
+    cmd_switch "$id"
+}
+
+cmd_rename() {
+    local name="${1:-}" current
+    current=$(_current_id)
+    if [[ -z "$name" ]]; then
+        local old
+        old=$(_desk_name "$current")
+        name=$(echo "$old" | rofi -dmenu -p " Rename desktop" \
+            -theme-str 'window { width: 350px; }') || return
+        [[ -z "$name" ]] && return
+    fi
+    sed -i "s/^${current}:.*/${current}:${name}/" "$DESKTOP_FILE"
+    _signal_waybar
+}
+
+cmd_delete() {
+    local current
+    current=$(_current_id)
+
+    local count
+    count=$(wc -l < "$DESKTOP_FILE")
+    (( count < 2 )) && { echo "Cannot delete the only desktop" >&2; return 1; }
+
+    _lock
+    trap '_unlock' EXIT
+
+    # Target: prefer previous (lower) desktop, fall back to next
+    local ids target
+    ids=$(cut -d: -f1 "$DESKTOP_FILE" | sort -n)
+    target=$(echo "$ids" | grep -B1 "^${current}$" | head -1)
+    [[ "$target" == "$current" ]] && target=$(echo "$ids" | grep -A1 "^${current}$" | tail -1)
+
+    # Move all windows to target desktop's matching workspace slots
+    local clients
+    clients=$(hyprctl clients -j)
+    for ws in $(seq 1 10); do
+        local src dst
+        src=$(_ws_id "$current" "$ws")
+        dst=$(_ws_id "$target" "$ws")
+        echo "$clients" | jq -r --argjson s "$src" \
+            '.[] | select(.workspace.id == $s) | .address' | while read -r addr; do
+            [[ -z "$addr" ]] && continue
+            hyprctl dispatch movetoworkspacesilent "$dst,address:$addr" >/dev/null 2>&1
+        done
+    done
+
+    cmd_switch "$target"
+    sed -i "/^${current}:/d" "$DESKTOP_FILE"
+    sed -i "/^${current}|/d" "$LAYOUT_FILE"
+    _signal_waybar
+
+    # Auto-compact remaining desktops
+    _do_compact
+}
+
+# ── compact (internal + command) ────────────────────────────────────
+
+_do_compact() {
+    local clients
+    clients=$(hyprctl clients -j)
+
+    # Find non-empty desktops (preserving file order)
+    local -a occupied=()
+    while IFS=: read -r id name; do
+        local ws_min ws_max wcount
+        ws_min=$(_ws_id "$id" 1)
+        ws_max=$(_ws_id "$id" 10)
+        wcount=$(echo "$clients" | jq --argjson min "$ws_min" --argjson max "$ws_max" \
+            '[.[] | select(.workspace.id >= $min and .workspace.id <= $max)] | length')
+        if (( wcount > 0 )); then
+            occupied+=("$id")
+        fi
+    done < "$DESKTOP_FILE"
+
+    # Always keep at least one desktop
+    (( ${#occupied[@]} == 0 )) && occupied=("$(head -1 "$DESKTOP_FILE" | cut -d: -f1)")
+
+    # Check if compaction is needed
+    local needs_work=false
+    local total
+    total=$(wc -l < "$DESKTOP_FILE")
+    for ((i=0; i<${#occupied[@]}; i++)); do
+        (( occupied[i] != i + 1 )) && { needs_work=true; break; }
+    done
+    if ! $needs_work && (( total == ${#occupied[@]} )); then
+        return
+    fi
+
+    # Track where current desktop ends up
+    local old_current new_current=1
+    old_current=$(_current_id)
+    for ((i=0; i<${#occupied[@]}; i++)); do
+        [[ "${occupied[$i]}" == "$old_current" ]] && new_current=$((i + 1))
+    done
+
+    # Move windows: old slots → new slots (processed low→high so targets are always free)
+    for ((i=0; i<${#occupied[@]}; i++)); do
+        local old_id=${occupied[$i]}
+        local new_id=$((i + 1))
+        (( old_id == new_id )) && continue
+        for ws in $(seq 1 10); do
+            local src dst
+            src=$(_ws_id "$old_id" "$ws")
+            dst=$(_ws_id "$new_id" "$ws")
+            echo "$clients" | jq -r --argjson s "$src" \
+                '.[] | select(.workspace.id == $s) | .address' | while read -r addr; do
+                [[ -z "$addr" ]] && continue
+                hyprctl dispatch movetoworkspacesilent "$dst,address:$addr" >/dev/null 2>&1
+            done
+        done
+    done
+
+    # Rewrite desktop file atomically
+    local tmpfile
+    tmpfile=$(mktemp)
+    for ((i=0; i<${#occupied[@]}; i++)); do
+        local old_id=${occupied[$i]}
+        local new_id=$((i + 1))
+        local name
+        name=$(_desk_name "$old_id")
+        echo "${new_id}:${name}" >> "$tmpfile"
+    done
+    mv "$tmpfile" "$DESKTOP_FILE"
+
+    echo "$new_current" > "$CURRENT_FILE"
+    > "$LAYOUT_FILE"
+
+    # Restore layout on current desktop
+    local mon_data
+    mon_data=$(_monitors_json)
+    _ensure_mapping "$new_current" "$mon_data"
+    _restore_layout "$new_current" "$mon_data"
+    _signal_waybar
+}
+
+cmd_compact() {
+    _lock
+    trap '_unlock' EXIT
+    _do_compact
+}
+
+cmd_tab() {
+    local direction="${1:-next}"
+    local mon_json current_ws current_mon desk
+
+    mon_json=$(_monitors_json)
+    current_mon=$(echo "$mon_json" | jq -r '.[] | select(.focused) | .name')
+    current_ws=$(echo "$mon_json" | jq -r '.[] | select(.focused) | .activeWorkspace.id')
+    desk=$(_current_id)
+
+    # Get canonical monitor list and find current index
+    local -a mons=()
+    while IFS= read -r m; do
+        mons+=("$m")
+    done < <(_ordered_monitors "$mon_json")
+
+    local mon_count=${#mons[@]}
+    local mon_idx=0
+    for ((i=0; i<mon_count; i++)); do
+        [[ "${mons[$i]}" == "$current_mon" ]] && { mon_idx=$i; break; }
+    done
+
+    # Compute this monitor's workspace slots within the desktop (round-robin)
+    local -a slots=()
+    for slot in $(seq 1 10); do
+        if (( (slot - 1) % mon_count == mon_idx )); then
+            slots+=($(_ws_id "$desk" "$slot"))
+        fi
+    done
+
+    local count=${#slots[@]}
+    (( count <= 1 )) && return
+
+    # Find current position in the slot list
+    local cur_idx=0
+    for ((i=0; i<count; i++)); do
+        (( slots[i] == current_ws )) && { cur_idx=$i; break; }
+    done
+
+    local target_idx
+    if [[ "$direction" == "next" ]]; then
+        target_idx=$(( (cur_idx + 1) % count ))
+    else
+        target_idx=$(( (cur_idx - 1 + count) % count ))
+    fi
+
+    hyprctl dispatch workspace "${slots[$target_idx]}" >/dev/null
+}
+
+cmd_current() {
+    local id name
+    id=$(_current_id)
+    name=$(_desk_name "$id")
+    name=${name//\\/\\\\}
+    name=${name//\"/\\\"}
+    printf '{"text": "%s", "tooltip": "Desktop %s: %s\\nSuper+D to switch", "class": "desktop-%s"}\n' \
+        "$name" "$id" "$name" "$id"
+}
+
+cmd_list() { cat "$DESKTOP_FILE"; }
+
+# ── watch daemon ────────────────────────────────────────────────────
+
+cmd_watch() {
+    local socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock"
+    [[ -S "$socket" ]] || { echo "Hyprland IPC socket not found: $socket" >&2; exit 1; }
+    command -v socat >/dev/null || { echo "socat required for watch mode" >&2; exit 1; }
+
+    local pidfile="$RUNTIME_DIR/watch.pid"
+    if [[ -f "$pidfile" ]] && kill -0 "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null; then
+        echo "Watch daemon already running (PID $(cat "$pidfile"))" >&2
+        return 1
+    fi
+    echo $$ > "$pidfile"
+    trap 'rm -f "$pidfile"' EXIT
+
+    socat -U - "UNIX-CONNECT:$socket" | while IFS= read -r event; do
+        case "$event" in
+            workspace\>\>*)
+                _on_workspace_change "${event#workspace>>}" || true
+                ;;
+        esac
+    done
+}
+
+_on_workspace_change() {
+    local ws_name="$1"
+
+    # Skip if locked (compact/delete in progress) or special workspace
+    _locked && return
+    [[ "$ws_name" == special:* ]] && return
+
+    # Resolve workspace name → numeric id
+    local ws_id
+    if [[ "$ws_name" =~ ^[0-9]+$ ]]; then
+        ws_id="$ws_name"
+    else
+        ws_id=$(hyprctl workspaces -j | jq -r --arg n "$ws_name" \
+            '.[] | select(.name == $n) | .id // empty')
+        [[ -z "$ws_id" ]] && return
+    fi
+
+    # Determine which desktop owns this workspace
+    local target_desk
+    target_desk=$(_ws_to_desktop "$ws_id")
+
+    local current
+    current=$(_current_id)
+    [[ "$target_desk" == "$current" ]] && return
+
+    # Verify target desktop exists in our file
+    grep -q "^${target_desk}:" "$DESKTOP_FILE" 2>/dev/null || return
+
+    # Auto-switch: save old layout, update state, restore new desktop.
+    # The focused monitor's workspace has ALREADY changed to the new desktop's
+    # workspace, so we must skip it when saving the old desktop's layout —
+    # otherwise we corrupt the old layout with a foreign workspace.
+    local mon_data focus_mon
+    mon_data=$(_monitors_json)
+    focus_mon=$(echo "$mon_data" | jq -r '.[] | select(.focused) | .name')
+
+    _save_layout "$current" "$mon_data" "$focus_mon"
+    echo "$target_desk" > "$CURRENT_FILE"
+    _restore_layout "$target_desk" "$mon_data" "$focus_mon"
+    _signal_waybar
+}
+
+# ── main ─────────────────────────────────────────────────────────────
+
+[[ -f "$CURRENT_FILE" ]] || _init
+
+case "${1:-}" in
+    switch)     cmd_switch "${2:-}" ;;
+    next)       cmd_next ;;
+    prev)       cmd_prev ;;
+    ws)         cmd_ws "${2:?workspace number required}" ;;
+    movews)     cmd_movews "${2:?workspace number required}" ;;
+    movesilent) cmd_movesilent "${2:?workspace number required}" ;;
+    moveall)    cmd_moveall "${2:?workspace number required}" ;;
+    create)     cmd_create "${2:-}" ;;
+    rename)     cmd_rename "${2:-}" ;;
+    delete)     cmd_delete ;;
+    compact)    cmd_compact ;;
+    tab)        cmd_tab "${2:-next}" ;;
+    current)    cmd_current ;;
+    list)       cmd_list ;;
+    watch)      cmd_watch ;;
+    init)       _init ;;
+    *)          echo "Usage: hypr-desktop {switch|next|prev|ws|movews|movesilent|moveall|create|rename|delete|compact|tab|current|list|watch|init}" >&2
+                exit 1 ;;
+esac

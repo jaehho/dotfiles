@@ -80,23 +80,6 @@ def get_workspace_for_active_window():
 		return None
 	return None
 
-def rename_workspace():
-	try:
-		theme_args = "-theme '" + rofi_theme_path + "'" if rofi_theme_path else ""
-		rofi_command = "rofi -no-plugins " + theme_args + " -dmenu -p \"Rename workspace to\""
-
-		user_choice = subprocess.check_output( rofi_command, shell=True )
-		user_choice = user_choice.decode().strip()
-		
-		current_workspace : Workspace = get_current_workspace()
-
-		if user_choice != "":
-			subprocess.check_output( "hyprctl dispatch renameworkspace " + current_workspace.id + " \"" + user_choice + "\"", shell=True )
-
-	except subprocess.CalledProcessError as some_error:
-		# User probably pressed Esc to quit rofi, returning an exit code of 1.
-		user_choice = ""
-
 def ask_user_which_workspace( prompt_message : str ):
 	global is_auto_select
 	all_workspaces = get_all_workspaces()
@@ -350,7 +333,6 @@ if __name__ == "__main__":
 	parser.add_argument("--window-switcher",                   action = "store_true",                        help = "Switch focus to another window.")
 	parser.add_argument("--workspace-switcher",                action = "store_true",                        help = "Switch to another workspace.")
 	parser.add_argument("--move-window",                       action = "store_true",                        help = "Move the focused window to another workspace.")
-	parser.add_argument("--rename-workspace",                  action = "store_true",                        help = "Rename the current workspace.")
 	parser.add_argument("--delete-current-workspace",          action = "store_true",                        help = "Moves all windows to a random workspace, deletes the current workspace, and then switches to the workspace we dumped the windows on to. If you are on a special workspace, the windows will be moved to the current workspace that is underneath it.")
 	parser.add_argument("--move-current-workspace-windows-to", action = "store_true",                        help = "User selects the workspace to move all the current workspace's windows to. Moves all windows to another workspace, deletes the current workspace, and then switches to the workspace we dumped the windows on to.")
 	parser.add_argument("--auto-select",                       action = "store_true",                        help = "Will automatically select an entry in the list as you type (default: False)")
@@ -394,8 +376,6 @@ if __name__ == "__main__":
 		workspace_switcher_with_confirmation()
 	elif args.move_window:
 		move_window_to_workspace()
-	elif args.rename_workspace:
-		rename_workspace()
 	elif args.delete_current_workspace:
 		move_current_windows_to_random_workspace()
 	elif args.move_current_workspace_windows_to:

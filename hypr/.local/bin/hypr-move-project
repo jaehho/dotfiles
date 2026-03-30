@@ -1,0 +1,169 @@
+#!/bin/bash
+# hypr-move-project — move all windows to an empty slot on the next/prev monitor
+#
+# Workspace IDs are hard-locked to monitors via round-robin distribution.
+# This script moves all windows from the current workspace to an empty slot
+# on the target monitor, then focuses that workspace.
+#
+# Usage:
+#   hypr-move-project next    — move to next monitor
+#   hypr-move-project prev    — move to previous monitor
+
+set -euo pipefail
+
+# ── cached hyprctl queries ──────────────────────────────────────────
+
+MONITORS_JSON=""
+WORKSPACES_JSON=""
+CLIENTS_JSON=""
+
+_monitors_json() {
+    [[ -z "$MONITORS_JSON" ]] && MONITORS_JSON=$(hyprctl monitors -j)
+    echo "$MONITORS_JSON"
+}
+
+_workspaces_json() {
+    [[ -z "$WORKSPACES_JSON" ]] && WORKSPACES_JSON=$(hyprctl workspaces -j)
+    echo "$WORKSPACES_JSON"
+}
+
+_clients_json() {
+    [[ -z "$CLIENTS_JSON" ]] && CLIENTS_JSON=$(hyprctl clients -j)
+    echo "$CLIENTS_JSON"
+}
+
+# ── monitor helpers ─────────────────────────────────────────────────
+
+get_ordered_monitors() {
+    # Returns monitors in canonical order: externals sorted by x, laptop (eDP/LVDS) last.
+    local mon_json
+    mon_json=$(_monitors_json)
+
+    local laptop_mon=""
+    local -a ext_mons=()
+
+    while IFS= read -r name; do
+        if [[ "$name" == eDP-* || "$name" == LVDS-* ]]; then
+            laptop_mon="$name"
+        else
+            ext_mons+=("$name")
+        fi
+    done < <(echo "$mon_json" | jq -r 'sort_by(.x) | .[].name')
+
+    [[ ${#ext_mons[@]} -gt 0 ]] && printf '%s\n' "${ext_mons[@]}"
+    [[ -n "$laptop_mon" ]] && echo "$laptop_mon"
+}
+
+get_monitor_workspaces() {
+    local target_mon="$1"
+    local -a all_mons=()
+    while IFS= read -r m; do
+        all_mons+=("$m")
+    done < <(get_ordered_monitors)
+
+    local count=${#all_mons[@]}
+    local target_idx=-1
+    for ((i=0; i<count; i++)); do
+        if [[ "${all_mons[$i]}" == "$target_mon" ]]; then
+            target_idx=$i
+            break
+        fi
+    done
+    ((target_idx < 0)) && return 1
+
+    # Desktop-aware workspace range (read from hypr-desktop state)
+    local desktop_id
+    desktop_id=$(cat "/tmp/hypr-desktops-$(id -u)/current" 2>/dev/null || echo 1)
+    local offset=$(( (desktop_id - 1) * 10 ))
+
+    # Round-robin: slot N belongs to monitor (N-1) % count
+    for slot in $(seq 1 10); do
+        if (( (slot - 1) % count == target_idx )); then
+            echo "$((offset + slot))"
+        fi
+    done
+}
+
+find_empty_slot() {
+    local target_mon="$1"
+    local ws_json
+    ws_json=$(_workspaces_json)
+
+    while IFS= read -r ws; do
+        local wcount
+        wcount=$(echo "$ws_json" | jq --argjson id "$ws" '[.[] | select(.id == $id) | .windows] | .[0] // 0')
+        if (( wcount == 0 )); then
+            echo "$ws"
+            return 0
+        fi
+    done < <(get_monitor_workspaces "$target_mon")
+    return 1
+}
+
+# ── main ────────────────────────────────────────────────────────────
+
+move_project() {
+    local direction="$1"
+    local aw_json
+    aw_json=$(hyprctl activeworkspace -j)
+    local current_ws current_mon
+    current_ws=$(echo "$aw_json" | jq -r '.id')
+    current_mon=$(echo "$aw_json" | jq -r '.monitor')
+
+    local -a all_mons=()
+    while IFS= read -r m; do
+        all_mons+=("$m")
+    done < <(get_ordered_monitors)
+
+    local count=${#all_mons[@]}
+    if ((count < 2)); then
+        notify-send -u low -t 2000 "Move Project" "Only one monitor connected"
+        exit 0
+    fi
+
+    local cur_idx=-1
+    for ((i=0; i<count; i++)); do
+        if [[ "${all_mons[$i]}" == "$current_mon" ]]; then
+            cur_idx=$i
+            break
+        fi
+    done
+
+    local target_idx
+    if [[ "$direction" == "next" ]]; then
+        target_idx=$(( (cur_idx + 1) % count ))
+    else
+        target_idx=$(( (cur_idx - 1 + count) % count ))
+    fi
+    local target_mon="${all_mons[$target_idx]}"
+
+    local target_ws
+    target_ws=$(find_empty_slot "$target_mon") || {
+        notify-send -u normal -t 3000 "Move Project" "No empty workspace slot on ${target_mon}"
+        exit 1
+    }
+
+    # Move all windows from current workspace to target
+    _clients_json | jq -r --argjson ws "$current_ws" \
+        '.[] | select(.workspace.id == $ws) | .address' | while IFS= read -r addr; do
+        [[ -z "$addr" ]] && continue
+        hyprctl dispatch movetoworkspacesilent "$target_ws,address:$addr" >/dev/null
+    done
+
+    hyprctl dispatch workspace "$target_ws" >/dev/null
+
+    notify-send -u low -t 2000 \
+        -h "string:x-canonical-private-synchronous:hypr-move-project" \
+        "Project Moved" "ws ${current_ws} → ws ${target_ws} (${target_mon})"
+}
+
+case "${1:-}" in
+    next) move_project next ;;
+    prev) move_project prev ;;
+    *)
+        echo "Usage: $(basename "$0") [next|prev]"
+        echo "  next  — move to next monitor"
+        echo "  prev  — move to previous monitor"
+        exit 1
+        ;;
+esac

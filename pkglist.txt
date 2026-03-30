@@ -80,6 +80,7 @@ rofimoji
 satty
 sddm
 slurp
+socat
 sof-firmware
 sshpass
 starship
@@ -92,6 +93,7 @@ texlive-latex
 texlive-latexextra
 texlive-latexrecommended
 texlive-mathscience
+thunderbird
 thunar
 tmux
 tree-sitter-cli
