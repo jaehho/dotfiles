@@ -37,10 +37,26 @@ dcs_osc99() {
 }
 
 if [ -n "${TMUX:-}" ]; then
-    # Write to tmux client tty so OSC 99 reaches Kitty even from background processes
-    dcs_osc99 > "$(tmux display-message -p '#{client_tty}')"
+    tty=$(tmux display-message -p '#{client_tty}' 2>/dev/null)
+    if [ -n "${SSH_CONNECTION:-}" ] && [ -n "$tty" ]; then
+        # Remote tmux over SSH: the DCS write bypasses remote tmux and goes
+        # straight to SSH → local terminal.  Send BOTH raw and DCS-wrapped so
+        # it works whether the local side is bare kitty or tmux+kitty.
+        { osc99; dcs_osc99; } > "$tty"
+    elif [ -n "$tty" ]; then
+        # Local tmux: DCS-wrapped for tmux to pass through to kitty
+        dcs_osc99 > "$tty"
+    fi
+elif [ -n "${SSH_CONNECTION:-}" ]; then
+    # SSH without remote tmux: write to controlling terminal (/dev/tty goes
+    # back through SSH to local terminal).  Send both formats.
+    if [ -w /dev/tty ]; then
+        { osc99; dcs_osc99; } > /dev/tty
+    else
+        notify-send ${title:+"$title"} "$body" 2>/dev/null || true
+    fi
 elif [ -t 1 ]; then
-    # Bare terminal (no tmux): raw OSC 99
+    # Bare terminal (no tmux, no SSH): raw OSC 99
     osc99
 else
     # Not in a terminal: fall back to notify-send
