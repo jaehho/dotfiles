@@ -190,7 +190,9 @@ def view_main(stdscr, state):
             ("\uf00d", "Dislike"),
             ("\uf021", "Switch to liked mode"),
             ("\uf0c1", "Open source"),
-            ("\uf141", "More..."),
+            ("\uf013", "Settings"),
+            ("\uf044", "Edit rules"),
+            ("\uf15c", "View log"),
         ]
     else:
         items = [
@@ -200,7 +202,9 @@ def view_main(stdscr, state):
             ("\uf00d", "Dislike"),
             ("\uf021", "Switch to explore mode"),
             ("\uf0c1", "Open source"),
-            ("\uf141", "More..."),
+            ("\uf013", "Settings"),
+            ("\uf044", "Edit rules"),
+            ("\uf15c", "View log"),
         ]
 
     info_lines = 3  # file, topic/source, blank
@@ -269,44 +273,228 @@ def view_main(stdscr, state):
             return items[selected][1]
 
 
-def view_more(stdscr):
-    """More sub-menu. Returns action string or None."""
-    items = [
-        ("\uf044", "Edit rules"),
-        ("\uf013", "Edit settings"),
-        ("\uf15c", "View log"),
-    ]
-    box_h = len(items) + 4
-    box_w = 34
+# ── settings TUI ─────────────────────────────────────────────────────
+
+SETTINGS_SPEC = [
+    # (config_key, display_name, type)
+    # type: "text", "choice:a,b,c", "transition"
+    ("MIN_WIDTH", "Min width (px)", "text"),
+    ("REDDIT_MIN_SCORE", "Reddit min score", "text"),
+    ("WALLHAVEN_MIN_FAVORITES", "WH min favorites", "text"),
+    ("WALLHAVEN_EXCLUDE_TAGS", "WH exclude tags", "text"),
+    ("LIKED_RESHOW_DAYS", "Liked reshow (days)", "text"),
+    ("MAX_RETRIES", "Fetch retries", "text"),
+    ("EXPLORE_HISTORY", "Explore undo depth", "text"),
+    ("LIKED_HISTORY", "Liked undo depth", "text"),
+    ("SOURCES", "Sources", "text"),
+    ("SOURCE_ORDER", "Source order", "choice:ordered,random"),
+    ("TRANSITION", "Transition", "transition"),
+    ("RULE_TIMEOUT", "Rule timeout (s)", "text"),
+    ("LOG_MAX_LINES", "Max log lines", "text"),
+]
+
+TRANSITIONS = [
+    "none", "simple", "fade", "left", "right", "top", "bottom",
+    "wipe", "wave", "grow", "center", "any", "outer", "random",
+]
+
+
+def parse_config():
+    values = {}
+    try:
+        with open(CONFFILE) as f:
+            for line in f:
+                s = line.strip()
+                if "=" in s and not s.startswith("#"):
+                    key, _, val = s.partition("=")
+                    val = val.strip()
+                    # Strip quoted value: "value"  # comment
+                    if val.startswith('"'):
+                        end = val.find('"', 1)
+                        if end > 0:
+                            val = val[1:end]
+                        else:
+                            val = val[1:]
+                    elif val.startswith("'"):
+                        end = val.find("'", 1)
+                        if end > 0:
+                            val = val[1:end]
+                        else:
+                            val = val[1:]
+                    else:
+                        # Unquoted: strip inline comment
+                        if "#" in val:
+                            val = val[:val.index("#")].strip()
+                    values[key.strip()] = val
+    except FileNotFoundError:
+        pass
+    return values
+
+
+def save_setting(key, new_value):
+    try:
+        with open(CONFFILE) as f:
+            lines = f.readlines()
+        with open(CONFFILE, "w") as f:
+            found = False
+            for line in lines:
+                s = line.strip()
+                if s.startswith(f"{key}=") or s.startswith(f"{key} ="):
+                    f.write(f'{key}="{new_value}"\n')
+                    found = True
+                else:
+                    f.write(line)
+            if not found:
+                f.write(f'{key}="{new_value}"\n')
+    except Exception:
+        pass
+
+
+def extract_transition_type(value):
+    parts = value.split()
+    for i, p in enumerate(parts):
+        if p == "--transition-type" and i + 1 < len(parts):
+            return parts[i + 1]
+    return "simple"
+
+
+def build_transition_value(ttype):
+    return f"--transition-type {ttype}"
+
+
+def settings_text_input(stdscr, bx, by, box_w, box_h, prompt, initial=""):
+    y = by + box_h - 2
+    inner = box_w - 2
+    text = initial
+    curses.curs_set(1)
+    while True:
+        try:
+            stdscr.addstr(y, bx + 1, " " * inner, curses.color_pair(C_NORMAL))
+            stdscr.addstr(y, bx + 2, prompt,
+                          curses.color_pair(C_KEY) | curses.A_BOLD)
+            px = bx + 2 + len(prompt)
+            maxlen = bx + box_w - 2 - px
+            stdscr.addstr(y, px, text[-maxlen:] if len(text) > maxlen else text,
+                          curses.color_pair(C_NORMAL))
+            stdscr.move(y, min(px + len(text), bx + box_w - 2))
+        except curses.error:
+            pass
+        stdscr.refresh()
+        ch = stdscr.getch()
+        if ch == 27:
+            curses.curs_set(0)
+            return None
+        elif ch in (10, curses.KEY_ENTER):
+            curses.curs_set(0)
+            return text
+        elif ch in (curses.KEY_BACKSPACE, 127, 8):
+            text = text[:-1]
+        elif 32 <= ch < 127:
+            text += chr(ch)
+
+
+def view_settings(stdscr):
+    """Interactive settings editor."""
+    values = parse_config()
     rows, cols = stdscr.getmaxyx()
+    box_w = min(50, cols - 4)
+    n = len(SETTINGS_SPEC)
+    visible = min(n, rows - 6)
+    box_h = visible + 4
     bx = (cols - box_w) // 2
     by = (rows - box_h) // 2
     selected = 0
+    scroll = 0
+    label_w = max(len(s[1]) for s in SETTINGS_SPEC) + 2
 
     while True:
         stdscr.erase()
-        draw_box(stdscr, by, bx, box_h, box_w, "More")
-        for i, (ic, label) in enumerate(items):
-            text = f" {ic}  {label}"
+        draw_box(stdscr, by, bx, box_h, box_w, "Settings")
+
+        for i in range(visible):
+            idx = scroll + i
+            if idx >= n:
+                break
+            key, name, stype = SETTINGS_SPEC[idx]
+            raw = values.get(key, "")
+            if stype == "transition":
+                display = extract_transition_type(raw)
+            else:
+                display = raw
+            # Truncate value to fit
+            val_w = box_w - label_w - 5
+            if len(display) > val_w:
+                display = display[:val_w - 1] + "\u2026"
+
             attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
-                    if i == selected else curses.color_pair(C_NORMAL))
-            draw_line(stdscr, by + 1 + i, bx, box_w, text, attr)
+                    if idx == selected else curses.color_pair(C_NORMAL))
+            val_attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
+                        if idx == selected else curses.color_pair(C_ACCENT))
+
+            text = f" {name.ljust(label_w)}"
+            try:
+                stdscr.addstr(by + 1 + i, bx + 1, text[:box_w - 2], attr)
+                stdscr.addstr(display, val_attr)
+                # Fill rest
+                rem = box_w - 2 - len(text) - len(display)
+                if rem > 0:
+                    stdscr.addstr(" " * rem, attr)
+            except curses.error:
+                pass
 
         draw_sep(stdscr, by + box_h - 3, bx, box_w)
         draw_hints(stdscr, by + box_h - 2, bx, box_w, [
-            ("\u23ce", "select"), ("esc", "back"),
+            ("\u23ce", "edit"), ("?", "help"), ("esc", "back"),
         ])
         stdscr.refresh()
 
         ch = stdscr.getch()
         if ch in (ord("q"), 27):
-            return None
+            return
+        elif ch == ord("?"):
+            show_help(stdscr, [
+                ("j / \u2193", "Move down"),
+                ("k / \u2191", "Move up"),
+                ("enter", "Edit value"),
+                ("esc / q", "Back to menu"),
+            ])
         elif ch in (ord("j"), curses.KEY_DOWN):
-            selected = min(selected + 1, len(items) - 1)
+            if selected < n - 1:
+                selected += 1
+                if selected >= scroll + visible:
+                    scroll += 1
         elif ch in (ord("k"), curses.KEY_UP):
-            selected = max(selected - 1, 0)
+            if selected > 0:
+                selected -= 1
+                if selected < scroll:
+                    scroll -= 1
         elif ch in (10, curses.KEY_ENTER):
-            return items[selected][1]
+            key, name, stype = SETTINGS_SPEC[selected]
+            raw = values.get(key, "")
+
+            if stype.startswith("choice:"):
+                # Cycle through choices
+                choices = stype.split(":", 1)[1].split(",")
+                cur_idx = choices.index(raw) if raw in choices else 0
+                new_val = choices[(cur_idx + 1) % len(choices)]
+                save_setting(key, new_val)
+                values[key] = new_val
+
+            elif stype == "transition":
+                # Cycle through transition types
+                cur_type = extract_transition_type(raw)
+                cur_idx = TRANSITIONS.index(cur_type) if cur_type in TRANSITIONS else 0
+                new_type = TRANSITIONS[(cur_idx + 1) % len(TRANSITIONS)]
+                new_val = build_transition_value(new_type)
+                save_setting(key, new_val)
+                values[key] = new_val
+
+            else:
+                new_val = settings_text_input(
+                    stdscr, bx, by, box_w, box_h, f"{name}: ", raw)
+                if new_val is not None:
+                    save_setting(key, new_val)
+                    values[key] = new_val
 
 
 def view_browse(stdscr):
@@ -412,20 +600,16 @@ def main(stdscr):
         elif action == "Open source":
             wp_cmd("source")
             break
-        elif action == "More...":
-            more = view_more(stdscr)
-            if more == "Edit rules":
-                subprocess.Popen(
-                    ["kitty", "--title", "Wallpaper Rules", "--", EDITOR, RULESFILE])
-                break
-            elif more == "Edit settings":
-                subprocess.Popen(
-                    ["kitty", "--title", "Wallpaper Settings", "--", EDITOR, CONFFILE])
-                break
-            elif more == "View log":
-                subprocess.Popen(
-                    ["kitty", "--title", "Wallpaper Log", "--", EDITOR, "-R", "+$", LOGFILE])
-                break
+        elif action == "Settings":
+            view_settings(stdscr)
+        elif action == "Edit rules":
+            subprocess.Popen(
+                ["kitty", "--title", "Wallpaper Rules", "--", EDITOR, RULESFILE])
+            break
+        elif action == "View log":
+            subprocess.Popen(
+                ["kitty", "--title", "Wallpaper Log", "--", EDITOR, "-R", "+$", LOGFILE])
+            break
         elif action == "Browse liked":
             pick = view_browse(stdscr)
             if pick:
