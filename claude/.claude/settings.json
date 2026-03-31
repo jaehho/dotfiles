@@ -3,7 +3,6 @@
     "commit": "",
     "pr": ""
   },
-  "model": "sonnet",
   "hooks": {
     "SessionStart": [
       {
@@ -78,5 +77,6 @@
       }
     }
   },
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+  "model": "haiku"
 }
