@@ -144,10 +144,13 @@ _save_layout() {
     focused=$(echo "$mon_data" | jq -r '.[] | select(.focused) | .name')
     echo "${desk}|_focus|${focused}" >> "$LAYOUT_FILE"
 
-    # Save active workspace per monitor
+    # Save active workspace per monitor (only if it belongs to this desktop)
     echo "$mon_data" | jq -r '.[] | "\(.name)|\(.activeWorkspace.id)"' \
     | while IFS='|' read -r mon ws; do
         [[ -n "$skip_mon" && "$mon" == "$skip_mon" ]] && continue
+        local ws_desk
+        ws_desk=$(_ws_to_desktop "$ws")
+        [[ "$ws_desk" != "$desk" ]] && continue
         echo "${desk}|${mon}|${ws}" >> "$LAYOUT_FILE"
     done
 }
@@ -616,6 +619,15 @@ _on_workspace_change() {
     # Verify target desktop exists in our file
     grep -q "^${target_desk}:" "$DESKTOP_FILE" 2>/dev/null || return
 
+    # Debounce: config reloads emit transient workspace events for default:true
+    # workspaces. Wait briefly and verify the focused workspace is still on
+    # a different desktop before committing to an auto-switch.
+    sleep 0.2
+    local verify_ws verify_desk
+    verify_ws=$(hyprctl activeworkspace -j | jq -r '.id')
+    verify_desk=$(_ws_to_desktop "$verify_ws")
+    [[ "$verify_desk" == "$(_current_id)" ]] && return
+
     # Auto-switch: save old layout, update state, restore new desktop.
     # The focused monitor's workspace has ALREADY changed to the new desktop's
     # workspace, so we must skip it when saving the old desktop's layout —
@@ -625,8 +637,8 @@ _on_workspace_change() {
     focus_mon=$(echo "$mon_data" | jq -r '.[] | select(.focused) | .name')
 
     _save_layout "$current" "$mon_data" "$focus_mon"
-    echo "$target_desk" > "$CURRENT_FILE"
-    _restore_layout "$target_desk" "$mon_data" "$focus_mon"
+    echo "$verify_desk" > "$CURRENT_FILE"
+    _restore_layout "$verify_desk" "$mon_data" "$focus_mon"
     _signal_waybar
 }
 
