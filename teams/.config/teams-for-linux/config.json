@@ -1,0 +1,8 @@
+{
+  "closeAppOnCross": false,
+  "minimizeToTray": true,
+  "startMinimized": true,
+  "notifications": true,
+  "disableNotificationSound": true,
+  "notificationMethod": "custom"
+}

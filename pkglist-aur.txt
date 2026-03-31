@@ -4,6 +4,7 @@ overskride-bin
 paru
 paru-debug
 signal-cli
+teams-for-linux-bin
 x2goclient
 zotero-bin
 zotero-extension-scihub
