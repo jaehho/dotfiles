@@ -5,6 +5,7 @@
     "spacing": 4,
 
     "modules-left": [
+        "custom/desktop",
         "hyprland/workspaces",
         "hyprland/window"
     ],
@@ -197,6 +198,16 @@
 
     "tray": {
         "spacing": 10
+    },
+
+    "custom/desktop": {
+        "exec": "~/.local/bin/hypr-desktop current",
+        "return-type": "json",
+        "interval": 0,
+        "signal": 8,
+        "on-click": "~/.local/bin/hypr-desktop switch",
+        "on-scroll-up": "~/.local/bin/hypr-desktop next",
+        "on-scroll-down": "~/.local/bin/hypr-desktop prev"
     },
 
     "custom/power": {

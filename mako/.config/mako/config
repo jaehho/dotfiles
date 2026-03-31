@@ -1,4 +1,4 @@
-# Mako notification daemon — Catppuccin Frappe theme
+# Mako notification daemon — colors applied by theme-apply
 
 # Appearance
 font=JetBrainsMono Nerd Font 11
@@ -49,8 +49,26 @@ default-timeout=0
 on-button-left=invoke-default-action
 default-timeout=0
 
+# SSH Claude notifications arrive via Kitty's OSC 99 (app-name="kitty")
+[app-name="kitty" summary~="Claude"]
+default-timeout=0
+on-button-left=dismiss
+
 # Spotify — green border, group track changes so skips replace not stack
 [app-name=spotify_player]
 default-timeout=5000
 border-color=#a6d189CC
 group-by=app-name
+
+# Thunderbird — purple border for new mail
+[app-name=thunderbird]
+default-timeout=8000
+border-color=#ca9ee6CC
+group-by=app-name
+
+# Teams — purple border, longer timeout for messages
+[app-name="Microsoft Teams*"]
+default-timeout=10000
+border-color=#ca9ee6CC
+group-by=app-name
+on-button-left=exec hyprctl dispatch focuswindow class:teams-for-linux

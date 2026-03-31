@@ -11,6 +11,7 @@ window#waybar {
 }
 
 /* ── Base pill styling for all modules ── */
+#custom-desktop,
 #workspaces,
 #window,
 #mpris,
@@ -40,6 +41,7 @@ window#waybar {
 #mpris,
 #clock,
 #tray,
+#custom-desktop,
 #custom-dnd,
 #custom-power {
     border-radius: 12px;
@@ -84,6 +86,7 @@ window#waybar {
 #mpris:hover,
 #clock:hover,
 #tray:hover,
+#custom-desktop:hover,
 #custom-dnd:hover,
 #cpu:hover,
 #memory:hover,
@@ -210,6 +213,12 @@ window#waybar {
 /* ── Backlight ── */
 #backlight {
     color: #e5c890;
+}
+
+/* ── Desktop indicator ── */
+#custom-desktop {
+    color: #8caaee;
+    font-weight: bold;
 }
 
 /* ── DND ── */

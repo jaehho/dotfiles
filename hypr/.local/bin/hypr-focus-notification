@@ -4,4 +4,11 @@
 # Teams → opens Firefox tab, etc.
 # Used by SUPER+. keybind.
 
-makoctl invoke >/dev/null 2>&1 || makoctl dismiss >/dev/null 2>&1
+# Invoke action (focuses terminal for local Claude, etc.)
+# If invoke didn't dismiss the notification (actionless, like SSH Claude via OSC 99),
+# dismiss it manually. Count check prevents dismissing an unrelated notification.
+count_before=$(makoctl list 2>/dev/null | jq '[.data[][]] | length')
+makoctl invoke >/dev/null 2>&1
+sleep 0.1
+count_after=$(makoctl list 2>/dev/null | jq '[.data[][]] | length')
+[[ "$count_after" -ge "$count_before" ]] && makoctl dismiss >/dev/null 2>&1
