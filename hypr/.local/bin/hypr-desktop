@@ -171,33 +171,8 @@ _restore_layout() {
 # ── commands ─────────────────────────────────────────────────────────
 
 cmd_switch() {
-    # Single code path for ALL desktop switches (keybind and daemon).
-    local target="${1:-}"
-
-    if [[ -z "$target" ]]; then
-        local current_id entries
-        current_id=$(_current_id)
-        entries=""
-        while IFS=: read -r id name; do
-            if [[ "$id" == "$current_id" ]]; then
-                entries+="▸ ${id}: ${name}"$'\n'
-            else
-                entries+="  ${id}: ${name}"$'\n'
-            fi
-        done < "$DESKTOP_FILE"
-        entries+="  + New desktop"
-
-        local chosen
-        chosen=$(printf '%s' "$entries" | rofi -dmenu -i -p " Desktop" \
-            -theme-str 'window { width: 350px; }') || return
-        [[ -z "$chosen" ]] && return
-
-        if [[ "$chosen" == *"+ New desktop"* ]]; then
-            cmd_create
-            return
-        fi
-        target=$(echo "$chosen" | sed 's/^[▸ ]*//' | cut -d: -f1 | tr -d ' ')
-    fi
+    # Single code path for ALL desktop switches (daemon, CLI, TUI).
+    local target="${1:?desktop id or name required}"
 
     if [[ ! "$target" =~ ^[0-9]+$ ]]; then
         local resolved
@@ -303,24 +278,29 @@ cmd_rename() {
 }
 
 cmd_delete() {
-    local current
-    current=$(_current_id)
+    # delete [id] — delete a desktop by id (default: current).
+    local victim="${1:-$(_current_id)}"
+
+    grep -q "^${victim}:" "$DESKTOP_FILE" 2>/dev/null \
+        || { echo "Desktop $victim not found" >&2; return 1; }
     local count
     count=$(wc -l < "$DESKTOP_FILE")
     (( count < 2 )) && { echo "Cannot delete the only desktop" >&2; return 1; }
 
     _lock
 
-    local ids target
+    # Neighbor receives windows: prefer previous, fall back to next
+    local ids neighbor
     ids=$(cut -d: -f1 "$DESKTOP_FILE" | sort -n)
-    target=$(echo "$ids" | grep -B1 "^${current}$" | head -1)
-    [[ "$target" == "$current" ]] && target=$(echo "$ids" | grep -A1 "^${current}$" | tail -1)
+    neighbor=$(echo "$ids" | grep -B1 "^${victim}$" | head -1)
+    [[ "$neighbor" == "$victim" ]] && neighbor=$(echo "$ids" | grep -A1 "^${victim}$" | tail -1)
 
+    # Move windows
     local clients
     clients=$(hyprctl clients -j)
     for ws in $(seq 1 10); do
-        local src=$(_ws_id "$current" "$ws")
-        local dst=$(_ws_id "$target" "$ws")
+        local src=$(_ws_id "$victim" "$ws")
+        local dst=$(_ws_id "$neighbor" "$ws")
         echo "$clients" | jq -r --argjson s "$src" \
             '.[] | select(.workspace.id == $s) | .address' | while read -r addr; do
             [[ -z "$addr" ]] && continue
@@ -328,14 +308,16 @@ cmd_delete() {
         done
     done
 
-    # Direct state update (we hold the lock, bypass cmd_switch)
-    local mon_data
-    mon_data=$(_monitors_json)
-    echo "$target" > "$CURRENT_FILE"
-    _restore_layout "$target" "$mon_data"
+    # If deleting the active desktop, switch monitors to the neighbor
+    local current=$(_current_id)
+    if [[ "$victim" == "$current" ]]; then
+        local mon_data=$(_monitors_json)
+        echo "$neighbor" > "$CURRENT_FILE"
+        _restore_layout "$neighbor" "$mon_data"
+    fi
 
-    sed -i "/^${current}:/d" "$DESKTOP_FILE"
-    sed -i "/^${current}|/d" "$LAYOUT_FILE"
+    sed -i "/^${victim}:/d" "$DESKTOP_FILE"
+    sed -i "/^${victim}|/d" "$LAYOUT_FILE"
     _lock   # refresh
     _signal_waybar
 
@@ -579,7 +561,7 @@ case "${1:-}" in
     moveall)        cmd_moveall "${2:?workspace number required}" ;;
     create)         cmd_create "${2:-}" ;;
     rename)         cmd_rename "${2:-}" ;;
-    delete)         cmd_delete ;;
+    delete)         cmd_delete "${2:-}" ;;
     compact)        cmd_compact ;;
     tab)            cmd_tab "${2:-next}" ;;
     sendtodesktop)  cmd_sendtodesktop "${2:?target required (next|prev|N)}" ;;

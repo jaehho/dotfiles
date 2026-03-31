@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+"""TUI desktop manager for Hyprland — launched via kitty popup."""
+
+import curses
+import json
+import os
+import subprocess
+import sys
+
+DESKTOP_FILE = os.path.expanduser(
+    os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state"))
+    + "/hypr-desktops/desktops"
+)
+RUNTIME_DIR = f"/tmp/hypr-desktops-{os.getuid()}"
+CURRENT_FILE = f"{RUNTIME_DIR}/current"
+DESKTOP_CMD = os.path.expanduser("~/.local/bin/hypr-desktop")
+WS_PER_DESKTOP = 10
+
+# ── color pairs ──────────────────────────────────────────────────────
+
+C_NORMAL = 1
+C_SELECTED = 2
+C_CURRENT = 3
+C_HEADER = 4
+C_KEY = 5
+C_DIM = 6
+C_INPUT = 7
+
+# ── data ─────────────────────────────────────────────────────────────
+
+
+def hyprctl_json(cmd):
+    try:
+        r = subprocess.run(["hyprctl", cmd, "-j"], capture_output=True, text=True)
+        return json.loads(r.stdout) if r.returncode == 0 else []
+    except Exception:
+        return []
+
+
+def desktop_cmd(*args):
+    subprocess.run([DESKTOP_CMD] + list(args), capture_output=True, text=True)
+
+
+def get_state():
+    desktops = []
+    try:
+        with open(DESKTOP_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if ":" in line:
+                    id_s, name = line.split(":", 1)
+                    desktops.append({"id": int(id_s), "name": name, "windows": 0})
+    except FileNotFoundError:
+        desktops = [{"id": 1, "name": "Default", "windows": 0}]
+
+    try:
+        with open(CURRENT_FILE) as f:
+            current = int(f.read().strip())
+    except Exception:
+        current = 1
+
+    clients = hyprctl_json("clients")
+    for desk in desktops:
+        lo = (desk["id"] - 1) * WS_PER_DESKTOP + 1
+        hi = desk["id"] * WS_PER_DESKTOP
+        desk["windows"] = sum(
+            1
+            for c in clients
+            if lo <= c.get("workspace", {}).get("id", 0) <= hi
+        )
+
+    return desktops, current
+
+
+# ── drawing ──────────────────────────────────────────────────────────
+
+BOX_PAD = 2  # horizontal padding inside box
+
+
+def draw_box(win, y, x, h, w, title=""):
+    """Draw a unicode box with optional title."""
+    attr = curses.color_pair(C_DIM)
+    win.addstr(y, x, "┌", attr)
+    if title:
+        win.addstr("─ ", attr)
+        win.addstr(title, curses.color_pair(C_HEADER) | curses.A_BOLD)
+        win.addstr(" " + "─" * max(0, w - len(title) - 5), attr)
+    else:
+        win.addstr("─" * (w - 2), attr)
+    win.addstr("┐", attr)
+
+    for row in range(1, h - 1):
+        win.addstr(y + row, x, "│", attr)
+        win.addstr(y + row, x + w - 1, "│", attr)
+
+    win.addstr(y + h - 1, x, "└" + "─" * (w - 2) + "┘", attr)
+
+
+def draw_sep(win, y, x, w):
+    attr = curses.color_pair(C_DIM)
+    win.addstr(y, x, "├" + "─" * (w - 2) + "┤", attr)
+
+
+def draw_row(win, y, x, w, desk, is_current, is_selected):
+    marker = "▸" if is_current else " "
+    wins = str(desk["windows"])
+    label = f" {marker} {desk['id']}: {desk['name']}"
+    inner = w - 2
+
+    if is_selected:
+        attr = curses.color_pair(C_SELECTED) | curses.A_BOLD
+    elif is_current:
+        attr = curses.color_pair(C_CURRENT)
+    else:
+        attr = curses.color_pair(C_NORMAL)
+
+    padding = inner - len(label) - len(wins) - 1
+    text = label + " " * max(padding, 1) + wins
+    text = text[:inner].ljust(inner)
+
+    win.addstr(y, x + 1, text, attr)
+
+
+def draw_hints(win, y, x, w, hints):
+    """hints: list of (key, label) tuples."""
+    inner = w - 2
+    win.addstr(y, x + 1, " " * inner, curses.color_pair(C_NORMAL))
+    cx = x + 2
+    for key, label in hints:
+        if cx + len(key) + len(label) + 3 > x + w - 1:
+            break
+        win.addstr(y, cx, key, curses.color_pair(C_KEY) | curses.A_BOLD)
+        win.addstr(f" {label}", curses.color_pair(C_DIM))
+        cx += len(key) + len(label) + 3
+
+
+def draw_menu(stdscr, desktops, current, selected):
+    stdscr.erase()
+    rows, cols = stdscr.getmaxyx()
+
+    n = len(desktops)
+    box_h = n + 5  # border + items + sep + 2 hint rows + border
+    max_name = max((len(d["name"]) for d in desktops), default=7)
+    box_w = max(max_name + 22, 38)
+    box_w = min(box_w, cols - 4)
+    box_h = min(box_h, rows - 2)
+    bx = (cols - box_w) // 2
+    by = (rows - box_h) // 2
+
+    draw_box(stdscr, by, bx, box_h, box_w, "Desktops")
+
+    for i, desk in enumerate(desktops):
+        if by + 1 + i >= by + box_h - 4:
+            break
+        draw_row(stdscr, by + 1 + i, bx, box_w, desk, desk["id"] == current, i == selected)
+
+    sep_y = by + 1 + min(n, box_h - 5)
+    draw_sep(stdscr, sep_y, bx, box_w)
+    draw_hints(stdscr, sep_y + 1, bx, box_w, [
+        ("enter", "switch"), ("n", "new"), ("r", "rename"),
+    ])
+    draw_hints(stdscr, sep_y + 2, bx, box_w, [
+        ("d", "delete"), ("c", "compact"), ("esc", "quit"),
+    ])
+
+    stdscr.refresh()
+    return bx, by, box_w, box_h
+
+
+# ── input ────────────────────────────────────────────────────────────
+
+
+def text_input(stdscr, bx, by, box_w, box_h, prompt, initial=""):
+    """Inline text input replacing the hint area."""
+    sep_y = by + box_h - 4
+    inner = box_w - 2
+    text = initial
+    curses.curs_set(1)
+
+    while True:
+        # Prompt line
+        stdscr.addstr(sep_y + 1, bx + 1, " " * inner, curses.color_pair(C_NORMAL))
+        stdscr.addstr(sep_y + 1, bx + 2, prompt, curses.color_pair(C_KEY) | curses.A_BOLD)
+        px = bx + 2 + len(prompt)
+        maxlen = bx + box_w - 2 - px
+        stdscr.addstr(sep_y + 1, px, text[:maxlen], curses.color_pair(C_INPUT))
+
+        # Cancel hint
+        stdscr.addstr(sep_y + 2, bx + 1, " " * inner, curses.color_pair(C_NORMAL))
+        draw_hints(stdscr, sep_y + 2, bx, box_w, [("esc", "cancel"), ("enter", "confirm")])
+
+        stdscr.move(sep_y + 1, min(px + len(text), bx + box_w - 2))
+        stdscr.refresh()
+
+        ch = stdscr.getch()
+        if ch == 27:  # ESC
+            curses.curs_set(0)
+            return None
+        elif ch in (10, curses.KEY_ENTER):  # Enter
+            curses.curs_set(0)
+            return text if text.strip() else None
+        elif ch in (curses.KEY_BACKSPACE, 127, 8):
+            text = text[:-1]
+        elif 32 <= ch < 127:
+            text += chr(ch)
+
+    curses.curs_set(0)
+    return None
+
+
+# ── main loop ────────────────────────────────────────────────────────
+
+
+def main(stdscr):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    curses.init_pair(C_NORMAL, -1, -1)
+    curses.init_pair(C_SELECTED, curses.COLOR_BLACK, curses.COLOR_CYAN)
+    curses.init_pair(C_CURRENT, curses.COLOR_CYAN, -1)
+    curses.init_pair(C_HEADER, curses.COLOR_CYAN, -1)
+    curses.init_pair(C_KEY, curses.COLOR_YELLOW, -1)
+    curses.init_pair(C_DIM, 8, -1)
+    curses.init_pair(C_INPUT, curses.COLOR_WHITE, -1)
+
+    desktops, current = get_state()
+    selected = next((i for i, d in enumerate(desktops) if d["id"] == current), 0)
+
+    while True:
+        bx, by, bw, bh = draw_menu(stdscr, desktops, current, selected)
+
+        ch = stdscr.getch()
+
+        if ch in (ord("q"), 27):  # q / ESC
+            break
+
+        elif ch in (ord("j"), curses.KEY_DOWN):
+            selected = min(selected + 1, len(desktops) - 1)
+
+        elif ch in (ord("k"), curses.KEY_UP):
+            selected = max(selected - 1, 0)
+
+        elif ch in (10, curses.KEY_ENTER):
+            desk = desktops[selected]
+            if desk["id"] != current:
+                desktop_cmd("switch", str(desk["id"]))
+            break
+
+        elif ch == ord("n"):
+            name = text_input(stdscr, bx, by, bw, bh, "Name: ")
+            if name:
+                desktop_cmd("create", name)
+                break
+
+        elif ch == ord("r"):
+            desk = desktops[selected]
+            name = text_input(stdscr, bx, by, bw, bh, "Rename: ", desk["name"])
+            if name:
+                # Edit desktop file directly (works for any desktop, not just current)
+                try:
+                    with open(DESKTOP_FILE) as f:
+                        lines = f.readlines()
+                    with open(DESKTOP_FILE, "w") as f:
+                        for line in lines:
+                            if line.startswith(f"{desk['id']}:"):
+                                f.write(f"{desk['id']}:{name}\n")
+                            else:
+                                f.write(line)
+                    subprocess.run(
+                        ["pkill", "-RTMIN+8", "waybar"],
+                        capture_output=True,
+                    )
+                except Exception:
+                    pass
+                desktops, current = get_state()
+
+        elif ch == ord("d"):
+            if len(desktops) < 2:
+                continue
+            desk = desktops[selected]
+            desktop_cmd("delete", str(desk["id"]))
+            desktops, current = get_state()
+            selected = min(selected, len(desktops) - 1)
+
+        elif ch == ord("c"):
+            desktop_cmd("compact")
+            desktops, current = get_state()
+            selected = min(selected, len(desktops) - 1)
+
+
+if __name__ == "__main__":
+    curses.wrapper(main)
