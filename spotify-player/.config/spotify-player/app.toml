@@ -1,6 +1,6 @@
 client_port = 8180
 
-theme = "catppuccin-mocha"
+theme = "forest"
 
 # Kitty terminal image protocol for album art
 cover_img_backend = "Kitty"
@@ -16,7 +16,7 @@ liked_icon = "♥"
 seek_duration_secs = 5
 
 # Notifications
-enable_notify = true
+enable_notify = false
 notify_timeout_in_secs = 5
 notify_transient = true
 

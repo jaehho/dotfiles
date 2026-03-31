@@ -2,12 +2,12 @@ function fish_prompt
     set -l last_status $status
     set -l duration $CMD_DURATION
 
-    # Catppuccin Frappe palette
-    set -l blue 8caaee
-    set -l overlay a5adce
-    set -l yellow e5c890
-    set -l green a6d189
-    set -l red e78284
+    # Theme colors (set by ~/.config/fish/conf.d/theme-colors.fish)
+    set -l blue $thm_blue
+    set -l overlay $thm_overlay
+    set -l yellow $thm_yellow
+    set -l green $thm_green
+    set -l red $thm_red
 
     # ── Line 1: directory + git + duration ───────────────────────────────────
 

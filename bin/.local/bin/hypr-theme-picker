@@ -1,0 +1,44 @@
+#!/bin/bash
+# Theme picker using rofi — lists presets, applies on selection
+# "Browse Gallery" option opens the HTML gallery in the browser
+set -euo pipefail
+
+PRESETS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/theme/presets"
+PALETTE="${XDG_CONFIG_HOME:-$HOME/.config}/theme/palette"
+GALLERY="${XDG_CONFIG_HOME:-$HOME/.config}/theme/gallery.html"
+
+[[ -d "$PRESETS_DIR" ]] || { notify-send -u critical "Theme Picker" "No presets dir"; exit 1; }
+
+CURRENT=""
+[[ -f "$PALETTE" ]] && CURRENT=$(head -1 "$PALETTE" | sed 's/^# *//')
+
+# Build rofi list
+entries=""
+while IFS= read -r f; do
+  [[ -L "$f" ]] && continue
+  name=$(basename "$f")
+  desc=$(head -1 "$f" | sed 's/^# *//')
+  if [[ "$desc" == "$CURRENT" ]]; then
+    entries+="$name  $desc  (active)\n"
+  else
+    entries+="$name  $desc\n"
+  fi
+done < <(find "$PRESETS_DIR" -maxdepth 1 -type f | sort)
+entries+="Browse Gallery"
+
+SELECTED=$(printf '%b' "$entries" | rofi -dmenu -i \
+  -p "Theme" \
+  -mesg "Current: $CURRENT" \
+  -theme-str 'listview { lines: 12; }' \
+  -theme-str 'window { width: 520px; }' \
+  | sed 's/  .*//')
+
+[[ -z "$SELECTED" ]] && exit 0
+
+if [[ "$SELECTED" == "Browse Gallery" ]]; then
+  xdg-open "$GALLERY" &
+  exit 0
+fi
+
+theme-switch "$SELECTED"
+notify-send -u low -c transient "Theme" "Switched to $(head -1 "$PRESETS_DIR/$SELECTED" | sed 's/^# *//')"

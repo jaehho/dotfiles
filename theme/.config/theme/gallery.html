@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Forest Theme Gallery</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'JetBrains Mono', 'Fira Code', monospace; background: #111; color: #ccc; padding: 1.5rem; }
+  h1 { font-size: 1.1rem; margin-bottom: 0.2rem; }
+  .subtitle { color: #888; margin-bottom: 1.5rem; font-size: 0.8rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(500px, 1fr)); gap: 1.5rem; }
+  .card { border: 2px solid #333; border-radius: 14px; overflow: hidden; cursor: pointer; transition: border-color 0.2s; }
+  .card:hover { border-color: #666; }
+  .card.selected { border-color: #6daa8e; box-shadow: 0 0 20px rgba(109,170,142,0.2); }
+  .card-header { padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; background: #1a1a1a; }
+  .card-header h2 { font-size: 0.85rem; }
+  .swatches { display: flex; height: 5px; }
+  .swatches div { flex: 1; }
+  .hypr-window { margin: 12px; border-radius: 10px; overflow: hidden; border-width: 2px; border-style: solid; }
+  .terminal-body { padding: 12px 16px; font-size: 0.78rem; line-height: 1.55; }
+  .t-line { display: inline-block; width: 2em; text-align: right; margin-right: 0.8em; user-select: none; }
+  .waybar-mock { margin: 0 12px; border-radius: 10px; padding: 5px 12px; display: flex; justify-content: space-between; font-size: 0.75rem; }
+  .wb-pill { padding: 1px 8px; border-radius: 8px; margin: 0 1px; display: inline-block; }
+  .wb-left, .wb-right { display: flex; gap: 2px; align-items: center; }
+  .notif-row { display: flex; gap: 8px; justify-content: flex-end; margin: 8px 12px; }
+  .notif-mock { border-radius: 10px; padding: 8px 12px; border-left: 3px solid; max-width: 260px; }
+  .notif-title { font-weight: bold; font-size: 0.72rem; }
+  .notif-body { font-size: 0.68rem; }
+  .cmd { margin: 8px 12px 12px; padding: 4px 10px; border-radius: 6px; font-size: 0.68rem; }
+  .cmd code { opacity: 0.7; }
+  #output { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); background: #1a3a1e; color: #8f8; padding: 10px 20px; border-radius: 8px; font-size: 0.8rem; display: none; z-index: 10; }
+</style>
+</head>
+<body>
+<h1>Forest Theme Gallery</h1>
+<p class="subtitle">Click a preset to copy the switch command. Use <code>Super+Alt+T</code> to open the rofi picker.</p>
+<div class="grid" id="grid"></div>
+<div id="output"></div>
+<script>
+const PRESETS = [
+  { name: "catppuccin-frappe", desc: "Catppuccin Frappe", colors: {"base":"303446","mantle":"292c3c","crust":"232634","text":"c6d0f5","subtext1":"b5bfe2","subtext0":"a5adce","surface0":"414559","surface1":"51576d","surface2":"626880","overlay0":"737994","overlay1":"838ba7","overlay2":"949cbb","blue":"8caaee","lavender":"babbf1","sapphire":"85c1dc","sky":"99d1db","teal":"81c8be","green":"a6d189","yellow":"e5c890","peach":"ef9f76","maroon":"ea999c","red":"e78284","mauve":"ca9ee6","pink":"f4b8e4","flamingo":"eebebe","rosewater":"f2d5cf"} },
+  { name: "forest-clearing-warm-muted", desc: "Clearing Warm Muted", colors: {"base":"232720","mantle":"1d201c","crust":"181b18","text":"ced5c4","subtext1":"b8bfae","subtext0":"a0a796","surface0":"2f342c","surface1":"3a3f36","surface2":"454b42","overlay0":"53594e","overlay1":"63695e","overlay2":"73796e","blue":"5e9a7e","lavender":"7ea593","sapphire":"459078","sky":"62b498","teal":"4da888","green":"7cb25e","yellow":"c49838","peach":"b47838","maroon":"a85e55","red":"b84a4a","mauve":"8a6da8","pink":"b07890","flamingo":"a88878","rosewater":"bca595"} },
+  { name: "forest-glade", desc: "Glade", colors: {"base":"252b26","mantle":"1f2420","crust":"1a1e1b","text":"d4dbc8","subtext1":"bdc5b0","subtext0":"a5ad98","surface0":"333b34","surface1":"3f4840","surface2":"4b544c","overlay0":"586158","overlay1":"687168","overlay2":"788178","blue":"6daa8e","lavender":"8eb5a3","sapphire":"4d9e8a","sky":"72c4a8","teal":"5bb89a","green":"8cc269","yellow":"d4a843","peach":"c48545","maroon":"b86860","red":"c95555","mauve":"9b7db8","pink":"c089a0","flamingo":"b89888","rosewater":"ccb5a5"} },
+  { name: "forest-glade-muted", desc: "Glade Muted", colors: {"base":"252b26","mantle":"1f2420","crust":"1a1e1b","text":"cdd4c2","subtext1":"b5bcaa","subtext0":"9ea594","surface0":"333b34","surface1":"3f4840","surface2":"4b544c","overlay0":"586158","overlay1":"687168","overlay2":"788178","blue":"5e9a7e","lavender":"7ea593","sapphire":"459078","sky":"62b498","teal":"4da888","green":"7cb25e","yellow":"c49838","peach":"b47838","maroon":"a85e55","red":"b84a4a","mauve":"8a6da8","pink":"b07890","flamingo":"a88878","rosewater":"bca595"} },
+  { name: "forest-midnight", desc: "Midnight Forest", colors: {"base":"0c120e","mantle":"090e0a","crust":"060a07","text":"d4dbc8","subtext1":"bdc5b0","subtext0":"a5ad98","surface0":"151e17","surface1":"1e2820","surface2":"283229","overlay0":"384538","overlay1":"485848","overlay2":"587058","blue":"6daa8e","lavender":"8eb5a3","sapphire":"4d9e8a","sky":"72c4a8","teal":"5bb89a","green":"8cc269","yellow":"d4a843","peach":"c48545","maroon":"b86860","red":"c95555","mauve":"9b7db8","pink":"c089a0","flamingo":"b89888","rosewater":"ccb5a5"} },
+  { name: "forest-understory", desc: "Understory", colors: {"base":"1e2320","mantle":"191d1a","crust":"141816","text":"d4dbc8","subtext1":"bdc5b0","subtext0":"a5ad98","surface0":"2a302c","surface1":"343b36","surface2":"3e4540","overlay0":"4c544e","overlay1":"5c645e","overlay2":"6c746e","blue":"6daa8e","lavender":"8eb5a3","sapphire":"4d9e8a","sky":"72c4a8","teal":"5bb89a","green":"8cc269","yellow":"d4a843","peach":"c48545","maroon":"b86860","red":"c95555","mauve":"9b7db8","pink":"c089a0","flamingo":"b89888","rosewater":"ccb5a5"} },
+  { name: "forest-understory-muted", desc: "Understory Muted", colors: {"base":"1e2320","mantle":"191d1a","crust":"141816","text":"cdd4c2","subtext1":"b5bcaa","subtext0":"9ea594","surface0":"2a302c","surface1":"343b36","surface2":"3e4540","overlay0":"4c544e","overlay1":"5c645e","overlay2":"6c746e","blue":"5e9a7e","lavender":"7ea593","sapphire":"459078","sky":"62b498","teal":"4da888","green":"7cb25e","yellow":"c49838","peach":"b47838","maroon":"a85e55","red":"b84a4a","mauve":"8a6da8","pink":"b07890","flamingo":"a88878","rosewater":"bca595"} },
+
+];
+function h(c, r) { return '#' + c[r]; }
+function renderCard(p, i) {
+  const c = p.colors;
+  const card = document.createElement('div');
+  card.className = 'card'; card.id = 'card-'+i;
+  card.onclick = () => selectCard(i);
+  const accents = ['blue','green','yellow','red','mauve','teal','peach','sapphire'];
+  card.innerHTML = `
+    <div class="card-header"><h2>${p.name}</h2></div>
+    <div class="swatches">${accents.map(k=>`<div style="background:${h(c,k)}"></div>`).join('')}</div>
+    <div class="card-body">
+      <div class="hypr-window" style="background:${h(c,'base')};border-color:${h(c,'blue')}">
+        <div class="terminal-body">
+          <div><span class="t-line" style="color:${h(c,'overlay0')}">1</span><span style="color:${h(c,'mauve')}">import</span> <span style="color:${h(c,'teal')}">json</span></div>
+          <div><span class="t-line" style="color:${h(c,'overlay0')}">2</span><span style="color:${h(c,'mauve')}">from</span> <span style="color:${h(c,'teal')}">pathlib</span> <span style="color:${h(c,'mauve')}">import</span> <span style="color:${h(c,'teal')}">Path</span></div>
+          <div><span class="t-line" style="color:${h(c,'overlay0')}">3</span></div>
+          <div><span class="t-line" style="color:${h(c,'overlay0')}">4</span><span style="color:${h(c,'overlay2')}">// Load the forest palette</span></div>
+          <div><span class="t-line" style="color:${h(c,'overlay0')}">5</span><span style="color:${h(c,'mauve')}">def</span> <span style="color:${h(c,'blue')}">load_palette</span>(<span style="color:${h(c,'peach')}">path</span>: <span style="color:${h(c,'teal')}">str</span>):</div>
+          <div><span class="t-line" style="color:${h(c,'overlay0')}">6</span>    <span style="color:${h(c,'mauve')}">with</span> <span style="color:${h(c,'blue')}">open</span>(<span style="color:${h(c,'peach')}">path</span>) <span style="color:${h(c,'mauve')}">as</span> f:</div>
+          <div><span class="t-line" style="color:${h(c,'overlay0')}">7</span>        <span style="color:${h(c,'mauve')}">return</span> <span style="color:${h(c,'teal')}">json</span>.<span style="color:${h(c,'blue')}">load</span>(f)</div>
+          <div><span class="t-line" style="color:${h(c,'overlay0')}">8</span>N = <span style="color:${h(c,'yellow')}">26</span></div>
+          <div><span class="t-line" style="color:${h(c,'overlay0')}">9</span><span style="color:${h(c,'red')}">raise</span> <span style="color:${h(c,'red')}">ValueError</span>(<span style="color:${h(c,'green')}">"Missing"</span>)</div>
+        </div>
+      </div>
+      <div class="waybar-mock" style="background:${h(c,'mantle')}e6">
+        <div class="wb-left">
+          <span class="wb-pill" style="background:${h(c,'blue')}26;color:${h(c,'blue')};border-bottom:2px solid ${h(c,'blue')}">  1</span>
+          <span class="wb-pill" style="color:${h(c,'overlay0')}">  2</span>
+        </div>
+        <span style="color:${h(c,'text')};font-weight:bold">Sat 29 Mar  14:32</span>
+        <div class="wb-right">
+          <span class="wb-pill" style="background:${h(c,'surface0')}99;color:${h(c,'yellow')}"> 65%</span>
+          <span class="wb-pill" style="background:${h(c,'surface0')}99;color:${h(c,'green')}"> 87%</span>
+        </div>
+      </div>
+      <div class="notif-row">
+        <div class="notif-mock" style="background:${h(c,'base')}e6;border-left-color:${h(c,'blue')}">
+          <div class="notif-title" style="color:${h(c,'text')}">Claude finished</div>
+          <div class="notif-body" style="color:${h(c,'subtext0')}">Refactored module...</div>
+        </div>
+        <div class="notif-mock" style="background:${h(c,'base')}e6;border-left-color:${h(c,'red')}">
+          <div class="notif-title" style="color:${h(c,'text')}">Battery Low</div>
+          <div class="notif-body" style="color:${h(c,'subtext0')}">10% remaining</div>
+        </div>
+      </div>
+      <div class="cmd" style="background:${h(c,'crust')}">
+        <code style="color:${h(c,'overlay2')}">theme-switch ${p.name}</code>
+      </div>
+    </div>`;
+  return card;
+}
+function selectCard(i) {
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('card-'+i).classList.add('selected');
+  const cmd = 'theme-switch ' + PRESETS[i].name;
+  navigator.clipboard.writeText(cmd);
+  const out = document.getElementById('output');
+  out.textContent = 'Copied: ' + cmd;
+  out.style.display = 'block';
+  setTimeout(() => out.style.display = 'none', 2000);
+}
+PRESETS.forEach((p, i) => document.getElementById('grid').appendChild(renderCard(p, i)));
+</script>
+</body>
+</html>
