@@ -25,6 +25,32 @@ help: ## Show this help message
 		     /^## / {gsub("^## ", ""); print "\n\033[1;35m" $$0 "\033[0m"}; \
 		     /^[a-zA-Z_%-]+:/ {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
+## Submodule tools (Arch only)
+TOOLS := hypr-desktop hypr-wallpaper
+
+install-tools: ## Install tools from submodules to ~/.local/bin (dev override)
+ifeq ($(DISTRO),arch)
+	@git -C $(REPO_ROOT) submodule update --init $(TOOLS)
+	@for tool in $(TOOLS); do \
+		echo "Installing $$tool..."; \
+		$(MAKE) -C $(REPO_ROOT)/$$tool install; \
+	done
+	@echo ""
+	@echo "Dev copies installed to ~/.local/bin (overrides AUR packages on PATH)."
+	@echo "Run 'make uninstall-tools' to revert to AUR versions."
+else
+	@echo "Skipped: tools are Arch/Hyprland only."
+endif
+
+uninstall-tools: ## Remove dev overrides, revert to AUR package versions
+	@for tool in $(TOOLS); do \
+		if [ -f "$(REPO_ROOT)/$$tool/Makefile" ]; then \
+			echo "Uninstalling $$tool..."; \
+			$(MAKE) -C $(REPO_ROOT)/$$tool uninstall; \
+		fi; \
+	done
+	@echo "Reverted to AUR package versions in /usr/bin."
+
 ## Stow
 stow-all: ## Stow all packages (idempotent — safe to re-run after adding files)
 	@for pkg in $(STOW_PACKAGES); do \
