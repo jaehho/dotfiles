@@ -619,14 +619,34 @@ def _tab_config(stdscr, tabs, active_tab):
                     values[key] = nv
 
 
-def _build_rule_rows(rules):
-    """Flatten rules into navigable rows: (type, rule_idx, topic_idx)."""
+def _wrap(text, width):
+    if not text or width <= 0:
+        return [text or ""]
+    lines = []
+    while len(text) > width:
+        brk = text.rfind(" ", 0, width)
+        if brk <= 0:
+            brk = width
+        lines.append(text[:brk])
+        text = text[brk:].lstrip()
+    if text:
+        lines.append(text)
+    return lines or [""]
+
+
+def _build_rule_rows(rules, wrap_width):
+    """Flatten rules into visual rows: (type, rule_idx, topic_idx, line_idx).
+    Conditions word-wrap into multiple rows. Only line_idx=0 is the 'anchor'."""
     items = []
+    cond_prefix_len = 5  # "   ⚡ "
+    w = max(wrap_width - cond_prefix_len, 10)
     for ri, rule in enumerate(rules):
-        items.append(("rule", ri, None))
-        items.append(("cond", ri, None))
+        items.append(("rule", ri, None, 0))
+        cond = rule["condition"] or "(no condition)"
+        for li, line in enumerate(_wrap(cond, w)):
+            items.append(("cond", ri, None, li))
         for ti in range(len(rule["topics"])):
-            items.append(("topic", ri, ti))
+            items.append(("topic", ri, ti, 0))
     return items
 
 
@@ -634,14 +654,14 @@ def _tab_rules(stdscr, tabs, active_tab):
     rules = parse_rules()
     rows, cols = stdscr.getmaxyx()
     box_w = min(52, cols - 2)
+    inner = box_w - 4
     visible = rows - 7
     box_h = visible + 5
     bx, by = (cols - box_w) // 2, (rows - box_h) // 2
     selected = scroll = 0
-    inner = box_w - 4
 
     while True:
-        items = _build_rule_rows(rules)
+        items = _build_rule_rows(rules, inner)
         n = len(items)
         if selected >= n:
             selected = max(0, n - 1)
@@ -652,14 +672,14 @@ def _tab_rules(stdscr, tabs, active_tab):
         draw_sep(stdscr, by + 2, bx, box_w)
 
         if not items:
-            draw_line(stdscr, by + 3, bx, box_w, " (no rules — press a to add)",
+            draw_line(stdscr, by + 3, bx, box_w, " (no rules \u2014 press a to add)",
                       curses.color_pair(C_DIM))
 
         for i in range(visible):
             idx = scroll + i
             if idx >= n:
                 break
-            itype, ri, ti = items[idx]
+            itype, ri, ti, li = items[idx]
             rule = rules[ri]
             is_sel = idx == selected
             y = by + 3 + i
@@ -673,15 +693,16 @@ def _tab_rules(stdscr, tabs, active_tab):
 
             elif itype == "cond":
                 cond = rule["condition"] or "(no condition)"
-                text = f"   \uf0e7 {cond}"
-                if len(text) > inner:
-                    text = text[:inner - 1] + "\u2026"
+                cond_w = inner - 5  # "   ⚡ "
+                wrapped = _wrap(cond, cond_w)
+                line = wrapped[li] if li < len(wrapped) else ""
+                prefix = "   \uf0e7 " if li == 0 else "     "
+                text = prefix + line
                 attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
                         if is_sel else curses.color_pair(C_DIM))
                 draw_line(stdscr, y, bx, box_w, text, attr)
 
             elif itype == "topic":
-                # Is this the last topic for this rule?
                 is_last = ti == len(rule["topics"]) - 1
                 branch = "\u2514" if is_last else "\u251c"
                 text = f"   {branch} {rule['topics'][ti]}"
@@ -706,7 +727,7 @@ def _tab_rules(stdscr, tabs, active_tab):
             show_help(stdscr, [
                 ("j / \u2193", "Move down"), ("k / \u2191", "Move up"),
                 ("enter", "Edit selected item"),
-                ("a", "Add (rule if on header, topic if on topic)"),
+                ("a", "Add (rule on header, topic otherwise)"),
                 ("d", "Delete selected item"),
                 ("H / L / tab", "Switch tab"), ("esc", "Back"),
             ])
@@ -722,23 +743,20 @@ def _tab_rules(stdscr, tabs, active_tab):
                     scroll -= 1
         elif ch == ord("a"):
             if not items:
-                # No rules — add a new one
                 name = text_input(stdscr, by + box_h - 1, bx + 1,
                                   box_w - 2, "New rule name: ")
                 if name:
                     rules.append({"name": name, "condition": "", "topics": []})
                     save_rules(rules)
             else:
-                itype, ri, ti = items[selected]
+                itype, ri, ti, li = items[selected]
                 if itype == "rule":
-                    # Add a new rule after this one
                     name = text_input(stdscr, by + box_h - 1, bx + 1,
                                       box_w - 2, "New rule name: ")
                     if name:
                         rules.insert(ri + 1, {"name": name, "condition": "", "topics": []})
                         save_rules(rules)
                 else:
-                    # Add a topic to this rule
                     topic = text_input(stdscr, by + box_h - 1, bx + 1,
                                        box_w - 2, "New topic: ")
                     if topic:
@@ -747,18 +765,17 @@ def _tab_rules(stdscr, tabs, active_tab):
         elif ch == ord("d"):
             if not items:
                 continue
-            itype, ri, ti = items[selected]
+            itype, ri, ti, li = items[selected]
             if itype == "rule":
                 rules.pop(ri)
                 save_rules(rules)
             elif itype == "topic":
                 rules[ri]["topics"].pop(ti)
                 save_rules(rules)
-            # Don't delete conditions — just clear them via enter
         elif ch in (10, curses.KEY_ENTER):
             if not items:
                 continue
-            itype, ri, ti = items[selected]
+            itype, ri, ti, li = items[selected]
             if itype == "rule":
                 name = text_input(stdscr, by + box_h - 1, bx + 1,
                                   box_w - 2, "Name: ", rules[ri]["name"])
