@@ -569,19 +569,21 @@ def _tab_config(stdscr, tabs, active_tab):
                 pass
         draw_sep(stdscr, by + box_h - 2, bx, box_w)
         draw_hints(stdscr, by + box_h - 1, bx, box_w,
-                   [("\u23ce", "edit"), ("tab", "next tab"),
+                   [("\u23ce", "edit"), ("H/L", "tabs"),
                     ("?", "help"), ("esc", "back")])
         stdscr.refresh()
         ch = stdscr.getch()
         if ch in (27,):
             return None
-        elif ch == 9:  # Tab
+        elif ch in (9, ord("L")):  # Tab / L
             return (active_tab + 1) % len(tabs)
+        elif ch in (curses.KEY_BTAB, ord("H")):  # Shift+Tab / H
+            return (active_tab - 1) % len(tabs)
         elif ch == ord("?"):
             show_help(stdscr, [
                 ("j / \u2193", "Move down"), ("k / \u2191", "Move up"),
                 ("enter", "Edit value (text) / cycle (choice)"),
-                ("tab", "Switch tab"), ("esc", "Back to menu"),
+                ("H / L / tab", "Switch tab"), ("esc", "Back to menu"),
             ])
         elif ch in (ord("j"), curses.KEY_DOWN):
             if selected < n - 1:
@@ -617,51 +619,99 @@ def _tab_config(stdscr, tabs, active_tab):
                     values[key] = nv
 
 
+def _build_rule_rows(rules):
+    """Flatten rules into navigable rows: (type, rule_idx, topic_idx)."""
+    items = []
+    for ri, rule in enumerate(rules):
+        items.append(("rule", ri, None))
+        items.append(("cond", ri, None))
+        for ti in range(len(rule["topics"])):
+            items.append(("topic", ri, ti))
+    return items
+
+
 def _tab_rules(stdscr, tabs, active_tab):
     rules = parse_rules()
     rows, cols = stdscr.getmaxyx()
     box_w = min(52, cols - 2)
-    visible = min(max(len(rules), 1), rows - 7)
+    visible = rows - 7
     box_h = visible + 5
     bx, by = (cols - box_w) // 2, (rows - box_h) // 2
     selected = scroll = 0
+    inner = box_w - 4
+
     while True:
+        items = _build_rule_rows(rules)
+        n = len(items)
+        if selected >= n:
+            selected = max(0, n - 1)
+
         stdscr.erase()
         draw_box(stdscr, by, bx, box_h, box_w, "Settings")
         _draw_tabs(stdscr, by + 1, bx, box_w, tabs, active_tab)
         draw_sep(stdscr, by + 2, bx, box_w)
-        if not rules:
-            draw_line(stdscr, by + 3, bx, box_w, " (no rules)",
+
+        if not items:
+            draw_line(stdscr, by + 3, bx, box_w, " (no rules — press a to add)",
                       curses.color_pair(C_DIM))
+
         for i in range(visible):
             idx = scroll + i
-            if idx >= len(rules):
+            if idx >= n:
                 break
-            r = rules[idx]
-            ntopics = len(r["topics"])
-            text = f" [{r['name']}]  {ntopics} topic{'s' if ntopics != 1 else ''}"
-            attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
-                    if idx == selected else curses.color_pair(C_NORMAL))
-            draw_line(stdscr, by + 3 + i, bx, box_w, text, attr)
+            itype, ri, ti = items[idx]
+            rule = rules[ri]
+            is_sel = idx == selected
+            y = by + 3 + i
+
+            if itype == "rule":
+                text = f" [{rule['name']}]"
+                attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
+                        if is_sel
+                        else curses.color_pair(C_HEADER) | curses.A_BOLD)
+                draw_line(stdscr, y, bx, box_w, text, attr)
+
+            elif itype == "cond":
+                cond = rule["condition"] or "(no condition)"
+                text = f"   \uf0e7 {cond}"
+                if len(text) > inner:
+                    text = text[:inner - 1] + "\u2026"
+                attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
+                        if is_sel else curses.color_pair(C_DIM))
+                draw_line(stdscr, y, bx, box_w, text, attr)
+
+            elif itype == "topic":
+                # Is this the last topic for this rule?
+                is_last = ti == len(rule["topics"]) - 1
+                branch = "\u2514" if is_last else "\u251c"
+                text = f"   {branch} {rule['topics'][ti]}"
+                attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
+                        if is_sel else curses.color_pair(C_NORMAL))
+                draw_line(stdscr, y, bx, box_w, text, attr)
+
         draw_sep(stdscr, by + box_h - 2, bx, box_w)
         draw_hints(stdscr, by + box_h - 1, bx, box_w,
                    [("\u23ce", "edit"), ("a", "add"), ("d", "del"),
-                    ("tab", "next tab"), ("esc", "back")])
+                    ("H/L", "tabs"), ("?", "help")])
         stdscr.refresh()
+
         ch = stdscr.getch()
         if ch == 27:
             return None
-        elif ch == 9:
+        elif ch in (9, ord("L")):
             return (active_tab + 1) % len(tabs)
+        elif ch in (curses.KEY_BTAB, ord("H")):
+            return (active_tab - 1) % len(tabs)
         elif ch == ord("?"):
             show_help(stdscr, [
                 ("j / \u2193", "Move down"), ("k / \u2191", "Move up"),
-                ("enter", "Edit rule (condition + topics)"),
-                ("a", "Add new rule"), ("d", "Delete rule"),
-                ("tab", "Switch tab"), ("esc", "Back to menu"),
+                ("enter", "Edit selected item"),
+                ("a", "Add (rule if on header, topic if on topic)"),
+                ("d", "Delete selected item"),
+                ("H / L / tab", "Switch tab"), ("esc", "Back"),
             ])
         elif ch in (ord("j"), curses.KEY_DOWN):
-            if rules and selected < len(rules) - 1:
+            if selected < n - 1:
                 selected += 1
                 if selected >= scroll + visible:
                     scroll += 1
@@ -671,33 +721,67 @@ def _tab_rules(stdscr, tabs, active_tab):
                 if selected < scroll:
                     scroll -= 1
         elif ch == ord("a"):
-            name = text_input(stdscr, by + box_h - 1, bx + 1,
-                              box_w - 2, "Rule name: ")
-            if name:
-                rules.append({"name": name, "condition": "", "topics": []})
-                save_rules(rules)
-                selected = len(rules) - 1
+            if not items:
+                # No rules — add a new one
+                name = text_input(stdscr, by + box_h - 1, bx + 1,
+                                  box_w - 2, "New rule name: ")
+                if name:
+                    rules.append({"name": name, "condition": "", "topics": []})
+                    save_rules(rules)
+            else:
+                itype, ri, ti = items[selected]
+                if itype == "rule":
+                    # Add a new rule after this one
+                    name = text_input(stdscr, by + box_h - 1, bx + 1,
+                                      box_w - 2, "New rule name: ")
+                    if name:
+                        rules.insert(ri + 1, {"name": name, "condition": "", "topics": []})
+                        save_rules(rules)
+                else:
+                    # Add a topic to this rule
+                    topic = text_input(stdscr, by + box_h - 1, bx + 1,
+                                       box_w - 2, "New topic: ")
+                    if topic:
+                        rules[ri]["topics"].append(topic)
+                        save_rules(rules)
         elif ch == ord("d"):
-            if rules:
-                rules.pop(selected)
-                save_rules(rules)
-                selected = min(selected, len(rules) - 1)
-        elif ch in (10, curses.KEY_ENTER):
-            if not rules:
+            if not items:
                 continue
-            r = rules[selected]
-            # Edit condition
-            nc = text_input(stdscr, by + box_h - 1, bx + 1,
-                            box_w - 2, "Condition: ", r["condition"])
-            if nc is not None:
-                r["condition"] = nc
-            # Edit topics (comma-separated)
-            nt = text_input(stdscr, by + box_h - 1, bx + 1,
-                            box_w - 2, "Topics: ",
-                            ", ".join(r["topics"]))
-            if nt is not None:
-                r["topics"] = [t.strip() for t in nt.split(",") if t.strip()]
-            save_rules(rules)
+            itype, ri, ti = items[selected]
+            if itype == "rule":
+                rules.pop(ri)
+                save_rules(rules)
+            elif itype == "topic":
+                rules[ri]["topics"].pop(ti)
+                save_rules(rules)
+            # Don't delete conditions — just clear them via enter
+        elif ch in (10, curses.KEY_ENTER):
+            if not items:
+                continue
+            itype, ri, ti = items[selected]
+            if itype == "rule":
+                name = text_input(stdscr, by + box_h - 1, bx + 1,
+                                  box_w - 2, "Name: ", rules[ri]["name"])
+                if name:
+                    rules[ri]["name"] = name
+                    save_rules(rules)
+            elif itype == "cond":
+                val = text_input(stdscr, by + box_h - 1, bx + 1,
+                                 box_w - 2, "Condition: ",
+                                 rules[ri]["condition"])
+                if val is not None:
+                    rules[ri]["condition"] = val
+                    save_rules(rules)
+            elif itype == "topic":
+                val = text_input(stdscr, by + box_h - 1, bx + 1,
+                                 box_w - 2, "Topic: ",
+                                 rules[ri]["topics"][ti])
+                if val is not None:
+                    if val.strip():
+                        rules[ri]["topics"][ti] = val.strip()
+                    else:
+                        rules[ri]["topics"].pop(ti)
+                    save_rules(rules)
 
 
 def _tab_log(stdscr, tabs, active_tab):
@@ -727,13 +811,15 @@ def _tab_log(stdscr, tabs, active_tab):
         draw_sep(stdscr, by + box_h - 2, bx, box_w)
         draw_hints(stdscr, by + box_h - 1, bx, box_w,
                    [("j/k", "scroll"), ("G", "end"), ("g", "top"),
-                    ("tab", "next tab"), ("esc", "back")])
+                    ("H/L", "tabs"), ("esc", "back")])
         stdscr.refresh()
         ch = stdscr.getch()
         if ch == 27:
             return None
-        elif ch == 9:
+        elif ch in (9, ord("L")):  # Tab / L
             return (active_tab + 1) % len(tabs)
+        elif ch in (curses.KEY_BTAB, ord("H")):  # Shift+Tab / H
+            return (active_tab - 1) % len(tabs)
         elif ch in (ord("j"), curses.KEY_DOWN):
             if scroll < len(lines) - visible:
                 scroll += 1
