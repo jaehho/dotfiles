@@ -134,12 +134,40 @@ def draw_hints(win, y, x, w, hints):
         cx += len(key) + len(label) + 3
 
 
+def show_help(stdscr, binds):
+    """Show a keybind help overlay. Press any key to dismiss."""
+    rows, cols = stdscr.getmaxyx()
+    max_key = max(len(k) for k, _ in binds)
+    box_w = min(max_key + max(len(d) for _, d in binds) + 8, cols - 4)
+    box_h = min(len(binds) + 3, rows - 2)
+    bx = (cols - box_w) // 2
+    by = (rows - box_h) // 2
+
+    stdscr.erase()
+    draw_box(stdscr, by, bx, box_h, box_w, "Keybinds")
+    for i, (key, desc) in enumerate(binds):
+        if by + 1 + i >= by + box_h - 2:
+            break
+        try:
+            stdscr.addstr(by + 1 + i, bx + 2,
+                          key.rjust(max_key),
+                          curses.color_pair(C_KEY) | curses.A_BOLD)
+            stdscr.addstr(f"  {desc}", curses.color_pair(C_NORMAL))
+        except curses.error:
+            pass
+    draw_sep(stdscr, by + box_h - 2, bx, box_w)
+    draw_hints(stdscr, by + box_h - 1, bx, box_w, [("any key", "close")])
+    # bottom border got overwritten by hints row; just leave it
+    stdscr.refresh()
+    stdscr.getch()
+
+
 def draw_menu(stdscr, desktops, current, selected):
     stdscr.erase()
     rows, cols = stdscr.getmaxyx()
 
     n = len(desktops)
-    box_h = n + 5  # border + items + sep + 2 hint rows + border
+    box_h = n + 4  # border + items + sep + hint row + border
     max_name = max((len(d["name"]) for d in desktops), default=7)
     box_w = max(max_name + 22, 38)
     box_w = min(box_w, cols - 4)
@@ -154,13 +182,11 @@ def draw_menu(stdscr, desktops, current, selected):
             break
         draw_row(stdscr, by + 1 + i, bx, box_w, desk, desk["id"] == current, i == selected)
 
-    sep_y = by + 1 + min(n, box_h - 5)
+    sep_y = by + 1 + min(n, box_h - 4)
     draw_sep(stdscr, sep_y, bx, box_w)
     draw_hints(stdscr, sep_y + 1, bx, box_w, [
-        ("enter", "switch"), ("n", "new"), ("r", "rename"),
-    ])
-    draw_hints(stdscr, sep_y + 2, bx, box_w, [
-        ("d", "delete"), ("c", "compact"), ("esc", "quit"),
+        ("\u23ce", "switch"), ("n", "new"), ("r", "rename"),
+        ("?", "help"),
     ])
 
     stdscr.refresh()
@@ -232,6 +258,18 @@ def main(stdscr):
 
         if ch in (ord("q"), 27):  # q / ESC
             break
+
+        elif ch == ord("?"):
+            show_help(stdscr, [
+                ("j / \u2193", "Move down"),
+                ("k / \u2191", "Move up"),
+                ("enter", "Switch to desktop"),
+                ("n", "Create new desktop"),
+                ("r", "Rename selected desktop"),
+                ("d", "Delete selected desktop"),
+                ("c", "Compact (remove empty)"),
+                ("esc / q", "Quit"),
+            ])
 
         elif ch in (ord("j"), curses.KEY_DOWN):
             selected = min(selected + 1, len(desktops) - 1)

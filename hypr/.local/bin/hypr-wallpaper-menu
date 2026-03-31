@@ -140,6 +140,32 @@ def draw_hints(win, y, x, w, hints):
         cx += len(key) + len(label) + 3
 
 
+def show_help(stdscr, binds):
+    rows, cols = stdscr.getmaxyx()
+    max_key = max(len(k) for k, _ in binds)
+    box_w = min(max_key + max(len(d) for _, d in binds) + 8, cols - 4)
+    box_h = min(len(binds) + 3, rows - 2)
+    bx = (cols - box_w) // 2
+    by = (rows - box_h) // 2
+
+    stdscr.erase()
+    draw_box(stdscr, by, bx, box_h, box_w, "Keybinds")
+    for i, (key, desc) in enumerate(binds):
+        if by + 1 + i >= by + box_h - 2:
+            break
+        try:
+            stdscr.addstr(by + 1 + i, bx + 2,
+                          key.rjust(max_key),
+                          curses.color_pair(C_KEY) | curses.A_BOLD)
+            stdscr.addstr(f"  {desc}", curses.color_pair(C_NORMAL))
+        except curses.error:
+            pass
+    draw_sep(stdscr, by + box_h - 2, bx, box_w)
+    draw_hints(stdscr, by + box_h - 1, bx, box_w, [("any key", "close")])
+    stdscr.refresh()
+    stdscr.getch()
+
+
 def draw_line(win, y, x, w, text, attr):
     inner = w - 2
     try:
@@ -221,13 +247,20 @@ def view_main(stdscr, state):
         sep_y = by + box_h - 3
         draw_sep(stdscr, sep_y, bx, box_w)
         draw_hints(stdscr, sep_y + 1, bx, box_w, [
-            ("\u23ce", "select"), ("esc", "quit"),
+            ("\u23ce", "select"), ("?", "help"), ("esc", "quit"),
         ])
         stdscr.refresh()
 
         ch = stdscr.getch()
         if ch in (ord("q"), 27):
             return None
+        elif ch == ord("?"):
+            show_help(stdscr, [
+                ("j / \u2193", "Move down"),
+                ("k / \u2191", "Move up"),
+                ("enter", "Run selected action"),
+                ("esc / q", "Quit"),
+            ])
         elif ch in (ord("j"), curses.KEY_DOWN):
             selected = min(selected + 1, len(items) - 1)
         elif ch in (ord("k"), curses.KEY_UP):
