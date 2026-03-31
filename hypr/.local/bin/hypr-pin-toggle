@@ -1,0 +1,25 @@
+#!/bin/bash
+# hypr-pin-toggle — toggle sticky window (auto-floats tiled windows, restores on unpin)
+
+win_json=$(hyprctl activewindow -j)
+is_floating=$(echo "$win_json" | jq -r '.floating')
+is_pinned=$(echo "$win_json" | jq -r '.pinned')
+
+if [ "$is_pinned" = "true" ]; then
+    hyprctl dispatch pin
+    # Restore to tiled if we auto-floated it
+    addr=$(echo "$win_json" | jq -r '.address')
+    if [ -f "/tmp/hypr-pin-was-tiled-$addr" ]; then
+        hyprctl dispatch togglefloating
+        rm -f "/tmp/hypr-pin-was-tiled-$addr"
+    fi
+    notify-send -u low -h "string:x-canonical-private-synchronous:hypr-pin" "Unpinned" "Window no longer sticky"
+else
+    addr=$(echo "$win_json" | jq -r '.address')
+    if [ "$is_floating" = "false" ]; then
+        hyprctl dispatch togglefloating
+        touch "/tmp/hypr-pin-was-tiled-$addr"
+    fi
+    hyprctl dispatch pin
+    notify-send -u low -h "string:x-canonical-private-synchronous:hypr-pin" "Pinned" "Window visible on all workspaces"
+fi
