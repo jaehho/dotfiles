@@ -251,12 +251,7 @@ cmd_moveall() {
 }
 
 cmd_create() {
-    local name="${1:-}"
-    if [[ -z "$name" ]]; then
-        name=$(rofi -dmenu -p " New desktop name" \
-            -theme-str 'window { width: 350px; }') || return
-        [[ -z "$name" ]] && return
-    fi
+    local name="${1:?name required}"
     local id
     id=$(_next_id)
     echo "${id}:${name}" >> "$DESKTOP_FILE"
@@ -264,14 +259,8 @@ cmd_create() {
 }
 
 cmd_rename() {
-    local name="${1:-}" current
+    local name="${1:?name required}" current
     current=$(_current_id)
-    if [[ -z "$name" ]]; then
-        local old
-        old=$(_desk_name "$current")
-        name=$(echo "$old" | rofi -dmenu -p " Rename desktop" \
-            -theme-str 'window { width: 350px; }') || return
-        [[ -z "$name" ]] && return
     fi
     sed -i "s/^${current}:.*/${current}:${name}/" "$DESKTOP_FILE"
     _signal_waybar

@@ -1,0 +1,403 @@
+#!/usr/bin/env python3
+"""TUI wallpaper manager for Hyprland — launched via kitty popup."""
+
+import curses
+import json
+import os
+import sqlite3
+import subprocess
+import sys
+
+WALLDIR = os.path.expanduser("~/Pictures/wallpapers")
+DATADIR = os.path.expanduser("~/.cache/wallpaper-data")
+DBFILE = f"{DATADIR}/wallpapers.db"
+STATEFILE = f"{DATADIR}/current"
+MODEFILE = f"{DATADIR}/mode"
+WP_CMD = os.path.expanduser("~/.local/bin/hypr-wallpaper")
+
+C_NORMAL = 1
+C_SELECTED = 2
+C_ACCENT = 3
+C_HEADER = 4
+C_KEY = 5
+C_DIM = 6
+C_STATUS = 7
+
+# ── data ─────────────────────────────────────────────────────────────
+
+
+def wp_cmd(*args):
+    subprocess.run([WP_CMD] + list(args), capture_output=True, text=True)
+
+
+def db_query(sql):
+    try:
+        conn = sqlite3.connect(DBFILE)
+        cur = conn.execute(sql)
+        rows = cur.fetchall()
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+
+def get_state():
+    current = ""
+    try:
+        with open(STATEFILE) as f:
+            current = f.read().strip()
+    except FileNotFoundError:
+        pass
+
+    mode = "explore"
+    try:
+        with open(MODEFILE) as f:
+            mode = f.read().strip() or "explore"
+    except FileNotFoundError:
+        pass
+
+    basename = os.path.basename(current) if current else ""
+    topic = source = status = ""
+    if basename:
+        rows = db_query(
+            f"SELECT topic, source, status FROM wallpapers "
+            f"WHERE filename = '{basename.replace(chr(39), chr(39)*2)}' LIMIT 1"
+        )
+        if rows:
+            topic, source, status = rows[0]
+
+    liked_count = 0
+    rows = db_query("SELECT COUNT(*) FROM wallpapers WHERE status = 'liked'")
+    if rows:
+        liked_count = rows[0][0]
+
+    total_count = 0
+    rows = db_query("SELECT COUNT(*) FROM wallpapers WHERE status = 'unrated'")
+    if rows:
+        total_count = rows[0][0]
+
+    return {
+        "file": basename,
+        "mode": mode,
+        "topic": topic or "—",
+        "source": source or "—",
+        "status": status or "—",
+        "liked": liked_count,
+        "unrated": total_count,
+    }
+
+
+def get_liked_wallpapers():
+    rows = db_query(
+        "SELECT filename, topic FROM wallpapers "
+        "WHERE status = 'liked' ORDER BY fetch_date DESC"
+    )
+    return [{"file": r[0], "topic": r[1] or "—"} for r in rows]
+
+
+STATUS_ICONS = {"liked": "\uf004", "disliked": "\uf00d", "unrated": "\uf128"}
+
+
+# ── drawing ──────────────────────────────────────────────────────────
+
+
+def draw_box(win, y, x, h, w, title=""):
+    d = curses.color_pair(C_DIM)
+    try:
+        win.addstr(y, x, "\u250c\u2500 ", d)
+        win.addstr(title, curses.color_pair(C_HEADER) | curses.A_BOLD)
+        win.addstr(" " + "\u2500" * max(0, w - len(title) - 5) + "\u2510", d)
+        for row in range(1, h - 1):
+            win.addstr(y + row, x, "\u2502", d)
+            win.addstr(y + row, x + w - 1, "\u2502", d)
+        win.addstr(y + h - 1, x, "\u2514" + "\u2500" * (w - 2) + "\u2518", d)
+    except curses.error:
+        pass
+
+
+def draw_sep(win, y, x, w):
+    try:
+        win.addstr(y, x, "\u251c" + "\u2500" * (w - 2) + "\u2524", curses.color_pair(C_DIM))
+    except curses.error:
+        pass
+
+
+def draw_hints(win, y, x, w, hints):
+    inner = w - 2
+    try:
+        win.addstr(y, x + 1, " " * inner, curses.color_pair(C_NORMAL))
+    except curses.error:
+        pass
+    cx = x + 2
+    for key, label in hints:
+        if cx + len(key) + len(label) + 3 > x + w - 1:
+            break
+        try:
+            win.addstr(y, cx, key, curses.color_pair(C_KEY) | curses.A_BOLD)
+            win.addstr(f" {label}", curses.color_pair(C_DIM))
+        except curses.error:
+            pass
+        cx += len(key) + len(label) + 3
+
+
+def draw_line(win, y, x, w, text, attr):
+    inner = w - 2
+    try:
+        win.addstr(y, x + 1, text[:inner].ljust(inner), attr)
+    except curses.error:
+        pass
+
+
+# ── views ────────────────────────────────────────────────────────────
+
+
+def view_main(stdscr, state):
+    """Main wallpaper menu. Returns action string or None."""
+    mode = state["mode"]
+    icon = STATUS_ICONS.get(state["status"], "")
+
+    if mode == "explore":
+        items = [
+            ("\uf051", "Next"),
+            ("\uf048", "Prev"),
+            ("\uf004", "Like"),
+            ("\uf00d", "Dislike"),
+            ("\uf021", "Switch to liked mode"),
+            ("\uf0c1", "Open source"),
+            ("\uf141", "More..."),
+        ]
+    else:
+        items = [
+            ("\uf051", "Next liked"),
+            ("\uf048", "Prev"),
+            ("\uf03e", "Browse liked"),
+            ("\uf00d", "Dislike"),
+            ("\uf021", "Switch to explore mode"),
+            ("\uf0c1", "Open source"),
+            ("\uf141", "More..."),
+        ]
+
+    info_lines = 3  # file, topic/source, blank
+    box_h = len(items) + info_lines + 4  # borders + sep + hints
+    box_w = 44
+    rows, cols = stdscr.getmaxyx()
+    box_w = min(box_w, cols - 4)
+    box_h = min(box_h, rows - 2)
+    bx = (cols - box_w) // 2
+    by = (rows - box_h) // 2
+
+    selected = 0
+
+    while True:
+        stdscr.erase()
+        draw_box(stdscr, by, bx, box_h, box_w, f"Wallpaper ({mode})")
+
+        # Info area
+        iy = by + 1
+        fname = state["file"] or "none"
+        if len(fname) > box_w - 6:
+            fname = "..." + fname[-(box_w - 9):]
+        draw_line(stdscr, iy, bx, box_w,
+                  f" {icon} {fname}",
+                  curses.color_pair(C_ACCENT))
+        draw_line(stdscr, iy + 1, bx, box_w,
+                  f"   {state['topic']} \u2022 {state['source']}"
+                  f"   \uf004 {state['liked']}  \uf128 {state['unrated']}",
+                  curses.color_pair(C_DIM))
+        draw_line(stdscr, iy + 2, bx, box_w, "", curses.color_pair(C_NORMAL))
+
+        # Items
+        for i, (ic, label) in enumerate(items):
+            y = iy + info_lines + i
+            if y >= by + box_h - 3:
+                break
+            text = f" {ic}  {label}"
+            if i == selected:
+                attr = curses.color_pair(C_SELECTED) | curses.A_BOLD
+            else:
+                attr = curses.color_pair(C_NORMAL)
+            draw_line(stdscr, y, bx, box_w, text, attr)
+
+        sep_y = by + box_h - 3
+        draw_sep(stdscr, sep_y, bx, box_w)
+        draw_hints(stdscr, sep_y + 1, bx, box_w, [
+            ("\u23ce", "select"), ("esc", "quit"),
+        ])
+        stdscr.refresh()
+
+        ch = stdscr.getch()
+        if ch in (ord("q"), 27):
+            return None
+        elif ch in (ord("j"), curses.KEY_DOWN):
+            selected = min(selected + 1, len(items) - 1)
+        elif ch in (ord("k"), curses.KEY_UP):
+            selected = max(selected - 1, 0)
+        elif ch in (10, curses.KEY_ENTER):
+            return items[selected][1]
+
+
+def view_more(stdscr):
+    """More sub-menu. Returns action string or None."""
+    items = [
+        ("\uf044", "Edit rules"),
+        ("\uf013", "Edit settings"),
+        ("\uf15c", "View log"),
+    ]
+    box_h = len(items) + 4
+    box_w = 34
+    rows, cols = stdscr.getmaxyx()
+    bx = (cols - box_w) // 2
+    by = (rows - box_h) // 2
+    selected = 0
+
+    while True:
+        stdscr.erase()
+        draw_box(stdscr, by, bx, box_h, box_w, "More")
+        for i, (ic, label) in enumerate(items):
+            text = f" {ic}  {label}"
+            attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
+                    if i == selected else curses.color_pair(C_NORMAL))
+            draw_line(stdscr, by + 1 + i, bx, box_w, text, attr)
+
+        draw_sep(stdscr, by + box_h - 3, bx, box_w)
+        draw_hints(stdscr, by + box_h - 2, bx, box_w, [
+            ("\u23ce", "select"), ("esc", "back"),
+        ])
+        stdscr.refresh()
+
+        ch = stdscr.getch()
+        if ch in (ord("q"), 27):
+            return None
+        elif ch in (ord("j"), curses.KEY_DOWN):
+            selected = min(selected + 1, len(items) - 1)
+        elif ch in (ord("k"), curses.KEY_UP):
+            selected = max(selected - 1, 0)
+        elif ch in (10, curses.KEY_ENTER):
+            return items[selected][1]
+
+
+def view_browse(stdscr):
+    """Browse liked wallpapers. Returns filename or None."""
+    wallpapers = get_liked_wallpapers()
+    if not wallpapers:
+        return None
+
+    rows, cols = stdscr.getmaxyx()
+    box_w = min(56, cols - 4)
+    visible = min(len(wallpapers), rows - 6)
+    box_h = visible + 4
+    bx = (cols - box_w) // 2
+    by = (rows - box_h) // 2
+    selected = 0
+    scroll = 0
+
+    while True:
+        stdscr.erase()
+        draw_box(stdscr, by, bx, box_h, box_w,
+                 f"Liked ({len(wallpapers)})")
+
+        for i in range(visible):
+            idx = scroll + i
+            if idx >= len(wallpapers):
+                break
+            wp = wallpapers[idx]
+            fname = wp["file"]
+            topic = wp["topic"]
+            max_fname = box_w - len(topic) - 8
+            if len(fname) > max_fname:
+                fname = fname[:max(max_fname - 3, 6)] + "..."
+            text = f" {fname}"
+            padding = box_w - 4 - len(text) - len(topic)
+            text += " " * max(padding, 1) + topic
+
+            attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
+                    if idx == selected else curses.color_pair(C_NORMAL))
+            draw_line(stdscr, by + 1 + i, bx, box_w, text, attr)
+
+        draw_sep(stdscr, by + box_h - 3, bx, box_w)
+        draw_hints(stdscr, by + box_h - 2, bx, box_w, [
+            ("\u23ce", "set"), ("esc", "back"),
+        ])
+        stdscr.refresh()
+
+        ch = stdscr.getch()
+        if ch in (ord("q"), 27):
+            return None
+        elif ch in (ord("j"), curses.KEY_DOWN):
+            if selected < len(wallpapers) - 1:
+                selected += 1
+                if selected >= scroll + visible:
+                    scroll += 1
+        elif ch in (ord("k"), curses.KEY_UP):
+            if selected > 0:
+                selected -= 1
+                if selected < scroll:
+                    scroll -= 1
+        elif ch in (10, curses.KEY_ENTER):
+            return wallpapers[selected]["file"]
+
+
+# ── main loop ────────────────────────────────────────────────────────
+
+CONFDIR = os.path.expanduser(
+    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    + "/hypr-wallpaper"
+)
+CONFFILE = f"{CONFDIR}/config"
+RULESFILE = f"{CONFDIR}/rules.toml"
+LOGFILE = f"{DATADIR}/hypr-wallpaper.log"
+EDITOR = os.environ.get("EDITOR", "nvim")
+
+
+def main(stdscr):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    curses.init_pair(C_NORMAL, -1, -1)
+    curses.init_pair(C_SELECTED, curses.COLOR_BLACK, curses.COLOR_CYAN)
+    curses.init_pair(C_ACCENT, curses.COLOR_GREEN, -1)
+    curses.init_pair(C_HEADER, curses.COLOR_CYAN, -1)
+    curses.init_pair(C_KEY, curses.COLOR_YELLOW, -1)
+    curses.init_pair(C_DIM, 8, -1)
+    curses.init_pair(C_STATUS, curses.COLOR_MAGENTA, -1)
+
+    while True:
+        state = get_state()
+        action = view_main(stdscr, state)
+
+        if action is None:
+            break
+        elif action == "Next" or action == "Next liked":
+            wp_cmd("next")
+        elif action == "Prev":
+            wp_cmd("prev")
+        elif action == "Like":
+            wp_cmd("like")
+        elif action == "Dislike":
+            wp_cmd("dislike")
+        elif action.startswith("Switch to"):
+            wp_cmd("mode")
+        elif action == "Open source":
+            wp_cmd("source")
+            break
+        elif action == "More...":
+            more = view_more(stdscr)
+            if more == "Edit rules":
+                subprocess.Popen(
+                    ["kitty", "--title", "Wallpaper Rules", "--", EDITOR, RULESFILE])
+                break
+            elif more == "Edit settings":
+                subprocess.Popen(
+                    ["kitty", "--title", "Wallpaper Settings", "--", EDITOR, CONFFILE])
+                break
+            elif more == "View log":
+                subprocess.Popen(
+                    ["kitty", "--title", "Wallpaper Log", "--", EDITOR, "-R", "+$", LOGFILE])
+                break
+        elif action == "Browse liked":
+            pick = view_browse(stdscr)
+            if pick:
+                wp_cmd("set", os.path.join(WALLDIR, pick))
+
+
+if __name__ == "__main__":
+    curses.wrapper(main)
