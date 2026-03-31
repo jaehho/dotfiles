@@ -616,5 +616,15 @@ def main(stdscr):
                 wp_cmd("set", os.path.join(WALLDIR, pick))
 
 
+def auto_resize():
+    """Resize terminal to fit content before curses takes over."""
+    # 9 menu items + 3 info lines + borders/sep/hints + padding
+    rows = 17
+    cols = 48
+    sys.stdout.write(f"\033[8;{rows};{cols}t")
+    sys.stdout.flush()
+
+
 if __name__ == "__main__":
+    auto_resize()
     curses.wrapper(main)
