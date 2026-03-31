@@ -28,10 +28,8 @@ _init() {
     [[ -f "$DESKTOP_FILE" ]] || echo "1:Default" > "$DESKTOP_FILE"
     [[ -f "$CURRENT_FILE" ]] || echo "1" > "$CURRENT_FILE"
     [[ -f "$LAYOUT_FILE" ]] || touch "$LAYOUT_FILE"
-    # Enforce correct workspace-monitor mapping for current desktop
-    local mon_data
-    mon_data=$(_monitors_json 2>/dev/null) || return 0
-    _ensure_mapping "$(_current_id)" "$mon_data"
+    # Static workspace-monitor mapping is handled by workspaces.conf.
+    # _ensure_mapping is only used during compact/restore for dynamic desktops.
 }
 
 _current_id() {
@@ -160,7 +158,9 @@ _restore_layout() {
     local skip_mon="${3:-}"   # optional: leave this monitor untouched
     local batch=""
     local idx=0
+    local -a targets=()
 
+    # Phase 1: assign workspaces to correct monitors (no workspace>> events)
     while IFS= read -r mon; do
         idx=$((idx + 1))
         if [[ -n "$skip_mon" && "$mon" == "$skip_mon" ]]; then
@@ -170,8 +170,14 @@ _restore_layout() {
         saved=$(grep "^${desk}|${mon}|" "$LAYOUT_FILE" 2>/dev/null | tail -1 | cut -d'|' -f3 || true)
         default=$(_ws_id "$desk" "$idx")
         target="${saved:-$default}"
-        batch+="dispatch moveworkspacetomonitor ${target} ${mon}; dispatch focusmonitor ${mon}; dispatch workspace ${target}; "
+        batch+="dispatch moveworkspacetomonitor ${target} ${mon}; "
+        targets+=("$target")
     done < <(_ordered_monitors "$mon_data")
+
+    # Phase 2: activate workspaces (workspace>> events are all for target desktop)
+    for target in "${targets[@]}"; do
+        batch+="dispatch workspace ${target}; "
+    done
 
     # Restore focus
     if [[ -n "$skip_mon" ]]; then
@@ -495,6 +501,40 @@ cmd_tab() {
     hyprctl dispatch workspace "${slots[$target_idx]}" >/dev/null
 }
 
+cmd_sendtodesktop() {
+    # Move focused window to the same slot on another desktop.
+    # Usage: sendtodesktop {next|prev|N}
+    local target_desk="${1:?desktop required}"
+    local current_desk
+    current_desk=$(_current_id)
+
+    # Resolve next/prev
+    if [[ "$target_desk" == "next" || "$target_desk" == "prev" ]]; then
+        local ids
+        ids=$(cut -d: -f1 "$DESKTOP_FILE" | sort -n)
+        if [[ "$target_desk" == "next" ]]; then
+            target_desk=$(echo "$ids" | grep -A1 "^${current_desk}$" | tail -1)
+            [[ "$target_desk" == "$current_desk" ]] && target_desk=$(echo "$ids" | head -1)
+        else
+            target_desk=$(echo "$ids" | grep -B1 "^${current_desk}$" | head -1)
+            [[ "$target_desk" == "$current_desk" ]] && target_desk=$(echo "$ids" | tail -1)
+        fi
+    fi
+
+    grep -q "^${target_desk}:" "$DESKTOP_FILE" 2>/dev/null \
+        || { echo "Desktop $target_desk not found" >&2; return 1; }
+
+    local current_ws
+    current_ws=$(hyprctl activewindow -j | jq -r '.workspace.id')
+    [[ -z "$current_ws" || "$current_ws" == "null" ]] && return
+
+    local slot=$(( (current_ws - 1) % DESKTOP_OFFSET + 1 ))
+    local target_ws
+    target_ws=$(_ws_id "$target_desk" "$slot")
+
+    hyprctl dispatch movetoworkspacesilent "$target_ws" >/dev/null
+}
+
 cmd_current() {
     local id name
     id=$(_current_id)
@@ -527,8 +567,25 @@ cmd_watch() {
             workspace\>\>*)
                 _on_workspace_change "${event#workspace>>}" || true
                 ;;
+            configreloaded\>\>*)
+                # Hyprland reloaded config — workspaces.conf default:true rules
+                # may have moved monitors back to desktop 1 workspaces.
+                # Re-enforce the current desktop's layout after a short settle.
+                sleep 0.5
+                _on_config_reload || true
+                ;;
         esac
     done
+}
+
+_on_config_reload() {
+    _locked && return
+    local desk mon_data
+    desk=$(_current_id)
+    mon_data=$(_monitors_json)
+    _ensure_mapping "$desk" "$mon_data"
+    _restore_layout "$desk" "$mon_data"
+    _signal_waybar
 }
 
 _on_workspace_change() {
@@ -588,12 +645,13 @@ case "${1:-}" in
     create)     cmd_create "${2:-}" ;;
     rename)     cmd_rename "${2:-}" ;;
     delete)     cmd_delete ;;
-    compact)    cmd_compact ;;
-    tab)        cmd_tab "${2:-next}" ;;
-    current)    cmd_current ;;
-    list)       cmd_list ;;
-    watch)      cmd_watch ;;
-    init)       _init ;;
-    *)          echo "Usage: hypr-desktop {switch|next|prev|ws|movews|movesilent|moveall|create|rename|delete|compact|tab|current|list|watch|init}" >&2
+    compact)        cmd_compact ;;
+    tab)            cmd_tab "${2:-next}" ;;
+    sendtodesktop)  cmd_sendtodesktop "${2:?target required (next|prev|N)}" ;;
+    current)        cmd_current ;;
+    list)           cmd_list ;;
+    watch)          cmd_watch ;;
+    init)           _init ;;
+    *)              echo "Usage: hypr-desktop {switch|next|prev|ws|movews|movesilent|moveall|create|rename|delete|compact|tab|sendtodesktop|current|list|watch|init}" >&2
                 exit 1 ;;
 esac
