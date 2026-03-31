@@ -103,7 +103,7 @@ def draw_sep(win, y, x, w):
 
 def draw_row(win, y, x, w, desk, is_current, is_selected):
     marker = "▸" if is_current else " "
-    wins = str(desk["windows"])
+    wins = f"\uf2d2 {desk['windows']}"
     label = f" {marker} {desk['id']}: {desk['name']}"
     inner = w - 2
 
