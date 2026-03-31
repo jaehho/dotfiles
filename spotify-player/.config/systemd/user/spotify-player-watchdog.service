@@ -1,9 +1,0 @@
-[Unit]
-Description=Spotify Player Daemon Watchdog
-After=spotify-player-daemon.service
-Requires=spotify-player-daemon.service
-
-[Service]
-Type=oneshot
-ExecCondition=/bin/sh -c '! timeout 2 bash -c "</dev/tcp/127.0.0.1/8180" 2>/dev/null'
-ExecStart=systemctl --user restart spotify-player-daemon.service
