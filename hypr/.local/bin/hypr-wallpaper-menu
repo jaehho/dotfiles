@@ -165,22 +165,49 @@ def show_help(stdscr, binds):
 
 
 def text_input(stdscr, y, x, w, prompt, initial=""):
-    """Single-line text input. Returns string or None on ESC."""
+    """Multi-line wrapping text input. Renders from y upward as needed."""
     text = initial
+    cur = len(text)  # cursor position in text
     curses.curs_set(1)
     while True:
+        # Build wrapped display: prompt + text, wrapped to width w
+        full = prompt + text
+        lines = _wrap(full, w) or [""]
+        nlines = len(lines)
+        # Draw from y upward (so the bottom line is always at y)
+        start_y = y - nlines + 1
+        for i, line in enumerate(lines):
+            row = start_y + i
+            try:
+                stdscr.addstr(row, x, " " * w, curses.color_pair(C_NORMAL))
+                if i == 0:
+                    # First line has the prompt highlighted
+                    stdscr.addstr(row, x, prompt,
+                                  curses.color_pair(C_KEY) | curses.A_BOLD)
+                    stdscr.addstr(line[len(prompt):],
+                                  curses.color_pair(C_NORMAL))
+                else:
+                    stdscr.addstr(row, x, line,
+                                  curses.color_pair(C_NORMAL))
+            except curses.error:
+                pass
+        # Place cursor: find which line/col the cursor is at
+        cursor_pos = len(prompt) + cur
+        cy, cx_pos = start_y, cursor_pos
+        for i, line in enumerate(lines):
+            if cx_pos <= len(line):
+                cy = start_y + i
+                break
+            cx_pos -= len(line)
+            # Account for the space eaten by wrapping
+            if cx_pos > 0 and i + 1 < nlines:
+                pass  # wrapped naturally
         try:
-            stdscr.addstr(y, x, " " * w, curses.color_pair(C_NORMAL))
-            stdscr.addstr(y, x, prompt,
-                          curses.color_pair(C_KEY) | curses.A_BOLD)
-            px = x + len(prompt)
-            avail = w - len(prompt) - 1
-            show = text[-avail:] if len(text) > avail else text
-            stdscr.addstr(y, px, show, curses.color_pair(C_NORMAL))
-            stdscr.move(y, min(px + len(text), x + w - 1))
+            stdscr.move(cy, min(x + cx_pos, x + w - 1))
         except curses.error:
             pass
         stdscr.refresh()
+
         ch = stdscr.getch()
         if ch == 27:
             curses.curs_set(0)
@@ -189,9 +216,22 @@ def text_input(stdscr, y, x, w, prompt, initial=""):
             curses.curs_set(0)
             return text
         elif ch in (curses.KEY_BACKSPACE, 127, 8):
-            text = text[:-1]
+            if cur > 0:
+                text = text[:cur - 1] + text[cur:]
+                cur -= 1
+        elif ch == curses.KEY_LEFT:
+            if cur > 0:
+                cur -= 1
+        elif ch == curses.KEY_RIGHT:
+            if cur < len(text):
+                cur += 1
+        elif ch == curses.KEY_HOME:
+            cur = 0
+        elif ch == curses.KEY_END:
+            cur = len(text)
         elif 32 <= ch < 127:
-            text += chr(ch)
+            text = text[:cur] + chr(ch) + text[cur:]
+            cur += 1
 
 
 # ── main menu ────────────────────────────────────────────────────────
@@ -634,19 +674,14 @@ def _wrap(text, width):
     return lines or [""]
 
 
-def _build_rule_rows(rules, wrap_width):
-    """Flatten rules into visual rows: (type, rule_idx, topic_idx, line_idx).
-    Conditions word-wrap into multiple rows. Only line_idx=0 is the 'anchor'."""
+def _build_rule_rows(rules):
+    """Flatten rules into navigable rows: (type, rule_idx, topic_idx)."""
     items = []
-    cond_prefix_len = 5  # "   ⚡ "
-    w = max(wrap_width - cond_prefix_len, 10)
     for ri, rule in enumerate(rules):
-        items.append(("rule", ri, None, 0))
-        cond = rule["condition"] or "(no condition)"
-        for li, line in enumerate(_wrap(cond, w)):
-            items.append(("cond", ri, None, li))
+        items.append(("rule", ri, None))
+        items.append(("cond", ri, None))
         for ti in range(len(rule["topics"])):
-            items.append(("topic", ri, ti, 0))
+            items.append(("topic", ri, ti))
     return items
 
 
@@ -661,7 +696,7 @@ def _tab_rules(stdscr, tabs, active_tab):
     selected = scroll = 0
 
     while True:
-        items = _build_rule_rows(rules, inner)
+        items = _build_rule_rows(rules)
         n = len(items)
         if selected >= n:
             selected = max(0, n - 1)
@@ -679,7 +714,7 @@ def _tab_rules(stdscr, tabs, active_tab):
             idx = scroll + i
             if idx >= n:
                 break
-            itype, ri, ti, li = items[idx]
+            itype, ri, ti = items[idx]
             rule = rules[ri]
             is_sel = idx == selected
             y = by + 3 + i
@@ -693,11 +728,9 @@ def _tab_rules(stdscr, tabs, active_tab):
 
             elif itype == "cond":
                 cond = rule["condition"] or "(no condition)"
-                cond_w = inner - 5  # "   ⚡ "
-                wrapped = _wrap(cond, cond_w)
-                line = wrapped[li] if li < len(wrapped) else ""
-                prefix = "   \uf0e7 " if li == 0 else "     "
-                text = prefix + line
+                text = f"   \uf0e7 {cond}"
+                if len(text) > inner:
+                    text = text[:inner - 1] + "\u2026"
                 attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
                         if is_sel else curses.color_pair(C_DIM))
                 draw_line(stdscr, y, bx, box_w, text, attr)
@@ -749,7 +782,7 @@ def _tab_rules(stdscr, tabs, active_tab):
                     rules.append({"name": name, "condition": "", "topics": []})
                     save_rules(rules)
             else:
-                itype, ri, ti, li = items[selected]
+                itype, ri, ti = items[selected]
                 if itype == "rule":
                     name = text_input(stdscr, by + box_h - 1, bx + 1,
                                       box_w - 2, "New rule name: ")
@@ -765,7 +798,7 @@ def _tab_rules(stdscr, tabs, active_tab):
         elif ch == ord("d"):
             if not items:
                 continue
-            itype, ri, ti, li = items[selected]
+            itype, ri, ti = items[selected]
             if itype == "rule":
                 rules.pop(ri)
                 save_rules(rules)
@@ -775,7 +808,7 @@ def _tab_rules(stdscr, tabs, active_tab):
         elif ch in (10, curses.KEY_ENTER):
             if not items:
                 continue
-            itype, ri, ti, li = items[selected]
+            itype, ri, ti = items[selected]
             if itype == "rule":
                 name = text_input(stdscr, by + box_h - 1, bx + 1,
                                   box_w - 2, "Name: ", rules[ri]["name"])
