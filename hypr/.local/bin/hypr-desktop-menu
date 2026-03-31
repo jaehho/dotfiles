@@ -325,15 +325,5 @@ def main(stdscr):
             selected = min(selected, len(desktops) - 1)
 
 
-def auto_resize():
-    """Resize terminal to fit content before curses takes over."""
-    desktops, _ = get_state()
-    rows = len(desktops) + 6  # items + border + sep + hints + padding
-    cols = 42
-    sys.stdout.write(f"\033[8;{rows};{cols}t")
-    sys.stdout.flush()
-
-
 if __name__ == "__main__":
-    auto_resize()
     curses.wrapper(main)

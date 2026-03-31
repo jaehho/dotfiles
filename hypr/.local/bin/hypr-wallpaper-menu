@@ -4,6 +4,7 @@
 import curses
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -14,6 +15,13 @@ DBFILE = f"{DATADIR}/wallpapers.db"
 STATEFILE = f"{DATADIR}/current"
 MODEFILE = f"{DATADIR}/mode"
 WP_CMD = os.path.expanduser("~/.local/bin/hypr-wallpaper")
+CONFDIR = os.path.expanduser(
+    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    + "/hypr-wallpaper"
+)
+CONFFILE = f"{CONFDIR}/config"
+RULESFILE = f"{CONFDIR}/rules.toml"
+LOGFILE = f"{DATADIR}/hypr-wallpaper.log"
 
 C_NORMAL = 1
 C_SELECTED = 2
@@ -23,7 +31,7 @@ C_KEY = 5
 C_DIM = 6
 C_STATUS = 7
 
-# ── data ─────────────────────────────────────────────────────────────
+# ── data helpers ─────────────────────────────────────────────────────
 
 
 def wp_cmd(*args):
@@ -33,8 +41,7 @@ def wp_cmd(*args):
 def db_query(sql):
     try:
         conn = sqlite3.connect(DBFILE)
-        cur = conn.execute(sql)
-        rows = cur.fetchall()
+        rows = conn.execute(sql).fetchall()
         conn.close()
         return rows
     except Exception:
@@ -48,14 +55,12 @@ def get_state():
             current = f.read().strip()
     except FileNotFoundError:
         pass
-
     mode = "explore"
     try:
         with open(MODEFILE) as f:
             mode = f.read().strip() or "explore"
     except FileNotFoundError:
         pass
-
     basename = os.path.basename(current) if current else ""
     topic = source = status = ""
     if basename:
@@ -65,25 +70,13 @@ def get_state():
         )
         if rows:
             topic, source, status = rows[0]
-
-    liked_count = 0
-    rows = db_query("SELECT COUNT(*) FROM wallpapers WHERE status = 'liked'")
-    if rows:
-        liked_count = rows[0][0]
-
-    total_count = 0
-    rows = db_query("SELECT COUNT(*) FROM wallpapers WHERE status = 'unrated'")
-    if rows:
-        total_count = rows[0][0]
-
+    liked = db_query("SELECT COUNT(*) FROM wallpapers WHERE status = 'liked'")
+    unrated = db_query("SELECT COUNT(*) FROM wallpapers WHERE status = 'unrated'")
     return {
-        "file": basename,
-        "mode": mode,
-        "topic": topic or "—",
-        "source": source or "—",
-        "status": status or "—",
-        "liked": liked_count,
-        "unrated": total_count,
+        "file": basename, "mode": mode, "topic": topic or "\u2014",
+        "source": source or "\u2014", "status": status or "\u2014",
+        "liked": liked[0][0] if liked else 0,
+        "unrated": unrated[0][0] if unrated else 0,
     }
 
 
@@ -92,13 +85,13 @@ def get_liked_wallpapers():
         "SELECT filename, topic FROM wallpapers "
         "WHERE status = 'liked' ORDER BY fetch_date DESC"
     )
-    return [{"file": r[0], "topic": r[1] or "—"} for r in rows]
+    return [{"file": r[0], "topic": r[1] or "\u2014"} for r in rows]
 
 
 STATUS_ICONS = {"liked": "\uf004", "disliked": "\uf00d", "unrated": "\uf128"}
 
 
-# ── drawing ──────────────────────────────────────────────────────────
+# ── drawing primitives ───────────────────────────────────────────────
 
 
 def draw_box(win, y, x, h, w, title=""):
@@ -117,7 +110,8 @@ def draw_box(win, y, x, h, w, title=""):
 
 def draw_sep(win, y, x, w):
     try:
-        win.addstr(y, x, "\u251c" + "\u2500" * (w - 2) + "\u2524", curses.color_pair(C_DIM))
+        win.addstr(y, x, "\u251c" + "\u2500" * (w - 2) + "\u2524",
+                   curses.color_pair(C_DIM))
     except curses.error:
         pass
 
@@ -140,22 +134,26 @@ def draw_hints(win, y, x, w, hints):
         cx += len(key) + len(label) + 3
 
 
+def draw_line(win, y, x, w, text, attr):
+    try:
+        win.addstr(y, x + 1, text[:w - 2].ljust(w - 2), attr)
+    except curses.error:
+        pass
+
+
 def show_help(stdscr, binds):
     rows, cols = stdscr.getmaxyx()
     max_key = max(len(k) for k, _ in binds)
     box_w = min(max_key + max(len(d) for _, d in binds) + 8, cols - 4)
     box_h = min(len(binds) + 3, rows - 2)
-    bx = (cols - box_w) // 2
-    by = (rows - box_h) // 2
-
+    bx, by = (cols - box_w) // 2, (rows - box_h) // 2
     stdscr.erase()
     draw_box(stdscr, by, bx, box_h, box_w, "Keybinds")
     for i, (key, desc) in enumerate(binds):
         if by + 1 + i >= by + box_h - 2:
             break
         try:
-            stdscr.addstr(by + 1 + i, bx + 2,
-                          key.rjust(max_key),
+            stdscr.addstr(by + 1 + i, bx + 2, key.rjust(max_key),
                           curses.color_pair(C_KEY) | curses.A_BOLD)
             stdscr.addstr(f"  {desc}", curses.color_pair(C_NORMAL))
         except curses.error:
@@ -166,104 +164,94 @@ def show_help(stdscr, binds):
     stdscr.getch()
 
 
-def draw_line(win, y, x, w, text, attr):
-    inner = w - 2
-    try:
-        win.addstr(y, x + 1, text[:inner].ljust(inner), attr)
-    except curses.error:
-        pass
+def text_input(stdscr, y, x, w, prompt, initial=""):
+    """Single-line text input. Returns string or None on ESC."""
+    text = initial
+    curses.curs_set(1)
+    while True:
+        try:
+            stdscr.addstr(y, x, " " * w, curses.color_pair(C_NORMAL))
+            stdscr.addstr(y, x, prompt,
+                          curses.color_pair(C_KEY) | curses.A_BOLD)
+            px = x + len(prompt)
+            avail = w - len(prompt) - 1
+            show = text[-avail:] if len(text) > avail else text
+            stdscr.addstr(y, px, show, curses.color_pair(C_NORMAL))
+            stdscr.move(y, min(px + len(text), x + w - 1))
+        except curses.error:
+            pass
+        stdscr.refresh()
+        ch = stdscr.getch()
+        if ch == 27:
+            curses.curs_set(0)
+            return None
+        elif ch in (10, curses.KEY_ENTER):
+            curses.curs_set(0)
+            return text
+        elif ch in (curses.KEY_BACKSPACE, 127, 8):
+            text = text[:-1]
+        elif 32 <= ch < 127:
+            text += chr(ch)
 
 
-# ── views ────────────────────────────────────────────────────────────
+# ── main menu ────────────────────────────────────────────────────────
 
 
 def view_main(stdscr, state):
-    """Main wallpaper menu. Returns action string or None."""
     mode = state["mode"]
     icon = STATUS_ICONS.get(state["status"], "")
-
     if mode == "explore":
         items = [
-            ("\uf051", "Next"),
-            ("\uf048", "Prev"),
-            ("\uf004", "Like"),
-            ("\uf00d", "Dislike"),
+            ("\uf051", "Next"), ("\uf048", "Prev"),
+            ("\uf004", "Like"), ("\uf00d", "Dislike"),
             ("\uf021", "Switch to liked mode"),
-            ("\uf0c1", "Open source"),
-            ("\uf013", "Settings"),
-            ("\uf044", "Edit rules"),
-            ("\uf15c", "View log"),
+            ("\uf0c1", "Open source"), ("\uf013", "Settings"),
         ]
     else:
         items = [
-            ("\uf051", "Next liked"),
-            ("\uf048", "Prev"),
-            ("\uf03e", "Browse liked"),
-            ("\uf00d", "Dislike"),
+            ("\uf051", "Next liked"), ("\uf048", "Prev"),
+            ("\uf03e", "Browse liked"), ("\uf00d", "Dislike"),
             ("\uf021", "Switch to explore mode"),
-            ("\uf0c1", "Open source"),
-            ("\uf013", "Settings"),
-            ("\uf044", "Edit rules"),
-            ("\uf15c", "View log"),
+            ("\uf0c1", "Open source"), ("\uf013", "Settings"),
         ]
-
-    info_lines = 3  # file, topic/source, blank
-    box_h = len(items) + info_lines + 4  # borders + sep + hints
-    box_w = 44
+    info_lines = 3
     rows, cols = stdscr.getmaxyx()
-    box_w = min(box_w, cols - 4)
-    box_h = min(box_h, rows - 2)
-    bx = (cols - box_w) // 2
-    by = (rows - box_h) // 2
-
+    box_w = min(44, cols - 4)
+    box_h = min(len(items) + info_lines + 4, rows - 2)
+    bx, by = (cols - box_w) // 2, (rows - box_h) // 2
     selected = 0
-
     while True:
         stdscr.erase()
         draw_box(stdscr, by, bx, box_h, box_w, f"Wallpaper ({mode})")
-
-        # Info area
         iy = by + 1
         fname = state["file"] or "none"
         if len(fname) > box_w - 6:
             fname = "..." + fname[-(box_w - 9):]
-        draw_line(stdscr, iy, bx, box_w,
-                  f" {icon} {fname}",
+        draw_line(stdscr, iy, bx, box_w, f" {icon} {fname}",
                   curses.color_pair(C_ACCENT))
         draw_line(stdscr, iy + 1, bx, box_w,
                   f"   {state['topic']} \u2022 {state['source']}"
                   f"   \uf004 {state['liked']}  \uf128 {state['unrated']}",
                   curses.color_pair(C_DIM))
         draw_line(stdscr, iy + 2, bx, box_w, "", curses.color_pair(C_NORMAL))
-
-        # Items
         for i, (ic, label) in enumerate(items):
             y = iy + info_lines + i
             if y >= by + box_h - 3:
                 break
-            text = f" {ic}  {label}"
-            if i == selected:
-                attr = curses.color_pair(C_SELECTED) | curses.A_BOLD
-            else:
-                attr = curses.color_pair(C_NORMAL)
-            draw_line(stdscr, y, bx, box_w, text, attr)
-
-        sep_y = by + box_h - 3
-        draw_sep(stdscr, sep_y, bx, box_w)
-        draw_hints(stdscr, sep_y + 1, bx, box_w, [
-            ("\u23ce", "select"), ("?", "help"), ("esc", "quit"),
-        ])
+            attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
+                    if i == selected else curses.color_pair(C_NORMAL))
+            draw_line(stdscr, y, bx, box_w, f" {ic}  {label}", attr)
+        draw_sep(stdscr, by + box_h - 3, bx, box_w)
+        draw_hints(stdscr, by + box_h - 2, bx, box_w,
+                   [("\u23ce", "select"), ("?", "help"), ("esc", "quit")])
         stdscr.refresh()
-
         ch = stdscr.getch()
         if ch in (ord("q"), 27):
             return None
         elif ch == ord("?"):
             show_help(stdscr, [
-                ("j / \u2193", "Move down"),
-                ("k / \u2191", "Move up"),
-                ("enter", "Run selected action"),
-                ("esc / q", "Quit"),
+                ("j / \u2193", "Move down"), ("k / \u2191", "Move up"),
+                ("enter", "Run action"), ("esc / q", "Quit"),
             ])
         elif ch in (ord("j"), curses.KEY_DOWN):
             selected = min(selected + 1, len(items) - 1)
@@ -273,11 +261,60 @@ def view_main(stdscr, state):
             return items[selected][1]
 
 
-# ── settings TUI ─────────────────────────────────────────────────────
+# ── browse liked ─────────────────────────────────────────────────────
+
+
+def view_browse(stdscr):
+    wallpapers = get_liked_wallpapers()
+    if not wallpapers:
+        return None
+    rows, cols = stdscr.getmaxyx()
+    box_w = min(56, cols - 4)
+    visible = min(len(wallpapers), rows - 6)
+    box_h = visible + 4
+    bx, by = (cols - box_w) // 2, (rows - box_h) // 2
+    selected = scroll = 0
+    while True:
+        stdscr.erase()
+        draw_box(stdscr, by, bx, box_h, box_w, f"Liked ({len(wallpapers)})")
+        for i in range(visible):
+            idx = scroll + i
+            if idx >= len(wallpapers):
+                break
+            wp = wallpapers[idx]
+            fname, topic = wp["file"], wp["topic"]
+            max_f = box_w - len(topic) - 8
+            if len(fname) > max_f:
+                fname = fname[:max(max_f - 3, 6)] + "..."
+            text = f" {fname}"
+            text += " " * max(box_w - 4 - len(text) - len(topic), 1) + topic
+            attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
+                    if idx == selected else curses.color_pair(C_NORMAL))
+            draw_line(stdscr, by + 1 + i, bx, box_w, text, attr)
+        draw_sep(stdscr, by + box_h - 3, bx, box_w)
+        draw_hints(stdscr, by + box_h - 2, bx, box_w,
+                   [("\u23ce", "set"), ("esc", "back")])
+        stdscr.refresh()
+        ch = stdscr.getch()
+        if ch in (ord("q"), 27):
+            return None
+        elif ch in (ord("j"), curses.KEY_DOWN):
+            if selected < len(wallpapers) - 1:
+                selected += 1
+                if selected >= scroll + visible:
+                    scroll += 1
+        elif ch in (ord("k"), curses.KEY_UP):
+            if selected > 0:
+                selected -= 1
+                if selected < scroll:
+                    scroll -= 1
+        elif ch in (10, curses.KEY_ENTER):
+            return wallpapers[selected]["file"]
+
+
+# ── settings view (config + rules + log) ─────────────────────────────
 
 SETTINGS_SPEC = [
-    # (config_key, display_name, type)
-    # type: "text", "choice:a,b,c", "transition"
     ("MIN_WIDTH", "Min width (px)", "text"),
     ("REDDIT_MIN_SCORE", "Reddit min score", "text"),
     ("WALLHAVEN_MIN_FAVORITES", "WH min favorites", "text"),
@@ -292,7 +329,6 @@ SETTINGS_SPEC = [
     ("RULE_TIMEOUT", "Rule timeout (s)", "text"),
     ("LOG_MAX_LINES", "Max log lines", "text"),
 ]
-
 TRANSITIONS = [
     "none", "simple", "fade", "left", "right", "top", "bottom",
     "wipe", "wave", "grow", "center", "any", "outer", "random",
@@ -308,23 +344,14 @@ def parse_config():
                 if "=" in s and not s.startswith("#"):
                     key, _, val = s.partition("=")
                     val = val.strip()
-                    # Strip quoted value: "value"  # comment
                     if val.startswith('"'):
                         end = val.find('"', 1)
-                        if end > 0:
-                            val = val[1:end]
-                        else:
-                            val = val[1:]
+                        val = val[1:end] if end > 0 else val[1:]
                     elif val.startswith("'"):
                         end = val.find("'", 1)
-                        if end > 0:
-                            val = val[1:end]
-                        else:
-                            val = val[1:]
-                    else:
-                        # Unquoted: strip inline comment
-                        if "#" in val:
-                            val = val[:val.index("#")].strip()
+                        val = val[1:end] if end > 0 else val[1:]
+                    elif "#" in val:
+                        val = val[:val.index("#")].strip()
                     values[key.strip()] = val
     except FileNotFoundError:
         pass
@@ -350,113 +377,211 @@ def save_setting(key, new_value):
         pass
 
 
-def extract_transition_type(value):
-    parts = value.split()
+def extract_transition_type(v):
+    parts = v.split()
     for i, p in enumerate(parts):
         if p == "--transition-type" and i + 1 < len(parts):
             return parts[i + 1]
     return "simple"
 
 
-def build_transition_value(ttype):
-    return f"--transition-type {ttype}"
+# ── rules parser ─────────────────────────────────────────────────────
 
 
-def settings_text_input(stdscr, bx, by, box_w, box_h, prompt, initial=""):
-    y = by + box_h - 2
-    inner = box_w - 2
-    text = initial
-    curses.curs_set(1)
-    while True:
+def parse_rules():
+    """Parse rules.toml into list of {name, condition, topics}."""
+    rules = []
+    try:
+        with open(RULESFILE) as f:
+            content = f.read()
+    except FileNotFoundError:
+        return rules
+    # Split by [section] headers
+    sections = re.split(r'^\[([^\]]+)\]', content, flags=re.MULTILINE)
+    # sections[0] is preamble (comments), then pairs of (name, body)
+    for i in range(1, len(sections), 2):
+        name = sections[i].strip()
+        body = sections[i + 1] if i + 1 < len(sections) else ""
+        cond = ""
+        topics = []
+        for line in body.splitlines():
+            line = line.strip()
+            if line.startswith("condition"):
+                m = re.search(r'"(.+)"', line)
+                if m:
+                    cond = m.group(1)
+            elif line.startswith("topics"):
+                m = re.findall(r'"([^"]+)"', line)
+                if m:
+                    topics = m
+        rules.append({"name": name, "condition": cond, "topics": topics})
+    return rules
+
+
+def save_rules(rules):
+    """Write rules back to rules.toml with a header comment."""
+    try:
+        # Preserve original preamble (comments before first section)
+        preamble = ""
         try:
-            stdscr.addstr(y, bx + 1, " " * inner, curses.color_pair(C_NORMAL))
-            stdscr.addstr(y, bx + 2, prompt,
-                          curses.color_pair(C_KEY) | curses.A_BOLD)
-            px = bx + 2 + len(prompt)
-            maxlen = bx + box_w - 2 - px
-            stdscr.addstr(y, px, text[-maxlen:] if len(text) > maxlen else text,
-                          curses.color_pair(C_NORMAL))
-            stdscr.move(y, min(px + len(text), bx + box_w - 2))
-        except curses.error:
+            with open(RULESFILE) as f:
+                for line in f:
+                    if line.strip().startswith("[") and not line.strip().startswith("#"):
+                        break
+                    preamble += line
+        except FileNotFoundError:
             pass
+        with open(RULESFILE, "w") as f:
+            f.write(preamble)
+            for rule in rules:
+                f.write(f"\n[{rule['name']}]\n")
+                if rule["condition"]:
+                    f.write(f'condition = "{rule["condition"]}"\n')
+                if rule["topics"]:
+                    quoted = ", ".join(f'"{t}"' for t in rule["topics"])
+                    f.write(f"topics = [{quoted}]\n")
+    except Exception:
+        pass
+
+
+# ── log viewer ───────────────────────────────────────────────────────
+
+
+def view_log(stdscr):
+    try:
+        with open(LOGFILE) as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        lines = ["(no log file)"]
+    lines = [l.rstrip() for l in lines]
+    rows, cols = stdscr.getmaxyx()
+    box_w = min(70, cols - 2)
+    visible = rows - 4
+    box_h = visible + 3
+    bx, by = (cols - box_w) // 2, (rows - box_h) // 2
+    scroll = max(0, len(lines) - visible)  # start at bottom
+    while True:
+        stdscr.erase()
+        draw_box(stdscr, by, bx, box_h, box_w,
+                 f"Log ({len(lines)} lines)")
+        for i in range(visible):
+            idx = scroll + i
+            if idx >= len(lines):
+                break
+            text = " " + lines[idx][:box_w - 4]
+            draw_line(stdscr, by + 1 + i, bx, box_w, text,
+                      curses.color_pair(C_DIM))
+        draw_sep(stdscr, by + box_h - 2, bx, box_w)
+        draw_hints(stdscr, by + box_h - 1, bx, box_w,
+                   [("j/k", "scroll"), ("G", "end"), ("g", "top"),
+                    ("esc", "back")])
         stdscr.refresh()
         ch = stdscr.getch()
-        if ch == 27:
-            curses.curs_set(0)
-            return None
-        elif ch in (10, curses.KEY_ENTER):
-            curses.curs_set(0)
-            return text
-        elif ch in (curses.KEY_BACKSPACE, 127, 8):
-            text = text[:-1]
-        elif 32 <= ch < 127:
-            text += chr(ch)
+        if ch in (ord("q"), 27):
+            return
+        elif ch in (ord("j"), curses.KEY_DOWN):
+            if scroll < len(lines) - visible:
+                scroll += 1
+        elif ch in (ord("k"), curses.KEY_UP):
+            if scroll > 0:
+                scroll -= 1
+        elif ch == ord("G"):
+            scroll = max(0, len(lines) - visible)
+        elif ch == ord("g"):
+            scroll = 0
+
+
+# ── settings hub (tabs: config / rules / log) ───────────────────────
 
 
 def view_settings(stdscr):
-    """Interactive settings editor."""
+    """Settings hub with tab switching."""
+    tabs = ["\uf013 Config", "\uf044 Rules", "\uf15c Log"]
+    tab = 0
+    while True:
+        if tab == 0:
+            result = _tab_config(stdscr, tabs, tab)
+        elif tab == 1:
+            result = _tab_rules(stdscr, tabs, tab)
+        else:
+            result = _tab_log(stdscr, tabs, tab)
+        if result is None:
+            return
+        elif isinstance(result, int):
+            tab = result
+
+
+def _draw_tabs(stdscr, by, bx, box_w, tabs, active):
+    """Draw tab bar inside the box."""
+    cx = bx + 2
+    for i, label in enumerate(tabs):
+        attr = (curses.color_pair(C_HEADER) | curses.A_BOLD
+                if i == active else curses.color_pair(C_DIM))
+        try:
+            stdscr.addstr(by, cx, label, attr)
+            if i < len(tabs) - 1:
+                stdscr.addstr("  \u2502  ", curses.color_pair(C_DIM))
+                cx += len(label) + 5
+            else:
+                cx += len(label)
+        except curses.error:
+            pass
+
+
+def _tab_config(stdscr, tabs, active_tab):
     values = parse_config()
     rows, cols = stdscr.getmaxyx()
-    box_w = min(50, cols - 4)
+    box_w = min(52, cols - 2)
     n = len(SETTINGS_SPEC)
-    visible = min(n, rows - 6)
-    box_h = visible + 4
-    bx = (cols - box_w) // 2
-    by = (rows - box_h) // 2
-    selected = 0
-    scroll = 0
+    visible = min(n, rows - 7)
+    box_h = visible + 5  # tabs + items + sep + hints
+    bx, by = (cols - box_w) // 2, (rows - box_h) // 2
+    selected = scroll = 0
     label_w = max(len(s[1]) for s in SETTINGS_SPEC) + 2
-
     while True:
         stdscr.erase()
         draw_box(stdscr, by, bx, box_h, box_w, "Settings")
-
+        _draw_tabs(stdscr, by + 1, bx, box_w, tabs, active_tab)
+        draw_sep(stdscr, by + 2, bx, box_w)
         for i in range(visible):
             idx = scroll + i
             if idx >= n:
                 break
             key, name, stype = SETTINGS_SPEC[idx]
             raw = values.get(key, "")
-            if stype == "transition":
-                display = extract_transition_type(raw)
-            else:
-                display = raw
-            # Truncate value to fit
+            display = extract_transition_type(raw) if stype == "transition" else raw
             val_w = box_w - label_w - 5
             if len(display) > val_w:
                 display = display[:val_w - 1] + "\u2026"
-
+            is_sel = idx == selected
             attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
-                    if idx == selected else curses.color_pair(C_NORMAL))
+                    if is_sel else curses.color_pair(C_NORMAL))
             val_attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
-                        if idx == selected else curses.color_pair(C_ACCENT))
-
+                        if is_sel else curses.color_pair(C_ACCENT))
             text = f" {name.ljust(label_w)}"
             try:
-                stdscr.addstr(by + 1 + i, bx + 1, text[:box_w - 2], attr)
+                stdscr.addstr(by + 3 + i, bx + 1, text[:box_w - 2], attr)
                 stdscr.addstr(display, val_attr)
-                # Fill rest
                 rem = box_w - 2 - len(text) - len(display)
                 if rem > 0:
                     stdscr.addstr(" " * rem, attr)
             except curses.error:
                 pass
-
-        draw_sep(stdscr, by + box_h - 3, bx, box_w)
-        draw_hints(stdscr, by + box_h - 2, bx, box_w, [
-            ("\u23ce", "edit"), ("?", "help"), ("esc", "back"),
-        ])
+        draw_sep(stdscr, by + box_h - 2, bx, box_w)
+        draw_hints(stdscr, by + box_h - 1, bx, box_w,
+                   [("\u23ce", "edit"), ("tab", "next tab"),
+                    ("?", "help"), ("esc", "back")])
         stdscr.refresh()
-
         ch = stdscr.getch()
-        if ch in (ord("q"), 27):
-            return
+        if ch in (27,):
+            return None
+        elif ch == 9:  # Tab
+            return (active_tab + 1) % len(tabs)
         elif ch == ord("?"):
             show_help(stdscr, [
-                ("j / \u2193", "Move down"),
-                ("k / \u2191", "Move up"),
-                ("enter", "Edit value"),
-                ("esc / q", "Back to menu"),
+                ("j / \u2193", "Move down"), ("k / \u2191", "Move up"),
+                ("enter", "Edit value (text) / cycle (choice)"),
+                ("tab", "Switch tab"), ("esc", "Back to menu"),
             ])
         elif ch in (ord("j"), curses.KEY_DOWN):
             if selected < n - 1:
@@ -471,81 +596,72 @@ def view_settings(stdscr):
         elif ch in (10, curses.KEY_ENTER):
             key, name, stype = SETTINGS_SPEC[selected]
             raw = values.get(key, "")
-
             if stype.startswith("choice:"):
-                # Cycle through choices
                 choices = stype.split(":", 1)[1].split(",")
-                cur_idx = choices.index(raw) if raw in choices else 0
-                new_val = choices[(cur_idx + 1) % len(choices)]
-                save_setting(key, new_val)
-                values[key] = new_val
-
+                ci = choices.index(raw) if raw in choices else 0
+                nv = choices[(ci + 1) % len(choices)]
+                save_setting(key, nv)
+                values[key] = nv
             elif stype == "transition":
-                # Cycle through transition types
-                cur_type = extract_transition_type(raw)
-                cur_idx = TRANSITIONS.index(cur_type) if cur_type in TRANSITIONS else 0
-                new_type = TRANSITIONS[(cur_idx + 1) % len(TRANSITIONS)]
-                new_val = build_transition_value(new_type)
-                save_setting(key, new_val)
-                values[key] = new_val
-
+                ct = extract_transition_type(raw)
+                ci = TRANSITIONS.index(ct) if ct in TRANSITIONS else 0
+                nt = TRANSITIONS[(ci + 1) % len(TRANSITIONS)]
+                nv = f"--transition-type {nt}"
+                save_setting(key, nv)
+                values[key] = nv
             else:
-                new_val = settings_text_input(
-                    stdscr, bx, by, box_w, box_h, f"{name}: ", raw)
-                if new_val is not None:
-                    save_setting(key, new_val)
-                    values[key] = new_val
+                nv = text_input(stdscr, by + box_h - 1, bx + 1,
+                                box_w - 2, f"{name}: ", raw)
+                if nv is not None:
+                    save_setting(key, nv)
+                    values[key] = nv
 
 
-def view_browse(stdscr):
-    """Browse liked wallpapers. Returns filename or None."""
-    wallpapers = get_liked_wallpapers()
-    if not wallpapers:
-        return None
-
+def _tab_rules(stdscr, tabs, active_tab):
+    rules = parse_rules()
     rows, cols = stdscr.getmaxyx()
-    box_w = min(56, cols - 4)
-    visible = min(len(wallpapers), rows - 6)
-    box_h = visible + 4
-    bx = (cols - box_w) // 2
-    by = (rows - box_h) // 2
-    selected = 0
-    scroll = 0
-
+    box_w = min(52, cols - 2)
+    visible = min(max(len(rules), 1), rows - 7)
+    box_h = visible + 5
+    bx, by = (cols - box_w) // 2, (rows - box_h) // 2
+    selected = scroll = 0
     while True:
         stdscr.erase()
-        draw_box(stdscr, by, bx, box_h, box_w,
-                 f"Liked ({len(wallpapers)})")
-
+        draw_box(stdscr, by, bx, box_h, box_w, "Settings")
+        _draw_tabs(stdscr, by + 1, bx, box_w, tabs, active_tab)
+        draw_sep(stdscr, by + 2, bx, box_w)
+        if not rules:
+            draw_line(stdscr, by + 3, bx, box_w, " (no rules)",
+                      curses.color_pair(C_DIM))
         for i in range(visible):
             idx = scroll + i
-            if idx >= len(wallpapers):
+            if idx >= len(rules):
                 break
-            wp = wallpapers[idx]
-            fname = wp["file"]
-            topic = wp["topic"]
-            max_fname = box_w - len(topic) - 8
-            if len(fname) > max_fname:
-                fname = fname[:max(max_fname - 3, 6)] + "..."
-            text = f" {fname}"
-            padding = box_w - 4 - len(text) - len(topic)
-            text += " " * max(padding, 1) + topic
-
+            r = rules[idx]
+            ntopics = len(r["topics"])
+            text = f" [{r['name']}]  {ntopics} topic{'s' if ntopics != 1 else ''}"
             attr = (curses.color_pair(C_SELECTED) | curses.A_BOLD
                     if idx == selected else curses.color_pair(C_NORMAL))
-            draw_line(stdscr, by + 1 + i, bx, box_w, text, attr)
-
-        draw_sep(stdscr, by + box_h - 3, bx, box_w)
-        draw_hints(stdscr, by + box_h - 2, bx, box_w, [
-            ("\u23ce", "set"), ("esc", "back"),
-        ])
+            draw_line(stdscr, by + 3 + i, bx, box_w, text, attr)
+        draw_sep(stdscr, by + box_h - 2, bx, box_w)
+        draw_hints(stdscr, by + box_h - 1, bx, box_w,
+                   [("\u23ce", "edit"), ("a", "add"), ("d", "del"),
+                    ("tab", "next tab"), ("esc", "back")])
         stdscr.refresh()
-
         ch = stdscr.getch()
-        if ch in (ord("q"), 27):
+        if ch == 27:
             return None
+        elif ch == 9:
+            return (active_tab + 1) % len(tabs)
+        elif ch == ord("?"):
+            show_help(stdscr, [
+                ("j / \u2193", "Move down"), ("k / \u2191", "Move up"),
+                ("enter", "Edit rule (condition + topics)"),
+                ("a", "Add new rule"), ("d", "Delete rule"),
+                ("tab", "Switch tab"), ("esc", "Back to menu"),
+            ])
         elif ch in (ord("j"), curses.KEY_DOWN):
-            if selected < len(wallpapers) - 1:
+            if rules and selected < len(rules) - 1:
                 selected += 1
                 if selected >= scroll + visible:
                     scroll += 1
@@ -554,20 +670,83 @@ def view_browse(stdscr):
                 selected -= 1
                 if selected < scroll:
                     scroll -= 1
+        elif ch == ord("a"):
+            name = text_input(stdscr, by + box_h - 1, bx + 1,
+                              box_w - 2, "Rule name: ")
+            if name:
+                rules.append({"name": name, "condition": "", "topics": []})
+                save_rules(rules)
+                selected = len(rules) - 1
+        elif ch == ord("d"):
+            if rules:
+                rules.pop(selected)
+                save_rules(rules)
+                selected = min(selected, len(rules) - 1)
         elif ch in (10, curses.KEY_ENTER):
-            return wallpapers[selected]["file"]
+            if not rules:
+                continue
+            r = rules[selected]
+            # Edit condition
+            nc = text_input(stdscr, by + box_h - 1, bx + 1,
+                            box_w - 2, "Condition: ", r["condition"])
+            if nc is not None:
+                r["condition"] = nc
+            # Edit topics (comma-separated)
+            nt = text_input(stdscr, by + box_h - 1, bx + 1,
+                            box_w - 2, "Topics: ",
+                            ", ".join(r["topics"]))
+            if nt is not None:
+                r["topics"] = [t.strip() for t in nt.split(",") if t.strip()]
+            save_rules(rules)
 
 
-# ── main loop ────────────────────────────────────────────────────────
+def _tab_log(stdscr, tabs, active_tab):
+    try:
+        with open(LOGFILE) as f:
+            lines = [l.rstrip() for l in f.readlines()]
+    except FileNotFoundError:
+        lines = ["(no log file)"]
+    rows, cols = stdscr.getmaxyx()
+    box_w = min(70, cols - 2)
+    visible = rows - 7
+    box_h = visible + 5
+    bx, by = (cols - box_w) // 2, (rows - box_h) // 2
+    scroll = max(0, len(lines) - visible)
+    while True:
+        stdscr.erase()
+        draw_box(stdscr, by, bx, box_h, box_w, "Settings")
+        _draw_tabs(stdscr, by + 1, bx, box_w, tabs, active_tab)
+        draw_sep(stdscr, by + 2, bx, box_w)
+        for i in range(visible):
+            idx = scroll + i
+            if idx >= len(lines):
+                break
+            draw_line(stdscr, by + 3 + i, bx, box_w,
+                      " " + lines[idx][:box_w - 4],
+                      curses.color_pair(C_DIM))
+        draw_sep(stdscr, by + box_h - 2, bx, box_w)
+        draw_hints(stdscr, by + box_h - 1, bx, box_w,
+                   [("j/k", "scroll"), ("G", "end"), ("g", "top"),
+                    ("tab", "next tab"), ("esc", "back")])
+        stdscr.refresh()
+        ch = stdscr.getch()
+        if ch == 27:
+            return None
+        elif ch == 9:
+            return (active_tab + 1) % len(tabs)
+        elif ch in (ord("j"), curses.KEY_DOWN):
+            if scroll < len(lines) - visible:
+                scroll += 1
+        elif ch in (ord("k"), curses.KEY_UP):
+            if scroll > 0:
+                scroll -= 1
+        elif ch == ord("G"):
+            scroll = max(0, len(lines) - visible)
+        elif ch == ord("g"):
+            scroll = 0
 
-CONFDIR = os.path.expanduser(
-    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
-    + "/hypr-wallpaper"
-)
-CONFFILE = f"{CONFDIR}/config"
-RULESFILE = f"{CONFDIR}/rules.toml"
-LOGFILE = f"{DATADIR}/hypr-wallpaper.log"
-EDITOR = os.environ.get("EDITOR", "nvim")
+
+# ── main ─────────────────────────────────────────────────────────────
 
 
 def main(stdscr):
@@ -580,14 +759,12 @@ def main(stdscr):
     curses.init_pair(C_KEY, curses.COLOR_YELLOW, -1)
     curses.init_pair(C_DIM, 8, -1)
     curses.init_pair(C_STATUS, curses.COLOR_MAGENTA, -1)
-
     while True:
         state = get_state()
         action = view_main(stdscr, state)
-
         if action is None:
             break
-        elif action == "Next" or action == "Next liked":
+        elif action in ("Next", "Next liked"):
             wp_cmd("next")
         elif action == "Prev":
             wp_cmd("prev")
@@ -602,29 +779,11 @@ def main(stdscr):
             break
         elif action == "Settings":
             view_settings(stdscr)
-        elif action == "Edit rules":
-            subprocess.Popen(
-                ["kitty", "--title", "Wallpaper Rules", "--", EDITOR, RULESFILE])
-            break
-        elif action == "View log":
-            subprocess.Popen(
-                ["kitty", "--title", "Wallpaper Log", "--", EDITOR, "-R", "+$", LOGFILE])
-            break
         elif action == "Browse liked":
             pick = view_browse(stdscr)
             if pick:
                 wp_cmd("set", os.path.join(WALLDIR, pick))
 
 
-def auto_resize():
-    """Resize terminal to fit content before curses takes over."""
-    # 9 menu items + 3 info lines + borders/sep/hints + padding
-    rows = 17
-    cols = 48
-    sys.stdout.write(f"\033[8;{rows};{cols}t")
-    sys.stdout.flush()
-
-
 if __name__ == "__main__":
-    auto_resize()
     curses.wrapper(main)
