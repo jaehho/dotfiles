@@ -333,13 +333,7 @@ vim.keymap.set('t', '<Esc><Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' }
 -- vim.keymap.set('n', '<up>', '<cmd>echo "Use k to move!!"<CR>')
 -- vim.keymap.set('n', '<down>', '<cmd>echo "Use j to move!!"<CR>')
 
--- Pane/split navigation handled by vim-tmux-navigator (Ctrl+hjkl)
-
--- NOTE: Some terminals have colliding keymaps or are not able to send distinct keycodes
--- vim.keymap.set("n", "<C-S-h>", "<C-w>H", { desc = "Move window to the left" })
--- vim.keymap.set("n", "<C-S-l>", "<C-w>L", { desc = "Move window to the right" })
--- vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
--- vim.keymap.set("n", "<C-S-k>", "<C-w>K", { desc = "Move window to the upper" })
+-- Pane/split navigation and resizing handled by smart-splits (see plugin config below)
 
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
@@ -379,7 +373,23 @@ rtp:prepend(lazypath)
 -- NOTE: Here is where you install your plugins.
 require('lazy').setup({
   -- NOTE: Plugins can be added via a link or github org/name. To run setup automatically, use `opts = {}`
-  { 'christoomey/vim-tmux-navigator' },
+  { -- Smart split navigation + directional resizing (works across tmux panes)
+    'mrjones2014/smart-splits.nvim',
+    lazy = false,
+    opts = {},
+    keys = {
+      -- Navigation (Ctrl+hjkl) — replaces vim-tmux-navigator
+      { '<C-h>', function() require('smart-splits').move_cursor_left() end, desc = 'Move to left split' },
+      { '<C-j>', function() require('smart-splits').move_cursor_down() end, desc = 'Move to below split' },
+      { '<C-k>', function() require('smart-splits').move_cursor_up() end, desc = 'Move to above split' },
+      { '<C-l>', function() require('smart-splits').move_cursor_right() end, desc = 'Move to right split' },
+      -- Resizing (Ctrl-w + hjkl) — directional border movement like tmux/Hyprland
+      { '<C-w>h', function() require('smart-splits').resize_left() end, desc = 'Resize left' },
+      { '<C-w>j', function() require('smart-splits').resize_down() end, desc = 'Resize down' },
+      { '<C-w>k', function() require('smart-splits').resize_up() end, desc = 'Resize up' },
+      { '<C-w>l', function() require('smart-splits').resize_right() end, desc = 'Resize right' },
+    },
+  },
   { 'NMAC427/guess-indent.nvim', opts = {} },
 
   -- Alternatively, use `config = function() ... end` for full control over the configuration.
@@ -989,6 +999,9 @@ require('lazy').setup({
       require('catppuccin').setup {
         flavour = 'frappe',
         no_italic = true,
+        color_overrides = {
+          all = require('theme_colors'),
+        },
       }
 
       vim.cmd.colorscheme 'catppuccin'
