@@ -30,7 +30,7 @@ TOOLS := hypr-desktop hypr-wallpaper
 
 install-tools: ## Install tools from submodules to ~/.local/bin (dev override)
 ifeq ($(DISTRO),arch)
-	@git -C $(REPO_ROOT) submodule update --init $(TOOLS)
+	@git -C $(REPO_ROOT) submodule update --init --recursive $(TOOLS)
 	@for tool in $(TOOLS); do \
 		echo "Installing $$tool..."; \
 		$(MAKE) -C $(REPO_ROOT)/$$tool install; \
