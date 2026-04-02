@@ -12,6 +12,8 @@ window#waybar {
 
 /* ── Base pill styling for all modules ── */
 #custom-desktop,
+#custom-scratchpad,
+#custom-tray,
 #workspaces,
 #window,
 #mpris,
@@ -42,6 +44,8 @@ window#waybar {
 #clock,
 #tray,
 #custom-desktop,
+#custom-scratchpad,
+#custom-tray,
 #custom-dnd,
 #custom-power {
     border-radius: 12px;
@@ -87,6 +91,8 @@ window#waybar {
 #clock:hover,
 #tray:hover,
 #custom-desktop:hover,
+#custom-scratchpad:hover,
+#custom-tray:hover,
 #custom-dnd:hover,
 #cpu:hover,
 #memory:hover,
@@ -123,6 +129,8 @@ window#waybar {
 #workspaces button.urgent {
     color: #e78284;
 }
+
+
 
 /* ── Window ── */
 #window {
@@ -215,6 +223,18 @@ window#waybar {
     color: #e5c890;
 }
 
+/* ── Special workspace indicators ── */
+#custom-scratchpad,
+#custom-tray {
+    color: #737994;
+}
+
+#custom-scratchpad.active,
+#custom-tray.active {
+    color: #ca9ee6;
+    background-color: rgba(202, 158, 230, 0.15);
+}
+
 /* ── Desktop indicator ── */
 #custom-desktop {
     color: #8caaee;
@@ -231,8 +251,8 @@ window#waybar {
 }
 
 /* ── Tray ── */
-#tray {
-    /* padding handled by pill base */
+#tray > * {
+    padding: 0 3px;
 }
 
 /* ── Power ── */

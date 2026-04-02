@@ -7,6 +7,8 @@
     "modules-left": [
         "custom/desktop",
         "hyprland/workspaces",
+        "custom/scratchpad",
+        "custom/tray",
         "hyprland/window"
     ],
     "modules-center": [
@@ -119,8 +121,8 @@
         },
         "on-click": "spotify-focus",
         "on-click-middle": "playerctl play-pause",
-        "on-scroll-up": "playerctl next",
-        "on-scroll-down": "playerctl previous"
+        "on-scroll-up": "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+",
+        "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
     },
 
     "bluetooth": {
@@ -177,7 +179,7 @@
             "default": ["󰕿", "󰖀", "󰕾"]
         },
         "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
-        "on-click-right": "pavucontrol",
+        "on-click-right": "kitty --class floating-tui -e wiremix",
         "on-scroll-up": "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+",
         "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
     },
@@ -197,7 +199,24 @@
     },
 
     "tray": {
-        "spacing": 10
+        "icon-size": 18,
+        "spacing": 8
+    },
+
+    "custom/scratchpad": {
+        "exec": "hypr-special-waybar 'special:󰏫' '󰏫'",
+        "return-type": "json",
+        "interval": 5,
+        "signal": 9,
+        "on-click": "hyprctl dispatch togglespecialworkspace 󰏫; pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar"
+    },
+
+    "custom/tray": {
+        "exec": "hypr-special-waybar 'special:󰘸' '󰘸'",
+        "return-type": "json",
+        "interval": 5,
+        "signal": 10,
+        "on-click": "hyprctl dispatch togglespecialworkspace 󰘸; pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar"
     },
 
     "custom/desktop": {
