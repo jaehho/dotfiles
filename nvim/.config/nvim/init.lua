@@ -184,6 +184,12 @@ vim.keymap.set({ 'n', 'v' }, 'k', function() return vim.v.count == 0 and 'gk' or
 vim.keymap.set('i', '<Down>', '<C-o>gj')
 vim.keymap.set('i', '<Up>', '<C-o>gk')
 
+-- Move lines up/down with Alt+j/k
+vim.keymap.set('n', '<A-j>', ':m .+1<CR>==', { desc = 'Move line down' })
+vim.keymap.set('n', '<A-k>', ':m .-2<CR>==', { desc = 'Move line up' })
+vim.keymap.set('v', '<A-j>', ":m '>+1<CR>gv=gv", { desc = 'Move selection down' })
+vim.keymap.set('v', '<A-k>', ":m '<-2<CR>gv=gv", { desc = 'Move selection up' })
+
 -- Clear highlights on search when pressing <Esc> in normal mode
 --  See `:help hlsearch`
 vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
@@ -793,6 +799,7 @@ require('lazy').setup({
         pyright = {},
         ts_ls = {},
         bashls = {},
+        tinymist = {},
 
         stylua = {}, -- Used to format Lua code
 
