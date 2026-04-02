@@ -12,9 +12,7 @@ if command -q tmux; and not set -q TMUX
     for var in HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY DISPLAY
         set -q $var; and tmux setenv -g $var $$var 2>/dev/null
     end
-    if test (count $unattached) -eq 1
-        exec tmux attach-session -t "$unattached[1]"
-    else if test (count $unattached) -gt 1
+    if test (count $unattached) -ge 1
         exec tmux attach-session -t "$unattached[1]" \; choose-tree -Zs -f '#{?session_attached,0,1}'
     else
         exec tmux new-session
