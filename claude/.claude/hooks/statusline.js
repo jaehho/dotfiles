@@ -120,11 +120,6 @@ process.stdin.on('end', () => {
     // Working directory
     parts.push(`${dim}${dir}${rst}`);
 
-    // Permanent discoverable hint (hidden when hints are active)
-    if (!hints) {
-      parts.push(`${dim}! claude-hints${rst}`);
-    }
-
     process.stdout.write(parts.join(' │ '));
   } catch {}
 });

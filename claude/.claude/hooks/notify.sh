@@ -62,22 +62,32 @@ NTFY_PRIORITY="default"
 
 # ── Resolve source window + tmux pane (for notification focus) ────────────────
 resolve_window_address() {
-  local pid
+  local clients pid addr
+
+  clients=$(hyprctl clients -j 2>/dev/null) || return 1
+
+  # tmux client PID bridges the client/server split; fall back to own PID
   pid=$(tmux display-message -p '#{client_pid}' 2>/dev/null) || pid=$$
+
+  # Walk ancestors, matching against hyprland window PIDs (terminal-agnostic)
   while [ "$pid" -gt 1 ] 2>/dev/null; do
-    if [[ "$(cat /proc/"$pid"/comm 2>/dev/null)" == "kitty" ]]; then
-      hyprctl clients -j 2>/dev/null \
-        | jq -r --argjson p "$pid" '.[] | select(.pid == $p) | .address' 2>/dev/null
-      return
+    addr=$(printf '%s' "$clients" | jq -r --argjson p "$pid" \
+      '.[] | select(.pid == $p) | .address' 2>/dev/null)
+    if [[ -n "$addr" ]]; then
+      printf '%s' "$addr"
+      return 0
     fi
-    pid=$(awk '/^PPid:/{print $2}' /proc/"$pid"/status 2>/dev/null) || return
+    pid=$(awk '/^PPid:/{print $2}' "/proc/$pid/status" 2>/dev/null) || break
   done
+
+  # Last resort: focused window (likely correct right after a response)
+  hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty' 2>/dev/null
 }
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 # Desktop: notify-send (mako) on local Wayland; OSC 99 for SSH/remote
 if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]; then
-  WINDOW_ADDR=$(resolve_window_address)
+  WINDOW_ADDR=$(resolve_window_address) || true
   TMUX_SOCKET="${TMUX%%,*}"
   TMUX_TARGET=""
   if [[ -n "${TMUX_PANE:-}" ]]; then
@@ -125,7 +135,10 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
           fi
           "$alive" || { makoctl dismiss -n "$NOTIF_ID" 2>/dev/null; break; }
 
-          # Focus check: dismiss after ~10s of the user looking at the source pane
+          # Focus check: dismiss after sustained focus on the source pane
+          # Skip if SUPER+. just fired (prevents cascade-dismiss of other notifications)
+          _inv_ts=$(cat /tmp/hypr-notification-invoke 2>/dev/null || echo 0)
+          if (( $(date +%s) - _inv_ts < 15 )); then focused_count=0; continue; fi
           pane_focused=false
           active_addr=$(hyprctl activewindow -j 2>/dev/null | jq -r ".address // empty" 2>/dev/null)
           if [[ -n "$TMUX_TARGET" && "$active_addr" == "$WINDOW_ADDR" ]]; then
