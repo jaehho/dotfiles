@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=X2Go Client
+Exec=x2go-launch
+Icon=x2goclient
+StartupWMClass=x2goclient
+Terminal=false
+Categories=Qt;KDE;Network;
+Keywords=Terminal,Client,Remote,Desktop,Published,Applications,Session,Profile;
+MimeType=application/x-x2go;
