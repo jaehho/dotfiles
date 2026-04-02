@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# hypr-tab-nonempty — cycle through non-empty workspaces on the current
+# monitor/desktop, skipping workspaces with no windows.
+# Drop-in replacement for `hypr-desktop tab` when you only want occupied slots.
+
+direction="${1:-next}"
+
+RUNTIME_DIR="/tmp/hypr-desktops-$(id -u)"
+CURRENT_FILE="$RUNTIME_DIR/current"
+DESKTOP_OFFSET=10
+
+desk=$(cat "$CURRENT_FILE" 2>/dev/null || echo 1)
+
+mon_json=$(hyprctl monitors -j)
+current_mon=$(echo "$mon_json" | jq -r '.[] | select(.focused) | .name')
+current_ws=$(echo "$mon_json" | jq -r '.[] | select(.focused) | .activeWorkspace.id')
+
+# Ordered monitors: externals sorted by x, laptop (eDP/LVDS) last.
+laptop=""
+externals=()
+while IFS= read -r name; do
+    if [[ "$name" =~ ^eDP|^LVDS ]]; then
+        laptop="$name"
+    else
+        externals+=("$name")
+    fi
+done < <(echo "$mon_json" | jq -r 'sort_by(.x) | .[].name')
+ordered=("${externals[@]}" ${laptop:+"$laptop"})
+
+mon_count=${#ordered[@]}
+mon_idx=0
+for ((i=0; i<mon_count; i++)); do
+    [[ "${ordered[$i]}" == "$current_mon" ]] && { mon_idx=$i; break; }
+done
+
+# Workspace IDs that have at least one window
+mapfile -t occupied < <(hyprctl clients -j | jq '[.[].workspace.id] | unique | .[]')
+
+# Build slots for this monitor, keeping only non-empty ones
+slots=()
+for slot in $(seq 1 10); do
+    (( (slot - 1) % mon_count == mon_idx )) || continue
+    ws_id=$(( (desk - 1) * DESKTOP_OFFSET + slot ))
+    for occ in "${occupied[@]}"; do
+        (( occ == ws_id )) && { slots+=("$ws_id"); break; }
+    done
+done
+
+(( ${#slots[@]} <= 1 )) && exit 0
+
+# Find current position in the filtered list
+cur_idx=0
+for ((i=0; i<${#slots[@]}; i++)); do
+    (( slots[i] == current_ws )) && { cur_idx=$i; break; }
+done
+
+if [[ "$direction" == "next" ]]; then
+    target_idx=$(( (cur_idx + 1) % ${#slots[@]} ))
+else
+    target_idx=$(( (cur_idx - 1 + ${#slots[@]}) % ${#slots[@]} ))
+fi
+
+hyprctl dispatch workspace "${slots[$target_idx]}" >/dev/null

@@ -1,0 +1,9 @@
+#!/bin/bash
+# Super+Shift+0: move active window to tray, or to workspace 10 if already on tray.
+active_ws=$(hyprctl activewindow -j | jq -r '.workspace.name')
+if [ "$active_ws" = "special:󰘸" ]; then
+    hypr-desktop movews 10
+else
+    hyprctl dispatch movetoworkspacesilent "special:󰘸"
+fi
+pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar

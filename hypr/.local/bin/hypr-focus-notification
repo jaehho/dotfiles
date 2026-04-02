@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # Invoke the top notification's action (or dismiss if no action).
-# Works for all notification types: Claude → focuses terminal + tmux pane,
-# Teams → opens Firefox tab, etc.
+# Teams notifications → focus Teams window directly (skip mako invoke).
+# Other notifications → mako invoke/dismiss as before.
 # Used by SUPER+. keybind.
 
-# Invoke action (focuses terminal for local Claude, etc.)
-# If invoke didn't dismiss the notification (actionless, like SSH Claude via OSC 99),
-# dismiss it manually. Count check prevents dismissing an unrelated notification.
-count_before=$(makoctl list 2>/dev/null | jq '[.data[][]] | length')
-makoctl invoke >/dev/null 2>&1
-sleep 0.1
-count_after=$(makoctl list 2>/dev/null | jq '[.data[][]] | length')
-[[ "$count_after" -ge "$count_before" ]] && makoctl dismiss >/dev/null 2>&1
+top_app=$(makoctl list 2>/dev/null | jq -r '.data[0][0]."app-name".data // empty')
+
+if [[ "$top_app" == "teams-for-linux" || "$top_app" == "Microsoft Teams" ]]; then
+    makoctl dismiss >/dev/null 2>&1
+    hyprctl dispatch focuswindow class:teams-for-linux >/dev/null
+else
+    # Signal watchers to skip focus-based auto-dismiss (prevents cascade)
+    date +%s > /tmp/hypr-notification-invoke
+    count_before=$(makoctl list 2>/dev/null | jq '[.data[][]] | length')
+    makoctl invoke >/dev/null 2>&1
+    sleep 0.1
+    count_after=$(makoctl list 2>/dev/null | jq '[.data[][]] | length')
+    [[ "$count_after" -ge "$count_before" ]] && makoctl dismiss >/dev/null 2>&1
+fi

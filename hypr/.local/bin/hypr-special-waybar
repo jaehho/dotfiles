@@ -1,0 +1,53 @@
+#!/bin/bash
+# Output waybar JSON for a special workspace, mapping window classes to nerd font glyphs.
+# Usage: hypr-special-waybar <workspace-name> <workspace-icon>
+# Example: hypr-special-waybar 'special:󰘸' '󰘸'
+
+WS_NAME="$1"
+WS_ICON="$2"
+
+class_to_glyph() {
+    case "$1" in
+        kitty|foot|Alacritty) echo -n "󰄛" ;;
+        firefox*) echo -n "󰈹" ;;
+        chromium) echo -n "󰊯" ;;
+        org.mozilla.Thunderbird) echo -n "󰺻" ;;
+        Zotero) echo -n "󱉟" ;;
+        spotify_player) echo -n "󰓇" ;;
+        teams-for-linux) echo -n "󰊻" ;;
+        code*) echo -n "󰨞" ;;
+        discord|vesktop) echo -n "󰙯" ;;
+        Slack) echo -n "󰒱" ;;
+        org.pwmt.zathura) echo -n "󰈙" ;;
+        mpv|vlc) echo -n "󰐌" ;;
+        obsidian) echo -n "󰎞" ;;
+        thunar|nautilus) echo -n "󰉋" ;;
+        pavucontrol|wiremix) echo -n "󰕾" ;;
+        *) echo -n "󰏗" ;;
+    esac
+}
+
+clients=$(hyprctl clients -j | jq -r --arg ws "$WS_NAME" '[.[] | select(.workspace.name == $ws) | .class] | .[]')
+
+if [ -z "$clients" ]; then
+    echo '{}'
+    exit 0
+fi
+
+text="$WS_ICON"
+tooltip=""
+while IFS= read -r class; do
+    text+=" $(class_to_glyph "$class")"
+    [ -n "$tooltip" ] && tooltip+=", "
+    tooltip+="$class"
+done <<< "$clients"
+
+# Check if this special workspace overlay is visible on THIS monitor
+visible=$(hyprctl monitors -j | jq -r --arg ws "$WS_NAME" --arg mon "$WAYBAR_OUTPUT_NAME" '.[] | select(.name == $mon) | .specialWorkspace.name == $ws')
+if [ "$visible" = "true" ]; then
+    css_class="active"
+else
+    css_class=""
+fi
+
+printf '{"text": "%s", "tooltip": "%s", "class": "%s"}\n' "$text" "$tooltip" "$css_class"

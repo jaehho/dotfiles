@@ -1,0 +1,9 @@
+#!/bin/bash
+# Super+0: toggle tray overlay if it has windows, otherwise switch to workspace 10.
+has_tray=$(hyprctl clients -j | jq --arg ws "special:󰘸" '[.[] | select(.workspace.name == $ws)] | length')
+if [ "$has_tray" -gt 0 ]; then
+    hyprctl dispatch togglespecialworkspace 󰘸
+else
+    hypr-desktop ws 10
+fi
+pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar
