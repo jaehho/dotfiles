@@ -1,0 +1,13 @@
+[Unit]
+Description=Hypr-Tray — hold GUI processes in the system tray
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.cargo/bin/hypr-tray daemon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target
