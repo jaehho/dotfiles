@@ -3,7 +3,6 @@
     "commit": "",
     "pr": ""
   },
-  "model": "sonnet",
   "hooks": {
     "SessionStart": [
       {
@@ -87,8 +86,7 @@
     "playwright@claude-plugins-official": true,
     "firecrawl@claude-plugins-official": true,
     "chrome-devtools-mcp@claude-plugins-official": true,
-    "lua-lsp@claude-plugins-official": true,
-    "postman@claude-plugins-official": true
+    "lua-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "everything-claude-code": {
@@ -98,5 +96,6 @@
       }
     }
   },
+  "effortLevel": "high",
   "skipDangerousModePermissionPrompt": true
 }

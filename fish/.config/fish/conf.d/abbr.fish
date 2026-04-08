@@ -32,9 +32,4 @@ abbr -a gl 'git log --oneline'
 # ── Tools ────────────────────────────────────────────────────────────────────
 abbr -a grep 'grep --color=auto'
 # ── Claude ───────────────────────────────────────────────────────────────────
-abbr -a c  'claude --dangerously-skip-permissions --model "sonnet" --effort max'
-abbr -a co 'claude --dangerously-skip-permissions --model "opus[1M]" --effort max'
-abbr -a cs 'claude --dangerously-skip-permissions --model "sonnet" --effort max'
-abbr -a ch 'claude --dangerously-skip-permissions --model "haiku"'
-abbr -a cc 'claude --dangerously-skip-permissions --continue'
-abbr -a cr 'claude --dangerously-skip-permissions --resume'
+abbr -a c 'claude --dangerously-skip-permissions --model "opus[1M]" --effort max'

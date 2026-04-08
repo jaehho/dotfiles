@@ -5,15 +5,19 @@ status is-interactive; or return
 # (where arch.fish may exec Hyprland) and skip if already inside tmux.
 if command -q tmux; and not set -q TMUX
     and begin; test -n "$DISPLAY" -o -n "$WAYLAND_DISPLAY"; or set -q SSH_CONNECTION; end
-    set -l unattached (tmux list-sessions -f '#{?session_attached,0,1}' -F '#S' 2>/dev/null)
     # Push current Hyprland/Wayland env into tmux global env so existing
     # sessions (including continuum-restored ones) pick up fresh values.
     # No-op if tmux server isn't running yet (new-session inherits directly).
     for var in HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY DISPLAY
         set -q $var; and tmux setenv -g $var $$var 2>/dev/null
     end
+    # Clean up unattached picker sessions from previous escapes
+    for s in (tmux list-sessions -f '#{?session_attached,0,1}' -F '#S' 2>/dev/null)
+        string match -q 'tmp*' $s; and tmux kill-session -t $s 2>/dev/null
+    end
+    set -l unattached (tmux list-sessions -f '#{?session_attached,0,1}' -F '#S' 2>/dev/null)
     if test (count $unattached) -ge 1
-        exec tmux attach-session -t "$unattached[1]" \; choose-tree -Zs -f '#{?session_attached,0,1}'
+        exec tmux new-session -s tmp-$fish_pid \; choose-tree -Zs -f '#{?session_attached,0,1}' "switch-client -t '%%' ; kill-session -t 'tmp-$fish_pid'"
     else
         exec tmux new-session
     end
