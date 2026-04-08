@@ -19,6 +19,7 @@ window#waybar {
 #mpris,
 #clock,
 #tray,
+#custom-idle-inhibitor,
 #custom-dnd,
 #cpu,
 #memory,
@@ -46,6 +47,7 @@ window#waybar {
 #custom-desktop,
 #custom-scratchpad,
 #custom-tray,
+#custom-idle-inhibitor,
 #custom-dnd,
 #custom-power {
     border-radius: 12px;
@@ -93,6 +95,7 @@ window#waybar {
 #custom-desktop:hover,
 #custom-scratchpad:hover,
 #custom-tray:hover,
+#custom-idle-inhibitor:hover,
 #custom-dnd:hover,
 #cpu:hover,
 #memory:hover,
@@ -154,11 +157,11 @@ window#waybar {
 }
 
 /* ── MPRIS ── */
-#mpris {
+#custom-mpris {
     color: #babbf1;
 }
 
-#mpris.paused {
+#custom-mpris.paused {
     color: #737994;
 }
 
@@ -239,6 +242,15 @@ window#waybar {
 #custom-desktop {
     color: #8caaee;
     font-weight: bold;
+}
+
+/* ── Idle Inhibitor ── */
+#custom-idle-inhibitor {
+    color: #737994;
+}
+
+#custom-idle-inhibitor.on {
+    color: #e5c890;
 }
 
 /* ── DND ── */

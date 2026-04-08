@@ -5,18 +5,18 @@
     "spacing": 4,
 
     "modules-left": [
-        "custom/desktop",
         "hyprland/workspaces",
         "custom/scratchpad",
         "custom/tray",
         "hyprland/window"
     ],
     "modules-center": [
-        "mpris",
+        "custom/mpris",
         "clock"
     ],
     "modules-right": [
         "tray",
+        "custom/idle-inhibitor",
         "custom/dnd",
         "cpu",
         "memory",
@@ -105,20 +105,12 @@
         "on-click": "kitty -e htop"
     },
 
-    "mpris": {
-        "format": "{player_icon} {artist} - {title}",
-        "format-paused": "{player_icon} {artist} - {title}",
-        "format-stopped": "",
+    "custom/mpris": {
+        "exec": "playerctl metadata --format '{\"text\": \"󰓇 {{markup_escape(artist)}} - {{markup_escape(title)}}\", \"tooltip\": \"{{markup_escape(artist)}} - {{markup_escape(title)}}\", \"class\": \"{{lc(status)}}\"}' 2>/dev/null || echo '{\"text\": \"\"}'",
+        "interval": 3,
+        "return-type": "json",
+        "exec-on-event": false,
         "max-length": 40,
-        "player-icons": {
-            "default": "▶",
-            "firefox": "󰈹",
-            "firefox-developer-edition": "󰈹",
-            "spotify": "󰓇",
-            "spotify_player": "󰓇",
-            "chromium": "󰊯",
-            "mpv": "󰐌"
-        },
         "on-click": "spotify-focus",
         "on-click-middle": "playerctl play-pause",
         "on-scroll-up": "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+",
@@ -191,6 +183,13 @@
         "on-scroll-down": "brightnessctl -e4 -n2 set 5%-"
     },
 
+    "custom/idle-inhibitor": {
+        "exec": "if pgrep -x hypridle > /dev/null; then echo '{\"text\": \"󰾪\", \"tooltip\": \"Idle inhibitor: OFF\", \"class\": \"off\"}'; else echo '{\"text\": \"󰅶\", \"tooltip\": \"Idle inhibitor: ON\", \"class\": \"on\"}'; fi",
+        "return-type": "json",
+        "interval": 2,
+        "on-click": "~/.local/bin/hypr-idle-toggle"
+    },
+
     "custom/dnd": {
         "exec": "if makoctl mode | grep -q do-not-disturb; then echo '{\"text\": \"󰂛\", \"tooltip\": \"Do Not Disturb: ON\", \"class\": \"on\"}'; else echo '{\"text\": \"󰂚\", \"tooltip\": \"Do Not Disturb: OFF\", \"class\": \"off\"}'; fi",
         "return-type": "json",
@@ -217,16 +216,6 @@
         "interval": 5,
         "signal": 10,
         "on-click": "hyprctl dispatch togglespecialworkspace 󰘸; pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar"
-    },
-
-    "custom/desktop": {
-        "exec": "~/.local/bin/hypr-desktop current",
-        "return-type": "json",
-        "interval": 0,
-        "signal": 8,
-        "on-click": "~/.local/bin/hypr-desktop switch",
-        "on-scroll-up": "~/.local/bin/hypr-desktop next",
-        "on-scroll-down": "~/.local/bin/hypr-desktop prev"
     },
 
     "custom/power": {

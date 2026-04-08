@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Toggle hypridle on/off (idle inhibitor)
+
+if pgrep -x hypridle > /dev/null; then
+    pkill -x hypridle
+else
+    hypridle &
+fi
