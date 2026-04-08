@@ -1,0 +1,22 @@
+# --one-file-system in the service handles all FUSE/sshfs mounts automatically.
+# This file covers caches and build artifacts that live on the main filesystem.
+
+# System caches
+.cache
+.local/share/Trash
+
+# Build artifacts
+node_modules
+__pycache__
+target
+*.pyc
+*.class
+dist
+build
+.gradle
+.tox
+
+# Large app data (regeneratable or remote)
+.local/share/Steam
+.local/share/bottles
+.local/share/lutris

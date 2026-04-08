@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily restic backup to OneDrive
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target

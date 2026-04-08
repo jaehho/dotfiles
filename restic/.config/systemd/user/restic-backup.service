@@ -1,0 +1,21 @@
+[Unit]
+Description=Restic backup to OneDrive
+Wants=network-online.target
+After=network-online.target rclone-onedrive.service
+Requires=rclone-onedrive.service
+
+[Service]
+Type=oneshot
+Environment=RESTIC_REPOSITORY=rclone:onedrive:Backups/restic
+Environment=RESTIC_PASSWORD_FILE=%h/.config/restic/password
+ExecStart=/usr/bin/restic backup \
+    --exclude-file %h/.config/restic/excludes \
+    --one-file-system \
+    --tag systemd.timer \
+    --verbose \
+    %h
+ExecStart=/usr/bin/restic forget \
+    --keep-daily 7 \
+    --keep-weekly 4 \
+    --keep-monthly 6 \
+    --prune

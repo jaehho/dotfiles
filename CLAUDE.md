@@ -22,13 +22,14 @@ dotfiles/
 ## Key commands
 
 ```bash
-make stow-all          # Stow all packages to ~
-make install-tools     # Dev-install submodule tools to ~/.local/bin (overrides AUR)
-make uninstall-tools   # Remove dev overrides, revert to AUR /usr/bin versions
-make stow-hypr         # Stow a single package
-make system-install    # Copy boot configs, symlink runtime configs (uses sudo)
-make pkg-dump          # Save installed package lists
-make status            # Show stow/system/service state
+make stow-all              # Stow all packages to ~
+make install-tools         # Dev-install submodule tools to ~/.local/bin (overrides AUR)
+make uninstall-tools       # Remove dev overrides, revert to AUR /usr/bin versions
+make stow-hypr             # Stow a single package
+make system-install        # Copy boot configs, symlink runtime configs (uses sudo)
+make install-claude-mcps   # Configure Claude Code MCP servers (per-machine OAuth)
+make pkg-dump              # Save installed package lists
+make status                # Show stow/system/service/MCP state
 ```
 
 ## Submodule tools

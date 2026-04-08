@@ -6,7 +6,7 @@ SHELL := /bin/bash
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # Stow packages split by distro
-COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime
+COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic
 ARCH_PACKAGES   := hypr mako rofi waybar spotify-player teams
 
 DISTRO := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
@@ -26,7 +26,7 @@ help: ## Show this help message
 		     /^[a-zA-Z_%-]+:/ {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 ## Submodule tools (Arch only)
-TOOLS := hypr-desktop hypr-wallpaper
+TOOLS := hypr-wallpaper
 
 install-tools: ## Install tools from submodules to ~/.local/bin (dev override)
 ifeq ($(DISTRO),arch)
@@ -218,6 +218,111 @@ sshfs-unmount: ## Unmount ice + mililab SSHFS and disable services
 	@systemctl --user disable --now sshfs-mililab 2>/dev/null || true
 	@echo "SSHFS mounts unmounted and services disabled."
 
+## Restic
+restic-setup: stow-restic ## Install restic, set password, init repo on OneDrive, enable timer
+	@command -v restic >/dev/null 2>&1 || { \
+		echo "Installing restic..."; \
+		if command -v pacman >/dev/null 2>&1; then \
+			sudo pacman -S --needed --noconfirm restic; \
+		elif command -v apt-get >/dev/null 2>&1; then \
+			sudo apt-get install -y restic; \
+		else \
+			echo "No supported package manager found"; exit 1; \
+		fi; \
+	}
+	@if [ ! -f "$(HOME)/.config/restic/password" ]; then \
+		echo "Enter a password for the restic repository:"; \
+		read -rsp "Password: " pw && echo && \
+		read -rsp "Confirm:  " pw2 && echo && \
+		[ "$$pw" = "$$pw2" ] || { echo "Passwords do not match."; exit 1; } && \
+		install -m 600 /dev/null "$(HOME)/.config/restic/password" && \
+		printf '%s' "$$pw" > "$(HOME)/.config/restic/password" && \
+		echo "Password saved to ~/.config/restic/password (not tracked by git)"; \
+	else \
+		echo "Password file already exists."; \
+	fi
+	@if ! RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
+		RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
+		restic snapshots >/dev/null 2>&1; then \
+		echo "Initializing restic repository at onedrive:Backups/restic ..."; \
+		RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
+		RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
+		restic init; \
+	else \
+		echo "Repository already initialized."; \
+	fi
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now restic-backup.timer
+	@echo ""
+	@echo "Restic backup timer enabled. Next run:"
+	@systemctl --user list-timers restic-backup.timer --no-legend
+
+restic-backup-now: ## Run a backup immediately (blocks until done, then shows logs)
+	@systemctl --user daemon-reload
+	@echo "Starting backup (this will block until complete)..."
+	@systemctl --user start restic-backup.service && \
+		journalctl --user -u restic-backup.service -n 50 --no-pager || \
+		{ journalctl --user -u restic-backup.service -n 50 --no-pager; exit 1; }
+
+restic-snapshots: ## List restic snapshots on OneDrive
+	@RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
+	RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
+	restic snapshots
+
+restic-disable: ## Disable the restic backup timer
+	@systemctl --user disable --now restic-backup.timer 2>/dev/null || true
+	@echo "Restic backup timer disabled."
+
+## Claude Code MCP servers
+CLAUDE_MCP_DIR    := $(HOME)/.config/claude-mcp
+CLAUDE_MCP_GW_ENV := $(CLAUDE_MCP_DIR)/google-workspace.env
+
+install-claude-mcps: ## Install Claude Code MCP servers (per-machine OAuth)
+	@command -v claude >/dev/null 2>&1 || { echo "claude CLI not found"; exit 1; }
+	@command -v uvx >/dev/null 2>&1 || { echo "uvx not found - install with: pacman -S uv"; exit 1; }
+	@if [ ! -f "$(CLAUDE_MCP_GW_ENV)" ]; then \
+		mkdir -p "$(CLAUDE_MCP_DIR)"; \
+		umask 077 && printf '%s\n' \
+			'# Google Workspace MCP credentials for THIS machine.' \
+			'# Create a Desktop-type OAuth client at:' \
+			'#   https://console.cloud.google.com -> APIs & Services -> Credentials' \
+			'# Enable: Gmail API + Google Calendar API' \
+			'GOOGLE_OAUTH_CLIENT_ID=' \
+			'GOOGLE_OAUTH_CLIENT_SECRET=' \
+			> "$(CLAUDE_MCP_GW_ENV)"; \
+		chmod 600 "$(CLAUDE_MCP_GW_ENV)"; \
+		echo "Created template: $(CLAUDE_MCP_GW_ENV)"; \
+		echo "Edit it with your Google OAuth client_id/secret, then re-run:"; \
+		echo "  make install-claude-mcps"; \
+	else \
+		set -a; . "$(CLAUDE_MCP_GW_ENV)"; set +a; \
+		if [ -z "$$GOOGLE_OAUTH_CLIENT_ID" ] || [ -z "$$GOOGLE_OAUTH_CLIENT_SECRET" ]; then \
+			echo "Missing GOOGLE_OAUTH_CLIENT_ID or GOOGLE_OAUTH_CLIENT_SECRET in:"; \
+			echo "  $(CLAUDE_MCP_GW_ENV)"; \
+			exit 1; \
+		fi; \
+		if claude mcp list 2>/dev/null | grep -q '^google-workspace:'; then \
+			echo "Refreshing existing google-workspace MCP..."; \
+			claude mcp remove -s user google-workspace >/dev/null 2>&1 || true; \
+		fi; \
+		claude mcp add -s user google-workspace \
+			-e GOOGLE_OAUTH_CLIENT_ID="$$GOOGLE_OAUTH_CLIENT_ID" \
+			-e GOOGLE_OAUTH_CLIENT_SECRET="$$GOOGLE_OAUTH_CLIENT_SECRET" \
+			-e OAUTHLIB_INSECURE_TRANSPORT=1 \
+			-- uvx workspace-mcp --single-user --tools gmail calendar; \
+		echo ""; \
+		echo "google-workspace MCP installed (user scope)."; \
+		echo "First MCP call opens a browser for OAuth consent."; \
+		echo "Tokens cache to ~/.google_workspace_mcp/credentials/ (machine-local)."; \
+	fi
+
+uninstall-claude-mcps: ## Remove MCP servers added by install-claude-mcps
+	@if claude mcp remove -s user google-workspace 2>/dev/null; then \
+		echo "Removed google-workspace MCP."; \
+	else \
+		echo "google-workspace MCP not configured."; \
+	fi
+
 ## Packages (Arch only)
 pkg-dump: ## Save list of explicitly installed packages
 ifeq ($(DISTRO),arch)
@@ -283,8 +388,15 @@ status: ## Show current dotfiles state
 		fi; \
 	done
 	@echo ""
+	@echo "Claude Code MCP servers:"
+	@if command -v claude >/dev/null 2>&1; then \
+		claude mcp list 2>/dev/null | grep -E '^[^ ].*: ' | sed 's/^/  /' || echo "  (none)"; \
+	else \
+		echo "  claude CLI not installed"; \
+	fi
+	@echo ""
 	@echo "Services:"
-	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab spotify-player-daemon; do \
+	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab spotify-player-daemon restic-backup.timer; do \
 		case "$$svc" in keyd) \
 			active=$$(systemctl is-active "$$svc" 2>/dev/null);; *) \
 			active=$$(systemctl --user is-active "$$svc" 2>/dev/null);; esac; \
