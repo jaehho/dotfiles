@@ -54,12 +54,6 @@ default-timeout=0
 default-timeout=0
 on-button-left=dismiss
 
-# Spotify — green border, group track changes so skips replace not stack
-[app-name=spotify_player]
-default-timeout=5000
-border-color=#a6d189CC
-group-by=app-name
-
 # Thunderbird — purple border for new mail
 [app-name=thunderbird]
 default-timeout=8000

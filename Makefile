@@ -7,7 +7,7 @@ REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # Stow packages split by distro
 COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic
-ARCH_PACKAGES   := hypr mako rofi waybar spotify-player teams
+ARCH_PACKAGES   := hypr mako rofi waybar teams
 
 DISTRO := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
 ifeq ($(DISTRO),arch)
@@ -396,7 +396,7 @@ status: ## Show current dotfiles state
 	fi
 	@echo ""
 	@echo "Services:"
-	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab spotify-player-daemon restic-backup.timer; do \
+	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab restic-backup.timer; do \
 		case "$$svc" in keyd) \
 			active=$$(systemctl is-active "$$svc" 2>/dev/null);; *) \
 			active=$$(systemctl --user is-active "$$svc" 2>/dev/null);; esac; \

@@ -20,8 +20,3 @@ restart = true
 command = "teams-for-linux"
 class = "teams-for-linux"
 has_tray = true
-
-[apps.spotify]
-command = "spotify_player"
-class = "spotify_player"
-icon = "spotify"
