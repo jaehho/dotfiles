@@ -16,7 +16,6 @@ window#waybar {
 #custom-tray,
 #workspaces,
 #window,
-#mpris,
 #clock,
 #tray,
 #custom-idle-inhibitor,
@@ -41,7 +40,6 @@ window#waybar {
 /* Standalone pills */
 #workspaces,
 #window,
-#mpris,
 #clock,
 #tray,
 #custom-desktop,
@@ -89,7 +87,6 @@ window#waybar {
 /* ── Hover ── */
 #workspaces button:hover,
 #window:hover,
-#mpris:hover,
 #clock:hover,
 #tray:hover,
 #custom-desktop:hover,
@@ -154,15 +151,6 @@ window#waybar {
 /* ── Memory ── */
 #memory {
     color: #ca9ee6;
-}
-
-/* ── MPRIS ── */
-#custom-mpris {
-    color: #babbf1;
-}
-
-#custom-mpris.paused {
-    color: #737994;
 }
 
 /* ── Bluetooth ── */

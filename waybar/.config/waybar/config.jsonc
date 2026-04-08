@@ -11,7 +11,6 @@
         "hyprland/window"
     ],
     "modules-center": [
-        "custom/mpris",
         "clock"
     ],
     "modules-right": [
@@ -102,18 +101,6 @@
         "format": "RAM {percentage}%",
         "tooltip-format": "{used:0.1f} GiB / {total:0.1f} GiB\n{swapUsed:0.1f} GiB swap",
         "on-click": "kitty -e htop"
-    },
-
-    "custom/mpris": {
-        "exec": "playerctl metadata --format '{\"text\": \"󰓇 {{markup_escape(artist)}} - {{markup_escape(title)}}\", \"tooltip\": \"{{markup_escape(artist)}} - {{markup_escape(title)}}\", \"class\": \"{{lc(status)}}\"}' 2>/dev/null || echo '{\"text\": \"\"}'",
-        "interval": 3,
-        "return-type": "json",
-        "exec-on-event": false,
-        "max-length": 40,
-        "on-click": "spotify-focus",
-        "on-click-middle": "playerctl play-pause",
-        "on-scroll-up": "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+",
-        "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
     },
 
     "bluetooth": {
