@@ -23,6 +23,8 @@ enum Commands {
     Waybar,
     /// List managed apps and their state
     Status,
+    /// Close active window, or hide it to tray if it's a managed app
+    CloseOrHide,
 }
 
 #[tokio::main]
@@ -35,6 +37,7 @@ async fn main() -> Result<()> {
         Commands::Daemon => daemon::run().await,
         Commands::Waybar => cmd_waybar().await,
         Commands::Status => cmd_status().await,
+        Commands::CloseOrHide => cmd_close_or_hide().await,
     }
 }
 
@@ -111,4 +114,27 @@ async fn cmd_status() -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn cmd_close_or_hide() -> Result<()> {
+    let config = config::Config::load()?;
+    let active = hyprland::active_window().await?;
+
+    if let Some((_, app)) = config.find_by_class(&active.class) {
+        if !app.has_tray {
+            // Managed app — hide to tray instead of closing
+            let arg = format!("{},address:{}", config::TRAY_WORKSPACE, active.address);
+            hyprland::dispatch(&["movetoworkspacesilent", &arg]).await?;
+            signal_waybar();
+            return Ok(());
+        }
+    }
+
+    // Not a managed app — normal close
+    hyprland::dispatch(&["killactive"]).await?;
+    Ok(())
+}
+
+fn signal_waybar() {
+    daemon::signal_waybar();
 }

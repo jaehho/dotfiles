@@ -8,30 +8,22 @@ use tokio::sync::mpsc;
 struct ManagedApp {
     command: Option<String>,
     restart: bool,
-    class: String,
 }
 
 struct WindowRecord {
     app_name: String,
 }
 
-/// Signal waybar to refresh the tray module.
-fn signal_waybar() {
+pub fn signal_waybar() {
     let _ = std::process::Command::new("pkill")
         .args(["-RTMIN+10", "waybar"])
         .spawn();
 }
 
-/// Add a temporary window rule to send new windows of this class directly to tray.
-async fn add_tray_rule(class: &str) {
-    let rule = format!("workspace {},class:^({})$", config::TRAY_WORKSPACE, class);
-    let _ = hyprland::keyword(&["windowrulev2", &rule]).await;
-}
-
-/// Remove the temporary tray window rule.
-async fn remove_tray_rule(class: &str) {
-    let rule = format!("workspace {},class:^({})$", config::TRAY_WORKSPACE, class);
-    let _ = hyprland::keyword_remove(&["windowrulev2", &rule]).await;
+/// Move a window to the tray workspace silently (no focus switch).
+async fn move_to_tray(addr: &str) {
+    let arg = format!("{},address:{}", config::TRAY_WORKSPACE, addr);
+    let _ = hyprland::dispatch(&["movetoworkspacesilent", &arg]).await;
 }
 
 pub async fn run() -> Result<()> {
@@ -41,6 +33,10 @@ pub async fn run() -> Result<()> {
 
     // Apps whose next window should be moved to the tray workspace
     let mut pending_tray: HashSet<String> = HashSet::new();
+
+    // Apps currently being restarted (guard against double-restart from
+    // Event::Closed and child_rx both firing for the same close)
+    let mut restarting: HashSet<String> = HashSet::new();
 
     // Channel for child process exits
     let (child_tx, mut child_rx) = mpsc::channel::<String>(16);
@@ -55,7 +51,6 @@ pub async fn run() -> Result<()> {
             ManagedApp {
                 command: app_cfg.command.clone(),
                 restart: app_cfg.restart,
-                class: app_cfg.class.clone(),
             },
         );
 
@@ -63,7 +58,6 @@ pub async fn run() -> Result<()> {
 
         if !already_running && let Some(cmd) = &app_cfg.command {
             pending_tray.insert(name.to_string());
-            add_tray_rule(&app_cfg.class).await;
             spawn_app(name, cmd, child_tx.clone());
         }
     }
@@ -102,17 +96,21 @@ pub async fn run() -> Result<()> {
     loop {
         tokio::select! {
             Some(event) = event_rx.recv() => {
-                handle_event(&event, &config, &apps, &mut windows, &mut pending_tray, &child_tx).await;
+                handle_event(&event, &config, &apps, &mut windows, &mut pending_tray, &mut restarting, &child_tx).await;
             }
             Some(name) = child_rx.recv() => {
                 log::info!("{name} process exited");
+                if restarting.contains(&name) {
+                    log::debug!("{name} already being restarted via window event, skipping");
+                    continue;
+                }
                 if let Some(app) = apps.get(&name)
                     && app.restart
                     && let Some(cmd) = &app.command
                 {
                     log::info!("restarting {name} → tray");
+                    restarting.insert(name.clone());
                     pending_tray.insert(name.clone());
-                    add_tray_rule(&app.class).await;
                     spawn_app(&name, cmd, child_tx.clone());
                 }
             }
@@ -132,6 +130,7 @@ async fn handle_event(
     apps: &HashMap<String, ManagedApp>,
     windows: &mut HashMap<String, WindowRecord>,
     pending_tray: &mut HashSet<String>,
+    restarting: &mut HashSet<String>,
     child_tx: &mpsc::Sender<String>,
 ) {
     match event {
@@ -145,13 +144,13 @@ async fn handle_event(
                     },
                 );
 
-                // Remove temporary rule now that the window has opened in tray
+                // Move to tray workspace if this app was pending placement
                 if pending_tray.remove(name) {
-                    if let Some(app) = apps.get(name) {
-                        remove_tray_rule(&app.class).await;
-                    }
+                    move_to_tray(addr).await;
                     signal_waybar();
                 }
+                // Restart complete — clear the guard
+                restarting.remove(name);
             }
         }
         Event::Closed { addr } => {
@@ -159,13 +158,14 @@ async fn handle_event(
                 log::debug!("tracked window closed: {}", record.app_name);
                 let has_other = windows.values().any(|w| w.app_name == record.app_name);
                 if !has_other
+                    && !restarting.contains(&record.app_name)
                     && let Some(app) = apps.get(&record.app_name)
                     && app.restart
                     && let Some(cmd) = &app.command
                 {
                     log::info!("restarting {} → tray", record.app_name);
+                    restarting.insert(record.app_name.clone());
                     pending_tray.insert(record.app_name.clone());
-                    add_tray_rule(&app.class).await;
                     spawn_app(&record.app_name, cmd, child_tx.clone());
                 }
                 signal_waybar();

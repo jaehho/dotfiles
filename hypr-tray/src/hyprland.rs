@@ -17,15 +17,8 @@ async fn hyprctl(args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-pub async fn keyword(args: &[&str]) -> Result<()> {
-    let mut cmd = vec!["keyword"];
-    cmd.extend_from_slice(args);
-    hyprctl(&cmd).await?;
-    Ok(())
-}
-
-pub async fn keyword_remove(args: &[&str]) -> Result<()> {
-    let mut cmd = vec!["keyword", "-r"];
+pub async fn dispatch(args: &[&str]) -> Result<()> {
+    let mut cmd = vec!["dispatch"];
     cmd.extend_from_slice(args);
     hyprctl(&cmd).await?;
     Ok(())
@@ -45,6 +38,11 @@ pub struct ClientInfo {
 
 pub async fn list_clients() -> Result<Vec<ClientInfo>> {
     let json = hyprctl(&["clients", "-j"]).await?;
+    Ok(serde_json::from_str(&json)?)
+}
+
+pub async fn active_window() -> Result<ClientInfo> {
+    let json = hyprctl(&["activewindow", "-j"]).await?;
     Ok(serde_json::from_str(&json)?)
 }
 
