@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Move all windows from the active workspace to the target workspace, then switch to it.
+target=$1
+if [[ -z "$target" ]]; then
+    echo "Usage: hypr-move-workspace-to <workspace_number>" >&2
+    exit 1
+fi
+
+ws_id=$(hyprctl activeworkspace -j | jq .id)
+hyprctl clients -j | \
+    jq -r --argjson ws "$ws_id" '.[] | select(.workspace.id == $ws) | .address' | \
+    while IFS= read -r addr; do
+        hyprctl dispatch movetoworkspacesilent "$target,address:$addr"
+    done
+hyprctl dispatch workspace "$target"
