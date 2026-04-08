@@ -32,7 +32,6 @@ case "$EVENT" in
     NTFY_BODY=$(truncate "$FULL_MSG" 4000)
     URGENCY="normal"
     CATEGORY="persistent"
-    play_sound
     ;;
 
   Notification)
@@ -45,7 +44,6 @@ case "$EVENT" in
         BODY="${MSG:-Claude needs your approval.}"
         URGENCY="normal"
         CATEGORY="persistent"
-        play_sound
         ;;
       *)
         exit 0
@@ -87,6 +85,7 @@ resolve_window_address() {
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 # Desktop: notify-send (mako) on local Wayland; OSC 99 for SSH/remote
 if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]; then
+  play_sound
   WINDOW_ADDR=$(resolve_window_address) || true
   TMUX_SOCKET="${TMUX%%,*}"
   TMUX_TARGET=""

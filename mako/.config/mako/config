@@ -51,7 +51,7 @@ default-timeout=0
 
 # SSH Claude notifications arrive via Kitty's OSC 99 (app-name="kitty")
 [app-name="kitty" summary~="Claude"]
-default-timeout=0
+default-timeout=5000
 on-button-left=dismiss
 
 # Thunderbird — purple border for new mail
