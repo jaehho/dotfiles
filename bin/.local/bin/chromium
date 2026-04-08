@@ -1,0 +1,2 @@
+#!/bin/bash
+exec /usr/bin/chromium --remote-debugging-port=9222 "$@"

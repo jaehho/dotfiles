@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Open the wallpaper TUI on an empty workspace so the desktop is visible.
+# If the TUI is already open, focus it instead.
+if hyprctl clients -j | jq -e '.[] | select(.class == "hypr-wallpaper-menu")' >/dev/null 2>&1; then
+    hyprctl dispatch focuswindow class:hypr-wallpaper-menu
+else
+    hyprctl dispatch workspace first-empty
+    kitty --class hypr-wallpaper-menu --title Wallpaper -e hypr-wallpaper-menu
+fi

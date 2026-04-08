@@ -1,7 +1,10 @@
 #!/bin/bash
 # Focus existing spotify_player window, or launch a new one
-if hyprctl clients -j | jq -e '.[] | select(.class == "spotify_player")' >/dev/null 2>&1; then
-    hyprctl dispatch focuswindow "class:spotify_player"
-else
+# Kill any orphaned spotify_player UI processes (no associated Hyprland window)
+if ! hyprctl clients -j | jq -e '.[] | select(.class == "spotify_player")' >/dev/null 2>&1; then
+    # Kill orphaned UI instances (exclude the daemon started with -d)
+    ps aux | awk '/spotify_player/ && !/spotify_player -d/ && !/grep/' | awk '{print $2}' | xargs -r kill 2>/dev/null
     kitty --class spotify_player -e spotify_player &
+else
+    hyprctl dispatch focuswindow "class:spotify_player"
 fi

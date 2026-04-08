@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Focus existing Zotero window, or launch a new one.
+if hyprctl clients -j | jq -e '.[] | select(.class == "Zotero")' >/dev/null 2>&1; then
+    hyprctl dispatch focuswindow class:Zotero
+else
+    /usr/bin/zotero &
+fi

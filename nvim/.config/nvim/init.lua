@@ -1121,6 +1121,7 @@ require('lazy').setup({
     opts = {
       preview = {
         hybrid_modes = { 'n', 'i' },
+        filetypes = { 'markdown', 'quarto', 'rmd' },
       },
     },
   },
@@ -1292,6 +1293,7 @@ require('lazy').setup({
 
   { -- Smooth scrolling
     'karb94/neoscroll.nvim',
+    enabled = false,
     event = 'VeryLazy',
     opts = {},
   },

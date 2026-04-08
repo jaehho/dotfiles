@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Invoke the top notification's action (or dismiss if no action).
+# Teams notifications → focus Teams window directly (skip mako invoke).
+# Other notifications → invoke action targeting specific notification ID only.
+# Used by SUPER+. keybind.
+
+top_json=$(makoctl list -j 2>/dev/null | jq -c '.[0]' 2>/dev/null)
+[[ -z "$top_json" || "$top_json" == "null" ]] && exit 0
+
+top_app=$(echo "$top_json" | jq -r '.app_name // empty')
+top_id=$(echo "$top_json" | jq -r '.id // empty')
+[[ -z "$top_id" ]] && exit 0
+
+if [[ "$top_app" == "teams-for-linux" || "$top_app" == "Microsoft Teams" ]]; then
+    makoctl dismiss -n "$top_id" >/dev/null 2>&1
+    hyprctl dispatch focuswindow class:teams-for-linux >/dev/null
+else
+    # Signal watchers to skip focus-based auto-dismiss (prevents cascade)
+    date +%s > /tmp/hypr-notification-invoke
+    count_before=$(makoctl list -j 2>/dev/null | jq 'length')
+    makoctl invoke -n "$top_id" >/dev/null 2>&1
+    sleep 0.1
+    count_after=$(makoctl list -j 2>/dev/null | jq 'length')
+    [[ "$count_after" -ge "$count_before" ]] && makoctl dismiss -n "$top_id" >/dev/null 2>&1
+fi
