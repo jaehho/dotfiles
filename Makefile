@@ -273,56 +273,6 @@ restic-disable: ## Disable the restic backup timer
 	@systemctl --user disable --now restic-backup.timer 2>/dev/null || true
 	@echo "Restic backup timer disabled."
 
-## Claude Code MCP servers
-CLAUDE_MCP_DIR    := $(HOME)/.config/claude-mcp
-CLAUDE_MCP_GW_ENV := $(CLAUDE_MCP_DIR)/google-workspace.env
-
-install-claude-mcps: ## Install Claude Code MCP servers (per-machine OAuth)
-	@command -v claude >/dev/null 2>&1 || { echo "claude CLI not found"; exit 1; }
-	@command -v uvx >/dev/null 2>&1 || { echo "uvx not found - install with: pacman -S uv"; exit 1; }
-	@if [ ! -f "$(CLAUDE_MCP_GW_ENV)" ]; then \
-		mkdir -p "$(CLAUDE_MCP_DIR)"; \
-		umask 077 && printf '%s\n' \
-			'# Google Workspace MCP credentials for THIS machine.' \
-			'# Create a Desktop-type OAuth client at:' \
-			'#   https://console.cloud.google.com -> APIs & Services -> Credentials' \
-			'# Enable: Gmail API + Google Calendar API' \
-			'GOOGLE_OAUTH_CLIENT_ID=' \
-			'GOOGLE_OAUTH_CLIENT_SECRET=' \
-			> "$(CLAUDE_MCP_GW_ENV)"; \
-		chmod 600 "$(CLAUDE_MCP_GW_ENV)"; \
-		echo "Created template: $(CLAUDE_MCP_GW_ENV)"; \
-		echo "Edit it with your Google OAuth client_id/secret, then re-run:"; \
-		echo "  make install-claude-mcps"; \
-	else \
-		set -a; . "$(CLAUDE_MCP_GW_ENV)"; set +a; \
-		if [ -z "$$GOOGLE_OAUTH_CLIENT_ID" ] || [ -z "$$GOOGLE_OAUTH_CLIENT_SECRET" ]; then \
-			echo "Missing GOOGLE_OAUTH_CLIENT_ID or GOOGLE_OAUTH_CLIENT_SECRET in:"; \
-			echo "  $(CLAUDE_MCP_GW_ENV)"; \
-			exit 1; \
-		fi; \
-		if claude mcp list 2>/dev/null | grep -q '^google-workspace:'; then \
-			echo "Refreshing existing google-workspace MCP..."; \
-			claude mcp remove -s user google-workspace >/dev/null 2>&1 || true; \
-		fi; \
-		claude mcp add -s user google-workspace \
-			-e GOOGLE_OAUTH_CLIENT_ID="$$GOOGLE_OAUTH_CLIENT_ID" \
-			-e GOOGLE_OAUTH_CLIENT_SECRET="$$GOOGLE_OAUTH_CLIENT_SECRET" \
-			-e OAUTHLIB_INSECURE_TRANSPORT=1 \
-			-- uvx workspace-mcp --single-user --tools gmail calendar; \
-		echo ""; \
-		echo "google-workspace MCP installed (user scope)."; \
-		echo "First MCP call opens a browser for OAuth consent."; \
-		echo "Tokens cache to ~/.google_workspace_mcp/credentials/ (machine-local)."; \
-	fi
-
-uninstall-claude-mcps: ## Remove MCP servers added by install-claude-mcps
-	@if claude mcp remove -s user google-workspace 2>/dev/null; then \
-		echo "Removed google-workspace MCP."; \
-	else \
-		echo "google-workspace MCP not configured."; \
-	fi
-
 ## Packages (Arch only)
 pkg-dump: ## Save list of explicitly installed packages
 ifeq ($(DISTRO),arch)
@@ -387,13 +337,6 @@ status: ## Show current dotfiles state
 			echo "  $$dst: missing"; \
 		fi; \
 	done
-	@echo ""
-	@echo "Claude Code MCP servers:"
-	@if command -v claude >/dev/null 2>&1; then \
-		claude mcp list 2>/dev/null | grep -E '^[^ ].*: ' | sed 's/^/  /' || echo "  (none)"; \
-	else \
-		echo "  claude CLI not installed"; \
-	fi
 	@echo ""
 	@echo "Services:"
 	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab restic-backup.timer; do \
