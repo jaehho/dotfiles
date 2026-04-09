@@ -1,0 +1,43 @@
+#!/bin/bash
+# Pauses MPRIS players when audio output changes away from headphones.
+# Handles bluetooth headphone disconnection and wired jack unplug.
+# Runs as a systemd user service — see audio-pause-on-unplug.service.
+
+set -u
+
+get_default_sink_port() {
+    # Prints "sinkname|activeport" for the current default sink, or empty on error.
+    local sink
+    sink=$(pactl get-default-sink 2>/dev/null) || return 0
+    [ -z "$sink" ] && return 0
+    local port
+    port=$(pactl list sinks 2>/dev/null | awk -v s="$sink" '
+        $0 ~ "Name: "s { found=1 }
+        found && /Active Port:/ { sub(/.*Active Port: /, ""); print; exit }
+        /^Sink #/ && found { exit }
+    ')
+    printf '%s|%s\n' "$sink" "$port"
+}
+
+is_headphone() {
+    # $1 = "sinkname|portname". Returns 0 if it looks like a headphone output.
+    local entry="$1"
+    case "$entry" in
+        *bluez_output*) return 0 ;;
+        *headphone*|*Headphone*|*headset*|*Headset*) return 0 ;;
+    esac
+    return 1
+}
+
+prev=$(get_default_sink_port)
+
+pactl subscribe 2>/dev/null | while read -r _event; do
+    sleep 0.2  # debounce rapid events
+    new=$(get_default_sink_port)
+    if [ "$prev" != "$new" ]; then
+        if is_headphone "$prev" && ! is_headphone "$new"; then
+            playerctl --all-players pause 2>/dev/null || true
+        fi
+        prev="$new"
+    fi
+done

@@ -7,7 +7,7 @@ REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # Stow packages split by distro
 COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic
-ARCH_PACKAGES   := hypr mako rofi waybar teams
+ARCH_PACKAGES   := hypr mako rofi waybar
 
 DISTRO := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
 ifeq ($(DISTRO),arch)

@@ -59,10 +59,3 @@ on-button-left=dismiss
 default-timeout=8000
 border-color=#ca9ee6CC
 group-by=app-name
-
-# Teams — purple border, longer timeout for messages
-[app-name="Microsoft Teams*"]
-default-timeout=10000
-border-color=#ca9ee6CC
-group-by=app-name
-on-button-left=exec hyprctl dispatch focuswindow class:teams-for-linux

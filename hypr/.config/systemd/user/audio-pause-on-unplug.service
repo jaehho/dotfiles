@@ -1,0 +1,13 @@
+[Unit]
+Description=Pause MPRIS players when audio output changes from headphones
+After=pipewire.service
+Requires=pipewire.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/audio-pause-on-unplug
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

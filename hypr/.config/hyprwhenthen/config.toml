@@ -1,0 +1,16 @@
+# hyprwhenthen — event-driven workspace automation
+# Docs: https://github.com/fiffeek/hyprwhenthen
+
+[general]
+timeout = "10s"
+
+# Notify on monitor connect/disconnect
+[[handler]]
+on = "monitoradded"
+when = "(.*)"
+then = "notify-send -u low 'Monitor connected' '${REGEX_GROUP_1}'"
+
+[[handler]]
+on = "monitorremoved"
+when = "(.*)"
+then = "notify-send -u low 'Monitor disconnected' '${REGEX_GROUP_1}'"

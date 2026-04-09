@@ -13,7 +13,6 @@ class_to_glyph() {
         chromium) echo -n "󰊯" ;;
         org.mozilla.Thunderbird) echo -n "󰺻" ;;
         Zotero) echo -n "󱉟" ;;
-        teams-for-linux) echo -n "󰊻" ;;
         code*) echo -n "󰨞" ;;
         discord|vesktop) echo -n "󰙯" ;;
         Slack) echo -n "󰒱" ;;

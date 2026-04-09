@@ -11,6 +11,7 @@
         "hyprland/window"
     ],
     "modules-center": [
+        "mpris",
         "clock"
     ],
     "modules-right": [
@@ -73,7 +74,6 @@
             "libreoffice.*": "󰈙",
             "com.gabm.satty": "󰄀",
             "x2goclient": "󰢹",
-            "teams-for-linux": "󰊻",
             "thunderbird": "󰺻",
             "wiremix": "󰕾"
         }
@@ -87,6 +87,29 @@
         "format": "{:%a %b %d  %H:%M}",
         "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
         "format-alt": "{:%Y-%m-%d %H:%M:%S}"
+    },
+
+    "mpris": {
+        "format": "{player_icon} {dynamic}",
+        "format-paused": "{status_icon} {dynamic}",
+        "player-icons": {
+            "default": "▶",
+            "mpv": "󰐌",
+            "spotify": "󰓇",
+            "spotify_player": "󰓇",
+            "vesktop": "󰙯",
+            "discord": "󰙯",
+            "vlc": "󰐌",
+            "firefox": "󰈹",
+            "chromium": "󰊯"
+        },
+        "status-icons": {
+            "paused": "⏸"
+        },
+        "dynamic-len": 50,
+        "on-click": "playerctl play-pause",
+        "on-click-right": "playerctl next",
+        "on-click-middle": "playerctl previous"
     },
 
     "cpu": {
