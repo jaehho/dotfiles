@@ -1,0 +1,53 @@
+# Stow ignore list for the `claude` package.
+#
+# The claude package tracks a tiny subset of ~/.claude — the user-authored
+# config (CLAUDE.md, settings.json, custom hook scripts). Everything else
+# listed here is either (a) a secret, (b) dynamic runtime state written by
+# Claude Code, or (c) installed by the plugin system and would conflict with
+# plugin updates. None of these paths should live in the dotfiles repo.
+#
+# Patterns are Perl regex anchored at the package root (see `man stow`).
+
+# Secrets and conversation logs
+^/\.claude/\.credentials\.json
+^/\.claude/history\.jsonl
+
+# Dynamic session/runtime state
+^/\.claude/projects
+^/\.claude/sessions
+^/\.claude/session-.*
+^/\.claude/shell-snapshots
+^/\.claude/file-history
+^/\.claude/tasks
+^/\.claude/todos
+^/\.claude/memory
+^/\.claude/cache
+^/\.claude/telemetry
+^/\.claude/metrics
+^/\.claude/debug
+^/\.claude/backups
+^/\.claude/paste-cache
+^/\.claude/downloads
+^/\.claude/plans
+^/\.claude/homunculus
+^/\.claude/ide
+^/\.claude/\.ide
+^/\.claude/mcp-health-cache\.json
+
+# Installed by plugin system or ECC — tracking these would fight updates
+^/\.claude/plugins
+^/\.claude/rules
+^/\.claude/agents
+^/\.claude/commands
+^/\.claude/skills
+^/\.claude/ecc
+^/\.claude/mcp-configs
+^/\.claude/scripts
+^/\.claude/get-shit-done
+^/\.claude/gsd-file-manifest\.json
+
+# Sibling tool state (Codex, Cursor, opencode, etc.)
+^/\.claude/\.codex
+^/\.claude/\.cursor
+^/\.claude/\.agents
+^/\.claude/\.opencode
