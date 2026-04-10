@@ -30,4 +30,4 @@ application/xhtml+xml=firefox-developer-edition.desktop;
 application/x-extension-xhtml=firefox-developer-edition.desktop;
 application/x-extension-xht=firefox-developer-edition.desktop;
 application/pdf=okularApplication_pdf.desktop;
-image/png=org.pwmt.zathura-pdf-mupdf.desktop;
+image/png=okularApplication_kimgio.desktop;org.pwmt.zathura-pdf-mupdf.desktop;
