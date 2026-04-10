@@ -212,17 +212,10 @@ vim.diagnostic.config {
 
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
 
--- Typst preview: compile, then watch in tmux pane + open zathura (toggle)
-vim.keymap.set('n', '<leader>tp', function()
-  if vim.bo.filetype ~= 'typst' then
-    vim.notify('Not a Typst file', vim.log.levels.WARN)
-    return
-  end
-
-  local bufnr = vim.api.nvim_get_current_buf()
-
-  local function stop_preview()
-    local ok, preview = pcall(function() return vim.b[bufnr].typst_preview end)
+-- Unified preview toggle: dispatches by filetype (typst, tex, csv)
+do
+  local function stop_pdf_preview(bufnr)
+    local ok, preview = pcall(function() return vim.b[bufnr].pdf_preview end)
     if not ok or not preview then return end
     if preview.pane_id and preview.pane_id ~= '' then
       vim.system({ 'tmux', 'kill-pane', '-t', preview.pane_id })
@@ -230,100 +223,83 @@ vim.keymap.set('n', '<leader>tp', function()
     if preview.zathura_id then
       pcall(vim.fn.jobstop, preview.zathura_id)
     end
-    pcall(function() vim.b[bufnr].typst_preview = nil end)
-    pcall(vim.api.nvim_del_augroup_by_name, 'TypstPreview' .. bufnr)
+    pcall(function() vim.b[bufnr].pdf_preview = nil end)
+    pcall(vim.api.nvim_del_augroup_by_name, 'PdfPreview' .. bufnr)
   end
 
-  -- Toggle: if preview is running, stop it
-  if vim.b.typst_preview then
-    stop_preview()
-    vim.notify('Typst preview stopped', vim.log.levels.INFO)
-    return
-  end
+  local function start_pdf_preview(compile_cmd, watch_cmd, src, pdf)
+    local bufnr = vim.api.nvim_get_current_buf()
 
-  local src = vim.api.nvim_buf_get_name(0)
-  local build_dir = vim.fn.fnamemodify(src, ':h') .. '/build'
-  vim.fn.mkdir(build_dir, 'p')
-  local pdf = build_dir .. '/' .. vim.fn.fnamemodify(src, ':t'):gsub('%.typ$', '.pdf')
-  -- Compile once so the PDF exists before zathura opens
-  vim.system({ 'typst', 'compile', src, pdf }):wait()
-  -- Open typst watch in a small tmux pane below
-  local result = vim.system({
-    'tmux', 'split-window', '-v', '-d', '-l', '6', '-P', '-F', '#{pane_id}',
-    'typst watch ' .. vim.fn.shellescape(src) .. ' ' .. vim.fn.shellescape(pdf),
-  }):wait()
-  local pane_id = vim.trim(result.stdout or '')
-  local zathura_id = vim.fn.jobstart({ 'zathura', pdf }, {
-    on_exit = function()
-      vim.schedule(function() stop_preview() end)
-    end,
-  })
-  vim.b.typst_preview = { pane_id = pane_id, zathura_id = zathura_id }
-  -- Clean up on buffer delete or Neovim exit
-  local augroup = vim.api.nvim_create_augroup('TypstPreview' .. bufnr, { clear = true })
-  vim.api.nvim_create_autocmd({ 'BufDelete', 'VimLeavePre' }, {
-    group = augroup,
-    buffer = bufnr,
-    callback = function() stop_preview() end,
-  })
-end, { desc = '[T]ypst [P]review (toggle)' })
-
--- LaTeX preview: compile with latexmk, then watch in tmux pane + open zathura (toggle)
-vim.keymap.set('n', '<leader>lp', function()
-  if vim.bo.filetype ~= 'tex' then
-    vim.notify('Not a LaTeX file', vim.log.levels.WARN)
-    return
-  end
-
-  local bufnr = vim.api.nvim_get_current_buf()
-
-  local function stop_preview()
-    local ok, preview = pcall(function() return vim.b[bufnr].latex_preview end)
-    if not ok or not preview then return end
-    if preview.pane_id and preview.pane_id ~= '' then
-      vim.system({ 'tmux', 'kill-pane', '-t', preview.pane_id })
+    if vim.b.pdf_preview then
+      stop_pdf_preview(bufnr)
+      vim.notify('Preview stopped', vim.log.levels.INFO)
+      return
     end
-    if preview.zathura_id then
-      pcall(vim.fn.jobstop, preview.zathura_id)
+
+    vim.system(compile_cmd):wait()
+    local result = vim.system({
+      'tmux', 'split-window', '-v', '-d', '-l', '6', '-P', '-F', '#{pane_id}',
+      watch_cmd,
+    }):wait()
+    local pane_id = vim.trim(result.stdout or '')
+    local zathura_id = vim.fn.jobstart({ 'zathura', pdf }, {
+      on_exit = function()
+        vim.schedule(function() stop_pdf_preview(bufnr) end)
+      end,
+    })
+    vim.b.pdf_preview = { pane_id = pane_id, zathura_id = zathura_id }
+    local augroup = vim.api.nvim_create_augroup('PdfPreview' .. bufnr, { clear = true })
+    vim.api.nvim_create_autocmd({ 'BufDelete', 'VimLeavePre' }, {
+      group = augroup,
+      buffer = bufnr,
+      callback = function() stop_pdf_preview(bufnr) end,
+    })
+  end
+
+  vim.keymap.set('n', '<leader>tp', function()
+    local ft = vim.bo.filetype
+
+    if ft == 'typst' then
+      local src = vim.api.nvim_buf_get_name(0)
+      local root = vim.fs.root(0, '.git') or vim.fn.fnamemodify(src, ':h')
+      local build_dir = vim.fn.fnamemodify(src, ':h') .. '/build'
+      vim.fn.mkdir(build_dir, 'p')
+      local pdf = build_dir .. '/' .. vim.fn.fnamemodify(src, ':t'):gsub('%.typ$', '.pdf')
+      start_pdf_preview(
+        { 'typst', 'compile', '--root', root, src, pdf },
+        'typst watch --root ' .. vim.fn.shellescape(root) .. ' ' .. vim.fn.shellescape(src) .. ' ' .. vim.fn.shellescape(pdf),
+        src, pdf
+      )
+    elseif ft == 'tex' then
+      local src = vim.api.nvim_buf_get_name(0)
+      local build_dir = vim.fn.fnamemodify(src, ':h') .. '/build'
+      vim.fn.mkdir(build_dir, 'p')
+      local pdf = build_dir .. '/' .. vim.fn.fnamemodify(src, ':t'):gsub('%.tex$', '.pdf')
+      start_pdf_preview(
+        { 'latexmk', '-pdf', '-g', '-interaction=nonstopmode', '-output-directory=' .. build_dir, src },
+        'latexmk -pdf -pvc -g -interaction=nonstopmode -output-directory=' .. vim.fn.shellescape(build_dir) .. ' ' .. vim.fn.shellescape(src),
+        src, pdf
+      )
+    elseif ft == 'markdown' then
+      local src = vim.api.nvim_buf_get_name(0)
+      local build_dir = vim.fn.fnamemodify(src, ':h') .. '/build'
+      vim.fn.mkdir(build_dir, 'p')
+      local pdf = build_dir .. '/' .. vim.fn.fnamemodify(src, ':t'):gsub('%.md$', '.pdf')
+      start_pdf_preview(
+        { 'pandoc', src, '-o', pdf },
+        'echo ' .. vim.fn.shellescape(src) .. ' | entr pandoc ' .. vim.fn.shellescape(src) .. ' -o ' .. vim.fn.shellescape(pdf),
+        src, pdf
+      )
+    elseif ft == 'html' then
+      local src = vim.api.nvim_buf_get_name(0)
+      vim.fn.jobstart({ 'xdg-open', src }, { detach = true })
+    elseif ft == 'csv' then
+      vim.cmd 'CsvViewToggle'
+    else
+      vim.notify('No preview for filetype: ' .. ft, vim.log.levels.WARN)
     end
-    pcall(function() vim.b[bufnr].latex_preview = nil end)
-    pcall(vim.api.nvim_del_augroup_by_name, 'LaTeXPreview' .. bufnr)
-  end
-
-  -- Toggle: if preview is running, stop it
-  if vim.b.latex_preview then
-    stop_preview()
-    vim.notify('LaTeX preview stopped', vim.log.levels.INFO)
-    return
-  end
-
-  local src = vim.api.nvim_buf_get_name(0)
-  local src_dir = vim.fn.fnamemodify(src, ':h')
-  local build_dir = src_dir .. '/build'
-  vim.fn.mkdir(build_dir, 'p')
-  local pdf = build_dir .. '/' .. vim.fn.fnamemodify(src, ':t'):gsub('%.tex$', '.pdf')
-  -- Compile once so the PDF exists before zathura opens
-  vim.system({ 'latexmk', '-pdf', '-g', '-interaction=nonstopmode', '-output-directory=' .. build_dir, src }):wait()
-  -- Open latexmk -pvc in a small tmux pane below
-  local result = vim.system({
-    'tmux', 'split-window', '-v', '-d', '-l', '6', '-P', '-F', '#{pane_id}',
-    'latexmk -pdf -pvc -g -interaction=nonstopmode -output-directory=' .. vim.fn.shellescape(build_dir) .. ' ' .. vim.fn.shellescape(src),
-  }):wait()
-  local pane_id = vim.trim(result.stdout or '')
-  local zathura_id = vim.fn.jobstart({ 'zathura', pdf }, {
-    on_exit = function()
-      vim.schedule(function() stop_preview() end)
-    end,
-  })
-  vim.b.latex_preview = { pane_id = pane_id, zathura_id = zathura_id }
-  -- Clean up on buffer delete or Neovim exit
-  local augroup = vim.api.nvim_create_augroup('LaTeXPreview' .. bufnr, { clear = true })
-  vim.api.nvim_create_autocmd({ 'BufDelete', 'VimLeavePre' }, {
-    group = augroup,
-    buffer = bufnr,
-    callback = function() stop_preview() end,
-  })
-end, { desc = '[L]aTeX [P]review (toggle)' })
+  end, { desc = '[T]oggle [P]review' })
+end
 
 -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
 -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
@@ -796,7 +772,20 @@ require('lazy').setup({
       ---@type table<string, vim.lsp.Config>
       local servers = {
         clangd = {},
-        pyright = {},
+        pyright = {
+          root_markers = { 'pyproject.toml', 'pyrightconfig.json', 'setup.py', 'setup.cfg' },
+          on_init = function(client)
+            local root = client.workspace_folders and client.workspace_folders[1] and client.workspace_folders[1].name
+            if root then
+              local venv_python = root .. '/.venv/bin/python'
+              if vim.uv.fs_stat(venv_python) then
+                client.config.settings.python = { pythonPath = venv_python }
+                client.notify('workspace/didChangeConfiguration', { settings = client.config.settings })
+              end
+            end
+          end,
+          settings = { python = {} },
+        },
         ts_ls = {},
         bashls = {},
         tinymist = {},
@@ -1157,6 +1146,27 @@ require('lazy').setup({
         },
       },
     },
+  },
+
+  { -- Aligned-column CSV/TSV viewer with sticky headers
+    'hat0uma/csvview.nvim',
+    ft = { 'csv', 'tsv', 'csv_semicolon', 'csv_whitespace', 'csv_pipe', 'tsv' },
+    cmd = { 'CsvViewEnable', 'CsvViewDisable', 'CsvViewToggle' },
+    opts = {
+      parser = { comments = { '#', '//' } },
+      view = {
+        display_mode = 'border',
+        header_lnum = 1,
+        sticky_header = { enabled = true },
+      },
+      keymaps = {
+        textobject_field_inner = { 'iF', mode = { 'o', 'x' } },
+        textobject_field_outer = { 'aF', mode = { 'o', 'x' } },
+        jump_next_field_end = { '<Tab>', mode = { 'n', 'v' } },
+        jump_prev_field_start = { '<S-Tab>', mode = { 'n', 'v' } },
+      },
+    },
+    ft = { 'csv' },
   },
 
   { -- Jump anywhere on screen with labeled targets
