@@ -1,6 +1,6 @@
 # Dotfiles
 
-GNU Stow-based dotfiles for Arch Linux + Hyprland. Each top-level directory is a stow package that mirrors `$HOME`.
+GNU Stow-based dotfiles. Primary target is Arch Linux + Hyprland, but the repo also supports Ubuntu — package lists split into `COMMON_PACKAGES` (all systems) and `ARCH_PACKAGES` (Arch only), and some boot/system configs are Arch-gated. When adding or editing configs, consider both environments; gate Arch-only pieces behind the existing distro checks in the Makefile. Each top-level directory is a stow package that mirrors `$HOME`.
 
 ## Structure
 
@@ -87,7 +87,3 @@ Both run inside kitty popups with class-based window rules for focus reuse (if a
 - `--no-folding` is always used (creates individual symlinks, not directory symlinks)
 - Distro-aware: `COMMON_PACKAGES` for all systems, `ARCH_PACKAGES` for Arch only
 - Boot-critical configs (grub, mkinitcpio) are **copied** not symlinked via `system-install`
-
-## Do not use sudo
-
-The user's environment blocks failed sudo attempts. Never run sudo in Bash tool calls.
