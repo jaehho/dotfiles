@@ -207,7 +207,7 @@ vim.diagnostic.config {
   virtual_lines = false, -- Text shows up underneath the line, with virtual lines
 
   -- Auto open the float, so you can easily read the errors when jumping with `[d` and `]d`
-  jump = { float = true },
+  jump = { on_jump = vim.diagnostic.open_float },
 }
 
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
@@ -290,6 +290,47 @@ do
         'echo ' .. vim.fn.shellescape(src) .. ' | entr pandoc ' .. vim.fn.shellescape(src) .. ' -o ' .. vim.fn.shellescape(pdf),
         src, pdf
       )
+    elseif ft == 'python' then
+      local lines = vim.api.nvim_buf_get_lines(0, 0, 5, false)
+      local is_marimo = false
+      for _, line in ipairs(lines) do
+        if line:match('^import marimo') then
+          is_marimo = true
+          break
+        end
+      end
+      if is_marimo then
+        local src = vim.api.nvim_buf_get_name(0)
+        local bufnr = vim.api.nvim_get_current_buf()
+
+        if vim.b.marimo_pane then
+          vim.system({ 'tmux', 'kill-pane', '-t', vim.b.marimo_pane })
+          vim.b.marimo_pane = nil
+          vim.notify('Preview stopped', vim.log.levels.INFO)
+          return
+        end
+
+        local root = vim.fs.root(0, { 'pyproject.toml', '.venv' }) or vim.fn.fnamemodify(src, ':h')
+        local venv_marimo = root .. '/.venv/bin/marimo'
+        local marimo_bin = vim.uv.fs_stat(venv_marimo) and venv_marimo or 'marimo'
+        local cmd = vim.fn.shellescape(marimo_bin) .. ' edit --watch ' .. vim.fn.shellescape(src)
+        local result = vim.system({
+          'tmux', 'split-window', '-v', '-d', '-l', '10', '-P', '-F', '#{pane_id}',
+          cmd,
+        }):wait()
+        vim.b.marimo_pane = vim.trim(result.stdout or '')
+        vim.api.nvim_create_autocmd({ 'BufDelete', 'VimLeavePre' }, {
+          buffer = bufnr,
+          once = true,
+          callback = function()
+            if vim.b[bufnr].marimo_pane then
+              vim.system({ 'tmux', 'kill-pane', '-t', vim.b[bufnr].marimo_pane })
+            end
+          end,
+        })
+      else
+        vim.notify('No preview for filetype: ' .. ft, vim.log.levels.WARN)
+      end
     elseif ft == 'html' then
       local src = vim.api.nvim_buf_get_name(0)
       vim.fn.jobstart({ 'xdg-open', src }, { detach = true })
@@ -780,7 +821,7 @@ require('lazy').setup({
               local venv_python = root .. '/.venv/bin/python'
               if vim.uv.fs_stat(venv_python) then
                 client.config.settings.python = { pythonPath = venv_python }
-                client.notify('workspace/didChangeConfiguration', { settings = client.config.settings })
+                client:notify('workspace/didChangeConfiguration', { settings = client.config.settings })
               end
             end
           end,
