@@ -3,23 +3,23 @@
 # split a pane there. Otherwise focus an existing floating qalc, or launch one.
 set -euo pipefail
 
-QALC_CLASS="floating-qalc"
-FLOAT_CMD=(kitty --class "$QALC_CLASS" -e qalc)
+QALC_CLASS="qalc-kitty"
+LAUNCH_CMD=(kitty --class "$QALC_CLASS" -e qalc)
 
-launch_or_focus_float() {
+launch_or_focus() {
     local addr
     addr=$(hyprctl clients -j 2>/dev/null \
         | jq -r --arg c "$QALC_CLASS" 'map(select(.class==$c)) | .[0].address // ""')
     if [ -n "$addr" ]; then
         exec hyprctl dispatch focuswindow "address:$addr"
     fi
-    exec "${FLOAT_CMD[@]}"
+    exec "${LAUNCH_CMD[@]}"
 }
 
 active=$(hyprctl activewindow -j 2>/dev/null || echo '{}')
 pid=$(printf '%s' "$active" | jq -r '.pid // 0')
 
-[ "$pid" -gt 0 ] || launch_or_focus_float
+[ "$pid" -gt 0 ] || launch_or_focus
 
 # Collect all descendants of the focused window.
 descendants() {
@@ -49,19 +49,20 @@ while read -r p; do
 done < <(descendants "$pid")
 
 if [ -n "$tmux_tty" ]; then
-    session=$(tmux list-clients -F '#{client_tty}|#{session_name}' 2>/dev/null \
-        | awk -F'|' -v tty="$tmux_tty" '$1==tty {print $2; exit}')
-    if [ -n "$session" ]; then
-        # Dwindle-style: split the longer pixel dimension. Character cells are
-        # ~2:1 tall:wide, so width > 2*height means the pane is wider in pixels.
-        read -r w h < <(tmux display -t "$session" -p -F '#{pane_width} #{pane_height}' 2>/dev/null || echo '0 0')
-        if [ "${w:-0}" -gt $(( ${h:-0} * 2 )) ]; then
-            split_flag="-h"   # side by side
+    # Query this specific client's view (-c tty) so we split the pane the user
+    # is actually focused on, not whatever tmux's session-level state thinks.
+    info=$(tmux display -c "$tmux_tty" -p -F '#{pane_id} #{pane_width} #{pane_height}' 2>/dev/null || true)
+    if [ -n "$info" ]; then
+        read -r pane_id w h <<< "$info"
+        # Split the longer pixel dimension, biased toward stacking (-v).
+        # Character cells are ~2:1 tall:wide; multiplier above 2 favors -v.
+        if [ "${w:-0}" -gt $(( ${h:-0} * 3 )) ]; then
+            split_flag="-h"   # side by side (only on very wide panes)
         else
-            split_flag="-v"   # stacked
+            split_flag="-v"   # stacked below
         fi
-        exec tmux split-window "$split_flag" -t "$session" qalc
+        exec tmux split-window "$split_flag" -t "$pane_id" qalc
     fi
 fi
 
-launch_or_focus_float
+launch_or_focus
