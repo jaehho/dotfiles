@@ -1,0 +1,12 @@
+# base — kernel, bootloader, filesystem, system core
+base
+base-devel
+cpio
+dosfstools
+efibootmgr
+grub
+linux
+linux-firmware
+linux-headers
+man-db
+sudo

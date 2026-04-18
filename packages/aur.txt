@@ -9,6 +9,7 @@ hyprsession
 hyprshell-bin-debug
 hyprwhenthen-bin
 microsoft-edge-stable-bin
+orca-slicer-bin
 overskride-bin
 paru
 paru-debug

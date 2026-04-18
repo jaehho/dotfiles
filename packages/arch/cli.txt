@@ -1,0 +1,22 @@
+# cli — terminal utilities and shell helpers
+bat
+btop
+csvlens
+eza
+fastfetch
+fd
+fzf
+glow
+htop
+jq
+less
+openssh
+pacman-contrib
+ripgrep
+rsync
+socat
+sshpass
+unzip
+visidata
+yq
+zoxide

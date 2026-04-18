@@ -1,0 +1,25 @@
+# hypr — Hyprland compositor + Wayland stack
+cliphist
+gnome-keyring
+grim
+hypridle
+hyprland
+hyprlock
+hyprsunset
+mako
+nwg-look
+polkit-gnome
+qt5-wayland
+qt6-wayland
+rofi
+rofimoji
+satty
+slurp
+swayosd
+waybar
+wev
+wl-clipboard
+wofi
+wtype
+xdg-desktop-portal-gtk
+xdg-desktop-portal-hyprland

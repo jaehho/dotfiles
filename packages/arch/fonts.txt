@@ -1,0 +1,6 @@
+# fonts — system fonts
+noto-fonts-cjk
+noto-fonts-emoji
+otf-font-awesome
+ttf-dejavu
+ttf-jetbrains-mono-nerd

@@ -70,7 +70,7 @@ set_default_shell_fish() {
 # ── Arch ──────────────────────────────────────────────────────────────────────
 if [ "$DISTRO" = "arch" ]; then
     echo "==> Installing packages (Arch)..."
-    sudo pacman -S --needed --noconfirm - < "$REPO_ROOT/pkglist.txt"
+    sudo pacman -S --needed --noconfirm - < "$REPO_ROOT/packages/arch-snapshot.txt"
 
     echo "==> Stowing all packages..."
     stow_common
@@ -100,8 +100,8 @@ sudo apt-get update -qq
 echo "==> Installing minimum bootstrap deps..."
 sudo apt-get install -y git curl stow make fish
 
-echo "==> Installing packages from pkglist-ubuntu.txt..."
-sudo apt-get install -y $(grep -v '^#' "$REPO_ROOT/pkglist-ubuntu.txt" | grep -v '^$')
+echo "==> Installing packages from packages/ubuntu.txt..."
+sudo apt-get install -y $(grep -v '^#' "$REPO_ROOT/packages/ubuntu.txt" | grep -v '^$')
 
 # ── ~/.local/bin symlinks for renamed Ubuntu tools ────────────────────────────
 echo "==> Setting up tool symlinks..."

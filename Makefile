@@ -273,28 +273,55 @@ restic-disable: ## Disable the restic backup timer
 	@systemctl --user disable --now restic-backup.timer 2>/dev/null || true
 	@echo "Restic backup timer disabled."
 
-## Packages (Arch only)
-pkg-dump: ## Save list of explicitly installed packages
+## Packages
+# Arch: source of truth is packages/arch/*.txt (hand-curated by category).
+# packages/arch-snapshot.txt is a snapshot written by pkg-dump — compare against
+# categories via pkg-drift. AUR/Ubuntu have single-file sources of truth.
+PKGDIR := $(REPO_ROOT)/packages
+
+pkg-dump: ## Snapshot explicitly-installed packages into packages/arch-snapshot.txt (for drift diffing)
 ifeq ($(DISTRO),arch)
-	pacman -Qqen > $(REPO_ROOT)/pkglist.txt
-	pacman -Qqem > $(REPO_ROOT)/pkglist-aur.txt
-	@echo "Saved $$(wc -l < $(REPO_ROOT)/pkglist.txt) official + $$(wc -l < $(REPO_ROOT)/pkglist-aur.txt) AUR packages."
+	pacman -Qqen > $(PKGDIR)/arch-snapshot.txt
+	pacman -Qqem > $(PKGDIR)/aur.txt
+	@echo "Saved $$(wc -l < $(PKGDIR)/arch-snapshot.txt) official + $$(wc -l < $(PKGDIR)/aur.txt) AUR packages."
+	@echo "Run 'make pkg-drift' to diff against packages/arch/*.txt categories."
 else ifeq ($(DISTRO),ubuntu)
-	apt-mark showmanual | sort > $(REPO_ROOT)/pkglist-ubuntu.txt
-	@echo "Saved $$(wc -l < $(REPO_ROOT)/pkglist-ubuntu.txt) manually installed packages."
+	apt-mark showmanual | sort > $(PKGDIR)/ubuntu.txt
+	@echo "Saved $$(wc -l < $(PKGDIR)/ubuntu.txt) manually installed packages."
 else
 	@echo "Skipped: unsupported distro ($(DISTRO))."
 endif
 
-pkg-install: ## Install packages from saved lists
+pkg-install: ## Install packages from categorized lists (Arch: packages/arch/*.txt + packages/aur.txt)
 ifeq ($(DISTRO),arch)
-	sudo pacman -S --needed - < $(REPO_ROOT)/pkglist.txt
+	@cat $(PKGDIR)/arch/*.txt | grep -v '^#' | grep -v '^$$' | sort -u | sudo pacman -S --needed -
 	@command -v paru >/dev/null 2>&1 || { echo "paru not found — install it first for AUR packages."; exit 1; }
-	paru -S --needed - < $(REPO_ROOT)/pkglist-aur.txt
+	paru -S --needed - < $(PKGDIR)/aur.txt
 else ifeq ($(DISTRO),ubuntu)
-	sudo apt-get install -y $$(grep -v '^#' $(REPO_ROOT)/pkglist-ubuntu.txt | grep -v '^$$')
+	sudo apt-get install -y $$(grep -v '^#' $(PKGDIR)/ubuntu.txt | grep -v '^$$')
 else
 	@echo "Skipped: unsupported distro ($(DISTRO))."
+endif
+
+pkg-drift: ## Arch: diff installed state vs categorized packages/arch/*.txt
+ifeq ($(DISTRO),arch)
+	@installed=$$(pacman -Qqen | sort -u); \
+	tracked=$$(cat $(PKGDIR)/arch/*.txt | grep -v '^#' | grep -v '^$$' | sort -u); \
+	untracked=$$(comm -23 <(echo "$$installed") <(echo "$$tracked")); \
+	stale=$$(comm -13 <(echo "$$installed") <(echo "$$tracked")); \
+	if [ -n "$$untracked" ]; then \
+		printf '\033[33mInstalled but not in any category (add to packages/arch/*.txt):\033[0m\n'; \
+		printf '  %s\n' $$untracked; \
+	fi; \
+	if [ -n "$$stale" ]; then \
+		printf '\033[33mIn categories but not installed (reinstall or remove from category):\033[0m\n'; \
+		printf '  %s\n' $$stale; \
+	fi; \
+	if [ -z "$$untracked" ] && [ -z "$$stale" ]; then \
+		printf '\033[32mCategories match installed state.\033[0m\n'; \
+	fi
+else
+	@echo "Skipped: pkg-drift is Arch-only."
 endif
 
 ## Status

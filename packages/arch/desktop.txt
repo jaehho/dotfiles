@@ -1,0 +1,26 @@
+# desktop — GUI applications (browsers, media, office, PDF, file manager)
+awww
+chntpw
+chromium
+espeak-ng
+ffmpegthumbnailer
+firefox-developer-edition
+himalaya
+libgsf
+libreoffice-fresh
+mpv
+okular
+poppler
+poppler-glib
+qalculate-gtk
+qrencode
+spotify-player
+thunar
+thunderbird
+tumbler
+wimlib
+winetricks
+xorg-server-xephyr
+xorg-xhost
+zathura
+zathura-pdf-mupdf

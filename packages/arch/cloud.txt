@@ -1,0 +1,6 @@
+# cloud — sync, backup, remote filesystems, VPN
+cloudflared
+rclone
+restic
+sshfs
+tailscale
