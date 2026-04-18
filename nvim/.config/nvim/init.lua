@@ -285,13 +285,18 @@ do
       local build_dir = vim.fn.fnamemodify(src, ':h') .. '/build'
       vim.fn.mkdir(build_dir, 'p')
       local pdf = build_dir .. '/' .. vim.fn.fnamemodify(src, ':t'):gsub('%.md$', '.pdf')
+      local pandoc_opts = "--pdf-engine=xelatex --filter=mermaid-filter -V mainfont='DejaVu Sans' -V monofont='JetBrainsMono Nerd Font Mono'"
+      local pandoc_cmd = 'pandoc ' .. pandoc_opts .. ' ' .. vim.fn.shellescape(src) .. ' -o ' .. vim.fn.shellescape(pdf)
+      local name = vim.fn.fnamemodify(src, ':t')
+      local inner = 'printf "\\n[%s] building ' .. name .. '\\n" "$(date +%T)"; if ' .. pandoc_cmd .. '; then printf "[%s] ok\\n" "$(date +%T)"; else printf "[%s] FAIL\\n" "$(date +%T)"; fi'
+      local watch_cmd = 'echo ' .. vim.fn.shellescape(src) .. ' | entr -c sh -c ' .. vim.fn.shellescape(inner)
       start_pdf_preview(
-        { 'pandoc', src, '-o', pdf },
-        'echo ' .. vim.fn.shellescape(src) .. ' | entr pandoc ' .. vim.fn.shellescape(src) .. ' -o ' .. vim.fn.shellescape(pdf),
+        { 'pandoc', '--pdf-engine=xelatex', '--filter=mermaid-filter', '-V', 'mainfont=DejaVu Sans', '-V', 'monofont=JetBrainsMono Nerd Font Mono', src, '-o', pdf },
+        watch_cmd,
         src, pdf
       )
     elseif ft == 'python' then
-      local lines = vim.api.nvim_buf_get_lines(0, 0, 5, false)
+      local lines = vim.api.nvim_buf_get_lines(0, 0, 50, false)
       local is_marimo = false
       for _, line in ipairs(lines) do
         if line:match('^import marimo') then
@@ -334,6 +339,32 @@ do
     elseif ft == 'html' then
       local src = vim.api.nvim_buf_get_name(0)
       vim.fn.jobstart({ 'xdg-open', src }, { detach = true })
+    elseif ft == 'openscad' then
+      local src = vim.api.nvim_buf_get_name(0)
+      local bufnr = vim.api.nvim_get_current_buf()
+
+      if vim.b.openscad_pane then
+        vim.system({ 'tmux', 'kill-pane', '-t', vim.b.openscad_pane })
+        vim.b.openscad_pane = nil
+        vim.notify('Preview stopped', vim.log.levels.INFO)
+        return
+      end
+
+      local cmd = 'openscad ' .. vim.fn.shellescape(src)
+      local result = vim.system({
+        'tmux', 'split-window', '-v', '-d', '-l', '10', '-P', '-F', '#{pane_id}',
+        cmd,
+      }):wait()
+      vim.b.openscad_pane = vim.trim(result.stdout or '')
+      vim.api.nvim_create_autocmd({ 'BufDelete', 'VimLeavePre' }, {
+        buffer = bufnr,
+        once = true,
+        callback = function()
+          if vim.b[bufnr].openscad_pane then
+            vim.system({ 'tmux', 'kill-pane', '-t', vim.b[bufnr].openscad_pane })
+          end
+        end,
+      })
     elseif ft == 'csv' then
       vim.cmd 'CsvViewToggle'
     else
@@ -830,6 +861,7 @@ require('lazy').setup({
         ts_ls = {},
         bashls = {},
         tinymist = {},
+        openscad_lsp = {},
 
         stylua = {}, -- Used to format Lua code
 
@@ -1101,8 +1133,8 @@ require('lazy').setup({
     config = function()
       local parsers = {
         'bash', 'c', 'css', 'diff', 'go', 'html', 'javascript', 'json', 'lua', 'luadoc',
-        'markdown', 'markdown_inline', 'python', 'query', 'rust', 'toml', 'typescript',
-        'typst', 'vim', 'vimdoc', 'yaml',
+        'markdown', 'markdown_inline', 'openscad', 'python', 'query', 'rust', 'toml',
+        'typescript', 'typst', 'vim', 'vimdoc', 'yaml',
       }
       require('nvim-treesitter').install(parsers)
       vim.api.nvim_create_autocmd('FileType', {
@@ -1152,39 +1184,6 @@ require('lazy').setup({
       preview = {
         hybrid_modes = { 'n', 'i' },
         filetypes = { 'markdown', 'quarto', 'rmd' },
-      },
-    },
-  },
-
-  { -- Inline image rendering via kitty graphics protocol
-    '3rd/image.nvim',
-    ft = { 'markdown' },
-    opts = {
-      backend = 'kitty',
-      integrations = {
-        markdown = {
-          enabled = true,
-          clear_in_insert_mode = true,
-          only_render_image_at_cursor = false,
-        },
-      },
-      max_width = 100,
-      max_height = 30,
-      max_width_window_percentage = 50,
-      max_height_window_percentage = 50,
-    },
-  },
-
-  { -- Render mermaid diagrams inline via image.nvim
-    '3rd/diagram.nvim',
-    ft = { 'markdown' },
-    dependencies = { '3rd/image.nvim' },
-    opts = {
-      renderer_options = {
-        mermaid = {
-          theme = 'dark',
-          background = 'transparent',
-        },
       },
     },
   },
