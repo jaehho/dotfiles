@@ -31,5 +31,7 @@ abbr -a gl 'git log --oneline'
 
 # ── Tools ────────────────────────────────────────────────────────────────────
 abbr -a grep 'grep --color=auto'
+abbr -a print lp
+
 # ── Claude ───────────────────────────────────────────────────────────────────
 abbr -a c 'claude --dangerously-skip-permissions --model "opus[1M]" --effort max'

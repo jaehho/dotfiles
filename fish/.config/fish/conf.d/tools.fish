@@ -1,10 +1,10 @@
 status is-interactive; or return
 
 # ── tmux auto-launch ─────────────────────────────────────────────────────────
-# Auto-launch tmux in graphical terminals and SSH sessions — skip bare TTYs
-# (where arch.fish may exec Hyprland) and skip if already inside tmux.
-if command -q tmux; and not set -q TMUX
-    and begin; test -n "$DISPLAY" -o -n "$WAYLAND_DISPLAY"; or set -q SSH_CONNECTION; end
+# Launch tmux session picker only when LAUNCH_TMUX is set (via keybind).
+# Skip bare TTYs (where arch.fish may exec Hyprland) and skip if already
+# inside tmux.
+if command -q tmux; and not set -q TMUX; and set -q LAUNCH_TMUX
     # Push current Hyprland/Wayland env into tmux global env so existing
     # sessions (including continuum-restored ones) pick up fresh values.
     # No-op if tmux server isn't running yet (new-session inherits directly).
@@ -36,6 +36,11 @@ function __refresh_hyprland_env --on-event fish_preexec
         set -l val (string replace -r '^[^=]+=' '' -- $line)
         test -n "$val"; and set -gx $var $val
     end
+end
+
+# ── fd ───────────────────────────────────────────────────────────────────────
+if command -q fd
+    abbr --add fd 'fd -HI'
 end
 
 # ── fzf ──────────────────────────────────────────────────────────────────────
