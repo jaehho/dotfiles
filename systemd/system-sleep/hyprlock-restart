@@ -1,0 +1,70 @@
+#!/bin/bash
+# Restart hyprlock after hibernate resume.
+#
+# nvidia-open + NVreg_PreserveVideoMemoryAllocations=0 means GPU/VRAM state is
+# not preserved across hibernate. hyprlock's Mesa/gallium threads crash with
+# SIGABRT post-resume ("lockscreen app died"). This hook kills the broken
+# instance and spawns a fresh one.
+#
+# Must be in /usr/lib/systemd/system-sleep/ (not /etc/), since systemd-sleep(8)
+# v260 only scans /usr/lib/.
+#
+# See BOOT_ISSUES.md 2026-04-16 evening entries.
+
+set -u
+LOG=/var/log/hyprlock-restart.log
+log() { printf '%s [%s] %s\n' "$(date -Iseconds)" "$$" "$*" >> "$LOG"; }
+
+log "invoked: phase=$1 op=${2:-}"
+
+case "$1" in
+    post)
+        case "$2" in
+            hibernate|suspend-then-hibernate)
+                pids_before=$(pgrep -u jaeho -x hyprlock | tr '\n' ' ')
+                log "hyprlock PIDs before kill: ${pids_before:-(none)}"
+
+                if [[ -n "$pids_before" ]]; then
+                    pkill -KILL -u jaeho -x hyprlock
+                    log "pkill exit: $?"
+                else
+                    log "no hyprlock to kill (already crashed)"
+                fi
+                sleep 0.5
+
+                # Unlock first — Hyprland considers a dead lockscreen as "still
+                # locked", so a Lock signal without an Unlock first is a no-op.
+                loginctl unlock-sessions
+                log "loginctl unlock-sessions exit: $?"
+                sleep 0.3
+
+                # Now lock fresh — Hyprland will call lock_cmd to spawn hyprlock.
+                loginctl lock-sessions
+                log "loginctl lock-sessions exit: $?"
+                sleep 1
+
+                pids_after=$(pgrep -u jaeho -x hyprlock | tr '\n' ' ')
+                log "hyprlock PIDs after lock-sessions: ${pids_after:-(none)}"
+
+                # Fallback: if Hyprland didn't spawn one, launch directly via
+                # setsid so it outlives this hook's process tree.
+                if [[ -z "$pids_after" ]]; then
+                    log "no fresh hyprlock; spawning via setsid"
+                    setsid runuser -u jaeho -- env \
+                        XDG_RUNTIME_DIR=/run/user/1000 \
+                        WAYLAND_DISPLAY=wayland-1 \
+                        DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+                        hyprlock </dev/null >> "$LOG" 2>&1 &
+                    log "setsid spawn pid: $!"
+                fi
+                ;;
+            *)
+                log "ignoring op=$2"
+                ;;
+        esac
+        ;;
+    pre)
+        log "pre phase, no-op"
+        ;;
+esac
+exit 0

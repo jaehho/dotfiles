@@ -1,0 +1,38 @@
+#!/bin/bash
+# Stop user-scope FUSE mounts before system sleep and restart them after.
+# Invoked by systemd-{suspend,hibernate,suspend-then-hibernate} with
+# positional args ($1 $2) = (pre <op>) before sleep, (post <op>) after.
+#
+# Without this hook, Bun/node threads walking into sshfs or rclone mounts
+# can stall in D-state (fuse_dentry_revalidate → request_wait_answer) and
+# refuse to freeze, which hangs suspend-then-hibernate entirely.
+#
+# ExecStop on each unit uses `fusermount3 -uz` (lazy unmount) so stopping
+# cannot itself hang even if the backend is stalled.
+
+set -u
+
+TARGET_UID=1000
+TARGET_USER=jaeho
+MOUNTS=(sshfs-ice.service sshfs-mililab.service rclone-onedrive.service)
+
+case "$1" in
+    pre)
+        for svc in "${MOUNTS[@]}"; do
+            timeout 10 runuser -u "$TARGET_USER" -- env \
+                "XDG_RUNTIME_DIR=/run/user/$TARGET_UID" \
+                "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus" \
+                systemctl --user stop "$svc" || true
+        done
+        ;;
+    post)
+        for svc in "${MOUNTS[@]}"; do
+            runuser -u "$TARGET_USER" -- env \
+                "XDG_RUNTIME_DIR=/run/user/$TARGET_UID" \
+                "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus" \
+                systemctl --user start "$svc" || true
+        done
+        ;;
+esac
+
+exit 0

@@ -104,21 +104,64 @@ system-install: ## Copy boot configs and symlink runtime configs
 	else \
 		echo "TPM already installed."; \
 	fi
-	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default /etc/systemd /etc/alsa/conf.d
+	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default /etc/systemd /etc/sysctl.d /etc/alsa/conf.d \
+		/etc/systemd/system/systemd-hibernate.service.d \
+		/etc/systemd/system/systemd-suspend.service.d \
+		/etc/systemd/system/systemd-hybrid-sleep.service.d \
+		/etc/systemd/system/systemd-suspend-then-hibernate.service.d
 	sudo ln -sf $(REPO_ROOT)/keyd/default.conf /etc/keyd/default.conf
 	sudo ln -sf $(REPO_ROOT)/libinput/local-overrides.quirks /etc/libinput/local-overrides.quirks
+	sudo ln -sf $(REPO_ROOT)/sysctl/99-sysrq.conf /etc/sysctl.d/99-sysrq.conf
+	sudo sysctl --system >/dev/null
 	sudo ln -sf $(REPO_ROOT)/systemd/sleep.conf /etc/systemd/sleep.conf
+	# system-sleep hooks must go in /usr/lib/, not /etc/ — systemd-sleep(8) v260+
+	# only scans /usr/lib/systemd/system-sleep/ (verified via `strings` on the
+	# binary). /etc/systemd/system-sleep/ is silently ignored.
+	sudo ln -sf $(REPO_ROOT)/systemd/system-sleep/fuse-mounts /usr/lib/systemd/system-sleep/fuse-mounts
+	sudo ln -sf $(REPO_ROOT)/systemd/system-sleep/hyprlock-restart /usr/lib/systemd/system-sleep/hyprlock-restart
+	# Clean up any stale /etc/ symlinks from before this was understood.
+	sudo rm -f /etc/systemd/system-sleep/fuse-mounts /etc/systemd/system-sleep/hyprlock-restart
+	sudo ln -sf $(REPO_ROOT)/systemd/system/systemd-hibernate.service.d/20-restore-freeze-session.conf /etc/systemd/system/systemd-hibernate.service.d/20-restore-freeze-session.conf
+	sudo ln -sf $(REPO_ROOT)/systemd/system/systemd-suspend.service.d/20-restore-freeze-session.conf /etc/systemd/system/systemd-suspend.service.d/20-restore-freeze-session.conf
+	sudo ln -sf $(REPO_ROOT)/systemd/system/systemd-hybrid-sleep.service.d/20-restore-freeze-session.conf /etc/systemd/system/systemd-hybrid-sleep.service.d/20-restore-freeze-session.conf
+	sudo ln -sf $(REPO_ROOT)/systemd/system/systemd-suspend-then-hibernate.service.d/20-restore-freeze-session.conf /etc/systemd/system/systemd-suspend-then-hibernate.service.d/20-restore-freeze-session.conf
 	sudo ln -sf /usr/share/alsa/alsa.conf.d/99-pipewire-default.conf /etc/alsa/conf.d/99-pipewire-default.conf
 	@changed=""; \
 	for pair in $(SYSTEM_COPIES); do \
 		src=$${pair%%:*}; dst=$${pair##*:}; \
-		if [ -f "$$dst" ] && ! diff -q "$(REPO_ROOT)/$$src" "$$dst" >/dev/null 2>&1; then \
-			sudo cp "$$dst" "$${dst}.bak"; \
-			echo "  backed up $$dst -> $${dst}.bak"; \
-			changed="$$changed $$dst"; \
+		if [ ! -f "$$dst" ]; then \
+			sudo cp "$(REPO_ROOT)/$$src" "$$dst"; \
+			echo "  $$dst: installed (new)"; \
+		elif diff -q "$(REPO_ROOT)/$$src" "$$dst" >/dev/null 2>&1; then \
+			echo "  $$dst: up to date"; \
+		else \
+			echo ""; \
+			echo "  $$dst differs from repo:"; \
+			git diff --no-index --color=always "$$dst" "$(REPO_ROOT)/$$src" || true; \
+			echo ""; \
+			if [ "$${FORCE:-0}" = "1" ]; then \
+				apply=y; \
+			else \
+				printf '  Apply this change? [y/N/q] '; \
+				read -r apply < /dev/tty; \
+			fi; \
+			case "$$apply" in \
+				y|Y) \
+					sudo cp "$$dst" "$${dst}.bak"; \
+					echo "  backed up $$dst -> $${dst}.bak"; \
+					sudo cp "$(REPO_ROOT)/$$src" "$$dst"; \
+					echo "  $$dst: applied"; \
+					changed="$$changed $$dst"; \
+					;; \
+				q|Q) \
+					echo "  aborted."; \
+					exit 1; \
+					;; \
+				*) \
+					echo "  $$dst: skipped"; \
+					;; \
+			esac; \
 		fi; \
-		sudo cp "$(REPO_ROOT)/$$src" "$$dst"; \
-		echo "  copied $$src -> $$dst"; \
 	done; \
 	if ! command -v keyd >/dev/null 2>&1 && [ "$(DISTRO)" = "ubuntu" ]; then \
 		echo "Installing keyd from source..."; \
@@ -342,7 +385,7 @@ status: ## Show current dotfiles state
 	done
 	@echo ""
 	@echo "System configs (symlinked):"
-	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks /etc/systemd/sleep.conf /etc/alsa/conf.d/99-pipewire-default.conf; do \
+	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks /etc/sysctl.d/99-sysrq.conf /etc/systemd/sleep.conf /etc/systemd/system-sleep/fuse-mounts /etc/alsa/conf.d/99-pipewire-default.conf; do \
 		if [ -L "$$f" ]; then \
 			echo "  $$f: linked"; \
 		elif [ -f "$$f" ]; then \
