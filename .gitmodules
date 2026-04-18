@@ -1,3 +1,3 @@
-[submodule "hypr-wallpaper"]
-	path = hypr-wallpaper
-	url = https://github.com/jaehho/hypr-wallpaper.git
+[submodule "hypr-tools"]
+	path = hypr-tools
+	url = https://github.com/jaehho/hypr-tools.git

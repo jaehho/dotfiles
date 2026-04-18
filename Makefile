@@ -26,7 +26,7 @@ help: ## Show this help message
 		     /^[a-zA-Z_%-]+:/ {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 ## Submodule tools (Arch only)
-TOOLS := hypr-wallpaper
+TOOLS := hypr-tools
 
 install-tools: ## Install tools from submodules to ~/.local/bin (dev override)
 ifeq ($(DISTRO),arch)

@@ -1,0 +1,11 @@
+# hypr-monitor configuration
+# See /usr/share/hypr-monitor/config.toml for the full template.
+
+laptop_pattern = "eDP-"
+
+# Preferred left-to-right order for externals. First match = leftmost.
+# Matches against monitor description OR serial (substring).
+external_order = ["FT36ZS2", "B946ZS2"]
+
+# Restore each monitor's wallpaper after a layout apply.
+post_apply_command = "hypr-wallpaper restore"

@@ -7,8 +7,7 @@ GNU Stow-based dotfiles. Primary target is Arch Linux + Hyprland, but the repo a
 ```
 dotfiles/
 ├── Makefile              # stow-all, install-tools, system-install, pkg-dump, etc.
-├── hypr-desktop/         # git submodule → github.com/jaehho/hypr-desktop
-├── hypr-wallpaper/       # git submodule → github.com/jaehho/hypr-wallpaper
+├── hypr-tools/           # git submodule → github.com/jaehho/hypr-tools
 ├── hypr/                 # Hyprland config, scripts, window rules
 ├── fish/                 # Fish shell config
 ├── kitty/                # Kitty terminal config
@@ -33,16 +32,16 @@ make status                # Show stow/system/service state
 
 ## Submodule tools
 
-`hypr-desktop` and `hypr-wallpaper` are standalone projects published to AUR and included here as git submodules.
+`hypr-tools` is a Rust Cargo workspace published to AUR, included here as a git submodule. It ships two binaries (`hypr-wallpaper`, `hypr-monitor`) and produces two AUR packages from one repo.
 
 ### Maintainer workflow (Option C)
 
-Day-to-day, the AUR package at `/usr/bin/` is what runs. The submodules are for development.
+Day-to-day, the AUR packages at `/usr/bin/` are what run. The submodule is for development.
 
 ```bash
 # Develop
-cd hypr-desktop/                     # or hypr-wallpaper/
-# edit code in bin/...
+cd hypr-tools/
+# edit code...
 make install-tools                   # (from dotfiles root) override AUR with dev copy
 # test changes...
 git add -A && git commit -m "..."
@@ -50,22 +49,22 @@ git push
 make uninstall-tools                 # revert to AUR version
 
 # Release
-cd hypr-desktop/
+cd hypr-tools/
 make release-patch                   # 1.0.1 — bug fix
 make release-minor                   # 1.1.0 — new feature
 make release-major                   # 2.0.0 — breaking change
-# Tags, pushes to GitHub, updates AUR in one command.
-# Reads latest git tag, auto-bumps the correct semver component.
+# Tags, pushes to GitHub, and updates both hypr-wallpaper-git AND
+# hypr-monitor-git on AUR in one command.
 ```
 
 ### AUR packages
 
 | Package | AUR name | Repo |
 |---------|----------|------|
-| Virtual desktop manager | `hypr-desktop-git` | github.com/jaehho/hypr-desktop |
-| Wallpaper manager | `hypr-wallpaper-git` | github.com/jaehho/hypr-wallpaper |
+| Wallpaper manager        | `hypr-wallpaper-git` | github.com/jaehho/hypr-tools |
+| Monitor/workspace daemon | `hypr-monitor-git`   | github.com/jaehho/hypr-tools |
 
-The `make release-*` targets clone the AUR repo to a temp dir, update PKGBUILD + .SRCINFO, push, and clean up. No persistent AUR checkout needed.
+The `make release-*` target clones each AUR repo to a temp dir, updates PKGBUILD + .SRCINFO, pushes, and cleans up. No persistent AUR checkout needed.
 
 ### PKGBUILD versioning
 
@@ -73,14 +72,12 @@ Uses `git describe --tags` — clean semver on tags (`1.0.0`), auto-suffix betwe
 
 ## Hyprland TUIs
 
-Both TUIs are Python 3 + curses. Key performance detail: `ESCDELAY` is set to 25ms (default is 1000ms). Kitty `input_delay` is set to 0.
-
-| TUI | Keybind | Script |
+| TUI | Keybind | Binary |
 |-----|---------|--------|
-| Desktop manager | `Super+D` | `hypr-desktop-menu` |
-| Wallpaper manager | `Super+Alt+W` | `hypr-wallpaper-menu` |
+| Wallpaper manager | `Super+Alt+W` | `hypr-wallpaper tui` (via `hypr-wallpaper-open` wrapper) |
+| Monitor inspector | (CLI only)    | `hypr-monitor tui` |
 
-Both run inside kitty popups with class-based window rules for focus reuse (if already open, focuses instead of launching a new instance).
+Both are Rust + ratatui (crossterm). The wallpaper TUI reuses its window via a class-based rule (class `hypr-wallpaper-menu`).
 
 ## Stow conventions
 

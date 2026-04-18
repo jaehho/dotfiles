@@ -5,10 +5,9 @@ choice=$(printf '%s\n' \
     "󰤨  Wi-Fi" \
     "󰂯  Bluetooth" \
     "󰕾  Audio" \
-    "󰍹  Display" \
     "  Appearance" \
     "󰍛  System Monitor" \
-    | rofi -dmenu -p "Settings" -theme-str 'listview { lines: 6; }')
+    | rofi -dmenu -p "Settings" -theme-str 'listview { lines: 5; }')
 
 [[ -z "$choice" ]] && exit 0
 
@@ -19,7 +18,6 @@ case "$choice" in
     *Wi-Fi*)       tui nmtui ;;
     *Bluetooth*)   gui blueman-manager ;;
     *Audio*)       gui pavucontrol ;;
-    *Display*)     gui nwg-displays ;;
     *Appearance*)  gui nwg-look ;;
     *System*)      tui btop ;;
 esac
