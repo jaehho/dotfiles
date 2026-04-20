@@ -8,6 +8,54 @@ See also: `~/.claude/projects/-home-jaeho-dotfiles/memory/project_nvidia_hiberna
 
 ---
 
+## 2026-04-18 (evening) — Sleep-fail resume with frozen session + phantom "Failed to load kernel modules"
+
+**Trigger:** User reported failing to come back from sleep, tried `Alt+SysRq REISUB` without success, hard-shutdown. On next boot thought kernel modules failed to load, hard-shutdown again. Ended up cautious in TTY3 before logging into Hyprland.
+
+**Timeline reconstructed from journalctl:**
+- **Boot -2 (Apr 18 17:52 → 18:17:32, ~25 min).** Start after the morning Hyprland-hang incident. Ended with a stuck shutdown: journal shows repeated "Requested transaction contradicts existing jobs: Transaction for ... is destructive (poweroff.target has 'start' job queued, but 'stop' is included)" loop. User tried sysrq REISUB: every op except `s` (Emergency Sync) returned `sysrq: This sysrq operation is disabled.`. Root cause — our `etc/sysctl.d/99-sysrq.conf` symlink was only installed later at 20:45 on boot -1, so at 18:17 sysrq was still at Arch default `kernel.sysrq = 16` (sync only). User eventually hit power button, journal ends 18:17:32.
+- **Boot -1 (Apr 18 18:18:42 → 22:17:29, ~4h).** Clean start, `PM: Image not found (code -22)` (fine — no prior hibernate image). Nvidia loaded OK (`[drm] Initialized nvidia-drm 0.0.0`). Two hibernate cycles:
+  - Hibernate 1: entry 19:32:32 → resume 20:39:50. GSP dead on resume (`NVRM: _kgspIsHeartbeatTimedOut: ... heartbeat 0 ... diff 2737698021 timeout 5200`, `_kgspRpcRecvPoll: GSP RM heartbeat timed out`). hyprlock-restart hook ran and spawned a new hyprlock via setsid (pid 251126). Session *mostly* usable.
+  - Hibernate 2: entry 21:28:29 → resume 22:17:02. Kernel additionally flagged `ACPI: PM: Hardware changed while hibernated, success doubtful!`. GSP dead again. This time hyprlock-restart could not restart anything because **the user slice was still in TASK_FROZEN**:
+    ```
+    22:17:03 Cannot start frozen unit Session 11 of User jaeho.
+    22:17:03 runuser[...] pam_systemd: io.systemd.Login.UnitAllocationFailed
+    22:17:05 Cannot start frozen unit Session 12 of User jaeho.
+    ```
+  - User power-button'd twice at 22:17:29. Journal ends cleanly (logind-initiated poweroff).
+- **Boot 0 (Apr 18 22:18:57 → current).** **HEALTHY.** `systemd-modules-load` successfully inserted xe, crypto_user, ntsync, nvidia_uvm; nvidia-drm initialized cleanly on minor 1 at 22:19:03; `nvidia-smi` works (RTX 4050, 38C, P8, 2 MiB used); no NVRM/GSP errors in boot 0 kernel log. The "Failed to load kernel modules" message the user saw was **not a real failure** — only `sshfs-ice.service` and `sshfs-mililab.service` failed (DNS not up yet — standard boot-time failure for user-level sshfs mounts), plus benign `platform_profile`/`hp-wmi` messages. Both look like "Failed to start …" on-screen but neither involves `systemd-modules-load`.
+
+**Diagnosis:**
+
+1. **Core problem (again): nvidia-open 595.58.03 GSP dies across hibernate.** Same issue tracked since 2026-04-09. The `MODULES=(xe)` initramfs fix keeps the boot kernel from hitting `nv_pmops_freeze -5` on resume, which is why hibernate image load succeeded both times today. But on resume, the runtime kgsp path still fails (GSP heartbeat never comes back) because nvidia-open can't recover GSP after s2idle-less direct S4 either — there is no non-GSP code path.
+
+2. **New failure mode: frozen-session deadlock on the second resume when GPU is hung.** `SYSTEMD_SLEEP_FREEZE_USER_SESSIONS=true` (our 20- drop-in from Apr 15) freezes `user-1000.slice` before sleep. Systemd is supposed to thaw it after `post` hooks run. When the GPU is hung on resume, *something* in the thaw path stalls, so by the time systemd-sleep fires `post` scripts, the slice is still TASK_FROZEN. hyprlock-restart's `runuser -u jaeho` then fails with `UnitAllocationFailed`, and the hook can't lock/restart hyprlock. The user's session is effectively stuck: GPU dead, compositor can't render, AND new PAM sessions can't be created to recover.
+
+3. **REISUB didn't work on boot -2 because sysrq wasn't enabled yet at that moment.** `99-sysrq.conf` got installed at 20:45 on boot -1. So for boot -2's stuck shutdown, Arch's default `kernel.sysrq = 16` was in effect. On boot -1's resume hang, sysrq *was* enabled (`kernel.sysrq = 1`) but either the keyboard input layer was wedged behind the frozen compositor or user didn't try — either way no `sysrq:` lines appear in boot -1's kernel log. Currently `/proc/sys/kernel/sysrq = 1` on boot 0.
+
+4. **The second "hard shutdown" was likely imagined.** There's exactly one boot between the sleep-fail shutdown (22:17:29) and now (22:18:57) — a single 88-second gap, zero intermediate boots in `journalctl --list-boots`. User probably saw a transient red "Failed to start …" line (SSHFS mounts) during boot 0 and misread it as a module-load failure, hit power, then boot 0 actually continued normally to the TTY prompt — so there was no second reboot.
+
+**Action taken:**
+- Boot 0 confirmed healthy; safe to log into Hyprland.
+- **Preventive #1: disabled auto-hibernate on idle.** Removed the 1800 s hibernate listener from `hypr/.config/hypr/hypridle.conf`. dpms-off at 15 min is still present. Hibernate is now manual only (`systemctl hibernate`). Every hibernate is a GSP coin flip on nvidia-open 595; not auto-triggering eliminates the idle-timer roulette.
+- **Preventive #2: reverted `SYSTEMD_SLEEP_FREEZE_USER_SESSIONS=true` override.** Removed the 4 `systemd/system/systemd-*.service.d/20-restore-freeze-session.conf` drop-ins from dotfiles and the corresponding symlink/mkdir lines from the Makefile. Wrote `/tmp/hsperfdata_jaeho/revert-freeze-session.sh` to remove the active `/etc/` symlinks and daemon-reload. Rationale: the override caused today's unrecoverable frozen-slice deadlock on bad resume. Reverting lets nvidia-utils' `10-nvidia-no-freeze-session.conf` take effect again (FREEZE_USER_SESSIONS=false), so user processes stay runnable on resume (TTY-switch recovery works). The fuse-mounts sleep hook still stops sshfs/rclone pre-sleep to reduce FUSE D-state during freezer pass.
+- Logged incident. Reinforcing the simplest-explanation memory: when a user reports multiple consecutive failed boots, count `journalctl --list-boots` first.
+
+**Recommendations (unvalidated unless marked):**
+1. **It is safe to log in now.** Boot 0 has a clean nvidia stack. Preserve the existing hibernate fixes; don't change anything.
+2. **Expect this to recur.** nvidia-open GSP instability on resume is the persistent problem. Until proprietary `nvidia` returns to Arch repos, every hibernate cycle is a coin-flip for GSP. The best we can do is contain the blast radius.
+3. **The frozen-session-on-bad-resume failure mode is new and deserves a follow-up.** Options if it repeats:
+   - Add a safety timer to hyprlock-restart (or a separate post-hook) that falls back to `systemctl thaw user-1000.slice` if `runuser` fails with `UnitAllocationFailed`. This at least unsticks PAM so the user can log in from a TTY.
+   - Or consider flipping `SYSTEMD_SLEEP_FREEZE_USER_SESSIONS` back to false on `systemd-hibernate.service` only, reverting to the FUSE-processes-stall behavior. Trade the "FUSE refuses to freeze" failure (recoverable — hibernate just aborts cleanly) for losing the "frozen slice on bad resume" failure (unrecoverable — user must hard-shutdown). Net probably better.
+4. **If a resume hangs the compositor again:** Alt+SysRq+R, E, I, S, U, B should now work (sysrq=1 is active). If REISUB is ignored, the kernel itself is wedged below sysrq — at that point hard power is unavoidable.
+5. **After any hard shutdown today, cold-boot with ≥10 s power-off** so the dGPU power island drains; this reduces the chance of a GSP-init deadlock on the next boot (the 2026-04-18 morning pattern).
+
+**Follow-ups:**
+1. If frozen-session blocks another recovery, add the thaw-fallback to `systemd/system-sleep/hyprlock-restart` and test.
+2. Keep watching `pacman -Si nvidia` — proprietary 595+ would eliminate both GSP instability and frozen-session together.
+
+---
+
 ## 2026-04-18 — Hyprland login freeze post-hard-shutdown (nvidia GSP init deadlock)
 
 **Trigger:** User reported the previous session froze while windows were refusing to close during shutdown, forcing a hard power-off. On the next boot, TTY1 login succeeded but Hyprland hung before actually drawing anything; user hard-shutdown a second time to escape. BIOS ran memory training on both subsequent boots.

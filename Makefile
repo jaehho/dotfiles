@@ -104,11 +104,7 @@ system-install: ## Copy boot configs and symlink runtime configs
 	else \
 		echo "TPM already installed."; \
 	fi
-	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default /etc/systemd /etc/sysctl.d /etc/alsa/conf.d \
-		/etc/systemd/system/systemd-hibernate.service.d \
-		/etc/systemd/system/systemd-suspend.service.d \
-		/etc/systemd/system/systemd-hybrid-sleep.service.d \
-		/etc/systemd/system/systemd-suspend-then-hibernate.service.d
+	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default /etc/systemd /etc/sysctl.d /etc/alsa/conf.d
 	sudo ln -sf $(REPO_ROOT)/keyd/default.conf /etc/keyd/default.conf
 	sudo ln -sf $(REPO_ROOT)/libinput/local-overrides.quirks /etc/libinput/local-overrides.quirks
 	sudo ln -sf $(REPO_ROOT)/sysctl/99-sysrq.conf /etc/sysctl.d/99-sysrq.conf
@@ -121,10 +117,6 @@ system-install: ## Copy boot configs and symlink runtime configs
 	sudo ln -sf $(REPO_ROOT)/systemd/system-sleep/hyprlock-restart /usr/lib/systemd/system-sleep/hyprlock-restart
 	# Clean up any stale /etc/ symlinks from before this was understood.
 	sudo rm -f /etc/systemd/system-sleep/fuse-mounts /etc/systemd/system-sleep/hyprlock-restart
-	sudo ln -sf $(REPO_ROOT)/systemd/system/systemd-hibernate.service.d/20-restore-freeze-session.conf /etc/systemd/system/systemd-hibernate.service.d/20-restore-freeze-session.conf
-	sudo ln -sf $(REPO_ROOT)/systemd/system/systemd-suspend.service.d/20-restore-freeze-session.conf /etc/systemd/system/systemd-suspend.service.d/20-restore-freeze-session.conf
-	sudo ln -sf $(REPO_ROOT)/systemd/system/systemd-hybrid-sleep.service.d/20-restore-freeze-session.conf /etc/systemd/system/systemd-hybrid-sleep.service.d/20-restore-freeze-session.conf
-	sudo ln -sf $(REPO_ROOT)/systemd/system/systemd-suspend-then-hibernate.service.d/20-restore-freeze-session.conf /etc/systemd/system/systemd-suspend-then-hibernate.service.d/20-restore-freeze-session.conf
 	sudo ln -sf /usr/share/alsa/alsa.conf.d/99-pipewire-default.conf /etc/alsa/conf.d/99-pipewire-default.conf
 	@changed=""; \
 	for pair in $(SYSTEM_COPIES); do \
