@@ -6,7 +6,7 @@ SHELL := /bin/bash
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # Stow packages split by distro
-COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic zathura
+COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic zathura visidata
 ARCH_PACKAGES   := hypr mako rofi waybar
 
 DISTRO := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
