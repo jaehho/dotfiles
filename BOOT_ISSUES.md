@@ -8,6 +8,26 @@ See also: `~/.claude/projects/-home-jaeho-dotfiles/memory/project_nvidia_hiberna
 
 ---
 
+## 2026-04-21 (evening) — Thunar hung on `~`; stale FUSE mount from crashed rclone-onedrive
+
+**Trigger:** User reported Thunar could not open the home directory. `ls ~` hung indefinitely. OS was otherwise responsive.
+
+**Diagnosis:**
+- `systemctl --user list-units --all | grep -iE 'onedrive|rclone'` showed `rclone-onedrive.service` in `activating (auto-restart)` with restart counter at **964** — roughly 2.7 hours of the 10-second retry loop.
+- `mount | grep OneDrive` confirmed the FUSE entry at `/home/jaeho/OneDrive` was still present (`fuse.rclone`).
+- Journal per attempt: `ERROR+4: Fatal error: failed to mount FUSE fs: directory already mounted, use --allow-non-empty to mount anyway: /home/jaeho/OneDrive`.
+
+rclone died uncleanly at some earlier point (suspend/resume is the likely trigger — the prior FUSE-on-sleep history in this log makes it the obvious candidate, though the precise moment of death was outside the journal's recent window). The kernel's FUSE mount entry stayed behind. Each 10-second auto-restart aborted because the mountpoint was still "occupied," and every process that stat'd the mountpoint — or walked `~`, which has to stat children — blocked on the dead FUSE endpoint. That is what wedged Thunar (and `ls ~`, and anything else that opened `/home/jaeho`).
+
+**Immediate action:**
+- `systemctl --user stop rclone-onedrive.service` (its `ExecStop=/bin/fusermount -u` cleared the stale entry), then `systemctl --user start`. `ls ~` and `ls ~/OneDrive` both responsive again.
+
+**Preventive fix:** Added `ExecStartPre=-/bin/fusermount -uz %h/OneDrive` to `rclone/.config/systemd/user/rclone-onedrive.service`. The leading `-` makes systemd ignore the error on a clean start (nothing to unmount); `-z` is a lazy unmount so a wedged mountpoint detaches even if something is stat'ing it. Next crash of this kind will self-heal on the 10-second auto-restart instead of accumulating hours of failed retries and hanging `~`. `daemon-reload` done; currently-running process keeps the old unit until its next restart, which is fine.
+
+**Not applied (would be the next step if this recurs):** killing any orphaned `rclone` PID in `ExecStartPre` before the `fusermount -uz`. Skipped as premature — the lazy unmount should be enough if the process actually exited (which it did, in this case). Revisit only if we see the pattern again with the new unit in place.
+
+---
+
 ## 2026-04-20 → 2026-04-21 — Driver swap to proprietary nvidia; suspend works for the first time
 
 **Context:** After the 2026-04-18 frozen-session incident, the preventive measures (no auto-hibernate, freeze-session override reverted) held but left the system in a constrained state: hibernate worked, suspend was known-broken, lid close was forced to `lock`. On 2026-04-20 discovered that proprietary nvidia is now available on AUR as `nvidia-beta` / `nvidia-beta-dkms` (maintainer dbermond, same 595.58.03 version), unblocking the canonical fix.
