@@ -81,10 +81,22 @@ stow-%: ## Stow a single package (e.g., make stow-nvim)
 unstow-%: ## Unstow a single package (e.g., make unstow-nvim)
 	stow -d $(REPO_ROOT) -t ~ -D $*
 
-mime-update: ## Rebuild user MIME cache (needed after editing mime/.local/share/mime/packages/*.xml)
+mime-update: ## Rebuild user MIME cache and absolutize the mimeapps.list symlink
 	@if command -v update-mime-database >/dev/null 2>&1 && [ -d "$(HOME)/.local/share/mime/packages" ]; then \
 		update-mime-database "$(HOME)/.local/share/mime"; \
 		echo "MIME database rebuilt."; \
+	fi
+	@# GLib's safe-write follows the symlink, then writes the tempfile next to
+	@# the resolved target using its raw path. A relative target gets
+	@# CWD-resolved instead of resolved relative to the link's directory, so
+	@# Thunar et al. fail to update mimeapps.list unless CWD happens to be
+	@# ~/.config/. Forcing the symlink to absolute makes the tempfile land in
+	@# the right directory regardless of CWD.
+	@target=$(REPO_ROOT)/mime/.config/mimeapps.list; \
+	link=$(HOME)/.config/mimeapps.list; \
+	if [ -L "$$link" ] && [ "$$(readlink "$$link")" != "$$target" ]; then \
+		ln -sfn "$$target" "$$link"; \
+		echo "mimeapps.list symlink converted to absolute path."; \
 	fi
 
 ## System configs (require sudo)
