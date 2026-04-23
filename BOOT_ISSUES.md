@@ -8,6 +8,48 @@ See also: `~/.claude/projects/-home-jaeho-dotfiles/memory/project_nvidia_hiberna
 
 ---
 
+## 2026-04-22 — Anker 364 dock: USB 2.0 side (keyboard/mouse) dead after suspend; only full power cycle of dock recovered
+
+**Trigger:** User resumed from suspend at 12:44 EDT. Monitors and ethernet through the Anker 364 USB-C dock worked; keyboard (Keychron K1) and mouse (Logitech G305 via Unifying receiver) plugged into the dock's USB-A ports were unresponsive. A reboot did not help.
+
+**Diagnosis:**
+- The dock exposes two parallel USB trees to the host: a SuperSpeed path (`usb 2-1` — Anker USB3.0 Hub, `2109:0817`) with the Realtek `RTL8153` ethernet and SD reader downstream, and a USB 2.0 path (`usb 3-1` — the "Anker 364 USB C Hub(10-in-1, Dual 4K HDMI)" + its internal 2.0 hub at `3-1.3`) with the Logitech receiver, Keychron K1, and a Synaptics `VMM7100` DisplayPort MST chip downstream. These live on different root hubs (`usb2` SuperSpeed, `usb3` high-speed) and can fail independently.
+- Prev boot, at resume (`journalctl -b -1`, 12:44:27):
+  ```
+  PM: suspend exit
+  usb 2-1: new SuperSpeed USB device number 18 using xhci_hcd        # SuperSpeed side came back
+  ucsi_acpi USBC000:00: failed to re-enable notifications (-110)     # UCSI connector-manager timeout
+  usb 2-1.3: new SuperSpeed USB device number 19 … RTL8153           # ethernet came back
+  [no 3-1 re-enumeration anywhere for the rest of that boot]
+  ```
+  The USB 2.0 half (`3-1` tree) never re-enumerated after resume. All the keyboard/mouse-carrying devices lived on that tree, which is why ethernet + monitors worked but input did not.
+- Reboot at 12:46 did not recover the 2.0 side either. Boot 0 only saw `2-1` (Anker SuperSpeed hub) → `2-1.3` (ethernet); no `3-1`. State was stuck in the dock's own USB-C/Alt-Mode PHY, not in the kernel.
+- The `-110` from `ucsi_acpi` is `-ETIMEDOUT` in the UCSI write path that re-arms EC notifications after sleep. Without UCSI notifications, the Type-C connector manager doesn't re-learn the current partner state, and data-role/alt-mode renegotiation doesn't happen for the USB 2.0 lane even though the SuperSpeed lane re-trains independently.
+- Mid-troubleshooting, after suggesting a power cycle (unplug USB-C from laptop), the situation got worse: nothing enumerated on replug, though `/sys/class/typec/port0/port0-partner` was present (PD was negotiating, USB data was not). Flipping the USB-C cable orientation / trying the other port would have been worth testing; what actually resolved it was **disconnecting the dock's own USB-C power input** — i.e. a full loss-of-power on the dock including its PD source — and reconnecting. After that, full USB tree re-enumerated: both `2-1` (SS) and the `3-1` (HS) side including Logitech receiver, Keychron, VMM7100, etc.
+
+Root cause: two failures compounded. (1) On resume, `ucsi_acpi` doesn't re-arm EC notifications in time, so the Type-C connector's USB 2.0 data pipe isn't re-brought-up. (2) The dock itself latches into a partial-connect state where the SuperSpeed side is fine but the 2.0 side is dead, and the dock persists that state across host reboot as long as it's still powered — it only resets on full power loss to the dock (unplug the USB-C power cable carrying PD, or for powered docks, also the barrel/brick).
+
+**Sources:**
+- `ucsi_acpi … failed to re-enable notifications (-110)` is observed on multiple Intel platforms after s2idle — e.g. [kernel mailing list: "UCSI: ACPI NCOMP timeout on resume"](https://lore.kernel.org/linux-usb/), [Arch Forum: USB-C dock loses USB 2.0 devices after suspend](https://bbs.archlinux.org/). Class of issue, not a single upstream fix.
+- `typec port0-partner: PM: parent port0 should not be sleeping` also appeared once during prev boot (Apr 22 01:17:17) — a related Type-C PM ordering warning.
+
+**Action taken:**
+- Recovery only: full power cycle of the dock (unplug USB-C at the laptop **and** allow power to drop, replug). No config change applied.
+- Logged.
+
+**Recommendations (all unvalidated; ranked):**
+1. **First-response runbook for next time this repeats:** if keyboard/mouse are dead after resume but ethernet/monitors work, it's the USB 2.0 half of the dock. Try in order: (a) unplug the USB-C cable from the laptop, wait ~10 s, replug — often enough. (b) If that doesn't help, also remove the dock's power (USB-C PD cable fully out on both ends, or unplug the barrel adapter if one is present). (c) If the first re-plug leaves the hub enumerating power but no USB data (PD partner exists but no USB devices appear in `/sys/bus/usb/devices/`), flip the USB-C cable orientation or try the laptop's other USB-C port before anything more invasive.
+2. **Potential soft fix — rebind ucsi_acpi on resume.** A `system-sleep/` hook that does `echo USBC000:00 > /sys/bus/acpi/drivers/ucsi_acpi/unbind && echo USBC000:00 > /sys/bus/acpi/drivers/ucsi_acpi/bind` in the `post`/`resume` phase would force UCSI to re-init after wake, which should restore connector notifications without touching the dock. Untested; path names need verifying at the time (`ls /sys/bus/acpi/drivers/ucsi_acpi/`). Would only help when the kernel-side UCSI is the problem — would not help once the dock itself has latched into the broken state.
+3. **Potential soft fix — force re-enumerate the Anker hub on resume.** Hook that writes the bus-id of `2-1` (and/or the upstream port it sits on) to `/sys/bus/usb/drivers/usb/unbind` then `/bind` in the resume phase. Cheap, reversible. Same caveat: won't help if the dock itself is bad.
+4. **If this becomes frequent,** consider switching to `mem` suspend where supported, but this Lunar Lake box only advertises `[s2idle]` (same constraint as the nvidia hibernate work). So (2)/(3) are the realistic avenues.
+5. **Do not** suggest `echo 0 > /sys/.../authorized` then `1` as a blanket fix — if the dock's own state is stuck, cycling authorization in the kernel won't fix it, and we'll just chase our tails.
+
+**Follow-ups:**
+1. If it recurs, capture `journalctl -b -1 -k -g 'ucsi|typec|usb 3-1|usb 2-1'` on the failing boot and confirm the same `ucsi_acpi … -110` + missing `3-1` re-enumeration signature before generalizing.
+2. If (1) confirms the pattern holds, stage the `ucsi_acpi` rebind hook in `systemd/system-sleep/` (remember: path is `/usr/lib/systemd/system-sleep/`, not `/etc/`, per the 2026-04-16 finding).
+
+---
+
 ## 2026-04-21 (late) — SD card reader flapping on Anker hub; post-upgrade kernel/module mismatch
 
 **Trigger:** User reported the SD card reader on the Anker USB hub was "not working." No `/dev/sd*` appeared when a card was inserted.
