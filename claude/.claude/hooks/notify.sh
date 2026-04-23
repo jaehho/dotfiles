@@ -87,7 +87,8 @@ resolve_window_address() {
 if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]; then
   play_sound
   WINDOW_ADDR=$(resolve_window_address) || true
-  TMUX_SOCKET="${TMUX%%,*}"
+  TMUX_SOCKET="${TMUX:-}"
+  TMUX_SOCKET="${TMUX_SOCKET%%,*}"
   TMUX_TARGET=""
   if [[ -n "${TMUX_PANE:-}" ]]; then
     TMUX_TARGET=$(tmux display-message -t "$TMUX_PANE" \
@@ -141,8 +142,11 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
           pane_focused=false
           active_addr=$(hyprctl activewindow -j 2>/dev/null | jq -r ".address // empty" 2>/dev/null)
           if [[ -n "$TMUX_TARGET" && "$active_addr" == "$WINDOW_ADDR" ]]; then
+            # Require both the source window AND the source pane to be currently
+            # displayed. #{pane_active} alone is per-window, so switching to a
+            # different tmux window in the same terminal would still read 1.
             [[ "$(tmux -S "$TMUX_SOCKET" display-message -t "$TMUX_TARGET" \
-              -p "#{pane_active}" 2>/dev/null)" == "1" ]] && pane_focused=true
+              -p "#{window_active}:#{pane_active}" 2>/dev/null)" == "1:1" ]] && pane_focused=true
           elif [[ -z "$TMUX_TARGET" && "$active_addr" == "$WINDOW_ADDR" ]]; then
             pane_focused=true
           fi
