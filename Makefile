@@ -104,12 +104,17 @@ system-install: ## Copy boot configs and symlink runtime configs
 	else \
 		echo "TPM already installed."; \
 	fi
-	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default /etc/systemd /etc/sysctl.d /etc/alsa/conf.d
+	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default /etc/systemd /etc/systemd/logind.conf.d /etc/sysctl.d /etc/alsa/conf.d
 	sudo ln -sf $(REPO_ROOT)/keyd/default.conf /etc/keyd/default.conf
 	sudo ln -sf $(REPO_ROOT)/libinput/local-overrides.quirks /etc/libinput/local-overrides.quirks
 	sudo ln -sf $(REPO_ROOT)/sysctl/99-sysrq.conf /etc/sysctl.d/99-sysrq.conf
 	sudo sysctl --system >/dev/null
 	sudo ln -sf $(REPO_ROOT)/systemd/sleep.conf /etc/systemd/sleep.conf
+	sudo ln -sf $(REPO_ROOT)/systemd/logind.conf.d/10-lid.conf /etc/systemd/logind.conf.d/10-lid.conf
+	# Old filename: "10-lid-hibernate.conf" was misleading (contents only ever
+	# set lid=lock/suspend, never hibernate). Remove if present.
+	sudo rm -f /etc/systemd/logind.conf.d/10-lid-hibernate.conf
+	sudo systemctl reload systemd-logind.service
 	# system-sleep hooks must go in /usr/lib/, not /etc/ — systemd-sleep(8) v260+
 	# only scans /usr/lib/systemd/system-sleep/ (verified via `strings` on the
 	# binary). /etc/systemd/system-sleep/ is silently ignored.

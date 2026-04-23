@@ -8,6 +8,43 @@ See also: `~/.claude/projects/-home-jaeho-dotfiles/memory/project_nvidia_hiberna
 
 ---
 
+## 2026-04-20 → 2026-04-21 — Driver swap to proprietary nvidia; suspend works for the first time
+
+**Context:** After the 2026-04-18 frozen-session incident, the preventive measures (no auto-hibernate, freeze-session override reverted) held but left the system in a constrained state: hibernate worked, suspend was known-broken, lid close was forced to `lock`. On 2026-04-20 discovered that proprietary nvidia is now available on AUR as `nvidia-beta` / `nvidia-beta-dkms` (maintainer dbermond, same 595.58.03 version), unblocking the canonical fix.
+
+**Migration (2026-04-20, evening):** Ran `/tmp/hsperfdata_jaeho/migrate-nvidia-beta.sh`:
+- Swapped `nvidia-open` + `nvidia-utils` for `nvidia-beta-dkms` + `nvidia-utils-beta`.
+- Reverted `MODULES=(xe)` back to `MODULES=(xe nvidia nvidia_modeset nvidia_uvm nvidia_drm)` — early-KMS is correct for proprietary.
+- Restored `options nvidia NVreg_PreserveVideoMemoryAllocations=1` in `/etc/modprobe.d/nvidia.conf`.
+- Kept `NVreg_EnableGpuFirmware=0` (now honored; was silently ignored on nvidia-open).
+- Re-enabled `nvidia-{suspend,hibernate,resume,suspend-then-hibernate}.service` (no longer no-ops — `/proc/driver/nvidia/suspend` exists on proprietary).
+- `mkinitcpio -P`, reboot.
+
+**Post-reboot verification (2026-04-20, 23:11):**
+- `cat /proc/driver/nvidia/version` → "NVIDIA UNIX x86_64 Kernel Module 595.58.03" (no "Open Kernel Module").
+- `ls /proc/driver/nvidia/suspend` exists.
+- `grep -E 'EnableGpuFirmware|PreserveVideoMemory' /proc/driver/nvidia/params` → both honored (`EnableGpuFirmware: 0`, `PreserveVideoMemoryAllocations: 1`).
+- initramfs contains all four nvidia .ko.zst under `updates/dkms/`.
+- All four nvidia sleep services enabled, all four nvidia modules loaded, no kernel errors.
+
+**Suspend validation (2026-04-20, 23:14):** First clean `systemctl suspend` on this machine. Journal shows `PM: suspend entry (s2idle)` at 23:14:44 → `PM: suspend exit` at 23:14:55 (11s round trip). No `nv_pmops_freeze returns -5`, no GSP heartbeat timeout, Hyprland intact on resume, user reports battery drain acceptable. Post-resume sshfs/rclone briefly failed (network not up yet) — benign, standard resume behavior.
+
+**Lid handler update (2026-04-21):** Bumped lid close from `lock` to `suspend` via new dotfiles-managed drop-in `/home/jaeho/dotfiles/systemd/logind.conf.d/10-lid.conf` symlinked to `/etc/systemd/logind.conf.d/10-lid.conf`. Tracked in Makefile `system-install`.
+
+Wrinkle: drop-in failed to override the main `/etc/systemd/logind.conf` that had `HandleLidSwitch=suspend-then-hibernate` uncommented (residue from a 2026-04-12 manual edit). This violates systemd's documented precedence rules (drop-ins should override main) but was empirically reproducible. Resolution: commented out the offending lines in `/etc/systemd/logind.conf` via `/tmp/hsperfdata_jaeho/fix-logind-lid.sh` (backup left at `/etc/systemd/logind.conf.bak-20260420-232740`). Also found that SIGHUP reload of systemd-logind only partially re-reads properties — `HandleLidSwitch` reloaded cleanly but `HandleLidSwitchExternalPower` went to empty string; full `systemctl restart systemd-logind` is needed for a clean busctl report (not functionally required because unset `HandleLidSwitchExternalPower` inherits from `HandleLidSwitch`).
+
+**Status:**
+- Direct hibernate: **works** (unchanged from 2026-04-16).
+- Direct suspend: **works** (newly validated 2026-04-20).
+- Lid close: **suspends** (works on battery via drop-in; on AC via inheritance from `HandleLidSwitch`).
+- `suspend-then-hibernate`: **plumbing intact, untested on proprietary**. See memory `project_suspend_then_hibernate_plan.md` for validation + enable steps if revisited.
+
+**Follow-ups:**
+- Accumulate a few more real-world suspend cycles before committing the dotfiles changes (`~/dotfiles` is currently dirty on `mkinitcpio.conf`, `modprobe/nvidia.conf`, `Makefile`, and adds `systemd/logind.conf.d/10-lid.conf`).
+- If proprietary `nvidia` returns to `extra/` (vs AUR), swap away from DKMS to avoid kernel-update race conditions.
+
+---
+
 ## 2026-04-18 (evening) — Sleep-fail resume with frozen session + phantom "Failed to load kernel modules"
 
 **Trigger:** User reported failing to come back from sleep, tried `Alt+SysRq REISUB` without success, hard-shutdown. On next boot thought kernel modules failed to load, hard-shutdown again. Ended up cautious in TTY3 before logging into Hyprland.
