@@ -250,6 +250,21 @@ window#waybar {
     color: #e78284;
 }
 
+/* ── Reboot needed (pill only visible when class=pending, i.e. kernel upgrade pending) ── */
+#custom-reboot-needed.pending {
+    background-color: rgba(65, 69, 89, 0.6);
+    padding: 0 10px;
+    margin: 4px 2px;
+    border-radius: 12px;
+    color: #e78284;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+#custom-reboot-needed.pending:hover {
+    background-color: rgba(81, 87, 109, 0.8);
+}
+
 /* ── Tray ── */
 #tray > * {
     padding: 0 3px;

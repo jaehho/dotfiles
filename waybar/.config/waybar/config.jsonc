@@ -18,6 +18,7 @@
         "tray",
         "custom/idle-inhibitor",
         "custom/dnd",
+        "custom/reboot-needed",
         "cpu",
         "memory",
         "pulseaudio",
@@ -205,6 +206,13 @@
         "return-type": "json",
         "interval": 2,
         "on-click": "~/.local/bin/hypr-dnd-toggle"
+    },
+
+    "custom/reboot-needed": {
+        "exec": "~/.config/waybar/scripts/reboot-needed.sh",
+        "return-type": "json",
+        "interval": 300,
+        "on-click": "rofi -dmenu -p 'Reboot now?' -theme-str 'listview { lines: 2; }' <<< $'No\\nYes' | grep -q Yes && systemctl reboot"
     },
 
     "tray": {

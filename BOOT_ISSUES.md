@@ -8,6 +8,23 @@ See also: `~/.claude/projects/-home-jaeho-dotfiles/memory/project_nvidia_hiberna
 
 ---
 
+## 2026-04-21 (late) — SD card reader flapping on Anker hub; post-upgrade kernel/module mismatch
+
+**Trigger:** User reported the SD card reader on the Anker USB hub was "not working." No `/dev/sd*` appeared when a card was inserted.
+
+**Diagnosis:**
+- Journal showed the reader enumerating successfully as `usb 2-1.2: Product: USB3.0 Card Reader` (Genesys Logic `05e3:0749`, SuperSpeed, behind Anker `USB3.0 Hub` at `2-1`, sharing the hub with a Realtek `RTL8153` Ethernet at `2-1.3`). But the device was flapping — connect/disconnect cycles every 5–20 s, reaching device number 17 within ~1 minute.
+- The interface `2-1.2:1.0` correctly declared mass-storage (`bInterfaceClass=08`, `bInterfaceSubClass=06`, `bInterfaceProtocol=50` — Bulk-Only SCSI), but **no driver was bound** to it.
+- `modinfo usb-storage` and `modinfo uas` both returned `Module not found`. `/lib/modules/6.19.11-arch1-1/` did not exist. Running kernel was `6.19.11-arch1-1`; `pacman -Q linux` reported `6.19.12.arch1-1`. Only `/lib/modules/6.19.12-arch1-1/` was on disk.
+
+Root cause: the `linux` package had been upgraded from 6.19.11 → 6.19.12 without a reboot. The old module tree was removed by the package upgrade, so the running kernel could not modprobe `usb-storage`/`uas` when the card reader's mass-storage interface appeared. Interface had no driver → no SCSI host → no block device → udev kept retrying enumeration, which looked like flapping. The flapping was a symptom, not the cause; any hotplug of anything that needed a not-yet-loaded module would behave the same way.
+
+**Proposed fix:** Reboot into `6.19.12-arch1-1`. `vmlinuz-linux` already points at the new build and all modules are installed for it. No modprobe quirks needed — the reader hardware and Anker hub are both fine.
+
+**Preventive note (not a change):** The Arch `linux` upgrade path always removes the old `/lib/modules/<oldver>/` immediately. Any post-upgrade module load (USB hotplug, filesystem mount of an unusual FS, bluetooth, etc.) will fail silently until reboot. Worth keeping `linux` upgrades and reboots closely paired; `needrestart` or a small "pending-reboot" indicator would surface this earlier. Not applied today.
+
+---
+
 ## 2026-04-21 (evening) — Thunar hung on `~`; stale FUSE mount from crashed rclone-onedrive
 
 **Trigger:** User reported Thunar could not open the home directory. `ls ~` hung indefinitely. OS was otherwise responsive.
