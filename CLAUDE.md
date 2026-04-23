@@ -84,3 +84,22 @@ Both are Rust + ratatui (crossterm). The wallpaper TUI reuses its window via a c
 - `--no-folding` is always used (creates individual symlinks, not directory symlinks)
 - Distro-aware: `COMMON_PACKAGES` for all systems, `ARCH_PACKAGES` for Arch only
 - Boot-critical configs (grub, mkinitcpio) are **copied** not symlinked via `system-install`
+
+## Commands You Give Me to Run
+
+**Default: run commands yourself with the Bash tool.** Don't hand me a command and ask me to run it just because it's convenient — that wastes a round trip. Only delegate to me when you genuinely cannot run the command yourself, e.g.:
+
+- It requires `sudo` or other privileged access
+- It needs an interactive TTY (login flows, REPLs, editors, password prompts)
+- It needs to run in my shell session, not a subprocess (sourcing env, activating contexts)
+- It would otherwise hang, prompt, or fail under your tool harness
+
+**When you do need to delegate**, do not list the commands inline for me to copy-paste. Instead, write them to a temporary shell script at `/tmp/<descriptive-name>.sh`. The script should:
+
+- Start with `set -euo pipefail` (for bash) or equivalent strict mode to fail fast
+- Print progress messages so I can see what step is running
+- Handle expected failure modes (check `command -v foo` before using it, guard against existing state, etc.)
+- Be idempotent where possible — safe to re-run if part of it fails
+- Exit cleanly with a meaningful status message
+
+Then tell me the path and how to invoke it (e.g. `sudo bash /tmp/foo.sh`, or `sh`/`python`/etc). This is more robust than copy-pasting a block of commands, especially for anything touching system state.
