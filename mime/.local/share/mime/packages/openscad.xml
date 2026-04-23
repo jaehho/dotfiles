@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  openscad-snapshot-appimage ships no MIME package and no MimeType= in its
+  .desktop entry, so xdg falls back to content sniffing on *.scad and
+  misclassifies it as text/plain (-> libreoffice-writer). This glob makes
+  .scad / .csg resolve to application/x-openscad, which mimeapps.list then
+  hands to openscad.desktop.
+-->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-openscad">
+    <comment>OpenSCAD source code</comment>
+    <sub-class-of type="text/plain"/>
+    <glob pattern="*.scad"/>
+    <glob pattern="*.csg"/>
+  </mime-type>
+</mime-info>

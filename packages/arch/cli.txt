@@ -12,6 +12,7 @@ jq
 less
 openssh
 pacman-contrib
+perl-file-mimeinfo
 ripgrep
 rsync
 socat

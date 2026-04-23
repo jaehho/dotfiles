@@ -57,6 +57,7 @@ stow-all: ## Stow all packages (idempotent — safe to re-run after adding files
 		echo "Stowing $$pkg..."; \
 		stow -d $(REPO_ROOT) -t ~ --no-folding $$pkg; \
 	done
+	@$(MAKE) --no-print-directory mime-update
 	@echo "All packages stowed."
 	@echo ""
 	@echo "To reload without restarting:"
@@ -79,6 +80,12 @@ stow-%: ## Stow a single package (e.g., make stow-nvim)
 
 unstow-%: ## Unstow a single package (e.g., make unstow-nvim)
 	stow -d $(REPO_ROOT) -t ~ -D $*
+
+mime-update: ## Rebuild user MIME cache (needed after editing mime/.local/share/mime/packages/*.xml)
+	@if command -v update-mime-database >/dev/null 2>&1 && [ -d "$(HOME)/.local/share/mime/packages" ]; then \
+		update-mime-database "$(HOME)/.local/share/mime"; \
+		echo "MIME database rebuilt."; \
+	fi
 
 ## System configs (require sudo)
 # Boot-critical configs (grub, mkinitcpio, modprobe) are COPIED, not symlinked,
