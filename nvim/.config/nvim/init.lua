@@ -212,7 +212,7 @@ vim.diagnostic.config {
 
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
 
--- Unified preview toggle: dispatches by filetype (typst, tex, csv)
+-- Unified preview toggle: dispatches by filetype (typst, tex, markdown, marimo)
 do
   local function stop_pdf_preview(bufnr)
     local ok, preview = pcall(function() return vim.b[bufnr].pdf_preview end)
@@ -281,20 +281,7 @@ do
         src, pdf
       )
     elseif ft == 'markdown' then
-      local src = vim.api.nvim_buf_get_name(0)
-      local build_dir = vim.fn.fnamemodify(src, ':h') .. '/build'
-      vim.fn.mkdir(build_dir, 'p')
-      local pdf = build_dir .. '/' .. vim.fn.fnamemodify(src, ':t'):gsub('%.md$', '.pdf')
-      local pandoc_opts = "--pdf-engine=xelatex --filter=mermaid-filter -V mainfont='DejaVu Sans' -V monofont='JetBrainsMono Nerd Font Mono'"
-      local pandoc_cmd = 'pandoc ' .. pandoc_opts .. ' ' .. vim.fn.shellescape(src) .. ' -o ' .. vim.fn.shellescape(pdf)
-      local name = vim.fn.fnamemodify(src, ':t')
-      local inner = 'printf "\\n[%s] building ' .. name .. '\\n" "$(date +%T)"; if ' .. pandoc_cmd .. '; then printf "[%s] ok\\n" "$(date +%T)"; else printf "[%s] FAIL\\n" "$(date +%T)"; fi'
-      local watch_cmd = 'echo ' .. vim.fn.shellescape(src) .. ' | entr -c sh -c ' .. vim.fn.shellescape(inner)
-      start_pdf_preview(
-        { 'pandoc', '--pdf-engine=xelatex', '--filter=mermaid-filter', '-V', 'mainfont=DejaVu Sans', '-V', 'monofont=JetBrainsMono Nerd Font Mono', src, '-o', pdf },
-        watch_cmd,
-        src, pdf
-      )
+      vim.cmd 'MarkdownPreviewToggle'
     elseif ft == 'python' then
       local lines = vim.api.nvim_buf_get_lines(0, 0, 50, false)
       local is_marimo = false
@@ -1346,6 +1333,17 @@ require('lazy').setup({
     enabled = false,
     event = 'VeryLazy',
     opts = {},
+  },
+
+  { -- Markdown preview in browser (GFM-ish, mermaid, katex)
+    'iamcco/markdown-preview.nvim',
+    cmd = { 'MarkdownPreviewToggle', 'MarkdownPreview', 'MarkdownPreviewStop' },
+    ft = 'markdown',
+    build = 'cd app && npx --yes yarn install',
+    init = function()
+      vim.g.mkdp_auto_close = 1
+      vim.g.mkdp_theme = 'dark'
+    end,
   },
 
   -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
