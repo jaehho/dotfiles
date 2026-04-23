@@ -1,4 +1,3 @@
-bambustudio-bin
 epson-inkjet-printer-escpr
 google-chrome
 google-cloud-cli
