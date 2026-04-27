@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# freecad-export-stl — export visible PartDesign Bodies in a .FCStd to STL.
+# fc-stl — export visible PartDesign Bodies in a .FCStd to STL.
 #
 # Args go through a NUL-delimited temp file rather than freecadcmd's argv,
 # because freecadcmd tries to interpret every positional arg (including
 # things like `-o` or `out/`) as a document to open and prints noisy
 # "File format not supported" warnings on each one.
 set -euo pipefail
-PY="$(dirname "$(realpath "$0")")/freecad-export-stl.py"
+PY="$(dirname "$(realpath "$0")")/fc-stl.py"
 ARGS_FILE=$(mktemp)
 trap 'rm -f "$ARGS_FILE"' EXIT
 # bash printf '%s\0' with zero args still emits one NUL, which Python would
@@ -14,4 +14,4 @@ trap 'rm -f "$ARGS_FILE"' EXIT
 if [ $# -gt 0 ]; then
     printf '%s\0' "$@" > "$ARGS_FILE"
 fi
-FREECAD_EXPORT_STL_ARGS_FILE="$ARGS_FILE" freecadcmd "$PY"
+FC_STL_ARGS_FILE="$ARGS_FILE" freecadcmd "$PY"

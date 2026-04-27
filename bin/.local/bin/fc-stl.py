@@ -1,10 +1,9 @@
 """
-freecad-export-stl — export visible PartDesign Bodies to STL.
+fc-stl — export visible PartDesign Bodies to STL.
 
-Internal Python implementation. Invoked by the `freecad-export-stl` wrapper
-under `freecadcmd`. The wrapper passes user args through
-FREECAD_EXPORT_STL_ARGS_FILE (NUL-delimited) so freecadcmd's own positional
-parsing never sees them.
+Internal Python implementation. Invoked by the `fc-stl` wrapper under
+`freecadcmd`. The wrapper passes user args through FC_STL_ARGS_FILE
+(NUL-delimited) so freecadcmd's own positional parsing never sees them.
 """
 import argparse
 import os
@@ -39,10 +38,10 @@ def export_bodies(doc, out_dir, *, ld, ad, include_hidden):
 
 def _user_argv():
     """Read user args from the NUL-delimited file written by the wrapper."""
-    args_file = os.environ.get("FREECAD_EXPORT_STL_ARGS_FILE")
+    args_file = os.environ.get("FC_STL_ARGS_FILE")
     if not args_file:
-        print("error: FREECAD_EXPORT_STL_ARGS_FILE not set "
-              "(invoke via the freecad-export-stl wrapper, not freecadcmd directly)",
+        print("error: FC_STL_ARGS_FILE not set "
+              "(invoke via the fc-stl wrapper, not freecadcmd directly)",
               file=sys.stderr)
         sys.exit(1)
     with open(args_file, "rb") as f:
@@ -57,7 +56,7 @@ def main(argv=None):
     if argv is None:
         argv = _user_argv()
     p = argparse.ArgumentParser(
-        prog="freecad-export-stl",
+        prog="fc-stl",
         description="Export PartDesign Bodies from a FreeCAD document to STL.",
     )
     p.add_argument("doc", help="Path to .FCStd document")
