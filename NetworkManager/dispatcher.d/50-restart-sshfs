@@ -1,0 +1,34 @@
+#!/bin/sh
+# NetworkManager dispatcher hook: restart user sshfs mounts when an interface
+# comes up. Pairs with the exponential backoff in sshfs-{ice,mililab}.service
+# so suspend/resume and wifi roaming get a fast remount instead of waiting
+# for the next backoff timer to fire.
+#
+# Installed to /etc/NetworkManager/dispatcher.d/ via Makefile system-install.
+# Must be root-owned, mode 755 — NetworkManager refuses to run otherwise.
+
+set -u
+
+iface="$1"
+action="$2"
+
+case "$action" in
+    up|connectivity-change) ;;
+    *) exit 0 ;;
+esac
+
+case "$iface" in
+    lo|docker*|virbr*|vnet*|tailscale*|veth*) exit 0 ;;
+esac
+
+TARGET_UID=1000
+TARGET_USER=jaeho
+
+for svc in sshfs-ice.service sshfs-mililab.service; do
+    runuser -u "$TARGET_USER" -- env \
+        "XDG_RUNTIME_DIR=/run/user/$TARGET_UID" \
+        "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus" \
+        systemctl --user restart "$svc" >/dev/null 2>&1 || true
+done
+
+exit 0

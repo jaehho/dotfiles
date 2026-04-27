@@ -2,17 +2,30 @@
 Description=SSHFS mount mililab
 Wants=network-online.target
 After=network-online.target
+# Disable systemd's default start-rate-limit (5 starts / 10s) so the
+# Restart= backoff below is the only thing throttling restarts.
+StartLimitIntervalSec=0
 
 [Service]
 Type=forking
+TimeoutStartSec=20
 ExecStartPre=-/usr/bin/fusermount3 -uz %h/mililab
 ExecStartPre=/usr/bin/mkdir -p %h/mililab
+# No `reconnect`: on connection loss, sshfs must exit so in-flight FUSE
+# calls return EIO instead of hanging forever (see BOOT_ISSUES.md).
 ExecStart=/usr/bin/sshfs mililab:/ %h/mililab \
-  -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 \
+  -o ServerAliveInterval=5,ServerAliveCountMax=2 \
+  -o ConnectTimeout=10 \
   -o dir_cache=no,no_readahead
 ExecStop=/usr/bin/fusermount3 -uz %h/mililab
-Restart=always
+# Exponential backoff: 10s → ~17s → ~30s → ~50s → ~60s (cap).
+# 60s cap keeps post-resume mount-down bounded; the NetworkManager
+# dispatcher hook (50-restart-sshfs) triggers immediate remount when
+# wifi comes up, so backoff is just the safety net.
+Restart=on-failure
 RestartSec=10
+RestartSteps=10
+RestartMaxDelaySec=60
 
 [Install]
 WantedBy=default.target

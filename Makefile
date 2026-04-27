@@ -142,6 +142,12 @@ system-install: ## Copy boot configs and symlink runtime configs
 	# Clean up any stale /etc/ symlinks from before this was understood.
 	sudo rm -f /etc/systemd/system-sleep/fuse-mounts /etc/systemd/system-sleep/hyprlock-restart
 	sudo ln -sf /usr/share/alsa/alsa.conf.d/99-pipewire-default.conf /etc/alsa/conf.d/99-pipewire-default.conf
+	# NetworkManager dispatcher hooks must be root-owned, not group/world
+	# writable, and not a symlink to a user-owned file — NM refuses otherwise.
+	# Install (copy + chmod + chown) instead of symlinking.
+	sudo install -D -m 0755 -o root -g root \
+		$(REPO_ROOT)/NetworkManager/dispatcher.d/50-restart-sshfs \
+		/etc/NetworkManager/dispatcher.d/50-restart-sshfs
 	@changed=""; \
 	for pair in $(SYSTEM_COPIES); do \
 		src=$${pair%%:*}; dst=$${pair##*:}; \
