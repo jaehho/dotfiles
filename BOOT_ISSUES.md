@@ -8,6 +8,67 @@ See also: `~/.claude/projects/-home-jaeho-dotfiles/memory/project_nvidia_hiberna
 
 ---
 
+## 2026-04-25 — Hyprland NULL ptr deref in nvidia_modeset on suspend resume; SysRq R/E recovery + reboot
+
+**Trigger:** User resumed from a long s2idle suspend. Display did not come back. Pressed `Alt+SysRq R` then `E`, ended up at a TTY login. After login, NetworkManager and dependent services were in a broken state, so user rebooted.
+
+**Timeline (boot -1, all EDT):**
+- `21:47:51` first suspend cycle on this boot — short, ~1 min, clean resume at `21:48:49`.
+- `21:49:42` second suspend → kernel `s2idle` at `21:49:44`.
+- `23:27:45` kernel resume from the long sleep (`PM: suspend exit`). systemd-suspend.service post-hook phase begins (`fuse-mounts`, `hyprlock-restart` no-op for `suspend`, `nvidia` → `/usr/bin/nvidia-sleep.sh "resume"` which writes `resume` to `/proc/driver/nvidia/suspend` to restore VRAM under `NVreg_PreserveVideoMemoryAllocations=1`).
+- `23:27:47` **Hyprland (PID 1199) crashed in nvidia_drm.** Kernel oops:
+  ```
+  BUG: kernel NULL pointer dereference, address: 0000000000000028
+  RIP: 0010:_nv000555kms+0x4/0x10 [nvidia_modeset]
+  Call Trace:
+    nv_drm_framebuffer_create+0x20c/0x470 [nvidia_drm]
+    drm_internal_framebuffer_create+0x426/0x5a0
+    drm_mode_addfb2+0x45/0x110
+    drm_ioctl+...
+  Comm: Hyprland Tainted: P OE 6.19.13-arch1-1
+  note: Hyprland[1199] exited with irqs disabled
+  ```
+  No GSP/NVRM heartbeat errors — distinct from prior `_kgspIsHeartbeatTimedOut` failures (04-09 → 04-18).
+- `23:28:14` lid closed, `23:28:17` lid opened (user flailing at a black screen — Hyprland was already dead, xdg-desktop-portal-hyprland still running pointed at nothing).
+- `23:28:35` systemd-suspend.service finally finishes (50 s post-resume tail — most of that is `nvidia-sleep.sh "resume"` blocked on `/proc/driver/nvidia/suspend` restoring VRAM; normal for this box, not the bug).
+- `23:28:38` user triggered another suspend (lid close); kernel s2idle at `23:28:40`.
+- `23:40:56` kernel resume. This time no Hyprland to crash — looked frozen because there was nothing on screen. User waited ~21 s.
+- `23:41:17` SysRq R (keyboard mode → system default). `23:41:18` SysRq E (terminate all). systemd-suspend.service got SIGTERM mid-flight before it could run `nvidia-resume.service` or signal NetworkManager to wake → `Failed to start System Suspend / Dependency failed for Suspend`. Those failure lines are the **consequence** of the SysRq, not the cause.
+- After SysRq: NetworkManager respawned but dependencies were broken — `tailscaled: Could not activate remote peer 'org.freedesktop.resolve1': activation request failed: unknown unit`, sshfs/rclone retrying against a dead resolved, etc. Reboot.
+
+**Diagnosis:**
+
+1. **Root cause: Hyprland raced nvidia-modeset on resume.** Per the 2026-04-18 evening fix, `SYSTEMD_SLEEP_FREEZE_USER_SESSIONS=0` (sessions stay runnable across suspend) — log confirms: `User sessions remain unfrozen on explicit request ($SYSTEMD_SLEEP_FREEZE_USER_SESSIONS=0)`. Hyprland kept rendering during the entire sleep cycle. The instant the kernel resumed, before `nvidia-sleep.sh "resume"` had finished restoring VRAM, Hyprland issued `DRM_IOCTL_MODE_ADDFB2` and walked into a half-restored modeset state. nvidia 595.58.03's `_nv000555kms` (an internal nvidia_modeset routine) hit `NULL+0x28` and the process died. `irqs disabled` on exit means the crash happened with kernel state held — not catastrophic but rare.
+
+2. **The "slow recovery" perception is unrelated.** The 50-second post-resume tail on this hardware is the cost of `NVreg_PreserveVideoMemoryAllocations=1` copying VRAM contents back across PCIe. Always slow on long sleeps. User's 21-second SysRq window was simply less than that. Even without the Hyprland crash, the box would have looked unresponsive that long — but it would have come back.
+
+3. **Inverse failure mode of 2026-04-18.** Same nvidia 595.58.03 unreliability, opposite knob:
+    - 04-18: freeze enabled → frozen user-1000.slice can't unfreeze when GPU hung on resume → unrecoverable.
+    - 04-25: freeze disabled → user-process renders before GPU restored → resume-time crash → recoverable via reboot.
+   Today validates the 04-18 tradeoff: you got the recoverable side.
+
+4. **The Hyprland crash on the *first* resume (23:27:47) is what broke the rest.** Once the compositor was dead at 23:27:47, every subsequent input-or-display event the user tried (lid close/open at 23:28:14/17, then re-suspend, then post-resume wait) was futile. SysRq was the right escape. Reboot was the right cleanup.
+
+**Action taken:**
+- None. No config change, no hook added, no driver swap.
+- Logged.
+
+**Recommendations (unvalidated):** Ranked by my own confidence, not by "what to do first."
+
+1. **Do nothing yet.** First suspend failure since the 2026-04-20 proprietary-nvidia migration (5 days of clean cycles). Single data point. The system recovered cleanly with SysRq R/E + reboot. Don't change a stable config based on one occurrence.
+2. **Tripwire:** if this recurs within ~a week, escalate. Capture another `journalctl -b -1 -k -g 'nvidia|NVRM|Hyprland|BUG|Oops'` snapshot to confirm the same `_nv000555kms` signature (vs. e.g. a different nvidia_drm path or a GSP heartbeat regression).
+3. **Watch upstream.** This is a class of bug that gets fixed in nvidia driver point releases. `pacman -Si nvidia-beta-dkms` and watch for >595.58.03; also watch repo `nvidia` returning to extra/.
+4. **If escalating: surgical SIGSTOP, not full freeze.** A `system-sleep` hook that `pkill -STOP -u jaeho -x Hyprland` in `pre` and `pkill -CONT` in `post` (after `nvidia-sleep.sh "resume"` has finished) is the lowest-risk option. Avoids re-enabling `SYSTEMD_SLEEP_FREEZE_USER_SESSIONS=true` (which would re-introduce the 04-18 frozen-slice failure mode). Open question: whether a SIGSTOP'd Hyprland with stale EGL state actually survives `SIGCONT` post-resume, or just shifts the crash to a slightly later moment. Untested.
+5. **Do not** unwind the 04-18 freeze-disable decision. That was made with full context; today is the inverse failure mode it explicitly accepted. Two unrecoverable hibernate deadlocks > many recoverable suspend crashes.
+6. **Do not** add retry loops or scripted recovery around the SysRq path. The clean-reboot path is the supported recovery — anything that tries to "fix" a half-killed userspace after SysRq E will fail in new ways.
+
+**Follow-ups:**
+1. If recurrence captures the same `_nv000555kms` + `nv_drm_framebuffer_create` signature, file or check for an upstream nvidia ticket. Search terms: `_nv000555kms NULL pointer nv_drm_framebuffer_create`.
+2. If it becomes frequent (say ≥1/week), implement Recommendation #4 as a separate hook in `systemd/system-sleep/hyprland-pause` (don't fold into existing `hyprlock-restart` — different concern).
+3. Memory `project_nvidia_hibernate_fix.md` should pick up this entry as the new most-recent failure mode.
+
+---
+
 ## 2026-04-22 — Anker 364 dock: USB 2.0 side (keyboard/mouse) dead after suspend; only full power cycle of dock recovered
 
 **Trigger:** User resumed from suspend at 12:44 EDT. Monitors and ethernet through the Anker 364 USB-C dock worked; keyboard (Keychron K1) and mouse (Logitech G305 via Unifying receiver) plugged into the dock's USB-A ports were unresponsive. A reboot did not help.
