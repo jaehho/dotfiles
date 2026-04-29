@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Periodic health check for an sshfs mount. If the mount is unresponsive,
+# abort the FUSE channel and restart the systemd user service that owns it.
+#
+# Why this exists: sshfs-{ice,mililab}.service relies on
+# ServerAliveInterval=5/CountMax=2 to make sshfs exit on connection loss,
+# at which point in-flight FUSE calls return EIO. But if the SSH peer goes
+# silent without sending RST (NAT eviction, dropped link without TCP RST),
+# Linux TCP holds the socket in retry for ~13-30 min, sshfs's read() never
+# returns, and any process touching the mount blocks in D-state. Killing
+# sshfs and unmounting are not enough on their own; only writing to the
+# connection's /sys/fs/fuse/connections/<id>/abort wakes blocked callers
+# with EIO. This script automates that reap.
+#
+# Usage: sshfs-watchdog <mountpoint> <user-service-name>
+
+set -u
+
+MP="${1:?mountpoint required}"
+SVC="${2:?service name required}"
+
+if timeout 3 stat -L "$MP/." >/dev/null 2>&1; then
+    exit 0
+fi
+
+logger -t sshfs-watchdog "$MP unresponsive; aborting FUSE and restarting $SVC"
+
+# Map mountpoint to its FUSE connection id via /proc/self/mountinfo:
+# field 5 is the mountpoint, field 3 is "major:minor" where minor matches
+# the directory name under /sys/fs/fuse/connections/.
+CONN=$(awk -v mp="$MP" '$5 == mp {split($3, a, ":"); print a[2]; exit}' /proc/self/mountinfo)
+
+fusermount3 -uz "$MP" 2>/dev/null || true
+
+if [ -n "$CONN" ] && [ -w "/sys/fs/fuse/connections/$CONN/abort" ]; then
+    echo 1 > "/sys/fs/fuse/connections/$CONN/abort" 2>/dev/null || true
+fi
+
+systemctl --user restart "$SVC"

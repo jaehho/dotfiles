@@ -1,0 +1,13 @@
+[Unit]
+Description=Periodic health check for sshfs-ice
+
+[Timer]
+# Skip the first 2 min after boot so post-boot mount race doesn't trigger
+# a redundant reap-restart cycle.
+OnBootSec=2min
+OnUnitActiveSec=30s
+AccuracySec=5s
+Unit=sshfs-ice-watchdog.service
+
+[Install]
+WantedBy=timers.target

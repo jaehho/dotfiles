@@ -261,7 +261,7 @@ rclone-onedrive-unmount: ## Unmount OneDrive and disable service
 	@systemctl --user disable --now rclone-onedrive 2>/dev/null || true
 	@echo "OneDrive unmounted and service disabled."
 
-sshfs-setup: stow-sshfs ## Install sshfs and enable ice + mililab mounts
+sshfs-setup: stow-sshfs stow-bin ## Install sshfs and enable ice + mililab mounts (+ ice watchdog)
 	@command -v sshfs >/dev/null 2>&1 || { \
 		echo "Installing sshfs..."; \
 		if command -v pacman >/dev/null 2>&1; then \
@@ -276,9 +276,11 @@ sshfs-setup: stow-sshfs ## Install sshfs and enable ice + mililab mounts
 	@systemctl --user daemon-reload
 	@systemctl --user enable --now sshfs-ice
 	@systemctl --user enable --now sshfs-mililab
+	@systemctl --user enable --now sshfs-ice-watchdog.timer
 	@echo "ice mounted at ~/ice, mililab mounted at ~/mililab"
 
 sshfs-unmount: ## Unmount ice + mililab SSHFS and disable services
+	@systemctl --user disable --now sshfs-ice-watchdog.timer 2>/dev/null || true
 	@systemctl --user disable --now sshfs-ice 2>/dev/null || true
 	@systemctl --user disable --now sshfs-mililab 2>/dev/null || true
 	@echo "SSHFS mounts unmounted and services disabled."

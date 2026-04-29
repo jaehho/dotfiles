@@ -1,0 +1,8 @@
+[Unit]
+Description=Health check + reaper for sshfs-ice
+# Don't run if sshfs-ice is intentionally inactive (e.g. unit disabled).
+ConditionPathExists=%h/.config/systemd/user/sshfs-ice.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/sshfs-watchdog %h/ice sshfs-ice.service
