@@ -1,0 +1,3 @@
+bind <Space>d tabdetach
+
+blacklistadd cvat.jaehho.com
