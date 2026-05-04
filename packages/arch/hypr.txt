@@ -6,7 +6,6 @@ hypridle
 hyprland
 hyprlock
 hyprsunset
-mako
 nwg-look
 polkit-gnome
 qt5-wayland
@@ -16,6 +15,7 @@ rofimoji
 satty
 slurp
 swayosd
+swaync
 waybar
 wev
 wl-clipboard

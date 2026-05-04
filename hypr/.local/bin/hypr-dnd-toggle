@@ -1,13 +1,14 @@
 #!/bin/bash
-# Toggle Do Not Disturb mode for mako
+# Toggle Do Not Disturb via swaync.
+# When turning DND on, notify first so the toast is visible before silencing.
 
-MODE=$(makoctl mode)
+state=$(swaync-client -D 2>/dev/null)
 
-if echo "$MODE" | grep -q "do-not-disturb"; then
-    makoctl mode -r do-not-disturb
+if [[ "$state" == "true" ]]; then
+    swaync-client -df >/dev/null
     notify-send -u low "Notifications" "Do Not Disturb OFF"
 else
     notify-send -u low "Notifications" "Do Not Disturb ON"
     sleep 1
-    makoctl mode -a do-not-disturb
+    swaync-client -dn >/dev/null
 fi

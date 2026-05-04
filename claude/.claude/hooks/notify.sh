@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Claude Code notification hook — desktop notifications via notify-send (mako)
-# Handles: Stop (response complete), Notification (permission prompts)
+# Claude Code notification hook — desktop notifications via notify-send.
+# Handles: Stop (response complete), Notification (permission prompts).
+# Daemon-agnostic: uses libnotify + freedesktop CloseNotification D-Bus method.
 
 set -euo pipefail
 
@@ -29,9 +30,7 @@ case "$EVENT" in
     TITLE="Claude finished"
     FULL_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // "Response complete."')
     BODY=$(truncate "$FULL_MSG" 300)
-    NTFY_BODY=$(truncate "$FULL_MSG" 4000)
     URGENCY="normal"
-    CATEGORY="persistent"
     ;;
 
   Notification)
@@ -43,7 +42,6 @@ case "$EVENT" in
         TITLE="Permission needed"
         BODY="${MSG:-Claude needs your approval.}"
         URGENCY="normal"
-        CATEGORY="persistent"
         ;;
       *)
         exit 0
@@ -53,10 +51,6 @@ case "$EVENT" in
 
   *) exit 0 ;;
 esac
-
-# ── ntfy.sh priority ────────────────────────────────────────────────────────
-NTFY_PRIORITY="default"
-[[ "${URGENCY:-normal}" == "high" ]] && NTFY_PRIORITY="high"
 
 # ── Resolve source window + tmux pane (for notification focus) ────────────────
 resolve_window_address() {
@@ -83,7 +77,7 @@ resolve_window_address() {
 }
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
-# Desktop: notify-send (mako) on local Wayland; OSC 99 for SSH/remote
+# Desktop: notify-send on local Wayland; OSC 99 for SSH/remote.
 if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]; then
   play_sound
   WINDOW_ADDR=$(resolve_window_address) || true
@@ -95,9 +89,8 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
       -p '#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null) || true
   fi
 
-  NOTIFY_ARGS=(--app-name="Claude Code" -u "${URGENCY:-normal}")
-  [[ -n "${CATEGORY:-}" ]] && NOTIFY_ARGS+=(-c "$CATEGORY")
-  NOTIFY_ARGS+=(--action=default=Focus)
+  # -t 0 = never auto-expire; the watcher below dismisses on focus / source death
+  NOTIFY_ARGS=(--app-name="Claude Code" -u "${URGENCY:-normal}" -t 0 --action=default=Focus)
 
   # setsid detaches so Claude doesn't wait. Single FIFO carries notify-send
   # stdout: line 1 = notification ID (--print-id), line 2 = action on click.
@@ -106,6 +99,15 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
   # A background watcher auto-dismisses if the source dies or user is looking.
   setsid bash -c '
     WINDOW_ADDR="$1"; TMUX_SOCKET="$2"; TMUX_TARGET="$3"; shift 3
+
+    # Daemon-agnostic dismiss: standard freedesktop CloseNotification D-Bus method.
+    dismiss_notif() {
+      gdbus call --session \
+        --dest org.freedesktop.Notifications \
+        --object-path /org/freedesktop/Notifications \
+        --method org.freedesktop.Notifications.CloseNotification \
+        "$1" >/dev/null 2>&1
+    }
 
     tmpdir=$(mktemp -d) || exit 1
     mkfifo "$tmpdir/out"
@@ -133,10 +135,12 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
           else
             alive=true
           fi
-          "$alive" || { makoctl dismiss -n "$NOTIF_ID" 2>/dev/null; break; }
+          "$alive" || { dismiss_notif "$NOTIF_ID"; break; }
 
-          # Focus check: dismiss after sustained focus on the source pane
-          # Skip if SUPER+. just fired (prevents cascade-dismiss of other notifications)
+          # Focus check: dismiss after sustained focus on the source pane.
+          # Skip if a default action was just invoked (panel click) — the focus
+          # shift below is intentional and would otherwise cascade-dismiss
+          # sibling notifications that share the same source pane.
           _inv_ts=$(cat /tmp/hypr-notification-invoke 2>/dev/null || echo 0)
           if (( $(date +%s) - _inv_ts < 15 )); then focused_count=0; continue; fi
           pane_focused=false
@@ -152,7 +156,7 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
           fi
           if "$pane_focused"; then
             (( ++focused_count ))
-            (( focused_count >= 1 )) && { makoctl dismiss -n "$NOTIF_ID" 2>/dev/null; break; }
+            (( focused_count >= 1 )) && { dismiss_notif "$NOTIF_ID"; break; }
           else
             focused_count=0
           fi
@@ -167,6 +171,8 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
     [[ -n "${WATCHER:-}" ]] && kill "$WATCHER" 2>/dev/null && wait "$WATCHER" 2>/dev/null
 
     if [[ "$action" == "default" ]]; then
+      # Tell sibling watchers to skip focus-based dismiss for 15s — see watcher above.
+      date +%s > /tmp/hypr-notification-invoke
       if [[ -n "$WINDOW_ADDR" ]] && hyprctl clients -j 2>/dev/null \
            | jq -e --arg a "$WINDOW_ADDR" ".[] | select(.address == \$a)" >/dev/null 2>&1; then
         hyprctl dispatch focuswindow "address:$WINDOW_ADDR" >/dev/null 2>&1
@@ -178,28 +184,8 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
     fi
   ' _ "${WINDOW_ADDR:-}" "${TMUX_SOCKET:-}" "${TMUX_TARGET:-}" \
     "${NOTIFY_ARGS[@]}" "$TITLE" "$BODY" </dev/null &>/dev/null &
-
-  # Mobile: ntfy.sh delayed — only send if user hasn't seen the desktop notification
-  # setsid detaches from hook's process group so Claude doesn't wait 90s
-  setsid bash -c '
-    sleep 90
-    if makoctl list 2>/dev/null | grep -q "App name: Claude Code"; then
-      curl -s -o /dev/null --connect-timeout 5 --max-time 10 \
-        -H "Title: $1" \
-        -H "Priority: $2" \
-        -d "$3" \
-        ntfy.sh/jaeho
-    fi
-  ' _ "$TITLE" "$NTFY_PRIORITY" "${NTFY_BODY:-$BODY}" </dev/null &>/dev/null &
 else
   "$HOME/.local/bin/notify" "$TITLE" "$BODY" &
-
-  # Mobile: always send ntfy as fallback (OSC 99 passthrough may fail silently)
-  setsid curl -s -o /dev/null --connect-timeout 5 --max-time 10 \
-    -H "Title: $TITLE" \
-    -H "Priority: $NTFY_PRIORITY" \
-    -d "${NTFY_BODY:-$BODY}" \
-    ntfy.sh/jaeho </dev/null &>/dev/null &
 fi
 
 exit 0

@@ -1,0 +1,256 @@
+/* swaync style — Catppuccin Frappé palette by default; theme-apply rewrites
+   hex values in place when the active theme changes. */
+
+* {
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 13px;
+}
+
+/* Use a proportional font on the keybind-mnemonic labels so the U+0332
+   combining low line aligns under its character (JetBrainsMono renders it
+   as a short stub offset to the right). */
+.widget-title button label,
+.widget-dnd > label,
+.widget-buttons-grid button label {
+  font-family: "Inter", "DejaVu Sans", sans-serif;
+}
+
+/* ── Floating notifications (overlay layer) ──────────────────────────────── */
+
+.notification-row {
+  background: transparent;
+  padding: 0;
+  margin: 6px;
+}
+
+.notification-row .notification-background .notification {
+  background: #414559;
+  background-color: #414559;
+  color: #c6d0f5;
+  border: 2px solid #8caaee;
+  border-radius: 12px;
+  padding: 12px;
+  margin: 0;
+}
+
+.notification-row .notification-background .notification.low {
+  border-color: #a6d189;
+}
+
+.notification-row .notification-background .notification.critical {
+  border-color: #e78284;
+}
+
+/* Keyboard focus / selection — swaync (GTK4) uses Adwaita's `row:selected`
+   which paints a sharp blue background on the actual GtkListBoxRow whose
+   class is `.notification-group` (NOT `.notification-row`, which is just an
+   inner Adw.Bin). Strip Adwaita's fill, focus ring, and outline, then put a
+   rounded indicator on the inner `.notification` so corners match. */
+.control-center-list > row,
+.control-center-list > row:selected,
+.control-center-list > row:focus,
+.control-center-list > row:focus-visible,
+.control-center-list > row:hover,
+.control-center-list > row:active,
+.notification-group,
+.notification-group:selected,
+.notification-group:focus,
+.notification-group:focus-visible,
+.notification-group:hover,
+.notification-row,
+.notification-row:focus,
+.notification-row:focus-within,
+.notification-row:hover,
+.notification-row:selected,
+.notification-default-action,
+.notification-default-action:focus,
+.notification-action:focus,
+.close-button:focus {
+  background: transparent;
+  background-color: transparent;
+  background-image: none;
+  outline: none;
+  border: none;
+  box-shadow: none;
+}
+
+.notification-row:hover .notification-background .notification,
+.notification-group:hover .notification-background .notification {
+  background: #51576d;
+  background-color: #51576d;
+}
+
+.notification-group:selected .notification-background .notification,
+.notification-group:focus .notification-background .notification,
+.notification-group:focus-within .notification-background .notification,
+.notification-row:focus .notification-background .notification,
+.notification-row:focus-within .notification-background .notification,
+.notification-row:selected .notification-background .notification {
+  background: #51576d;
+  background-color: #51576d;
+  border-color: #f4b8e4;
+}
+
+.notification-default-action {
+  padding: 0;
+  margin: 0;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.notification-action {
+  background-color: #414559;
+  color: #c6d0f5;
+  border: none;
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin: 4px 4px 0 0;
+}
+
+.notification-action:hover {
+  background-color: #51576d;
+}
+
+.summary {
+  font-weight: 600;
+  color: #c6d0f5;
+}
+
+.time {
+  color: #a5adce;
+  font-size: 11px;
+}
+
+.body {
+  color: #c6d0f5;
+}
+
+.close-button {
+  background: transparent;
+  color: #a5adce;
+  border: none;
+  padding: 2px 6px;
+  margin: 0;
+}
+
+.close-button:hover {
+  color: #e78284;
+}
+
+/* Inline image / icon */
+.notification image {
+  border-radius: 8px;
+}
+
+/* ── Control center panel ────────────────────────────────────────────────── */
+
+.control-center {
+  background-color: #303446;
+  color: #c6d0f5;
+  border: 2px solid #8caaee;
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.control-center-list {
+  background: transparent;
+}
+
+.control-center-list-placeholder {
+  color: #a5adce;
+}
+
+.widget-title > label {
+  color: #c6d0f5;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.widget-title > button {
+  background-color: #414559;
+  color: #c6d0f5;
+  border: none;
+  border-radius: 8px;
+  padding: 4px 10px;
+}
+
+.widget-title > button:hover {
+  background-color: #51576d;
+}
+
+.widget-dnd > label {
+  color: #c6d0f5;
+}
+
+.widget-dnd > switch {
+  background-color: #414559;
+  border-radius: 12px;
+}
+
+.widget-dnd > switch:checked {
+  background-color: #8caaee;
+}
+
+.widget-dnd > switch slider {
+  background-color: #c6d0f5;
+  border-radius: 10px;
+}
+
+.widget-buttons-grid {
+  margin: 4px 0;
+  background: transparent;
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button {
+  background-color: #414559;
+  color: #c6d0f5;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 2px;
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button:hover {
+  background-color: #51576d;
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button.active {
+  background-color: #8caaee;
+  color: #232634;
+}
+
+.widget-mpris {
+  background-color: #292c3c;
+  border-radius: 10px;
+  padding: 8px;
+  margin: 4px 0;
+}
+
+.widget-mpris-title {
+  color: #c6d0f5;
+  font-weight: 600;
+}
+
+.widget-mpris-subtitle {
+  color: #a5adce;
+}
+
+/* Notifications inside the panel */
+.control-center .notification-row {
+  margin: 4px 0;
+}
+
+.control-center .notification-background .notification {
+  border-radius: 10px;
+}
+
+/* Floating progress bar (volume / brightness OSD via notifications) */
+progressbar {
+  background-color: #51576d;
+  border-radius: 6px;
+}
+
+progressbar progress {
+  background-color: #8caaee;
+  border-radius: 6px;
+}

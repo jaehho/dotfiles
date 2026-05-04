@@ -207,24 +207,22 @@ return {
 EOF
 echo "  nvim theme_colors.lua"
 
-# ── 7. Mako — sed replacement (no include support) ──────────────────────────
-MAKO="$DOTFILES/mako/.config/mako/config"
-if [[ -f "$MAKO" ]]; then
-  # Read current palette from mako (extract unique 6-char hex after #)
-  MAKO_PREV="$DOTFILES/theme/.config/theme/.mako-colors"
-  if [[ -f "$MAKO_PREV" ]]; then
+# ── 7. Swaync — sed replacement on style.css ────────────────────────────────
+SWAYNC="$DOTFILES/swaync/.config/swaync/style.css"
+if [[ -f "$SWAYNC" ]]; then
+  SWAYNC_PREV="$DOTFILES/theme/.config/theme/.swaync-colors"
+  if [[ -f "$SWAYNC_PREV" ]]; then
     while IFS='=' read -r role old_hex; do
       [[ -z "$role" || -z "$old_hex" ]] && continue
       new_hex="${C[$role]:-}"
       [[ -z "$new_hex" || "$old_hex" == "$new_hex" ]] && continue
-      sed -i "s/#${old_hex}/#${new_hex}/gi" "$MAKO"
-    done < "$MAKO_PREV"
+      sed -i "s/#${old_hex}/#${new_hex}/gi" "$SWAYNC"
+    done < "$SWAYNC_PREV"
   fi
-  # Save current colors for next run
   for r in "${ROLES[@]}"; do
     echo "$r=${C[$r]}"
-  done > "$MAKO_PREV"
-  echo "  mako config (sed)"
+  done > "$SWAYNC_PREV"
+  echo "  swaync style.css (sed)"
 fi
 
 # ── 8. Waybar CSS — sed replacement (hex + rgba decimal) ─────────────────────
@@ -406,7 +404,7 @@ GALLERY_TAIL
 echo "  gallery.html"
 
 # ── Re-stow packages with new generated files ──────────────────────────────
-(cd "$DOTFILES" && stow -R hypr kitty rofi nvim theme 2>/dev/null) || true
+(cd "$DOTFILES" && stow -R hypr kitty rofi nvim theme swaync 2>/dev/null) || true
 
 # ── Reload running services ─────────────────────────────────────────────────
 echo "Reloading..."
@@ -415,7 +413,7 @@ if pgrep -x Hyprland >/dev/null 2>&1; then
   hyprctl reload 2>/dev/null || true
   pkill waybar 2>/dev/null; sleep 0.3
   waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' &disown 2>/dev/null
-  makoctl reload 2>/dev/null || true
+  swaync-client -rs 2>/dev/null || true
 fi
 
 for sock in /tmp/kitty-*; do

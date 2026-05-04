@@ -19,7 +19,7 @@ window#waybar {
 #clock,
 #tray,
 #custom-idle-inhibitor,
-#custom-dnd,
+#custom-swaync,
 #cpu,
 #memory,
 #pulseaudio,
@@ -46,7 +46,7 @@ window#waybar {
 #custom-scratchpad,
 #custom-tray,
 #custom-idle-inhibitor,
-#custom-dnd,
+#custom-swaync,
 #custom-power {
     border-radius: 12px;
 }
@@ -93,7 +93,7 @@ window#waybar {
 #custom-scratchpad:hover,
 #custom-tray:hover,
 #custom-idle-inhibitor:hover,
-#custom-dnd:hover,
+#custom-swaync:hover,
 #cpu:hover,
 #memory:hover,
 #pulseaudio:hover,
@@ -241,12 +241,22 @@ window#waybar {
     color: #e5c890;
 }
 
-/* ── DND ── */
-#custom-dnd {
+/* ── Notifications + DND ── */
+#custom-swaync {
     color: #737994;
 }
 
-#custom-dnd.on {
+/* Blue when there are pending notifications */
+#custom-swaync.notification,
+#custom-swaync.inhibited-notification {
+    color: #8caaee;
+}
+
+/* Red whenever DND is active (overrides notification color) */
+#custom-swaync.dnd-none,
+#custom-swaync.dnd-notification,
+#custom-swaync.dnd-inhibited-none,
+#custom-swaync.dnd-inhibited-notification {
     color: #e78284;
 }
 
