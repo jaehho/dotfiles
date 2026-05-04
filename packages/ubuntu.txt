@@ -1,11 +1,11 @@
 # Packages needed for common stow configs to work on Ubuntu/Debian.
-# Install with: make pkg-install
+# Install with: make pkg-install (or `make sync` for full setup).
 #
-# Tools not in apt — bootstrap.sh handles these:
+# Tools not in apt — `make sync` handles these:
 #   eza        — https://github.com/eza-community/eza (in apt on Ubuntu 24.10+)
 #   zoxide     — https://github.com/ajeetdsouza/zoxide
-#   bat        — available as 'batcat'; bootstrap.sh symlinks ~/.local/bin/bat
-#   fd         — available as 'fdfind'; bootstrap.sh symlinks ~/.local/bin/fd
+#   bat        — available as 'batcat'; `make sync` symlinks ~/.local/bin/bat
+#   fd         — available as 'fdfind'; `make sync` symlinks ~/.local/bin/fd
 
 # Shell
 fish

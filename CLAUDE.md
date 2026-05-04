@@ -14,13 +14,14 @@ dotfiles/
 ├── nvim/                 # Neovim config
 ├── waybar/               # Waybar config
 ├── rofi/                 # Rofi launcher config
-├── mako/                 # Mako notification daemon
+├── swaync/               # SwayNotificationCenter daemon
 └── ...                   # Other stow packages (git, tmux, ssh, etc.)
 ```
 
 ## Key commands
 
 ```bash
+make sync                  # One-shot full setup: pkgs, stow, system, services, default shell
 make stow-all              # Stow all packages to ~
 make install-tools         # Dev-install submodule tools to ~/.local/bin (overrides AUR)
 make uninstall-tools       # Remove dev overrides, revert to AUR /usr/bin versions
@@ -29,6 +30,14 @@ make system-install        # Copy boot configs, symlink runtime configs (uses su
 make pkg-dump              # Save installed package lists
 make status                # Show stow/system/service state
 ```
+
+`make sync` is the primary entry point on a new machine and for re-syncing after
+pulls: it's idempotent and chains `pkg-install` → Ubuntu extras (bat/fd shims,
+eza, zoxide, kitty terminfo) → `stow-all` → `system-install` → `rclone-onedrive-setup`
+→ `sshfs-setup` → `restic-setup` → set fish as default shell. First run prompts
+for the restic password and rclone OAuth; later runs skip already-configured steps.
+`install-tools` is intentionally *not* part of sync — it's a dev-only override
+of the AUR packages.
 
 ## Submodule tools
 

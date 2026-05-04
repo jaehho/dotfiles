@@ -6,11 +6,21 @@ SHELL := /bin/bash
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # Stow packages split by distro
-COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic zathura visidata
-ARCH_PACKAGES   := hypr mako rofi waybar
+COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic zathura visidata tridactyl
+ARCH_PACKAGES   := hypr swaync rofi waybar
 
-DISTRO := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
-ifeq ($(DISTRO),arch)
+# Detect distro family by package manager rather than os-release ID. This
+# catches derivatives (Manjaro/EndeavourOS as arch, Pop/Mint/Kali as debian)
+# without an explicit allowlist.
+ifneq (,$(shell command -v pacman 2>/dev/null))
+  DISTRO_FAMILY := arch
+else ifneq (,$(shell command -v apt-get 2>/dev/null))
+  DISTRO_FAMILY := debian
+else
+  DISTRO_FAMILY := unknown
+endif
+
+ifeq ($(DISTRO_FAMILY),arch)
   STOW_PACKAGES := $(COMMON_PACKAGES) $(ARCH_PACKAGES)
 else
   STOW_PACKAGES := $(COMMON_PACKAGES)
@@ -25,11 +35,74 @@ help: ## Show this help message
 		     /^## / {gsub("^## ", ""); print "\n\033[1;35m" $$0 "\033[0m"}; \
 		     /^[a-zA-Z_%-]+:/ {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
+## Sync (one-shot full setup, idempotent)
+sync: ## Install packages, stow dotfiles, configure system, enable services, set default shell
+	@$(MAKE) --no-print-directory pkg-install
+	@$(MAKE) --no-print-directory _sync-ubuntu-extras
+	@$(MAKE) --no-print-directory stow-all
+	@$(MAKE) --no-print-directory system-install
+	@$(MAKE) --no-print-directory rclone-onedrive-setup
+	@$(MAKE) --no-print-directory sshfs-setup
+	@$(MAKE) --no-print-directory restic-setup
+	@$(MAKE) --no-print-directory _sync-default-shell
+	@echo ""
+	@echo "==> Sync complete."
+
+# Debian-family only: tools not in apt, or apt names that need ~/.local/bin shims.
+_sync-ubuntu-extras:
+ifeq ($(DISTRO_FAMILY),debian)
+	@mkdir -p $(HOME)/.local/bin
+	@if ! command -v bat >/dev/null 2>&1 && [ -x /usr/bin/batcat ]; then \
+		ln -sf /usr/bin/batcat $(HOME)/.local/bin/bat; \
+		echo "  bat: symlinked /usr/bin/batcat -> ~/.local/bin/bat"; \
+	fi
+	@if ! command -v fd >/dev/null 2>&1 && [ -x /usr/bin/fdfind ]; then \
+		ln -sf /usr/bin/fdfind $(HOME)/.local/bin/fd; \
+		echo "  fd: symlinked /usr/bin/fdfind -> ~/.local/bin/fd"; \
+	fi
+	@if ! command -v eza >/dev/null 2>&1; then \
+		echo "==> Installing eza..."; \
+		if apt-cache show eza >/dev/null 2>&1; then \
+			sudo apt-get install -y eza; \
+		elif command -v cargo >/dev/null 2>&1; then \
+			cargo install eza; \
+		else \
+			echo "  eza: install manually from https://github.com/eza-community/eza/releases"; \
+		fi; \
+	fi
+	@if ! command -v zoxide >/dev/null 2>&1; then \
+		echo "==> Installing zoxide..."; \
+		curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash; \
+	fi
+	@if ! infocmp xterm-kitty >/dev/null 2>&1; then \
+		echo "==> Installing kitty terminfo..."; \
+		tmp_ti=$$(mktemp); \
+		(curl -fsSL "https://raw.githubusercontent.com/kovidgoyal/kitty/master/terminfo/kitty.terminfo" -o "$$tmp_ti" \
+			&& tic -x "$$tmp_ti" \
+			&& echo "  kitty terminfo installed") \
+			|| echo "  kitty terminfo install failed"; \
+		rm -f "$$tmp_ti"; \
+	fi
+endif
+
+_sync-default-shell:
+	@fish_path=$$(command -v fish); \
+	if [ -z "$$fish_path" ]; then \
+		echo "  default shell: fish not installed, skipping"; \
+	elif [ "$$(getent passwd "$$USER" | cut -d: -f7)" = "$$fish_path" ]; then \
+		echo "  default shell: already fish"; \
+	else \
+		echo "==> Setting fish as default shell..."; \
+		grep -qxF "$$fish_path" /etc/shells || echo "$$fish_path" | sudo tee -a /etc/shells; \
+		chsh -s "$$fish_path"; \
+		echo "  Log out and back in for fish to take effect."; \
+	fi
+
 ## Submodule tools (Arch only)
 TOOLS := hypr-tools
 
 install-tools: ## Install tools from submodules to ~/.local/bin (dev override)
-ifeq ($(DISTRO),arch)
+ifeq ($(DISTRO_FAMILY),arch)
 	@git -C $(REPO_ROOT) submodule update --init --recursive $(TOOLS)
 	@for tool in $(TOOLS); do \
 		echo "Installing $$tool..."; \
@@ -52,9 +125,17 @@ uninstall-tools: ## Remove dev overrides, revert to AUR package versions
 	@echo "Reverted to AUR package versions in /usr/bin."
 
 ## Stow
-stow-all: ## Stow all packages (idempotent — safe to re-run after adding files)
+stow-all: ## Stow all packages (idempotent — backs up conflicting plain files to .bak)
 	@for pkg in $(STOW_PACKAGES); do \
 		echo "Stowing $$pkg..."; \
+		while IFS= read -r -d '' file; do \
+			rel="$${file#$(REPO_ROOT)/$$pkg/}"; \
+			target="$(HOME)/$$rel"; \
+			if [ -e "$$target" ] && [ ! -L "$$target" ]; then \
+				echo "  backing up $$target -> $${target}.bak"; \
+				mv "$$target" "$${target}.bak"; \
+			fi; \
+		done < <(find "$(REPO_ROOT)/$$pkg" -type f -print0); \
 		stow -d $(REPO_ROOT) -t ~ --no-folding $$pkg; \
 	done
 	@$(MAKE) --no-print-directory mime-update
@@ -66,7 +147,7 @@ stow-all: ## Stow all packages (idempotent — safe to re-run after adding files
 	@echo "  nvim     :source \$$MYVIMRC"
 	@if echo "$(STOW_PACKAGES)" | grep -qw hypr; then \
 		echo "  hypr     hyprctl reload"; \
-		echo "  mako     makoctl reload"; \
+		echo "  swaync   swaync-client -rs"; \
 		echo "  waybar   killall -SIGUSR2 waybar"; \
 	fi
 	@if [ "$$SHELL" != "/usr/bin/fish" ]; then \
@@ -110,7 +191,7 @@ ARCH_SYSTEM_COPIES := \
 	grub/grub:/etc/default/grub \
 	mkinitcpio/mkinitcpio.conf:/etc/mkinitcpio.conf
 
-ifeq ($(DISTRO),arch)
+ifeq ($(DISTRO_FAMILY),arch)
   SYSTEM_COPIES := $(COMMON_SYSTEM_COPIES) $(ARCH_SYSTEM_COPIES)
 else
   SYSTEM_COPIES := $(COMMON_SYSTEM_COPIES)
@@ -185,7 +266,7 @@ system-install: ## Copy boot configs and symlink runtime configs
 			esac; \
 		fi; \
 	done; \
-	if ! command -v keyd >/dev/null 2>&1 && [ "$(DISTRO)" = "ubuntu" ]; then \
+	if ! command -v keyd >/dev/null 2>&1 && [ "$(DISTRO_FAMILY)" = "debian" ]; then \
 		echo "Installing keyd from source..."; \
 		tmp=$$(mktemp -d); \
 		git clone https://github.com/rvaiya/keyd "$$tmp/keyd"; \
@@ -285,6 +366,23 @@ sshfs-unmount: ## Unmount ice + mililab SSHFS and disable services
 	@systemctl --user disable --now sshfs-mililab 2>/dev/null || true
 	@echo "SSHFS mounts unmounted and services disabled."
 
+sshfs-cdn-mount: stow-sshfs ## Mount cdn at ~/cdn (starts the GCP instance if stopped). ssh-cdn does this automatically.
+	@command -v gcloud >/dev/null 2>&1 || { echo "gcloud CLI not found; install google-cloud-cli"; exit 1; }
+	@command -v sshfs >/dev/null 2>&1 || { echo "sshfs not found; run 'make sshfs-setup' first"; exit 1; }
+	@state=$$(gcloud compute instances describe cdn-project --zone=us-east4-b --format='value(status)' 2>/dev/null); \
+		if [ "$$state" != RUNNING ]; then \
+			echo "Starting cdn-project ($$state → RUNNING)..."; \
+			gcloud compute instances start cdn-project --zone=us-east4-b; \
+		fi
+	@mkdir -p ~/cdn
+	@systemctl --user daemon-reload
+	@systemctl --user start sshfs-cdn
+	@echo "cdn mounted at ~/cdn. Will auto-unmount when the instance stops."
+
+sshfs-cdn-unmount: ## Unmount cdn manually (does NOT stop the GCP instance — auto-stop unmounts on its own)
+	@systemctl --user stop sshfs-cdn 2>/dev/null || true
+	@echo "cdn unmounted. To also stop the instance: gcloud compute instances stop cdn-project --zone=us-east4-b"
+
 ## Restic
 restic-setup: stow-restic ## Install restic, set password, init repo on OneDrive, enable timer
 	@command -v restic >/dev/null 2>&1 || { \
@@ -347,31 +445,32 @@ restic-disable: ## Disable the restic backup timer
 PKGDIR := $(REPO_ROOT)/packages
 
 pkg-dump: ## Snapshot explicitly-installed packages into packages/arch-snapshot.txt (for drift diffing)
-ifeq ($(DISTRO),arch)
+ifeq ($(DISTRO_FAMILY),arch)
 	pacman -Qqen > $(PKGDIR)/arch-snapshot.txt
 	pacman -Qqem > $(PKGDIR)/aur.txt
 	@echo "Saved $$(wc -l < $(PKGDIR)/arch-snapshot.txt) official + $$(wc -l < $(PKGDIR)/aur.txt) AUR packages."
 	@echo "Run 'make pkg-drift' to diff against packages/arch/*.txt categories."
-else ifeq ($(DISTRO),ubuntu)
+else ifeq ($(DISTRO_FAMILY),debian)
 	apt-mark showmanual | sort > $(PKGDIR)/ubuntu.txt
 	@echo "Saved $$(wc -l < $(PKGDIR)/ubuntu.txt) manually installed packages."
 else
-	@echo "Skipped: unsupported distro ($(DISTRO))."
+	@echo "Skipped: unsupported distro ($(DISTRO_FAMILY))."
 endif
 
 pkg-install: ## Install packages from categorized lists (Arch: packages/arch/*.txt + packages/aur.txt)
-ifeq ($(DISTRO),arch)
+ifeq ($(DISTRO_FAMILY),arch)
 	@cat $(PKGDIR)/arch/*.txt | grep -v '^#' | grep -v '^$$' | sort -u | sudo pacman -S --needed -
 	@command -v paru >/dev/null 2>&1 || { echo "paru not found — install it first for AUR packages."; exit 1; }
 	paru -S --needed - < $(PKGDIR)/aur.txt
-else ifeq ($(DISTRO),ubuntu)
+else ifeq ($(DISTRO_FAMILY),debian)
+	sudo apt-get update -qq
 	sudo apt-get install -y $$(grep -v '^#' $(PKGDIR)/ubuntu.txt | grep -v '^$$')
 else
-	@echo "Skipped: unsupported distro ($(DISTRO))."
+	@echo "Skipped: unsupported distro ($(DISTRO_FAMILY))."
 endif
 
 pkg-drift: ## Arch: diff installed state vs categorized packages/arch/*.txt
-ifeq ($(DISTRO),arch)
+ifeq ($(DISTRO_FAMILY),arch)
 	@installed=$$(pacman -Qqen | sort -u); \
 	tracked=$$(cat $(PKGDIR)/arch/*.txt | grep -v '^#' | grep -v '^$$' | sort -u); \
 	untracked=$$(comm -23 <(echo "$$installed") <(echo "$$tracked")); \
@@ -433,7 +532,7 @@ status: ## Show current dotfiles state
 	done
 	@echo ""
 	@echo "Services:"
-	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab restic-backup.timer; do \
+	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab sshfs-cdn restic-backup.timer; do \
 		case "$$svc" in keyd) \
 			active=$$(systemctl is-active "$$svc" 2>/dev/null);; *) \
 			active=$$(systemctl --user is-active "$$svc" 2>/dev/null);; esac; \
