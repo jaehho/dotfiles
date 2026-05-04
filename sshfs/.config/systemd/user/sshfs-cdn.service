@@ -1,0 +1,25 @@
+[Unit]
+Description=SSHFS mount cdn (GCP cdn-project)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+# Type=simple: ExecStart runs sshfs in the foreground (-f) via the
+# wrapper, so the unit's active lifetime tracks the mount. When the
+# GCP instance stops, sshfs disconnects, the wrapper observes
+# state != RUNNING, and exits 0 — systemd cleanly stops the unit.
+Type=simple
+ExecStartPre=-/usr/bin/fusermount3 -uz %h/cdn
+ExecStartPre=/usr/bin/mkdir -p %h/cdn
+ExecStart=%h/.local/bin/sshfs-cdn
+ExecStop=-/usr/bin/fusermount3 -uz %h/cdn
+# Network blips return non-zero from the wrapper → restart with backoff.
+# Clean shutdowns (instance stopped) return 0 → no retry.
+Restart=on-failure
+RestartSec=10
+RestartSteps=10
+RestartMaxDelaySec=60
+
+# Deliberately no [Install] section: cdn is opt-in. The mount is
+# triggered by the `ssh-cdn` fish function; no auto-start at boot.

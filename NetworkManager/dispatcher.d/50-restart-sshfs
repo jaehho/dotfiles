@@ -31,4 +31,12 @@ for svc in sshfs-ice.service sshfs-mililab.service; do
         systemctl --user restart "$svc" >/dev/null 2>&1 || true
 done
 
+# cdn is opt-in (GCP VM costs money while RUNNING). Use try-restart so a
+# wifi event only refreshes the mount if the user had it active; never
+# auto-start a stopped instance from a network event.
+runuser -u "$TARGET_USER" -- env \
+    "XDG_RUNTIME_DIR=/run/user/$TARGET_UID" \
+    "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus" \
+    systemctl --user try-restart sshfs-cdn.service >/dev/null 2>&1 || true
+
 exit 0

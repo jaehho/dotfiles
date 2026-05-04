@@ -1,0 +1,87 @@
+#!/bin/bash
+# Mount the GCP `cdn-project` instance via sshfs.
+#
+# Lifecycle is tied to the instance, not the user-session: the wrapper
+# does NOT start the instance. The expected entry point is the `ssh-cdn`
+# fish function, which starts the instance, fires this unit, then opens
+# an SSH session. When the instance later auto-stops, sshfs sees the
+# connection drop and exits; this wrapper observes state != RUNNING and
+# exits 0 so systemd cleanly stops the unit instead of looping retries.
+#
+# Network blips (instance still RUNNING after sshfs disconnect) propagate
+# the non-zero exit so Restart=on-failure remounts.
+
+set -euo pipefail
+
+INSTANCE=cdn-project
+ZONE=us-east4-b
+REMOTE_USER=jaeho
+MOUNT="$HOME/cdn"
+GCLOUD=/usr/bin/gcloud
+SSHFS=/usr/bin/sshfs
+
+instance_state() {
+    "$GCLOUD" compute instances describe "$INSTANCE" --zone="$ZONE" \
+        --format='value(status)' 2>/dev/null || true
+}
+
+state=$(instance_state)
+
+if [ "$state" != RUNNING ]; then
+    echo "sshfs-cdn: instance state=${state:-unreachable}, nothing to mount" >&2
+    exit 0
+fi
+
+read -r INSTANCE_ID HOST < <("$GCLOUD" compute instances describe "$INSTANCE" \
+    --zone="$ZONE" \
+    --format='value(id,networkInterfaces[0].accessConfigs[0].natIP)')
+
+if [ -z "${HOST:-}" ] || [ -z "${INSTANCE_ID:-}" ]; then
+    echo "sshfs-cdn: missing IP or instance id (got HOST='$HOST' ID='$INSTANCE_ID')" >&2
+    exit 1
+fi
+
+mkdir -p "$MOUNT"
+
+# Most ssh options must ride inside ssh_command — sshfs only recognizes a
+# small subset of -o flags itself and forwards the rest to FUSE, which
+# rejects them.
+SSH_CMD="/usr/bin/ssh \
+    -i $HOME/.ssh/google_compute_engine \
+    -o IdentitiesOnly=yes \
+    -o UserKnownHostsFile=$HOME/.ssh/google_compute_known_hosts \
+    -o HostKeyAlias=compute.$INSTANCE_ID \
+    -o CheckHostIP=no"
+
+# sshfs in foreground (-f) so this script's lifetime tracks the mount.
+set +e
+"$SSHFS" -f "$REMOTE_USER@$HOST:/" "$MOUNT" \
+    -o ServerAliveInterval=5,ServerAliveCountMax=2 \
+    -o ConnectTimeout=10 \
+    -o dir_cache=no,no_readahead \
+    -o "ssh_command=$SSH_CMD"
+sshfs_exit=$?
+set -e
+
+# Drop any stale FUSE entry sshfs left behind on disconnect.
+/usr/bin/fusermount3 -uz "$MOUNT" 2>/dev/null || true
+
+post_state=$(instance_state)
+case "$post_state" in
+    RUNNING)
+        # Instance still up: disconnect was a network blip or transient
+        # error. Propagate the failure so Restart=on-failure retries.
+        exit "$sshfs_exit" ;;
+    "")
+        # gcloud unreachable (likely also why sshfs disconnected). Treat
+        # as transient so the dispatcher hook / Restart= can recover when
+        # the network returns.
+        exit "$sshfs_exit" ;;
+    *)
+        # Instance is no longer RUNNING (TERMINATED, STOPPING, SUSPENDED,
+        # REPAIRING, ...) — sshfs disconnected because the instance went
+        # away. Exit 0 so systemd marks the unit cleanly stopped and
+        # does NOT retry (which would otherwise just fail again).
+        echo "sshfs-cdn: instance state=$post_state, clean unmount" >&2
+        exit 0 ;;
+esac
