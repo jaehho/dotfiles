@@ -1,0 +1,15 @@
+#!/usr/bin/env fish
+
+set dir $argv[1]
+if test -z "$dir"
+    echo "Usage: icat-dir <directory>"
+    exit 1
+end
+
+for f in $dir/*
+    test -f $f; or continue
+    if file --mime-type -b $f | string match -q 'image/*'
+        echo (basename $f)
+        kitty icat $f
+    end
+end
