@@ -3,6 +3,7 @@ biber
 clang
 direnv
 entr
+extra-cmake-modules
 fish
 git
 git-filter-repo
@@ -14,7 +15,6 @@ nano
 neovim
 nodejs
 npm
-openscad
 pandoc-cli
 python-pipx
 python-pygments
@@ -33,3 +33,4 @@ texlive-xetex
 tmux
 tree-sitter-cli
 typst
+typstyle

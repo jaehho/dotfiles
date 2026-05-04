@@ -1,10 +1,13 @@
 # desktop — GUI applications (browsers, media, office, PDF, file manager)
 awww
+blender
 chntpw
 chromium
 espeak-ng
+f3d
 ffmpegthumbnailer
 firefox-developer-edition
+freecad
 himalaya
 libgsf
 libreoffice-fresh

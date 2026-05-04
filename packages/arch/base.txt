@@ -5,6 +5,7 @@ cpio
 dosfstools
 efibootmgr
 grub
+kernel-modules-hook
 linux
 linux-firmware
 linux-headers

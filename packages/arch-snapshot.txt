@@ -5,6 +5,7 @@ base
 base-devel
 bat
 biber
+blender
 blueman
 bluetui
 bluez
@@ -26,12 +27,16 @@ dosfstools
 efibootmgr
 entr
 espeak-ng
+extra-cmake-modules
 eza
+f3d
 fastfetch
 fd
+feh
 ffmpegthumbnailer
 firefox-developer-edition
 fish
+freecad
 fzf
 git
 git-filter-repo
@@ -54,6 +59,7 @@ hyprlock
 hyprsunset
 intel-media-driver
 jq
+kernel-modules-hook
 keyd
 kitty
 less
@@ -64,7 +70,6 @@ linux
 linux-firmware
 linux-headers
 luarocks
-mako
 man-db
 mesa
 mesa-utils
@@ -80,9 +85,7 @@ noto-fonts-cjk
 noto-fonts-emoji
 npm
 nss-mdns
-nvidia-open
 nvidia-prime
-nvidia-utils
 nwg-look
 okular
 openssh
@@ -90,6 +93,7 @@ otf-font-awesome
 pacman-contrib
 pandoc-cli
 pavucontrol
+perl-file-mimeinfo
 pipewire
 pipewire-pulse
 polkit-gnome
@@ -122,6 +126,7 @@ sshpass
 starship
 stow
 sudo
+swaync
 swayosd
 tailscale
 tea
@@ -140,12 +145,14 @@ ttf-dejavu
 ttf-jetbrains-mono-nerd
 tumbler
 typst
+typstyle
 udiskie
 unzip
 visidata
 vulkan-tools
 waybar
 wev
+wget
 wimlib
 winetricks
 wiremix

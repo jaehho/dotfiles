@@ -1,3 +1,4 @@
+cloudcompare
 epson-inkjet-printer-escpr
 google-chrome
 google-cloud-cli
@@ -8,6 +9,8 @@ hyprsession
 hyprshell-bin-debug
 hyprwhenthen-bin
 microsoft-edge-stable-bin
+nvidia-beta-dkms
+openscad-snapshot-appimage
 orca-slicer-bin
 overskride-bin
 paru

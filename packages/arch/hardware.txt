@@ -24,9 +24,7 @@ network-manager-applet
 networkmanager
 nm-connection-editor
 nss-mdns
-nvidia-open
 nvidia-prime
-nvidia-utils
 pavucontrol
 pipewire
 pipewire-pulse

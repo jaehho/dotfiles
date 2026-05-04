@@ -5,6 +5,7 @@ csvlens
 eza
 fastfetch
 fd
+feh
 fzf
 glow
 htop
@@ -19,5 +20,6 @@ socat
 sshpass
 unzip
 visidata
+wget
 yq
 zoxide
