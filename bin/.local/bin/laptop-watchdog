@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# Polls CPU temp + lid state, alerts via ntfy.sh on:
+#   - Critical:    CPU >= 95°C sustained for >= 60s (filters turbo spikes)
+#   - Bag risk:    lid closed AND CPU >= 80°C sustained for >= 60s
+#   - Stay-awake:  lid just closed while inhibitor pidfile is live
+# Hysteresis re-arms each alert after temp drops 5°C below threshold for 5 min.
+#
+# Why poll lid state here instead of using Hyprland's `bindl switch:on:Lid`?
+# logind's HandleLidSwitch=suspend consumes the lid event before Hyprland sees
+# it, so the bind never fires. Polling /proc/acpi/button/lid sees state directly.
+
+set -uo pipefail
+
+INTERVAL=10                   # seconds between samples
+LID_THRESHOLD=80              # °C
+LID_SUSTAIN_CYCLES=6          # 6 * INTERVAL = 60s sustained
+CRIT_THRESHOLD=95             # °C
+CRIT_SUSTAIN_CYCLES=6         # 6 * INTERVAL = 60s sustained
+REARM_DELTA=5                 # °C below threshold to count as "cooled"
+REARM_CYCLES=30               # 30 * INTERVAL = 5 min cooled to re-arm
+INHIBIT_PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-inhibit.pid"
+
+read_cpu_temp() {
+    local max=0 t type
+    for f in /sys/class/thermal/thermal_zone*/type; do
+        type=$(<"$f")
+        case "$type" in
+            x86_pkg_temp|TCPU)
+                t=$(<"${f%/type}/temp")
+                t=$((t / 1000))
+                (( t > max )) && max=$t
+                ;;
+        esac
+    done
+    echo "$max"
+}
+
+read_lid() {
+    for f in /proc/acpi/button/lid/*/state; do
+        awk '{print $2}' "$f"
+        return
+    done
+    echo unknown
+}
+
+notify() {
+    "$HOME/.local/bin/laptop-ntfy" "$@" || true
+}
+
+lid_streak=0
+crit_streak=0
+crit_alerted=0
+crit_cool=0
+lid_alerted=0
+lid_cool=0
+prev_lid=""
+
+while :; do
+    temp=$(read_cpu_temp)
+    lid=$(read_lid)
+
+    # Lid just transitioned open -> closed: warn if stay-awake inhibitor held.
+    if [[ "$prev_lid" == "open" ]] && [[ "$lid" == "closed" ]]; then
+        if [[ -f "$INHIBIT_PIDFILE" ]] && kill -0 "$(cat "$INHIBIT_PIDFILE")" 2>/dev/null; then
+            notify "Lid closed with stay-awake ON" \
+                "Laptop will keep running. Toggle stay-awake off if it's in your bag." \
+                high warning,laptop
+        fi
+    fi
+    prev_lid=$lid
+
+    # Critical (sustained — filters out brief turbo spikes)
+    if (( temp >= CRIT_THRESHOLD )); then
+        crit_streak=$((crit_streak + 1))
+    else
+        crit_streak=0
+    fi
+
+    if (( ! crit_alerted )); then
+        if (( crit_streak >= CRIT_SUSTAIN_CYCLES )); then
+            notify "Laptop critical temp" \
+                "CPU at ${temp}°C sustained for $((CRIT_SUSTAIN_CYCLES * INTERVAL))s (lid ${lid})" \
+                urgent fire
+            crit_alerted=1
+            crit_cool=0
+        fi
+    else
+        if (( temp < CRIT_THRESHOLD - REARM_DELTA )); then
+            crit_cool=$((crit_cool + 1))
+            (( crit_cool >= REARM_CYCLES )) && crit_alerted=0
+        else
+            crit_cool=0
+        fi
+    fi
+
+    # Bag risk (lid closed + sustained heat)
+    if [[ "$lid" == "closed" ]] && (( temp >= LID_THRESHOLD )); then
+        lid_streak=$((lid_streak + 1))
+    else
+        lid_streak=0
+    fi
+
+    if (( ! lid_alerted )); then
+        if (( lid_streak >= LID_SUSTAIN_CYCLES )); then
+            notify "Laptop hot in bag?" \
+                "Lid closed, CPU at ${temp}°C sustained for $((LID_SUSTAIN_CYCLES * INTERVAL))s" \
+                high warning,laptop
+            lid_alerted=1
+            lid_cool=0
+        fi
+    else
+        if [[ "$lid" == "open" ]] || (( temp < LID_THRESHOLD - REARM_DELTA )); then
+            lid_cool=$((lid_cool + 1))
+            (( lid_cool >= REARM_CYCLES )) && lid_alerted=0
+        else
+            lid_cool=0
+        fi
+    fi
+
+    sleep "$INTERVAL"
+done

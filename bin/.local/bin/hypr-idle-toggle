@@ -1,8 +1,24 @@
 #!/usr/bin/env bash
-# Toggle hypridle on/off (idle inhibitor)
+# Toggle "stay awake": kills hypridle (idle inhibitor) AND holds a
+# handle-lid-switch inhibitor so closing the lid doesn't suspend.
+
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-inhibit.pid"
 
 if pgrep -x hypridle > /dev/null; then
+    # Currently OFF → turn ON
     pkill -x hypridle
+    nohup systemd-inhibit \
+        --what=handle-lid-switch \
+        --who=hypr-lid-inhibit \
+        --why="Stay awake (idle + lid) inhibitor" \
+        --mode=block \
+        sleep infinity </dev/null >/dev/null 2>&1 &
+    echo $! > "$PIDFILE"
 else
+    # Currently ON → turn OFF
     hypridle &
+    if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+        kill "$(cat "$PIDFILE")"
+    fi
+    rm -f "$PIDFILE"
 fi

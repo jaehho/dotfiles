@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Send a notification to the configured ntfy.sh topic.
+# Usage: laptop-ntfy <title> <body> [priority] [tags]
+set -euo pipefail
+
+TOPIC=${LAPTOP_NTFY_TOPIC:-jaeho}
+title=${1:?title required}
+body=${2:?body required}
+priority=${3:-default}
+tags=${4:-}
+
+curl -fsS --max-time 10 \
+    -H "Title: $title" \
+    -H "Priority: $priority" \
+    ${tags:+-H "Tags: $tags"} \
+    -d "$body" \
+    "https://ntfy.sh/$TOPIC" >/dev/null
