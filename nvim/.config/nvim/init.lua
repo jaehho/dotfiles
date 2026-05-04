@@ -262,9 +262,7 @@ do
     if ft == 'typst' then
       local src = vim.api.nvim_buf_get_name(0)
       local root = vim.fs.root(0, '.git') or vim.fn.fnamemodify(src, ':h')
-      local build_dir = vim.fn.fnamemodify(src, ':h') .. '/build'
-      vim.fn.mkdir(build_dir, 'p')
-      local pdf = build_dir .. '/' .. vim.fn.fnamemodify(src, ':t'):gsub('%.typ$', '.pdf')
+      local pdf = src:gsub('%.typ$', '.pdf')
       start_pdf_preview(
         { 'typst', 'compile', '--root', root, src, pdf },
         'typst watch --root ' .. vim.fn.shellescape(root) .. ' ' .. vim.fn.shellescape(src) .. ' ' .. vim.fn.shellescape(pdf),
