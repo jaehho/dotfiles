@@ -412,6 +412,17 @@ sshfs-cdn-unmount: ## Unmount cdn manually (does NOT stop the GCP instance — a
 	@systemctl --user stop sshfs-cdn 2>/dev/null || true
 	@echo "cdn unmounted. To also stop the instance: gcloud compute instances stop cdn-project --zone=us-east4-b"
 
+sshfs-msi-mount: stow-sshfs ## Mount msi at ~/msi (Windows laptop via Tailscale; opt-in)
+	@command -v sshfs >/dev/null 2>&1 || { echo "sshfs not found; run 'make sshfs-setup' first"; exit 1; }
+	@mkdir -p ~/msi
+	@systemctl --user daemon-reload
+	@systemctl --user start sshfs-msi
+	@echo "msi mounted at ~/msi"
+
+sshfs-msi-unmount: ## Unmount msi
+	@systemctl --user stop sshfs-msi 2>/dev/null || true
+	@echo "msi unmounted."
+
 ## Restic
 restic-setup: stow-restic ## Install restic, set password, init repo on OneDrive, enable timer
 	@command -v restic >/dev/null 2>&1 || { \
@@ -542,7 +553,7 @@ status: ## Show current dotfiles state
 	done
 	@echo ""
 	@echo "System configs (symlinked):"
-	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks /etc/sysctl.d/99-sysrq.conf /etc/systemd/sleep.conf /etc/systemd/system-sleep/fuse-mounts /etc/alsa/conf.d/99-pipewire-default.conf; do \
+	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks /etc/sysctl.d/99-sysrq.conf /etc/systemd/sleep.conf /usr/lib/systemd/system-sleep/fuse-mounts /etc/alsa/conf.d/99-pipewire-default.conf; do \
 		if [ -L "$$f" ]; then \
 			echo "  $$f: linked"; \
 		elif [ -f "$$f" ]; then \
@@ -566,7 +577,7 @@ status: ## Show current dotfiles state
 	done
 	@echo ""
 	@echo "Services:"
-	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab sshfs-cdn restic-backup.timer; do \
+	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab sshfs-cdn sshfs-msi restic-backup.timer; do \
 		case "$$svc" in keyd) \
 			active=$$(systemctl is-active "$$svc" 2>/dev/null);; *) \
 			active=$$(systemctl --user is-active "$$svc" 2>/dev/null);; esac; \

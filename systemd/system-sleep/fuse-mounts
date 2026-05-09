@@ -14,24 +14,45 @@ set -u
 
 TARGET_UID=1000
 TARGET_USER=jaeho
-MOUNTS=(sshfs-ice.service sshfs-mililab.service rclone-onedrive.service)
+# Auto-start mounts: always restart on resume.
+AUTO_MOUNTS=(sshfs-ice.service sshfs-mililab.service rclone-onedrive.service)
+# Opt-in mounts: capture pre-suspend state, restore only what was active.
+# (Otherwise resume would auto-start a service the user had deliberately
+# stopped — same policy as the NM dispatcher hook 50-restart-sshfs.)
+OPT_IN_MOUNTS=(sshfs-cdn.service sshfs-msi.service)
+# /run is root-owned tmpfs: persists across suspend, cleared on reboot
+# (which is what we want — pre-reboot state is meaningless on resume).
+STATE_FILE=/run/fuse-mounts-was-active
+
+run_user() {
+    runuser -u "$TARGET_USER" -- env \
+        "XDG_RUNTIME_DIR=/run/user/$TARGET_UID" \
+        "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus" \
+        "$@"
+}
 
 case "$1" in
     pre)
-        for svc in "${MOUNTS[@]}"; do
-            timeout 10 runuser -u "$TARGET_USER" -- env \
-                "XDG_RUNTIME_DIR=/run/user/$TARGET_UID" \
-                "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus" \
-                systemctl --user stop "$svc" || true
+        : > "$STATE_FILE"
+        for svc in "${OPT_IN_MOUNTS[@]}"; do
+            if run_user systemctl --user is-active --quiet "$svc"; then
+                echo "$svc" >> "$STATE_FILE"
+            fi
+        done
+        for svc in "${AUTO_MOUNTS[@]}" "${OPT_IN_MOUNTS[@]}"; do
+            timeout 10 run_user systemctl --user stop "$svc" || true
         done
         ;;
     post)
-        for svc in "${MOUNTS[@]}"; do
-            runuser -u "$TARGET_USER" -- env \
-                "XDG_RUNTIME_DIR=/run/user/$TARGET_UID" \
-                "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus" \
-                systemctl --user start "$svc" || true
+        for svc in "${AUTO_MOUNTS[@]}"; do
+            run_user systemctl --user start "$svc" || true
         done
+        if [[ -f "$STATE_FILE" ]]; then
+            while IFS= read -r svc; do
+                [[ -n "$svc" ]] && run_user systemctl --user start "$svc" || true
+            done < "$STATE_FILE"
+            rm -f "$STATE_FILE"
+        fi
         ;;
 esac
 

@@ -1,0 +1,28 @@
+[Unit]
+Description=SSHFS mount msi (Windows laptop, via Tailscale)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=forking
+TimeoutStartSec=30
+ExecStartPre=-/usr/bin/fusermount3 -uz %h/msi
+ExecStartPre=/usr/bin/mkdir -p %h/msi
+# No `reconnect`: on connection loss, sshfs must exit so in-flight FUSE
+# calls return EIO instead of hanging forever (see BOOT_ISSUES.md).
+# DERP-relayed Tailscale link is high-latency; aggressive caching (vs
+# mililab's dir_cache=no) avoids per-entry roundtrips on `ls`.
+ExecStart=/usr/bin/sshfs msi:/C:/ %h/msi \
+  -o ServerAliveInterval=15,ServerAliveCountMax=4 \
+  -o ConnectTimeout=15 \
+  -o dcache_timeout=300,entry_timeout=300,attr_timeout=300 \
+  -o kernel_cache,compression=yes
+ExecStop=/usr/bin/fusermount3 -uz %h/msi
+Restart=on-failure
+RestartSec=10
+RestartSteps=10
+RestartMaxDelaySec=60
+
+# Deliberately no [Install] section: msi is opt-in (laptop, often offline).
+# Triggered by `make sshfs-msi-mount`; no auto-start at boot.
