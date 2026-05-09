@@ -1,0 +1,6 @@
+{
+  "claude-plugins-official": {
+    "source": "github",
+    "repo": "anthropics/claude-plugins-official"
+  }
+}

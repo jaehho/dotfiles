@@ -46,6 +46,9 @@
 ^/\.claude/get-shit-done
 ^/\.claude/gsd-file-manifest\.json
 
+# Reconcile manifests — read by scripts/claude-reconcile.sh, not by Claude Code
+^/\.claude/reconcile
+
 # Sibling tool state (Codex, Cursor, opencode, etc.)
 ^/\.claude/\.codex
 ^/\.claude/\.cursor
