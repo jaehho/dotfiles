@@ -1,0 +1,4 @@
+# mimeapps.list is managed by `make mime-update`, not stow, because GLib's
+# safe-write requires the symlink to be absolute (see Makefile mime-update).
+# stow always writes relative symlinks, so it can't own this one.
+mimeapps\.list

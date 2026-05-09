@@ -162,22 +162,28 @@ stow-%: ## Stow a single package (e.g., make stow-nvim)
 unstow-%: ## Unstow a single package (e.g., make unstow-nvim)
 	stow -d $(REPO_ROOT) -t ~ -D $*
 
-mime-update: ## Rebuild user MIME cache and absolutize the mimeapps.list symlink
+mime-update: ## Rebuild user MIME cache and (re)create the mimeapps.list absolute symlink
 	@if command -v update-mime-database >/dev/null 2>&1 && [ -d "$(HOME)/.local/share/mime/packages" ]; then \
 		update-mime-database "$(HOME)/.local/share/mime"; \
 		echo "MIME database rebuilt."; \
 	fi
-	@# GLib's safe-write follows the symlink, then writes the tempfile next to
-	@# the resolved target using its raw path. A relative target gets
-	@# CWD-resolved instead of resolved relative to the link's directory, so
-	@# Thunar et al. fail to update mimeapps.list unless CWD happens to be
-	@# ~/.config/. Forcing the symlink to absolute makes the tempfile land in
-	@# the right directory regardless of CWD.
+	@# mimeapps.list is owned by this target, not stow (mime/.stow-local-ignore
+	@# excludes it). GLib's safe-write follows the symlink, then writes the
+	@# tempfile next to the resolved target using its raw path. A relative
+	@# target gets CWD-resolved instead of resolved relative to the link's
+	@# directory, so Thunar et al. fail to update mimeapps.list unless CWD
+	@# happens to be ~/.config/. An absolute symlink makes the tempfile land
+	@# in the right directory regardless of CWD.
 	@target=$(REPO_ROOT)/mime/.config/mimeapps.list; \
 	link=$(HOME)/.config/mimeapps.list; \
-	if [ -L "$$link" ] && [ "$$(readlink "$$link")" != "$$target" ]; then \
+	mkdir -p "$$(dirname "$$link")"; \
+	if [ -e "$$link" ] && [ ! -L "$$link" ]; then \
+		mv "$$link" "$${link}.bak"; \
+		echo "mimeapps.list: backed up regular file to $${link}.bak"; \
+	fi; \
+	if [ ! -L "$$link" ] || [ "$$(readlink "$$link")" != "$$target" ]; then \
 		ln -sfn "$$target" "$$link"; \
-		echo "mimeapps.list symlink converted to absolute path."; \
+		echo "mimeapps.list: linked $$link -> $$target"; \
 	fi
 
 ## System configs (require sudo)
