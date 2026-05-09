@@ -13,7 +13,8 @@
 - **Don't narrate deliberation.** State conclusions and decisions; skip the "let me think about..." preamble.
 - **Match response length to the task.** A yes/no question gets a one-line answer, not a sectioned report.
 - **Plain, precise language.** Avoid dramatic phrasing and unnecessary jargon. Prefer shorter, more ordinary words when they carry the same information.
-- **No emdashes.** Use periods, commas, semicolons, parentheses, or colons instead. Applies to prose you write for me (chat, commit messages, PR descriptions, code comments, docs).
+- **Light hand on emdashes.** Other punctuation usually reads cleaner.
+- **American English spelling.** Use artifact, behavior, color, characterize, analyze, center — not the British forms. My training data drifts; default firmly to American.
 
 ## Authoring CLAUDE.md Files
 

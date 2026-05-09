@@ -3,7 +3,7 @@
     "commit": "",
     "pr": ""
   },
-  "model": "claude-opus-4-6[1m]",
+  "model": "sonnet",
   "hooks": {
     "Stop": [
       {
@@ -42,6 +42,6 @@
     "pyright-lsp@claude-plugins-official": true,
     "hookify@claude-plugins-official": true
   },
-  "effortLevel": "medium",
+  "effortLevel": "high",
   "skipDangerousModePermissionPrompt": true
 }
