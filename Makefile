@@ -184,15 +184,26 @@ mime-update: ## Rebuild user MIME cache and absolutize the mimeapps.list symlink
 # Boot-critical configs (grub, mkinitcpio, modprobe) are COPIED, not symlinked,
 # so they survive broken /home mounts and work in rescue/chroot environments.
 # keyd and libinput are symlinked (non-boot-critical, read at runtime).
-COMMON_SYSTEM_COPIES := \
-	modprobe/nvidia.conf:/etc/modprobe.d/nvidia.conf
+#
+# nvidia.conf splits by driver variant: Arch runs proprietary nvidia-beta-dkms
+# (full tuning); Debian-family installs here run nvidia-driver-*-open (minimal,
+# since the proprietary-only options break suspend on the open module). If you
+# ever switch a Debian box to proprietary nvidia, swap nvidia-open.conf for
+# nvidia.conf in DEBIAN_SYSTEM_COPIES.
+COMMON_SYSTEM_COPIES :=
 
 ARCH_SYSTEM_COPIES := \
 	grub/grub:/etc/default/grub \
-	mkinitcpio/mkinitcpio.conf:/etc/mkinitcpio.conf
+	mkinitcpio/mkinitcpio.conf:/etc/mkinitcpio.conf \
+	modprobe/nvidia.conf:/etc/modprobe.d/nvidia.conf
+
+DEBIAN_SYSTEM_COPIES := \
+	modprobe/nvidia-open.conf:/etc/modprobe.d/nvidia.conf
 
 ifeq ($(DISTRO_FAMILY),arch)
   SYSTEM_COPIES := $(COMMON_SYSTEM_COPIES) $(ARCH_SYSTEM_COPIES)
+else ifeq ($(DISTRO_FAMILY),debian)
+  SYSTEM_COPIES := $(COMMON_SYSTEM_COPIES) $(DEBIAN_SYSTEM_COPIES)
 else
   SYSTEM_COPIES := $(COMMON_SYSTEM_COPIES)
 endif
@@ -335,8 +346,13 @@ rclone-onedrive-setup: stow-rclone ## Configure OneDrive remote and enable mount
 	fi
 	@mkdir -p ~/OneDrive
 	@systemctl --user daemon-reload
-	@systemctl --user enable --now rclone-onedrive
-	@echo "OneDrive mounted at ~/OneDrive"
+	@if rclone listremotes 2>/dev/null | grep -q '^onedrive:'; then \
+		systemctl --user enable --now rclone-onedrive; \
+		echo "OneDrive mounted at ~/OneDrive"; \
+	else \
+		echo "  'onedrive' remote not configured — skipping mount enable."; \
+		echo "  Re-run 'make rclone-onedrive-setup' once the remote exists."; \
+	fi
 
 rclone-onedrive-unmount: ## Unmount OneDrive and disable service
 	@systemctl --user disable --now rclone-onedrive 2>/dev/null || true
@@ -355,10 +371,17 @@ sshfs-setup: stow-sshfs stow-bin ## Install sshfs and enable ice + mililab mount
 	}
 	@mkdir -p ~/ice ~/mililab
 	@systemctl --user daemon-reload
-	@systemctl --user enable --now sshfs-ice
-	@systemctl --user enable --now sshfs-mililab
-	@systemctl --user enable --now sshfs-ice-watchdog.timer
-	@echo "ice mounted at ~/ice, mililab mounted at ~/mililab"
+	@if [ ! -f "$$HOME/.ssh/jump_pass" ]; then \
+		echo "  ~/.ssh/jump_pass missing — skipping ice/mililab mount enable."; \
+		echo "  Cooper services need the jump password file. Create it"; \
+		echo "  ('echo PASSWORD > ~/.ssh/jump_pass && chmod 600 ~/.ssh/jump_pass')"; \
+		echo "  then re-run 'make sshfs-setup'."; \
+	else \
+		systemctl --user enable --now sshfs-ice; \
+		systemctl --user enable --now sshfs-mililab; \
+		systemctl --user enable --now sshfs-ice-watchdog.timer; \
+		echo "ice mounted at ~/ice, mililab mounted at ~/mililab"; \
+	fi
 
 sshfs-unmount: ## Unmount ice + mililab SSHFS and disable services
 	@systemctl --user disable --now sshfs-ice-watchdog.timer 2>/dev/null || true
@@ -406,21 +429,26 @@ restic-setup: stow-restic ## Install restic, set password, init repo on OneDrive
 	else \
 		echo "Password file already exists."; \
 	fi
-	@if ! RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
-		RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
-		restic snapshots >/dev/null 2>&1; then \
-		echo "Initializing restic repository at onedrive:Backups/restic ..."; \
-		RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
-		RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
-		restic init; \
+	@if ! rclone listremotes 2>/dev/null | grep -q '^onedrive:'; then \
+		echo "  'onedrive' remote not configured — skipping repo init and timer."; \
+		echo "  Re-run 'make restic-setup' after 'make rclone-onedrive-setup'."; \
 	else \
-		echo "Repository already initialized."; \
+		if ! RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
+			RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
+			restic snapshots >/dev/null 2>&1; then \
+			echo "Initializing restic repository at onedrive:Backups/restic ..."; \
+			RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
+			RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
+			restic init; \
+		else \
+			echo "Repository already initialized."; \
+		fi; \
+		systemctl --user daemon-reload; \
+		systemctl --user enable --now restic-backup.timer; \
+		echo ""; \
+		echo "Restic backup timer enabled. Next run:"; \
+		systemctl --user list-timers restic-backup.timer --no-legend; \
 	fi
-	@systemctl --user daemon-reload
-	@systemctl --user enable --now restic-backup.timer
-	@echo ""
-	@echo "Restic backup timer enabled. Next run:"
-	@systemctl --user list-timers restic-backup.timer --no-legend
 
 restic-backup-now: ## Run a backup immediately (blocks until done, then shows logs)
 	@systemctl --user daemon-reload
