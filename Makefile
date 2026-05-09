@@ -26,6 +26,50 @@ else
   STOW_PACKAGES := $(COMMON_PACKAGES)
 endif
 
+# Per-host config: capability-based variation (distro, cloudflared, gcloud,
+# ssh reachability, etc.) is auto-detected elsewhere. This block handles
+# *choices* — flags persisted in hosts/<hostname>.mk by scripts/setup-host.sh
+# (which sync runs once on first install of a new machine).
+#
+# Flags:
+# - HOST_DEV_TOOLS  : 1 = build hypr-tools submodule into ~/.local/bin (overrides AUR)
+# - HOST_RESTIC     : 1 = enable restic backup timer; 0 = disable
+# - HOST_DROP_PKGS  : whitespace-separated stow packages to skip on this host
+HOSTNAME := $(shell uname -n)
+-include $(REPO_ROOT)/hosts/$(HOSTNAME).mk
+
+# Conservative defaults for any flag the host file didn't set.
+HOST_DEV_TOOLS ?= 0
+HOST_RESTIC    ?= 1
+HOST_DROP_PKGS ?=
+
+STOW_PACKAGES := $(filter-out $(HOST_DROP_PKGS),$(STOW_PACKAGES))
+
+PKGDIR := $(REPO_ROOT)/packages
+
+# Boot-critical configs (grub, mkinitcpio, modprobe) are COPIED, not symlinked,
+# so they survive broken /home mounts and work in rescue/chroot environments.
+# nvidia.conf splits by driver variant: Arch runs proprietary nvidia-beta-dkms
+# (full tuning); Debian-family installs here run nvidia-driver-*-open (minimal,
+# since the proprietary-only options break suspend on the open module).
+ARCH_SYSTEM_COPIES := \
+	grub/grub:/etc/default/grub \
+	mkinitcpio/mkinitcpio.conf:/etc/mkinitcpio.conf \
+	modprobe/nvidia.conf:/etc/modprobe.d/nvidia.conf
+
+DEBIAN_SYSTEM_COPIES := \
+	modprobe/nvidia-open.conf:/etc/modprobe.d/nvidia.conf
+
+ifeq ($(DISTRO_FAMILY),arch)
+  SYSTEM_COPIES := $(ARCH_SYSTEM_COPIES)
+else ifeq ($(DISTRO_FAMILY),debian)
+  SYSTEM_COPIES := $(DEBIAN_SYSTEM_COPIES)
+else
+  SYSTEM_COPIES :=
+endif
+
+TOOLS := hypr-tools
+
 ## General
 help: ## Show this help message
 	echo "Available targets:"
@@ -33,20 +77,62 @@ help: ## Show this help message
 	grep -hE '(^[a-zA-Z_%-]+:.*?## .*$$|^## )' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; \
 		     /^## / {gsub("^## ", ""); print "\n\033[1;35m" $$0 "\033[0m"}; \
-		     /^[a-zA-Z_%-]+:/ {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+		     /^[a-zA-Z_%-]+:/ {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
-## Sync (one-shot full setup, idempotent)
-sync: ## Install packages, stow dotfiles, configure system, enable services, set default shell
-	@$(MAKE) --no-print-directory pkg-install
-	@$(MAKE) --no-print-directory _sync-ubuntu-extras
-	@$(MAKE) --no-print-directory stow-all
-	@$(MAKE) --no-print-directory system-install
-	@$(MAKE) --no-print-directory rclone-onedrive-setup
-	@$(MAKE) --no-print-directory sshfs-setup
-	@$(MAKE) --no-print-directory restic-setup
-	@$(MAKE) --no-print-directory _sync-default-shell
+## Sync — the only setup command you need to remember
+sync: ## One-shot, idempotent: pkgs, dotfiles, system, services, Claude config, default shell
+	@DOTFILES=$(REPO_ROOT) bash $(REPO_ROOT)/scripts/setup-host.sh
+	@$(MAKE) -s _sync-pkgs
+	@$(MAKE) -s _sync-ubuntu-extras
+	@$(MAKE) -s _sync-tools
+	@$(MAKE) -s _sync-stow
+	@$(MAKE) -s _sync-system
+	@$(MAKE) -s _sync-rclone
+	@$(MAKE) -s _sync-sshfs
+	@$(MAKE) -s _sync-restic
+	@$(MAKE) -s _sync-claude
+	@$(MAKE) -s _sync-shell
 	@echo ""
 	@echo "==> Sync complete."
+	@echo "    Reload running tools to pick up dotfile changes:"
+	@echo "      fish     exec fish"
+	@echo "      tmux     tmux source-file ~/.tmux.conf"
+	@echo "      nvim     :source \$$MYVIMRC"
+	@if echo "$(STOW_PACKAGES)" | grep -qw hypr; then \
+		echo "      hypr     hyprctl reload"; \
+		echo "      swaync   swaync-client -rs"; \
+		echo "      waybar   killall -SIGUSR2 waybar"; \
+	fi
+
+# --- internal _sync-* helpers (not in help) -------------------------------
+
+_sync-pkgs:
+	@echo "==> Packages..."
+ifeq ($(DISTRO_FAMILY),arch)
+	@cat $(PKGDIR)/arch/*.txt | grep -v '^#' | grep -v '^$$' | sort -u | sudo pacman -S --needed -
+	@command -v paru >/dev/null 2>&1 || { echo "paru not found — install it first for AUR packages."; exit 1; }
+	@paru -S --needed - < $(PKGDIR)/aur.txt
+else ifeq ($(DISTRO_FAMILY),debian)
+	@sudo apt-get update -qq
+	@sudo apt-get install -y $$(grep -v '^#' $(PKGDIR)/ubuntu.txt | grep -v '^$$')
+else
+	@echo "  skipped: unsupported distro ($(DISTRO_FAMILY))."
+endif
+
+# Submodule-built tool overrides (Arch + dev hosts only). HOST_DEV_TOOLS=1 builds
+# hypr-tools from the submodule into ~/.local/bin, shadowing the AUR /usr/bin
+# copies. Use `make uninstall-tools` to revert temporarily; next sync re-installs.
+_sync-tools:
+ifeq ($(HOST_DEV_TOOLS),1)
+ifeq ($(DISTRO_FAMILY),arch)
+	@echo "==> hypr-tools (dev override active)..."
+	@git -C $(REPO_ROOT) submodule update --init --recursive $(TOOLS) 2>&1 | sed 's/^/  /'
+	@for tool in $(TOOLS); do \
+		$(MAKE) -C $(REPO_ROOT)/$$tool install >/dev/null 2>&1 && \
+			echo "  $$tool: installed to ~/.local/bin"; \
+	done
+endif
+endif
 
 # Debian-family only: tools not in apt, or apt names that need ~/.local/bin shims.
 _sync-ubuntu-extras:
@@ -85,165 +171,85 @@ ifeq ($(DISTRO_FAMILY),debian)
 	fi
 endif
 
-_sync-default-shell:
-	@fish_path=$$(command -v fish); \
-	if [ -z "$$fish_path" ]; then \
-		echo "  default shell: fish not installed, skipping"; \
-	elif [ "$$(getent passwd "$$USER" | cut -d: -f7)" = "$$fish_path" ]; then \
-		echo "  default shell: already fish"; \
-	else \
-		echo "==> Setting fish as default shell..."; \
-		grep -qxF "$$fish_path" /etc/shells || echo "$$fish_path" | sudo tee -a /etc/shells; \
-		chsh -s "$$fish_path"; \
-		echo "  Log out and back in for fish to take effect."; \
-	fi
-
-## Submodule tools (Arch only)
-TOOLS := hypr-tools
-
-install-tools: ## Install tools from submodules to ~/.local/bin (dev override)
-ifeq ($(DISTRO_FAMILY),arch)
-	@git -C $(REPO_ROOT) submodule update --init --recursive $(TOOLS)
-	@for tool in $(TOOLS); do \
-		echo "Installing $$tool..."; \
-		$(MAKE) -C $(REPO_ROOT)/$$tool install; \
-	done
-	@echo ""
-	@echo "Dev copies installed to ~/.local/bin (overrides AUR packages on PATH)."
-	@echo "Run 'make uninstall-tools' to revert to AUR versions."
-else
-	@echo "Skipped: tools are Arch/Hyprland only."
-endif
-
-uninstall-tools: ## Remove dev overrides, revert to AUR package versions
-	@for tool in $(TOOLS); do \
-		if [ -f "$(REPO_ROOT)/$$tool/Makefile" ]; then \
-			echo "Uninstalling $$tool..."; \
-			$(MAKE) -C $(REPO_ROOT)/$$tool uninstall; \
-		fi; \
-	done
-	@echo "Reverted to AUR package versions in /usr/bin."
-
-## Stow
-stow-all: ## Stow all packages (idempotent — backs up conflicting plain files to .bak)
+# Pre-stow cleanup handles three legacy/edge cases that would otherwise damage
+# files or block stow:
+#   1. Absolute symlinks pointing into the repo: stow doesn't recognize these as
+#      "owned" and refuses to re-stow. Remove so stow can recreate them as relative.
+#   2. Regular files reachable via a symlinked parent dir (target's realpath lives
+#      inside the repo): a naive `mv` would follow the parent symlink and trash
+#      the dotfiles file. Skip these — they're already linked in effect.
+#   3. Regular files outside the repo: back up so stow can take over.
+_sync-stow:
+	@echo "==> Stowing dotfiles..."
 	@for pkg in $(STOW_PACKAGES); do \
-		echo "Stowing $$pkg..."; \
 		while IFS= read -r -d '' file; do \
 			rel="$${file#$(REPO_ROOT)/$$pkg/}"; \
 			target="$(HOME)/$$rel"; \
-			if [ -e "$$target" ] && [ ! -L "$$target" ]; then \
-				echo "  backing up $$target -> $${target}.bak"; \
-				mv "$$target" "$${target}.bak"; \
+			if [ -L "$$target" ]; then \
+				lt=$$(readlink "$$target"); \
+				case "$$lt" in \
+					"$(REPO_ROOT)"/*) rm -f "$$target" ;; \
+				esac; \
+				continue; \
+			fi; \
+			if [ -e "$$target" ]; then \
+				real=$$(readlink -f "$$target" 2>/dev/null || echo ""); \
+				case "$$real" in \
+					"$(REPO_ROOT)"/*) : ;; \
+					*) mv "$$target" "$${target}.bak"; \
+					   echo "  backed up $$target -> $${target}.bak" ;; \
+				esac; \
 			fi; \
 		done < <(find "$(REPO_ROOT)/$$pkg" -type f -print0); \
 		stow -d $(REPO_ROOT) -t ~ --no-folding $$pkg; \
 	done
-	@$(MAKE) --no-print-directory mime-update
-	@echo "All packages stowed."
-	@echo ""
-	@echo "To reload without restarting:"
-	@echo "  fish     exec fish"
-	@echo "  tmux     tmux source-file ~/.tmux.conf"
-	@echo "  nvim     :source \$$MYVIMRC"
-	@if echo "$(STOW_PACKAGES)" | grep -qw hypr; then \
-		echo "  hypr     hyprctl reload"; \
-		echo "  swaync   swaync-client -rs"; \
-		echo "  waybar   killall -SIGUSR2 waybar"; \
-	fi
-	@if [ "$$SHELL" != "/usr/bin/fish" ]; then \
-		echo ""; \
-		echo "To set fish as your default shell:"; \
-		echo "  chsh -s /usr/bin/fish"; \
-	fi
+	@$(MAKE) -s _sync-mime
 
-stow-%: ## Stow a single package (e.g., make stow-nvim)
-	stow -d $(REPO_ROOT) -t ~ --no-folding $*
-
-unstow-%: ## Unstow a single package (e.g., make unstow-nvim)
-	stow -d $(REPO_ROOT) -t ~ -D $*
-
-mime-update: ## Rebuild user MIME cache and (re)create the mimeapps.list absolute symlink
+# mimeapps.list is owned here, not stow (mime/.stow-local-ignore excludes it).
+# GLib's safe-write writes the tempfile next to the resolved target; a relative
+# symlink would resolve from CWD instead of the link's directory, so Thunar et al.
+# fail to update mimeapps.list unless CWD happens to be ~/.config/. An absolute
+# symlink makes the tempfile land in the right directory regardless of CWD.
+_sync-mime:
 	@if command -v update-mime-database >/dev/null 2>&1 && [ -d "$(HOME)/.local/share/mime/packages" ]; then \
 		update-mime-database "$(HOME)/.local/share/mime"; \
-		echo "MIME database rebuilt."; \
 	fi
-	@# mimeapps.list is owned by this target, not stow (mime/.stow-local-ignore
-	@# excludes it). GLib's safe-write follows the symlink, then writes the
-	@# tempfile next to the resolved target using its raw path. A relative
-	@# target gets CWD-resolved instead of resolved relative to the link's
-	@# directory, so Thunar et al. fail to update mimeapps.list unless CWD
-	@# happens to be ~/.config/. An absolute symlink makes the tempfile land
-	@# in the right directory regardless of CWD.
 	@target=$(REPO_ROOT)/mime/.config/mimeapps.list; \
 	link=$(HOME)/.config/mimeapps.list; \
 	mkdir -p "$$(dirname "$$link")"; \
 	if [ -e "$$link" ] && [ ! -L "$$link" ]; then \
 		mv "$$link" "$${link}.bak"; \
-		echo "mimeapps.list: backed up regular file to $${link}.bak"; \
+		echo "  mimeapps.list: backed up regular file to $${link}.bak"; \
 	fi; \
 	if [ ! -L "$$link" ] || [ "$$(readlink "$$link")" != "$$target" ]; then \
 		ln -sfn "$$target" "$$link"; \
-		echo "mimeapps.list: linked $$link -> $$target"; \
 	fi
 
-## System configs (require sudo)
-# Boot-critical configs (grub, mkinitcpio, modprobe) are COPIED, not symlinked,
-# so they survive broken /home mounts and work in rescue/chroot environments.
-# keyd and libinput are symlinked (non-boot-critical, read at runtime).
-#
-# nvidia.conf splits by driver variant: Arch runs proprietary nvidia-beta-dkms
-# (full tuning); Debian-family installs here run nvidia-driver-*-open (minimal,
-# since the proprietary-only options break suspend on the open module). If you
-# ever switch a Debian box to proprietary nvidia, swap nvidia-open.conf for
-# nvidia.conf in DEBIAN_SYSTEM_COPIES.
-COMMON_SYSTEM_COPIES :=
-
-ARCH_SYSTEM_COPIES := \
-	grub/grub:/etc/default/grub \
-	mkinitcpio/mkinitcpio.conf:/etc/mkinitcpio.conf \
-	modprobe/nvidia.conf:/etc/modprobe.d/nvidia.conf
-
-DEBIAN_SYSTEM_COPIES := \
-	modprobe/nvidia-open.conf:/etc/modprobe.d/nvidia.conf
-
-ifeq ($(DISTRO_FAMILY),arch)
-  SYSTEM_COPIES := $(COMMON_SYSTEM_COPIES) $(ARCH_SYSTEM_COPIES)
-else ifeq ($(DISTRO_FAMILY),debian)
-  SYSTEM_COPIES := $(COMMON_SYSTEM_COPIES) $(DEBIAN_SYSTEM_COPIES)
-else
-  SYSTEM_COPIES := $(COMMON_SYSTEM_COPIES)
-endif
-
-system-install: ## Copy boot configs and symlink runtime configs
+# Boot/system configs (require sudo). Symlinked configs are runtime-read; copied
+# configs (grub, mkinitcpio, modprobe) need to survive broken /home mounts.
+# nvidia.conf splits by driver variant. NetworkManager dispatcher hook is
+# install-copied (NM refuses symlinks/non-root for security).
+# system-sleep hooks live in /usr/lib/, not /etc/ — systemd-sleep(8) v260+
+# only scans /usr/lib/systemd/system-sleep/.
+_sync-system:
+	@echo "==> System configs..."
 	@if [ ! -d "$(HOME)/.tmux/plugins/tpm" ]; then \
-		echo "Installing TPM..."; \
 		git clone https://github.com/tmux-plugins/tpm "$(HOME)/.tmux/plugins/tpm"; \
-	else \
-		echo "TPM already installed."; \
 	fi
-	sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default /etc/systemd /etc/systemd/logind.conf.d /etc/sysctl.d /etc/alsa/conf.d
-	sudo ln -sf $(REPO_ROOT)/keyd/default.conf /etc/keyd/default.conf
-	sudo ln -sf $(REPO_ROOT)/libinput/local-overrides.quirks /etc/libinput/local-overrides.quirks
-	sudo ln -sf $(REPO_ROOT)/sysctl/99-sysrq.conf /etc/sysctl.d/99-sysrq.conf
-	sudo sysctl --system >/dev/null
-	sudo ln -sf $(REPO_ROOT)/systemd/sleep.conf /etc/systemd/sleep.conf
-	sudo ln -sf $(REPO_ROOT)/systemd/logind.conf.d/10-lid.conf /etc/systemd/logind.conf.d/10-lid.conf
-	# Old filename: "10-lid-hibernate.conf" was misleading (contents only ever
-	# set lid=lock/suspend, never hibernate). Remove if present.
-	sudo rm -f /etc/systemd/logind.conf.d/10-lid-hibernate.conf
-	sudo systemctl reload systemd-logind.service
-	# system-sleep hooks must go in /usr/lib/, not /etc/ — systemd-sleep(8) v260+
-	# only scans /usr/lib/systemd/system-sleep/ (verified via `strings` on the
-	# binary). /etc/systemd/system-sleep/ is silently ignored.
-	sudo ln -sf $(REPO_ROOT)/systemd/system-sleep/fuse-mounts /usr/lib/systemd/system-sleep/fuse-mounts
-	sudo ln -sf $(REPO_ROOT)/systemd/system-sleep/hyprlock-restart /usr/lib/systemd/system-sleep/hyprlock-restart
-	# Clean up any stale /etc/ symlinks from before this was understood.
-	sudo rm -f /etc/systemd/system-sleep/fuse-mounts /etc/systemd/system-sleep/hyprlock-restart
-	sudo ln -sf /usr/share/alsa/alsa.conf.d/99-pipewire-default.conf /etc/alsa/conf.d/99-pipewire-default.conf
-	# NetworkManager dispatcher hooks must be root-owned, not group/world
-	# writable, and not a symlink to a user-owned file — NM refuses otherwise.
-	# Install (copy + chmod + chown) instead of symlinking.
-	sudo install -D -m 0755 -o root -g root \
+	@sudo mkdir -p /etc/keyd /etc/libinput /etc/modprobe.d /etc/default /etc/systemd /etc/systemd/logind.conf.d /etc/sysctl.d /etc/alsa/conf.d
+	@sudo ln -sf $(REPO_ROOT)/keyd/default.conf /etc/keyd/default.conf
+	@sudo ln -sf $(REPO_ROOT)/libinput/local-overrides.quirks /etc/libinput/local-overrides.quirks
+	@sudo ln -sf $(REPO_ROOT)/sysctl/99-sysrq.conf /etc/sysctl.d/99-sysrq.conf
+	@sudo sysctl --system >/dev/null
+	@sudo ln -sf $(REPO_ROOT)/systemd/sleep.conf /etc/systemd/sleep.conf
+	@sudo ln -sf $(REPO_ROOT)/systemd/logind.conf.d/10-lid.conf /etc/systemd/logind.conf.d/10-lid.conf
+	@sudo rm -f /etc/systemd/logind.conf.d/10-lid-hibernate.conf
+	@sudo systemctl reload systemd-logind.service
+	@sudo ln -sf $(REPO_ROOT)/systemd/system-sleep/fuse-mounts /usr/lib/systemd/system-sleep/fuse-mounts
+	@sudo ln -sf $(REPO_ROOT)/systemd/system-sleep/hyprlock-restart /usr/lib/systemd/system-sleep/hyprlock-restart
+	@sudo rm -f /etc/systemd/system-sleep/fuse-mounts /etc/systemd/system-sleep/hyprlock-restart
+	@sudo ln -sf /usr/share/alsa/alsa.conf.d/99-pipewire-default.conf /etc/alsa/conf.d/99-pipewire-default.conf
+	@sudo install -D -m 0755 -o root -g root \
 		$(REPO_ROOT)/NetworkManager/dispatcher.d/50-restart-sshfs \
 		/etc/NetworkManager/dispatcher.d/50-restart-sshfs
 	@changed=""; \
@@ -253,7 +259,7 @@ system-install: ## Copy boot configs and symlink runtime configs
 			sudo cp "$(REPO_ROOT)/$$src" "$$dst"; \
 			echo "  $$dst: installed (new)"; \
 		elif diff -q "$(REPO_ROOT)/$$src" "$$dst" >/dev/null 2>&1; then \
-			echo "  $$dst: up to date"; \
+			:; \
 		else \
 			echo ""; \
 			echo "  $$dst differs from repo:"; \
@@ -266,25 +272,17 @@ system-install: ## Copy boot configs and symlink runtime configs
 				read -r apply < /dev/tty; \
 			fi; \
 			case "$$apply" in \
-				y|Y) \
-					sudo cp "$$dst" "$${dst}.bak"; \
-					echo "  backed up $$dst -> $${dst}.bak"; \
-					sudo cp "$(REPO_ROOT)/$$src" "$$dst"; \
-					echo "  $$dst: applied"; \
-					changed="$$changed $$dst"; \
-					;; \
-				q|Q) \
-					echo "  aborted."; \
-					exit 1; \
-					;; \
-				*) \
-					echo "  $$dst: skipped"; \
-					;; \
+				y|Y) sudo cp "$$dst" "$${dst}.bak"; \
+				     sudo cp "$(REPO_ROOT)/$$src" "$$dst"; \
+				     echo "  $$dst: applied (backup at $${dst}.bak)"; \
+				     changed="$$changed $$dst" ;; \
+				q|Q) echo "  aborted."; exit 1 ;; \
+				*)   echo "  $$dst: skipped" ;; \
 			esac; \
 		fi; \
 	done; \
 	if ! command -v keyd >/dev/null 2>&1 && [ "$(DISTRO_FAMILY)" = "debian" ]; then \
-		echo "Installing keyd from source..."; \
+		echo "  Installing keyd from source..."; \
 		tmp=$$(mktemp -d); \
 		git clone https://github.com/rvaiya/keyd "$$tmp/keyd"; \
 		make -C "$$tmp/keyd"; \
@@ -292,9 +290,8 @@ system-install: ## Copy boot configs and symlink runtime configs
 		rm -rf "$$tmp"; \
 	fi; \
 	if command -v keyd >/dev/null 2>&1; then \
-		sudo systemctl enable --now keyd; \
+		sudo systemctl enable --now keyd >/dev/null 2>&1 || sudo systemctl restart keyd; \
 	fi; \
-	echo "System configs installed."; \
 	case "$$changed" in \
 		*/grub*)       echo "  -> Run: sudo grub-mkconfig -o /boot/grub/grub.cfg" ;; \
 	esac; \
@@ -302,270 +299,138 @@ system-install: ## Copy boot configs and symlink runtime configs
 		*/mkinitcpio*) echo "  -> Run: sudo mkinitcpio -P" ;; \
 	esac
 
-system-diff: ## Show differences between repo and system configs
-	@dirty=0; \
-	for pair in $(SYSTEM_COPIES); do \
-		src=$${pair%%:*}; dst=$${pair##*:}; \
-		if [ -f "$$dst" ]; then \
-			if ! diff -q "$(REPO_ROOT)/$$src" "$$dst" >/dev/null 2>&1; then \
-				printf '\033[33m%s differs from repo:\033[0m\n' "$$dst"; \
-				diff --color=auto -u "$(REPO_ROOT)/$$src" "$$dst" || true; \
-				dirty=1; \
-			fi; \
-		else \
-			printf '\033[31m%s: missing on system\033[0m\n' "$$dst"; \
-			dirty=1; \
-		fi; \
-	done; \
-	if [ "$$dirty" = 0 ]; then printf '\033[32mAll system configs match repo.\033[0m\n'; fi
-
-system-pull: ## Pull system configs into repo (overwrite repo copies)
-	@for pair in $(SYSTEM_COPIES); do \
-		src=$${pair%%:*}; dst=$${pair##*:}; \
-		if [ -f "$$dst" ]; then \
-			cp "$$dst" "$(REPO_ROOT)/$$src"; \
-			echo "  pulled $$dst -> $$src"; \
-		else \
-			echo "  $$dst: missing, skipped"; \
-		fi; \
-	done
-	@echo "Run 'git diff' to review changes."
-
-## Rclone
-rclone-onedrive-setup: stow-rclone ## Configure OneDrive remote and enable mount
+_sync-rclone:
+	@echo "==> rclone OneDrive..."
 	@command -v rclone >/dev/null 2>&1 || { \
-		echo "Installing rclone..."; \
-		if command -v pacman >/dev/null 2>&1; then \
-			sudo pacman -S --needed --noconfirm rclone; \
-		elif command -v apt-get >/dev/null 2>&1; then \
-			sudo apt-get install -y rclone; \
-		else \
-			echo "No supported package manager found"; exit 1; \
-		fi; \
+		if command -v pacman >/dev/null 2>&1; then sudo pacman -S --needed --noconfirm rclone; \
+		elif command -v apt-get >/dev/null 2>&1; then sudo apt-get install -y rclone; \
+		else echo "  no supported package manager — skipping"; exit 0; fi; \
 	}
 	@if ! rclone listremotes 2>/dev/null | grep -q '^onedrive:'; then \
-		echo "No 'onedrive' remote found. Starting interactive config..."; \
-		echo "  -> Choose 'onedrive' type, leave client_id/secret blank, auto-config: yes"; \
+		echo "  No 'onedrive' remote — starting interactive config (choose 'onedrive', blank client_id/secret, auto-config: yes)..."; \
 		rclone config; \
-	else \
-		echo "Remote 'onedrive' already configured."; \
 	fi
 	@mkdir -p ~/OneDrive
 	@systemctl --user daemon-reload
 	@if rclone listremotes 2>/dev/null | grep -q '^onedrive:'; then \
-		systemctl --user enable --now rclone-onedrive; \
-		echo "OneDrive mounted at ~/OneDrive"; \
+		systemctl --user enable --now rclone-onedrive >/dev/null 2>&1 && echo "  OneDrive mounted at ~/OneDrive" || true; \
 	else \
-		echo "  'onedrive' remote not configured — skipping mount enable."; \
-		echo "  Re-run 'make rclone-onedrive-setup' once the remote exists."; \
+		echo "  'onedrive' remote not configured — re-run sync once it exists."; \
 	fi
 
-rclone-onedrive-unmount: ## Unmount OneDrive and disable service
-	@systemctl --user disable --now rclone-onedrive 2>/dev/null || true
-	@echo "OneDrive unmounted and service disabled."
-
-sshfs-setup: stow-sshfs stow-bin ## Install sshfs and enable ice + mililab mounts (+ ice watchdog)
+_sync-sshfs:
+	@echo "==> sshfs..."
 	@command -v sshfs >/dev/null 2>&1 || { \
-		echo "Installing sshfs..."; \
-		if command -v pacman >/dev/null 2>&1; then \
-			sudo pacman -S --needed --noconfirm sshfs; \
-		elif command -v apt-get >/dev/null 2>&1; then \
-			sudo apt-get install -y sshfs; \
-		else \
-			echo "No supported package manager found"; exit 1; \
-		fi; \
+		if command -v pacman >/dev/null 2>&1; then sudo pacman -S --needed --noconfirm sshfs; \
+		elif command -v apt-get >/dev/null 2>&1; then sudo apt-get install -y sshfs; \
+		else echo "  no supported package manager — skipping"; exit 0; fi; \
 	}
-	@mkdir -p ~/ice ~/mililab
+	@mkdir -p ~/ice ~/mililab ~/cdn ~/msi
 	@systemctl --user daemon-reload
+	@# Always-on mounts: ice (jump-host), mililab (cloudflared)
 	@if command -v cloudflared >/dev/null 2>&1; then \
-		systemctl --user enable --now sshfs-mililab; \
-		echo "mililab mounted at ~/mililab"; \
+		systemctl --user enable --now sshfs-mililab >/dev/null 2>&1 && echo "  mililab mounted at ~/mililab" || true; \
 	else \
-		echo "  cloudflared missing — skipping mililab mount enable (pacman -S cloudflared)."; \
+		echo "  cloudflared missing — skipping mililab mount"; \
 	fi
 	@if [ ! -f "$$HOME/.ssh/jump_pass" ]; then \
-		echo "  ~/.ssh/jump_pass missing — skipping ice mount enable."; \
-		echo "  Cooper jump needs the password file. Create it"; \
-		echo "  ('echo PASSWORD > ~/.ssh/jump_pass && chmod 600 ~/.ssh/jump_pass')"; \
-		echo "  then re-run 'make sshfs-setup'."; \
+		echo "  ~/.ssh/jump_pass missing — skipping ice mount"; \
+		echo "    Create with: echo PASSWORD > ~/.ssh/jump_pass && chmod 600 ~/.ssh/jump_pass"; \
 	else \
-		systemctl --user enable --now sshfs-ice; \
-		systemctl --user enable --now sshfs-ice-watchdog.timer; \
-		echo "ice mounted at ~/ice"; \
+		systemctl --user enable --now sshfs-ice >/dev/null 2>&1 && \
+		systemctl --user enable --now sshfs-ice-watchdog.timer >/dev/null 2>&1 && \
+		echo "  ice mounted at ~/ice"; \
+	fi
+	@# Opt-in mounts: only attach if the remote is already reachable. The
+	@# manual `make sshfs-cdn-mount` target handles the start-instance case.
+	@if command -v gcloud >/dev/null 2>&1; then \
+		state=$$(gcloud compute instances describe cdn-project --zone=us-east4-b --format='value(status)' 2>/dev/null); \
+		if [ "$$state" = RUNNING ]; then \
+			systemctl --user start sshfs-cdn >/dev/null 2>&1 && echo "  cdn mounted at ~/cdn (instance running)" || true; \
+		fi; \
+	fi
+	@if ssh -o ConnectTimeout=2 -o BatchMode=yes msi true 2>/dev/null; then \
+		systemctl --user start sshfs-msi >/dev/null 2>&1 && echo "  msi mounted at ~/msi (host reachable)" || true; \
 	fi
 
-sshfs-unmount: ## Unmount ice + mililab SSHFS and disable services
-	@systemctl --user disable --now sshfs-ice-watchdog.timer 2>/dev/null || true
-	@systemctl --user disable --now sshfs-ice 2>/dev/null || true
-	@systemctl --user disable --now sshfs-mililab 2>/dev/null || true
-	@echo "SSHFS mounts unmounted and services disabled."
-
-sshfs-cdn-mount: stow-sshfs ## Mount cdn at ~/cdn (starts the GCP instance if stopped). ssh-cdn does this automatically.
-	@command -v gcloud >/dev/null 2>&1 || { echo "gcloud CLI not found; install google-cloud-cli"; exit 1; }
-	@command -v sshfs >/dev/null 2>&1 || { echo "sshfs not found; run 'make sshfs-setup' first"; exit 1; }
-	@state=$$(gcloud compute instances describe cdn-project --zone=us-east4-b --format='value(status)' 2>/dev/null); \
-		if [ "$$state" != RUNNING ]; then \
-			echo "Starting cdn-project ($$state → RUNNING)..."; \
-			gcloud compute instances start cdn-project --zone=us-east4-b; \
-		fi
-	@mkdir -p ~/cdn
-	@systemctl --user daemon-reload
-	@systemctl --user start sshfs-cdn
-	@echo "cdn mounted at ~/cdn. Will auto-unmount when the instance stops."
-
-sshfs-cdn-unmount: ## Unmount cdn manually (does NOT stop the GCP instance — auto-stop unmounts on its own)
-	@systemctl --user stop sshfs-cdn 2>/dev/null || true
-	@echo "cdn unmounted. To also stop the instance: gcloud compute instances stop cdn-project --zone=us-east4-b"
-
-sshfs-msi-mount: stow-sshfs ## Mount msi at ~/msi (Windows laptop via Tailscale; opt-in)
-	@command -v sshfs >/dev/null 2>&1 || { echo "sshfs not found; run 'make sshfs-setup' first"; exit 1; }
-	@mkdir -p ~/msi
-	@systemctl --user daemon-reload
-	@systemctl --user start sshfs-msi
-	@echo "msi mounted at ~/msi"
-
-sshfs-msi-unmount: ## Unmount msi
-	@systemctl --user stop sshfs-msi 2>/dev/null || true
-	@echo "msi unmounted."
-
-## Restic
-restic-setup: stow-restic ## Install restic, set password, init repo on OneDrive, enable timer
+_sync-restic:
+ifneq ($(HOST_RESTIC),1)
+	@echo "==> restic: disabled for $(HOSTNAME)"
+	@systemctl --user disable --now restic-backup.timer 2>/dev/null || true
+else
+	@echo "==> restic..."
 	@command -v restic >/dev/null 2>&1 || { \
-		echo "Installing restic..."; \
-		if command -v pacman >/dev/null 2>&1; then \
-			sudo pacman -S --needed --noconfirm restic; \
-		elif command -v apt-get >/dev/null 2>&1; then \
-			sudo apt-get install -y restic; \
-		else \
-			echo "No supported package manager found"; exit 1; \
-		fi; \
+		if command -v pacman >/dev/null 2>&1; then sudo pacman -S --needed --noconfirm restic; \
+		elif command -v apt-get >/dev/null 2>&1; then sudo apt-get install -y restic; \
+		else echo "  no supported package manager — skipping"; exit 0; fi; \
 	}
+	@mkdir -p $(HOME)/.config/restic
 	@if [ ! -f "$(HOME)/.config/restic/password" ]; then \
-		echo "Enter a password for the restic repository:"; \
-		read -rsp "Password: " pw && echo && \
-		read -rsp "Confirm:  " pw2 && echo && \
-		[ "$$pw" = "$$pw2" ] || { echo "Passwords do not match."; exit 1; } && \
+		echo "  Set a restic repository password:"; \
+		read -rsp "  Password: " pw < /dev/tty && echo && \
+		read -rsp "  Confirm:  " pw2 < /dev/tty && echo && \
+		[ "$$pw" = "$$pw2" ] || { echo "  passwords do not match — skipping"; exit 0; } && \
 		install -m 600 /dev/null "$(HOME)/.config/restic/password" && \
 		printf '%s' "$$pw" > "$(HOME)/.config/restic/password" && \
-		echo "Password saved to ~/.config/restic/password (not tracked by git)"; \
-	else \
-		echo "Password file already exists."; \
+		echo "  Password saved to ~/.config/restic/password"; \
 	fi
 	@if ! rclone listremotes 2>/dev/null | grep -q '^onedrive:'; then \
-		echo "  'onedrive' remote not configured — skipping repo init and timer."; \
-		echo "  Re-run 'make restic-setup' after 'make rclone-onedrive-setup'."; \
+		echo "  'onedrive' remote not configured — skipping repo init."; \
 	else \
 		if ! RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
 			RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
 			restic snapshots >/dev/null 2>&1; then \
-			echo "Initializing restic repository at onedrive:Backups/restic ..."; \
+			echo "  Initializing restic repo at onedrive:Backups/restic..."; \
 			RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
 			RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
 			restic init; \
-		else \
-			echo "Repository already initialized."; \
 		fi; \
 		systemctl --user daemon-reload; \
-		systemctl --user enable --now restic-backup.timer; \
-		echo ""; \
-		echo "Restic backup timer enabled. Next run:"; \
-		systemctl --user list-timers restic-backup.timer --no-legend; \
+		systemctl --user enable --now restic-backup.timer >/dev/null 2>&1 && \
+			echo "  backup timer enabled — next run: $$(systemctl --user list-timers restic-backup.timer --no-legend | awk '{print $$1, $$2}')" || true; \
+	fi
+endif
+
+_sync-claude:
+	@echo "==> Claude Code reconcile..."
+	@DOTFILES=$(REPO_ROOT) bash $(REPO_ROOT)/scripts/claude-reconcile.sh --interactive
+
+_sync-shell:
+	@fish_path=$$(command -v fish); \
+	if [ -z "$$fish_path" ]; then \
+		echo "==> Default shell: fish not installed, skipping"; \
+	elif [ "$$(getent passwd "$$USER" | cut -d: -f7)" = "$$fish_path" ]; then \
+		:; \
+	else \
+		echo "==> Setting fish as default shell..."; \
+		grep -qxF "$$fish_path" /etc/shells || echo "$$fish_path" | sudo tee -a /etc/shells; \
+		chsh -s "$$fish_path"; \
+		echo "  log out and back in for fish to take effect."; \
 	fi
 
-restic-backup-now: ## Run a backup immediately (blocks until done, then shows logs)
-	@systemctl --user daemon-reload
-	@echo "Starting backup (this will block until complete)..."
-	@systemctl --user start restic-backup.service && \
-		journalctl --user -u restic-backup.service -n 50 --no-pager || \
-		{ journalctl --user -u restic-backup.service -n 50 --no-pager; exit 1; }
-
-restic-snapshots: ## List restic snapshots on OneDrive
-	@RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
-	RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
-	restic snapshots
-
-restic-disable: ## Disable the restic backup timer
-	@systemctl --user disable --now restic-backup.timer 2>/dev/null || true
-	@echo "Restic backup timer disabled."
-
-## Packages
-# Arch: source of truth is packages/arch/*.txt (hand-curated by category).
-# packages/arch-snapshot.txt is a snapshot written by pkg-dump — compare against
-# categories via pkg-drift. AUR/Ubuntu have single-file sources of truth.
-PKGDIR := $(REPO_ROOT)/packages
-
-pkg-dump: ## Snapshot explicitly-installed packages into packages/arch-snapshot.txt (for drift diffing)
-ifeq ($(DISTRO_FAMILY),arch)
-	pacman -Qqen > $(PKGDIR)/arch-snapshot.txt
-	pacman -Qqem > $(PKGDIR)/aur.txt
-	@echo "Saved $$(wc -l < $(PKGDIR)/arch-snapshot.txt) official + $$(wc -l < $(PKGDIR)/aur.txt) AUR packages."
-	@echo "Run 'make pkg-drift' to diff against packages/arch/*.txt categories."
-else ifeq ($(DISTRO_FAMILY),debian)
-	apt-mark showmanual | sort > $(PKGDIR)/ubuntu.txt
-	@echo "Saved $$(wc -l < $(PKGDIR)/ubuntu.txt) manually installed packages."
-else
-	@echo "Skipped: unsupported distro ($(DISTRO_FAMILY))."
-endif
-
-pkg-install: ## Install packages from categorized lists (Arch: packages/arch/*.txt + packages/aur.txt)
-ifeq ($(DISTRO_FAMILY),arch)
-	@cat $(PKGDIR)/arch/*.txt | grep -v '^#' | grep -v '^$$' | sort -u | sudo pacman -S --needed -
-	@command -v paru >/dev/null 2>&1 || { echo "paru not found — install it first for AUR packages."; exit 1; }
-	paru -S --needed - < $(PKGDIR)/aur.txt
-else ifeq ($(DISTRO_FAMILY),debian)
-	sudo apt-get update -qq
-	sudo apt-get install -y $$(grep -v '^#' $(PKGDIR)/ubuntu.txt | grep -v '^$$')
-else
-	@echo "Skipped: unsupported distro ($(DISTRO_FAMILY))."
-endif
-
-pkg-drift: ## Arch: diff installed state vs categorized packages/arch/*.txt
-ifeq ($(DISTRO_FAMILY),arch)
-	@installed=$$(pacman -Qqen | sort -u); \
-	tracked=$$(cat $(PKGDIR)/arch/*.txt | grep -v '^#' | grep -v '^$$' | sort -u); \
-	untracked=$$(comm -23 <(echo "$$installed") <(echo "$$tracked")); \
-	stale=$$(comm -13 <(echo "$$installed") <(echo "$$tracked")); \
-	if [ -n "$$untracked" ]; then \
-		printf '\033[33mInstalled but not in any category (add to packages/arch/*.txt):\033[0m\n'; \
-		printf '  %s\n' $$untracked; \
-	fi; \
-	if [ -n "$$stale" ]; then \
-		printf '\033[33mIn categories but not installed (reinstall or remove from category):\033[0m\n'; \
-		printf '  %s\n' $$stale; \
-	fi; \
-	if [ -z "$$untracked" ] && [ -z "$$stale" ]; then \
-		printf '\033[32mCategories match installed state.\033[0m\n'; \
-	fi
-else
-	@echo "Skipped: pkg-drift is Arch-only."
-endif
-
-## Status
-status: ## Show current dotfiles state
+## Status (read-only)
+status: ## Show stow / system / service state
 	@echo "Stow packages:"
 	@for pkg in $(STOW_PACKAGES); do \
-		first_file=$$(find "$(REPO_ROOT)/$$pkg" -type f -print -quit 2>/dev/null); \
-		if [ -n "$$first_file" ]; then \
-			rel="$${first_file#$(REPO_ROOT)/$$pkg/}"; \
-			if [ -L "$$HOME/$$rel" ]; then \
-				echo "  $$pkg: stowed"; \
-			else \
-				echo "  $$pkg: not stowed"; \
-			fi; \
+		stowed=0; \
+		while IFS= read -r -d '' file; do \
+			rel="$${file#$(REPO_ROOT)/$$pkg/}"; \
+			target="$(HOME)/$$rel"; \
+			real=$$(readlink -f "$$target" 2>/dev/null || true); \
+			if [ "$$real" = "$$file" ]; then stowed=1; break; fi; \
+		done < <(find "$(REPO_ROOT)/$$pkg" -type f -print0); \
+		if [ "$$stowed" -eq 1 ]; then \
+			echo "  $$pkg: stowed"; \
 		else \
-			echo "  $$pkg: empty"; \
+			echo "  $$pkg: not stowed"; \
 		fi; \
 	done
 	@echo ""
 	@echo "System configs (symlinked):"
 	@for f in /etc/keyd/default.conf /etc/libinput/local-overrides.quirks /etc/sysctl.d/99-sysrq.conf /etc/systemd/sleep.conf /usr/lib/systemd/system-sleep/fuse-mounts /etc/alsa/conf.d/99-pipewire-default.conf; do \
-		if [ -L "$$f" ]; then \
-			echo "  $$f: linked"; \
-		elif [ -f "$$f" ]; then \
-			echo "  $$f: exists (not linked)"; \
-		else \
-			echo "  $$f: missing"; \
-		fi; \
+		if [ -L "$$f" ]; then echo "  $$f: linked"; \
+		elif [ -f "$$f" ]; then echo "  $$f: exists (not linked)"; \
+		else echo "  $$f: missing"; fi; \
 	done
 	@echo "System configs (copied):"
 	@for pair in $(SYSTEM_COPIES); do \
@@ -586,9 +451,90 @@ status: ## Show current dotfiles state
 		case "$$svc" in keyd) \
 			active=$$(systemctl is-active "$$svc" 2>/dev/null);; *) \
 			active=$$(systemctl --user is-active "$$svc" 2>/dev/null);; esac; \
-		if [ "$$active" = "active" ]; then \
-			echo "  $$svc: active"; \
-		else \
-			echo "  $$svc: inactive"; \
+		if [ "$$active" = "active" ]; then echo "  $$svc: active"; \
+		else echo "  $$svc: inactive"; fi; \
+	done
+
+## Operational commands (one-off actions, not part of sync)
+restic-backup-now: ## Run a backup immediately (blocks, then shows logs)
+	@systemctl --user daemon-reload
+	@echo "Starting backup..."
+	@systemctl --user start restic-backup.service && \
+		journalctl --user -u restic-backup.service -n 50 --no-pager || \
+		{ journalctl --user -u restic-backup.service -n 50 --no-pager; exit 1; }
+
+restic-snapshots: ## List restic snapshots on OneDrive
+	@RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
+	RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
+	restic snapshots
+
+restic-disable: ## Disable the restic backup timer
+	@systemctl --user disable --now restic-backup.timer 2>/dev/null || true
+	@echo "Restic backup timer disabled."
+
+rclone-onedrive-unmount: ## Unmount OneDrive and disable service
+	@systemctl --user disable --now rclone-onedrive 2>/dev/null || true
+	@echo "OneDrive unmounted."
+
+sshfs-unmount: ## Unmount ice + mililab and disable services
+	@systemctl --user disable --now sshfs-ice-watchdog.timer 2>/dev/null || true
+	@systemctl --user disable --now sshfs-ice 2>/dev/null || true
+	@systemctl --user disable --now sshfs-mililab 2>/dev/null || true
+	@echo "ice + mililab unmounted."
+
+sshfs-cdn-mount: ## Mount cdn — STARTS the GCP instance if stopped (sync only mounts if already running)
+	@command -v gcloud >/dev/null 2>&1 || { echo "gcloud CLI not found"; exit 1; }
+	@command -v sshfs >/dev/null 2>&1 || { echo "sshfs not found — run 'make sync' first"; exit 1; }
+	@state=$$(gcloud compute instances describe cdn-project --zone=us-east4-b --format='value(status)' 2>/dev/null); \
+		if [ "$$state" != RUNNING ]; then \
+			echo "Starting cdn-project ($$state -> RUNNING)..."; \
+			gcloud compute instances start cdn-project --zone=us-east4-b; \
+		fi
+	@mkdir -p ~/cdn
+	@systemctl --user daemon-reload
+	@systemctl --user start sshfs-cdn
+	@echo "cdn mounted at ~/cdn (auto-unmounts when instance stops)."
+
+sshfs-cdn-unmount: ## Unmount cdn (does NOT stop the GCP instance)
+	@systemctl --user stop sshfs-cdn 2>/dev/null || true
+	@echo "cdn unmounted. To stop the instance: gcloud compute instances stop cdn-project --zone=us-east4-b"
+
+sshfs-msi-mount: ## Mount msi at ~/msi explicitly (sync auto-mounts when host is reachable)
+	@command -v sshfs >/dev/null 2>&1 || { echo "sshfs not found — run 'make sync' first"; exit 1; }
+	@mkdir -p ~/msi
+	@systemctl --user daemon-reload
+	@systemctl --user start sshfs-msi
+	@echo "msi mounted at ~/msi"
+
+sshfs-msi-unmount: ## Unmount msi
+	@systemctl --user stop sshfs-msi 2>/dev/null || true
+	@echo "msi unmounted."
+
+## Submodule tools (Arch only, dev override of AUR packages)
+install-tools: ## Build & install hypr-tools to ~/.local/bin (overrides AUR)
+ifeq ($(DISTRO_FAMILY),arch)
+	@git -C $(REPO_ROOT) submodule update --init --recursive $(TOOLS)
+	@for tool in $(TOOLS); do \
+		echo "Installing $$tool..."; \
+		$(MAKE) -C $(REPO_ROOT)/$$tool install; \
+	done
+	@echo "Dev copies in ~/.local/bin override AUR packages on PATH."
+else
+	@echo "Skipped: tools are Arch/Hyprland only."
+endif
+
+uninstall-tools: ## Remove dev overrides, revert to AUR /usr/bin
+	@for tool in $(TOOLS); do \
+		if [ -f "$(REPO_ROOT)/$$tool/Makefile" ]; then \
+			$(MAKE) -C $(REPO_ROOT)/$$tool uninstall; \
 		fi; \
 	done
+	@echo "Reverted to AUR package versions."
+
+.PHONY: help sync status \
+	_sync-pkgs _sync-ubuntu-extras _sync-tools _sync-stow _sync-mime _sync-system \
+	_sync-rclone _sync-sshfs _sync-restic _sync-claude _sync-shell \
+	restic-backup-now restic-snapshots restic-disable \
+	rclone-onedrive-unmount sshfs-unmount \
+	sshfs-cdn-mount sshfs-cdn-unmount sshfs-msi-mount sshfs-msi-unmount \
+	install-tools uninstall-tools

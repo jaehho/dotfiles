@@ -4,40 +4,51 @@ GNU Stow-based dotfiles. Primary target is Arch Linux + Hyprland, but the repo a
 
 ## Structure
 
-```
-dotfiles/
-├── Makefile              # stow-all, install-tools, system-install, pkg-dump, etc.
-├── hypr-tools/           # git submodule → github.com/jaehho/hypr-tools
-├── hypr/                 # Hyprland config, scripts, window rules
-├── fish/                 # Fish shell config
-├── kitty/                # Kitty terminal config
-├── nvim/                 # Neovim config
-├── waybar/               # Waybar config
-├── rofi/                 # Rofi launcher config
-├── swaync/               # SwayNotificationCenter daemon
-└── ...                   # Other stow packages (git, tmux, ssh, etc.)
-```
+Each top-level directory is either a stow package mirroring `$HOME` or a
+non-stow helper (`packages/`, `scripts/`, `hypr-tools/` submodule). Run
+`tree -L 1` or `make help` to see what's there.
 
 ## Key commands
 
+`make sync` is the only setup command. It chains everything: packages,
+stow, system configs, services, Claude Code reconcile (interactive on
+removals), default shell. Idempotent — safe to re-run after a pull.
+First run prompts for restic password, rclone OAuth, and any system-config
+diffs. Later runs skip already-configured steps.
+
 ```bash
-make sync                  # One-shot full setup: pkgs, stow, system, services, default shell
-make stow-all              # Stow all packages to ~
-make install-tools         # Dev-install submodule tools to ~/.local/bin (overrides AUR)
-make uninstall-tools       # Remove dev overrides, revert to AUR /usr/bin versions
-make stow-hypr             # Stow a single package
-make system-install        # Copy boot configs, symlink runtime configs (uses sudo)
-make pkg-dump              # Save installed package lists
-make status                # Show stow/system/service state
+make sync                  # bring this machine up to date
+make status                # show stow/system/service state
+make help                  # full target list (incl. operational commands)
 ```
 
-`make sync` is the primary entry point on a new machine and for re-syncing after
-pulls: it's idempotent and chains `pkg-install` → Ubuntu extras (bat/fd shims,
-eza, zoxide, kitty terminfo) → `stow-all` → `system-install` → `rclone-onedrive-setup`
-→ `sshfs-setup` → `restic-setup` → set fish as default shell. First run prompts
-for the restic password and rclone OAuth; later runs skip already-configured steps.
-`install-tools` is intentionally *not* part of sync — it's a dev-only override
-of the AUR packages.
+Operational one-offs (mounts, backup-now, snapshots) and `install-tools` /
+`uninstall-tools` (manual toggle of the dev override) are kept as separate
+targets — see `make help`.
+
+### Per-machine intent
+
+Sync auto-detects most variation (distro, capabilities, network reachability,
+GCP-instance state). For *choices* that vary by machine, sync prompts once on
+a new host and writes the answers to `hosts/<hostname>.mk` (committed to the
+repo). Subsequent syncs include the file silently. Flags it sets:
+`HOST_DEV_TOOLS`, `HOST_RESTIC`, `HOST_DROP_PKGS`. To change later, edit the
+file or delete it (next sync re-prompts). In non-interactive contexts (CI / no
+TTY), the script writes conservative defaults without prompting.
+
+## Claude Code config
+
+Tracked under `claude/.claude/`: `CLAUDE.md`, `settings.json` (including
+`enabledPlugins`), custom hooks, and reconcile manifests at
+`claude/.claude/reconcile/` (MCP servers, marketplaces, third-party skill
+sources). Custom skills live at `claude/.claude/skills/<name>/`.
+
+`scripts/claude-reconcile.sh` (called from `make sync`) enforces strict
+parity: anything installed at user scope but not declared gets removed
+(interactively prompted per category when run from sync). Secrets for
+`${VAR}` placeholders in `mcp-servers.json` come from
+`~/.config/claude-mcp-secrets.env` (gitignored, see
+`claude/.claude/reconcile/secrets.env.example`).
 
 ## Submodule tools
 
@@ -92,7 +103,8 @@ Both are Rust + ratatui (crossterm). The wallpaper TUI reuses its window via a c
 
 - `--no-folding` is always used (creates individual symlinks, not directory symlinks)
 - Distro-aware: `COMMON_PACKAGES` for all systems, `ARCH_PACKAGES` for Arch only
-- Boot-critical configs (grub, mkinitcpio) are **copied** not symlinked via `system-install`
+- Boot-critical configs (grub, mkinitcpio, modprobe) are **copied** not symlinked
+  by `_sync-system` so they survive broken /home mounts
 
 ## Commands You Give Me to Run
 
