@@ -111,9 +111,14 @@ _sync-pkgs:
 ifeq ($(DISTRO_FAMILY),arch)
 	@cat $(PKGDIR)/arch/*.txt | grep -vE '^(#|$$)' | sort -u | sudo pacman -S --needed -
 	@command -v paru >/dev/null 2>&1 || { echo "paru not found — install it first for AUR packages."; exit 1; }
-	@# Strip comments, blanks, and *-debug split packages (auto-produced when paru
-	@# builds with OPTIONS=(debug); not individually installable from AUR).
-	@grep -vE '^(#|$$)' $(PKGDIR)/aur.txt | grep -vE -- '-debug$$' | paru -S --needed -
+	@# Strip comments/blanks and *-debug split packages (auto-produced by makepkg
+	@# OPTIONS=(debug); they show up in pacman -Qm but aren't installable). Also
+	@# skip AUR copies of hypr-tools when HOST_DEV_TOOLS=1, since _sync-tools will
+	@# build the submodule into ~/.local/bin and shadow them on PATH.
+	@grep -vE '^(#|$$)' $(PKGDIR)/aur.txt \
+		| grep -vE -- '-debug$$' \
+		$(if $(filter 1,$(HOST_DEV_TOOLS)),| grep -vE '^(hypr-wallpaper-git|hypr-monitor-git)$$',) \
+		| paru -S --needed -
 else ifeq ($(DISTRO_FAMILY),debian)
 	@sudo apt-get update -qq
 	@sudo apt-get install -y $$(grep -v '^#' $(PKGDIR)/ubuntu.txt | grep -v '^$$')
