@@ -377,16 +377,21 @@ sshfs-setup: stow-sshfs stow-bin ## Install sshfs and enable ice + mililab mount
 	}
 	@mkdir -p ~/ice ~/mililab
 	@systemctl --user daemon-reload
+	@if command -v cloudflared >/dev/null 2>&1; then \
+		systemctl --user enable --now sshfs-mililab; \
+		echo "mililab mounted at ~/mililab"; \
+	else \
+		echo "  cloudflared missing — skipping mililab mount enable (pacman -S cloudflared)."; \
+	fi
 	@if [ ! -f "$$HOME/.ssh/jump_pass" ]; then \
-		echo "  ~/.ssh/jump_pass missing — skipping ice/mililab mount enable."; \
-		echo "  Cooper services need the jump password file. Create it"; \
+		echo "  ~/.ssh/jump_pass missing — skipping ice mount enable."; \
+		echo "  Cooper jump needs the password file. Create it"; \
 		echo "  ('echo PASSWORD > ~/.ssh/jump_pass && chmod 600 ~/.ssh/jump_pass')"; \
 		echo "  then re-run 'make sshfs-setup'."; \
 	else \
 		systemctl --user enable --now sshfs-ice; \
-		systemctl --user enable --now sshfs-mililab; \
 		systemctl --user enable --now sshfs-ice-watchdog.timer; \
-		echo "ice mounted at ~/ice, mililab mounted at ~/mililab"; \
+		echo "ice mounted at ~/ice"; \
 	fi
 
 sshfs-unmount: ## Unmount ice + mililab SSHFS and disable services
