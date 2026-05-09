@@ -6,7 +6,6 @@ hypr-wallpaper-git
 hyprland-autoname-workspaces-git
 hyprscratch
 hyprsession
-hyprshell-bin-debug
 hyprwhenthen-bin
 microsoft-edge-stable-bin
 nvidia-beta-dkms
@@ -14,7 +13,6 @@ openscad-snapshot-appimage
 orca-slicer-bin
 overskride-bin
 paru
-paru-debug
 raw-thumbnailer
 signal-cli
 visual-studio-code-bin

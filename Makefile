@@ -109,9 +109,11 @@ sync: ## One-shot, idempotent: pkgs, dotfiles, system, services, Claude config, 
 _sync-pkgs:
 	@echo "==> Packages..."
 ifeq ($(DISTRO_FAMILY),arch)
-	@cat $(PKGDIR)/arch/*.txt | grep -v '^#' | grep -v '^$$' | sort -u | sudo pacman -S --needed -
+	@cat $(PKGDIR)/arch/*.txt | grep -vE '^(#|$$)' | sort -u | sudo pacman -S --needed -
 	@command -v paru >/dev/null 2>&1 || { echo "paru not found — install it first for AUR packages."; exit 1; }
-	@paru -S --needed - < $(PKGDIR)/aur.txt
+	@# Strip comments, blanks, and *-debug split packages (auto-produced when paru
+	@# builds with OPTIONS=(debug); not individually installable from AUR).
+	@grep -vE '^(#|$$)' $(PKGDIR)/aur.txt | grep -vE -- '-debug$$' | paru -S --needed -
 else ifeq ($(DISTRO_FAMILY),debian)
 	@sudo apt-get update -qq
 	@sudo apt-get install -y $$(grep -v '^#' $(PKGDIR)/ubuntu.txt | grep -v '^$$')
