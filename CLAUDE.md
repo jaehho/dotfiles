@@ -19,12 +19,13 @@ diffs. Later runs skip already-configured steps.
 ```bash
 make sync                  # bring this machine up to date
 make status                # show stow/system/service state
-make help                  # full target list (incl. operational commands)
 ```
 
-Operational one-offs (mounts, backup-now, snapshots) and `install-tools` /
-`uninstall-tools` (manual toggle of the dev override) are kept as separate
-targets — see `make help`.
+That's the whole public surface. Mounts, backups, snapshots, and the
+hypr-tools dev override are toggled directly with `systemctl --user`,
+`restic`, and `make -C hypr-tools install/uninstall` — no Makefile
+wrappers. The `ssh-cdn` fish function starts the GCP instance and mounts
+on demand.
 
 ### Per-machine intent
 
@@ -58,18 +59,21 @@ parity: anything installed at user scope but not declared gets removed
 
 Day-to-day, the AUR packages at `/usr/bin/` are what run. The submodule is for development.
 
+Set `HOST_DEV_TOOLS := 1` in `hosts/<hostname>.mk` to make `make sync` build
+from the submodule into `~/.local/bin` (which shadows AUR on PATH). To
+revert temporarily without touching the host config, run
+`make -C hypr-tools uninstall`; the next `make sync` re-installs.
+
 ```bash
 # Develop
 cd hypr-tools/
 # edit code...
-make install-tools                   # (from dotfiles root) override AUR with dev copy
+make -C . install                    # rebuild & reinstall after edits
 # test changes...
 git add -A && git commit -m "..."
 git push
-make uninstall-tools                 # revert to AUR version
 
 # Release
-cd hypr-tools/
 make release-patch                   # 1.0.1 — bug fix
 make release-minor                   # 1.1.0 — new feature
 make release-major                   # 2.0.0 — breaking change
