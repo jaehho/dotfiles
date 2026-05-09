@@ -115,10 +115,15 @@ ifeq ($(DISTRO_FAMILY),arch)
 	@# OPTIONS=(debug); they show up in pacman -Qm but aren't installable). Also
 	@# skip AUR copies of hypr-tools when HOST_DEV_TOOLS=1, since _sync-tools will
 	@# build the submodule into ~/.local/bin and shadow them on PATH.
+	@# --batchinstall: build all queued AUR packages first, then install them in
+	@# a single pacman transaction. Without it, paru installs each as it builds,
+	@# which breaks for tightly-coupled packages (e.g., nvidia-beta-dkms pins
+	@# nvidia-utils-beta to an exact version — the new utils can't install
+	@# alone, but the pair upgrades fine atomically).
 	@grep -vE '^(#|$$)' $(PKGDIR)/aur.txt \
 		| grep -vE -- '-debug$$' \
 		$(if $(filter 1,$(HOST_DEV_TOOLS)),| grep -vE '^(hypr-wallpaper-git|hypr-monitor-git)$$',) \
-		| paru -S --needed -
+		| paru -S --needed --batchinstall -
 else ifeq ($(DISTRO_FAMILY),debian)
 	@sudo apt-get update -qq
 	@sudo apt-get install -y $$(grep -v '^#' $(PKGDIR)/ubuntu.txt | grep -v '^$$')
