@@ -339,8 +339,16 @@ _sync-sshfs:
 	}
 	@mkdir -p ~/ice ~/mililab ~/cdn ~/msi
 	@systemctl --user daemon-reload
-	@# Always-on mounts: ice (jump-host), mililab (tailscale)
-	@systemctl --user enable --now sshfs-mililab >/dev/null 2>&1 && echo "  mililab mounted at ~/mililab" || true
+	@# Always-on mounts: ice (jump-host), mililab (tailscale).
+	@# Skip + clean up the mililab mount when running on mililab itself; sshfs
+	@# would otherwise loop the host's / onto ~/mililab.
+	@if [ "$(HOSTNAME)" = "mililab" ]; then \
+		systemctl --user disable --now sshfs-mililab >/dev/null 2>&1 || true; \
+		fusermount3 -uz "$$HOME/mililab" 2>/dev/null || true; \
+		echo "  on mililab — skipping self-mount"; \
+	else \
+		systemctl --user enable --now sshfs-mililab >/dev/null 2>&1 && echo "  mililab mounted at ~/mililab" || true; \
+	fi
 	@if [ ! -f "$$HOME/.ssh/jump_pass" ]; then \
 		echo "  ~/.ssh/jump_pass missing — skipping ice mount"; \
 		echo "    Create with: echo PASSWORD > ~/.ssh/jump_pass && chmod 600 ~/.ssh/jump_pass"; \
