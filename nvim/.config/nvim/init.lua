@@ -172,8 +172,8 @@ vim.opt.whichwrap:append('<,>,[,]')
 -- See `:help 'confirm'`
 vim.o.confirm = true
 
--- Session options: include localoptions so filetype/highlighting restore correctly (auto-session)
-vim.o.sessionoptions = 'blank,buffers,curdir,folds,help,tabpages,winsize,winpos,terminal,localoptions'
+-- Session options: include localoptions so filetype/highlighting restore correctly
+vim.o.sessionoptions = 'blank,buffers,curdir,folds,help,tabpages,winsize,winpos,localoptions'
 
 -- [[ Basic Keymaps ]]
 --  See `:help vim.keymap.set()`
@@ -319,7 +319,20 @@ do
           end,
         })
       else
-        vim.notify('No preview for filetype: ' .. ft, vim.log.levels.WARN)
+        local dap = require 'dap'
+        if dap.session() then
+          dap.terminate()
+          require('dapui').close()
+          vim.notify('Debug stopped', vim.log.levels.INFO)
+          return
+        end
+        dap.run {
+          type = 'python',
+          request = 'launch',
+          name = 'tp: Launch file',
+          program = '${file}',
+          console = 'integratedTerminal',
+        }
       end
     elseif ft == 'html' then
       local src = vim.api.nvim_buf_get_name(0)
@@ -544,6 +557,7 @@ require('lazy').setup({
       -- Document existing key chains
       spec = {
         { '<leader>s', group = '[S]earch', mode = { 'n', 'v' } },
+        { '<leader>S', group = '[S]ession' },
         { '<leader>t', group = '[T]oggle' },
         { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } },
         { '<leader>d', group = '[D]ebug' },
@@ -1118,7 +1132,7 @@ require('lazy').setup({
     config = function()
       local parsers = {
         'bash', 'c', 'css', 'diff', 'go', 'html', 'javascript', 'json', 'lua', 'luadoc',
-        'markdown', 'markdown_inline', 'openscad', 'python', 'query', 'rust', 'toml',
+        'markdown', 'markdown_inline', 'python', 'query', 'rust', 'toml',
         'typescript', 'typst', 'vim', 'vimdoc', 'yaml',
       }
       require('nvim-treesitter').install(parsers)
@@ -1234,6 +1248,7 @@ require('lazy').setup({
       'rcarriga/nvim-dap-ui',
       'nvim-neotest/nvim-nio',
       'jay-babu/mason-nvim-dap.nvim',
+      'mfussenegger/nvim-dap-python',
     },
     keys = {
       { '<leader>dc', function() require('dap').continue() end, desc = 'Debug: Start/Continue' },
@@ -1257,6 +1272,16 @@ require('lazy').setup({
         ensure_installed = { 'debugpy', 'codelldb' },
       }
 
+      local mason_debugpy = vim.fn.stdpath('data') .. '/mason/packages/debugpy/venv/bin/python'
+      require('dap-python').setup(mason_debugpy)
+      require('dap-python').resolve_python = function()
+        local root = vim.fs.root(0, { 'pyproject.toml', '.venv' })
+        if root and vim.uv.fs_stat(root .. '/.venv/bin/python') then
+          return root .. '/.venv/bin/python'
+        end
+        return vim.fn.exepath('python3')
+      end
+
       dapui.setup()
       dap.listeners.after.event_initialized['dapui_config'] = dapui.open
       dap.listeners.before.event_terminated['dapui_config'] = dapui.close
@@ -1266,11 +1291,14 @@ require('lazy').setup({
     end,
   },
 
-  { -- Session persistence
-    'rmagatti/auto-session',
-    lazy = false,
-    opts = {
-      suppressed_dirs = { '~/', '~/Downloads', '~/Documents', '/' },
+  { -- Session persistence (on-demand restore, auto-save on exit)
+    'folke/persistence.nvim',
+    event = 'BufReadPre',
+    opts = {},
+    keys = {
+      { '<leader>Sl', function() require('persistence').load() end, desc = '[S]ession [L]oad for cwd' },
+      { '<leader>SL', function() require('persistence').load({ last = true }) end, desc = '[S]ession [L]oad last' },
+      { '<leader>Sd', function() require('persistence').stop() end, desc = "[S]ession [D]on't save on exit" },
     },
   },
 
