@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Auto-focus kitty windows that request urgent (xdg-activation).
+#
+# Why: Hyprland's `misc:focus_on_activate = true` is supposed to follow
+# activation requests, but in practice it fires `urgent>>` and stops short of
+# switching workspace (hyprwm/Hyprland#2675). The local notify.sh hook works
+# around this by calling `focuswindow` itself, but the SSH path uses Kitty's
+# OSC 99 — clicking that notification goes through xdg-activation and hits
+# the bug. This daemon listens for `urgent>>` and runs `focuswindow`, which
+# does switch workspace.
+#
+# Scoped to kitty so other apps marking urgent don't pull focus.
+# Daemon: started via exec-once from hyprland.conf.
+set -euo pipefail
+
+SOCKET="${XDG_RUNTIME_DIR:?}/hypr/${HYPRLAND_INSTANCE_SIGNATURE:?}/.socket2.sock"
+
+socat -u "UNIX-CONNECT:$SOCKET" - | while IFS= read -r event; do
+  case "$event" in
+    "urgent>>"*)
+      addr="0x${event#urgent>>}"
+      class=$(hyprctl clients -j 2>/dev/null \
+        | jq -r --arg a "$addr" '.[] | select(.address == $a) | .class' 2>/dev/null)
+      [[ $class == kitty ]] || continue
+      hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
+      ;;
+  esac
+done
