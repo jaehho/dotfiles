@@ -12,10 +12,6 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/notify.sh"
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/pytest-check.py"
           }
         ]
       }

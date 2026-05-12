@@ -5,9 +5,14 @@ Reads tool-input JSON from stdin (Claude Code hook contract). If the edited
 file is Python and the project has pyright configured, runs pyright on the
 project root and emits errors to stderr (exit 2 → blocking-feedback to Claude).
 Silent + exit 0 on clean runs or when pyright doesn't apply.
+
+A hash-based cache at $XDG_CACHE_HOME/claude-hooks/pyright-cache.json
+(default ~/.cache) skips redundant runs when the project state hasn't
+changed since the last successful invocation.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -17,6 +22,10 @@ from pathlib import Path
 MAX_DIAGS = 30
 TIMEOUT_S = 30
 PYRIGHT_BIN = "pyright"
+CACHE_DIR = Path(
+    os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
+) / "claude-hooks"
+CACHE_FILE = CACHE_DIR / "pyright-cache.json"
 
 
 def project_root(start: Path) -> Path | None:
@@ -34,6 +43,51 @@ def project_root(start: Path) -> Path | None:
     return None
 
 
+def fingerprint(root: Path) -> str:
+    """Hash of all .py/.pyi mtimes + pyright config + tool version."""
+    h = hashlib.sha256()
+    try:
+        result = subprocess.run(
+            [PYRIGHT_BIN, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        h.update(result.stdout.encode())
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    for sub in sorted(root.rglob("*")):
+        if not sub.is_file():
+            continue
+        name = sub.name
+        if not (name.endswith((".py", ".pyi")) or name in ("pyproject.toml", "pyrightconfig.json")):
+            continue
+        if ".venv" in sub.parts or "node_modules" in sub.parts or ".git" in sub.parts:
+            continue
+        try:
+            st = sub.stat()
+            h.update(f"{sub}:{st.st_mtime_ns}:{st.st_size}".encode())
+        except OSError:
+            continue
+    return h.hexdigest()
+
+
+def load_cache() -> dict[str, str]:
+    try:
+        return json.loads(CACHE_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_cache(cache: dict[str, str]) -> None:
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        CACHE_FILE.write_text(json.dumps(cache))
+    except OSError:
+        pass
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -48,6 +102,11 @@ def main() -> int:
     edited = Path(file_path).resolve()
     root = project_root(edited.parent)
     if root is None:
+        return 0
+
+    cache = load_cache()
+    fp = fingerprint(root)
+    if cache.get(str(root)) == fp:
         return 0
 
     try:
@@ -70,6 +129,8 @@ def main() -> int:
         d for d in data.get("generalDiagnostics", []) if d.get("severity") == "error"
     ]
     if not diags:
+        cache[str(root)] = fp
+        save_cache(cache)
         return 0
 
     lines = [f"pyright: {len(diags)} error(s) in {root}"]
