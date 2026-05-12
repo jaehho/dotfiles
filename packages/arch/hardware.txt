@@ -2,7 +2,6 @@
 alsa-tools
 alsa-utils
 bluetui
-blueman
 bluez
 bluez-utils
 bolt
@@ -25,11 +24,9 @@ networkmanager
 nm-connection-editor
 nss-mdns
 nvidia-prime
-pavucontrol
 pipewire
 pipewire-pulse
 power-profiles-daemon
-pulsemixer
 sddm
 sof-firmware
 udiskie

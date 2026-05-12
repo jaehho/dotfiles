@@ -6,7 +6,6 @@ base-devel
 bat
 biber
 blender
-blueman
 bluetui
 bluez
 bluez-utils
@@ -92,7 +91,6 @@ openssh
 otf-font-awesome
 pacman-contrib
 pandoc-cli
-pavucontrol
 perl-file-mimeinfo
 pipewire
 pipewire-pulse
@@ -100,7 +98,6 @@ polkit-gnome
 poppler
 poppler-glib
 power-profiles-daemon
-pulsemixer
 python-pipx
 python-pygments
 python-pynvim

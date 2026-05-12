@@ -20,7 +20,7 @@ class_to_glyph() {
         mpv|vlc) echo -n "󰐌" ;;
         obsidian) echo -n "󰎞" ;;
         thunar|nautilus) echo -n "󰉋" ;;
-        pavucontrol|wiremix) echo -n "󰕾" ;;
+        wiremix) echo -n "󰕾" ;;
         *) echo -n "󰏗" ;;
     esac
 }

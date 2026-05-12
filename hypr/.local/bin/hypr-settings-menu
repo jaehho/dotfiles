@@ -5,19 +5,14 @@ choice=$(printf '%s\n' \
     "󰤨  Wi-Fi" \
     "󰂯  Bluetooth" \
     "󰕾  Audio" \
-    "  Appearance" \
-    "󰍛  System Monitor" \
-    | rofi -dmenu -p "Settings" -theme-str 'listview { lines: 5; }')
+    | rofi -dmenu -p "Settings" -theme-str 'listview { lines: 3; }')
 
 [[ -z "$choice" ]] && exit 0
 
-gui() { "$@" &>/dev/null & disown; }
 tui() { kitty --class floating-tui -e "$@"; }
 
 case "$choice" in
     *Wi-Fi*)       tui nmtui ;;
-    *Bluetooth*)   gui blueman-manager ;;
-    *Audio*)       gui pavucontrol ;;
-    *Appearance*)  gui nwg-look ;;
-    *System*)      tui btop ;;
+    *Bluetooth*)   tui bluetui ;;
+    *Audio*)       tui wiremix ;;
 esac
