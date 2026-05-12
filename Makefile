@@ -339,12 +339,8 @@ _sync-sshfs:
 	}
 	@mkdir -p ~/ice ~/mililab ~/cdn ~/msi
 	@systemctl --user daemon-reload
-	@# Always-on mounts: ice (jump-host), mililab (cloudflared)
-	@if command -v cloudflared >/dev/null 2>&1; then \
-		systemctl --user enable --now sshfs-mililab >/dev/null 2>&1 && echo "  mililab mounted at ~/mililab" || true; \
-	else \
-		echo "  cloudflared missing — skipping mililab mount"; \
-	fi
+	@# Always-on mounts: ice (jump-host), mililab (tailscale)
+	@systemctl --user enable --now sshfs-mililab >/dev/null 2>&1 && echo "  mililab mounted at ~/mililab" || true
 	@if [ ! -f "$$HOME/.ssh/jump_pass" ]; then \
 		echo "  ~/.ssh/jump_pass missing — skipping ice mount"; \
 		echo "    Create with: echo PASSWORD > ~/.ssh/jump_pass && chmod 600 ~/.ssh/jump_pass"; \
