@@ -12,6 +12,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/notify.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/pytest-check.py"
           }
         ]
       }
@@ -23,6 +27,21 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/notify.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/pyright-check.py"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/ruff-check.py"
           }
         ]
       }
