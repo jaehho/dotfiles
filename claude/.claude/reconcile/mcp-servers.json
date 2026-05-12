@@ -1,10 +1,1 @@
-{
-  "zotero": {
-    "command": "zotero-mcp",
-    "env": {
-      "ZOTERO_LOCAL": "true",
-      "ZOTERO_API_KEY": "${ZOTERO_API_KEY}",
-      "ZOTERO_LIBRARY_ID": "16661452"
-    }
-  }
-}
+{}
