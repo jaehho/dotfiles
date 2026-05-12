@@ -33,6 +33,13 @@ DEV=0
 RESTIC=1
 DROP=""
 
+# Mirror the Makefile's distro detection so we can skip Arch-only prompts.
+if command -v pacman >/dev/null 2>&1; then
+  DISTRO_FAMILY=arch
+else
+  DISTRO_FAMILY=other
+fi
+
 if [ -t 0 ] && [ -t 1 ] && [ "${NONINTERACTIVE:-0}" != 1 ]; then
   echo
   echo "==> First sync on this host ('$HOSTNAME')."
@@ -40,8 +47,10 @@ if [ -t 0 ] && [ -t 1 ] && [ "${NONINTERACTIVE:-0}" != 1 ]; then
   echo "    Defaults shown in [brackets]; press Enter to accept."
   echo
 
-  read -r -p "    Build hypr-tools from submodule (overrides AUR)? [y/N] " ans
-  case "$ans" in y|Y|yes|YES) DEV=1 ;; esac
+  if [ "$DISTRO_FAMILY" = arch ]; then
+    read -r -p "    Build hypr-tools from submodule (overrides AUR)? [y/N] " ans
+    case "$ans" in y|Y|yes|YES) DEV=1 ;; esac
+  fi
 
   read -r -p "    Enable restic backups to OneDrive? [Y/n] " ans
   case "$ans" in n|N|no|NO) RESTIC=0 ;; esac
