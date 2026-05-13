@@ -371,14 +371,19 @@ _sync-sshfs:
 	fi
 
 # Local listener for nvim's <leader>tp over SSH. See typst-preview/ and
-# the RemoteForward block in ssh/.ssh/config. Socket activation makes the
-# runtime cost ~zero on hosts that never receive a connection.
+# the RemoteForward block in ssh/.ssh/config. Hosts without zathura must
+# DISABLE the socket — otherwise it binds 127.0.0.1:45876 and collides
+# with the SSH RemoteForward when this host is the *remote* end.
 _sync-typst-preview:
 	@echo "==> typst-preview..."
-	@command -v zathura >/dev/null 2>&1 || { echo "  zathura missing — skipping"; exit 0; }
 	@systemctl --user daemon-reload
-	@systemctl --user enable --now typst-preview.socket >/dev/null 2>&1 && \
-		echo "  listening on 127.0.0.1:45876" || true
+	@if command -v zathura >/dev/null 2>&1; then \
+		systemctl --user enable --now typst-preview.socket >/dev/null 2>&1 && \
+			echo "  listening on 127.0.0.1:45876" || true; \
+	else \
+		systemctl --user disable --now typst-preview.socket >/dev/null 2>&1 || true; \
+		echo "  zathura missing — socket disabled (this host is preview-source only)"; \
+	fi
 
 _sync-restic:
 ifneq ($(HOST_RESTIC),1)
