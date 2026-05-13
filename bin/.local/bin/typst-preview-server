@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# typst-preview-server — invoked by systemd socket activation
+# (typst-preview@.service). Reads one TAB-separated command line from stdin
+# and dispatches. Sent by typst-preview-client over the RemoteForward'd
+# unix socket; see nvim/init.lua <leader>tp.
+#
+# Wire format (TAB-separated, one line):
+#   open\t<host>\t<tag>\t<remote-pdf-abs-path>
+#   stop\t\t<tag>\t
+#
+# Path translation assumes the remote host's / is sshfs-mounted at ~/<host>/.
+set -euo pipefail
+
+piddir="${XDG_RUNTIME_DIR:-/tmp}/typst-preview"
+mkdir -p "$piddir"
+
+read -r line || exit 0
+IFS=$'\t' read -r action host tag path <<< "$line"
+
+case "$action" in
+  open)
+    local_path="$HOME/$host$path"
+    if [ ! -f "$local_path" ]; then
+      echo "typst-preview: $local_path missing (sshfs $host mounted?)" >&2
+      exit 1
+    fi
+    setsid zathura "$local_path" >/dev/null 2>&1 &
+    echo $! > "$piddir/$tag.pid"
+    ;;
+  stop)
+    pidfile="$piddir/$tag.pid"
+    [ -f "$pidfile" ] || exit 0
+    kill "$(cat "$pidfile")" 2>/dev/null || true
+    rm -f "$pidfile"
+    ;;
+  *)
+    echo "typst-preview: unknown action '$action'" >&2
+    exit 2
+    ;;
+esac

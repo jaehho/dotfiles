@@ -1,0 +1,13 @@
+[Unit]
+Description=Typst preview command socket
+# Listens for "open"/"stop" commands from remote nvim sessions whose SSH
+# RemoteForward terminates at this socket. See typst-preview-server(1) and
+# the mililab block in ~/.ssh/config.
+
+[Socket]
+ListenStream=%t/typst-preview.sock
+Accept=yes
+SocketMode=0600
+
+[Install]
+WantedBy=sockets.target
