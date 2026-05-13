@@ -217,7 +217,7 @@ do
   local stop_pdf_preview  -- forward decl: open_zathura's on_exit references it
 
   -- Remote mode: when SSH'd, hand the PDF path to typst-preview-client which
-  -- pipes it through the RemoteForward'd socket to the local zathura. The
+  -- pipes it through an SSH-forwarded TCP port to the local zathura. The
   -- file is fetched via the sshfs mount on the local side. See
   -- typst-preview/.config/systemd/user/typst-preview.socket.
   local function close_zathura(z)
@@ -235,7 +235,8 @@ do
       local tag = host .. '-' .. bufnr .. '-' .. os.time()
       local r = vim.system({ 'typst-preview-client', 'open', host, tag, pdf }):wait()
       if r.code ~= 0 then
-        vim.notify('typst-preview: ' .. (r.stderr or 'open failed'), vim.log.levels.ERROR)
+        local msg = vim.trim(r.stderr or '')
+        vim.notify(msg ~= '' and msg or 'typst-preview-client open failed', vim.log.levels.ERROR)
         return nil
       end
       return { kind = 'remote', tag = tag }

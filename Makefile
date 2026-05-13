@@ -378,7 +378,7 @@ _sync-typst-preview:
 	@command -v zathura >/dev/null 2>&1 || { echo "  zathura missing — skipping"; exit 0; }
 	@systemctl --user daemon-reload
 	@systemctl --user enable --now typst-preview.socket >/dev/null 2>&1 && \
-		echo "  socket listening at $${XDG_RUNTIME_DIR:-/run/user/$$(id -u)}/typst-preview.sock" || true
+		echo "  listening on 127.0.0.1:45876" || true
 
 _sync-restic:
 ifneq ($(HOST_RESTIC),1)

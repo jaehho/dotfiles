@@ -2,7 +2,7 @@
 # typst-preview-server — invoked by systemd socket activation
 # (typst-preview@.service). Reads one TAB-separated command line from stdin
 # and dispatches. Sent by typst-preview-client over the RemoteForward'd
-# unix socket; see nvim/init.lua <leader>tp.
+# TCP port; see nvim/init.lua <leader>tp.
 #
 # Wire format (TAB-separated, one line):
 #   open\t<host>\t<tag>\t<remote-pdf-abs-path>
