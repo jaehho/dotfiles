@@ -214,48 +214,15 @@ vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagn
 
 -- Unified preview toggle: dispatches by filetype (typst, tex, markdown, marimo)
 do
-  local stop_pdf_preview  -- forward decl: open_zathura's on_exit references it
-
-  -- Remote mode: when SSH'd, hand the PDF path to typst-preview-client which
-  -- pipes it through an SSH-forwarded TCP port to the local zathura. The
-  -- file is fetched via the sshfs mount on the local side. See
-  -- typst-preview/.config/systemd/user/typst-preview.socket.
-  local function close_zathura(z)
-    if not z then return end
-    if z.kind == 'remote' then
-      vim.system({ 'typst-preview-client', 'stop', z.tag }):wait()
-    elseif z.kind == 'local' and z.job_id then
-      pcall(vim.fn.jobstop, z.job_id)
-    end
-  end
-
-  local function open_zathura(pdf, bufnr)
-    if vim.env.SSH_CONNECTION then
-      local host = vim.uv.os_gethostname()
-      local tag = host .. '-' .. bufnr .. '-' .. os.time()
-      local r = vim.system({ 'typst-preview-client', 'open', host, tag, pdf }):wait()
-      if r.code ~= 0 then
-        local msg = vim.trim(r.stderr or '')
-        vim.notify(msg ~= '' and msg or 'typst-preview-client open failed', vim.log.levels.ERROR)
-        return nil
-      end
-      return { kind = 'remote', tag = tag }
-    end
-    local id = vim.fn.jobstart({ 'zathura', pdf }, {
-      on_exit = function()
-        vim.schedule(function() stop_pdf_preview(bufnr) end)
-      end,
-    })
-    return { kind = 'local', job_id = id }
-  end
-
-  function stop_pdf_preview(bufnr)
+  local function stop_pdf_preview(bufnr)
     local ok, preview = pcall(function() return vim.b[bufnr].pdf_preview end)
     if not ok or not preview then return end
     if preview.pane_id and preview.pane_id ~= '' then
       vim.system({ 'tmux', 'kill-pane', '-t', preview.pane_id })
     end
-    close_zathura(preview.viewer)
+    if preview.zathura_id then
+      pcall(vim.fn.jobstop, preview.zathura_id)
+    end
     pcall(function() vim.b[bufnr].pdf_preview = nil end)
     pcall(vim.api.nvim_del_augroup_by_name, 'PdfPreview' .. bufnr)
   end
@@ -275,12 +242,12 @@ do
       watch_cmd,
     }):wait()
     local pane_id = vim.trim(result.stdout or '')
-    local viewer = open_zathura(pdf, bufnr)
-    if not viewer then
-      vim.system({ 'tmux', 'kill-pane', '-t', pane_id })
-      return
-    end
-    vim.b.pdf_preview = { pane_id = pane_id, viewer = viewer }
+    local zathura_id = vim.fn.jobstart({ 'zathura', pdf }, {
+      on_exit = function()
+        vim.schedule(function() stop_pdf_preview(bufnr) end)
+      end,
+    })
+    vim.b.pdf_preview = { pane_id = pane_id, zathura_id = zathura_id }
     local augroup = vim.api.nvim_create_augroup('PdfPreview' .. bufnr, { clear = true })
     vim.api.nvim_create_autocmd({ 'BufDelete', 'VimLeavePre' }, {
       group = augroup,

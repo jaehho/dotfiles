@@ -1,7 +1,0 @@
-[Unit]
-Description=Typst preview command handler (per-connection)
-
-[Service]
-ExecStart=%h/.local/bin/typst-preview-server
-StandardInput=socket
-StandardError=journal

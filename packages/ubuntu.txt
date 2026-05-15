@@ -44,4 +44,3 @@ libnotify-bin
 ffmpeg
 openssh-client
 unzip
-socat

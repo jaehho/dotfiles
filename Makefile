@@ -6,7 +6,7 @@ SHELL := /bin/bash
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # Stow packages split by distro
-COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic zathura visidata tridactyl typst-preview
+COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic zathura visidata tridactyl
 ARCH_PACKAGES   := hypr swaync rofi waybar
 
 # Detect distro family by package manager rather than os-release ID. This
@@ -89,7 +89,6 @@ sync: ## One-shot, idempotent: pkgs, dotfiles, system, services, Claude config, 
 	@$(MAKE) -s _sync-system
 	@$(MAKE) -s _sync-rclone
 	@$(MAKE) -s _sync-sshfs
-	@$(MAKE) -s _sync-typst-preview
 	@$(MAKE) -s _sync-restic
 	@$(MAKE) -s _sync-claude
 	@$(MAKE) -s _sync-shell
@@ -368,21 +367,6 @@ _sync-sshfs:
 	fi
 	@if ssh -o ConnectTimeout=2 -o BatchMode=yes msi true 2>/dev/null; then \
 		systemctl --user start sshfs-msi >/dev/null 2>&1 && echo "  msi mounted at ~/msi (host reachable)" || true; \
-	fi
-
-# Local listener for nvim's <leader>tp over SSH. See typst-preview/ and
-# the RemoteForward block in ssh/.ssh/config. Hosts without zathura must
-# DISABLE the socket — otherwise it binds 127.0.0.1:45876 and collides
-# with the SSH RemoteForward when this host is the *remote* end.
-_sync-typst-preview:
-	@echo "==> typst-preview..."
-	@systemctl --user daemon-reload
-	@if command -v zathura >/dev/null 2>&1; then \
-		systemctl --user enable --now typst-preview.socket >/dev/null 2>&1 && \
-			echo "  listening on 127.0.0.1:45876" || true; \
-	else \
-		systemctl --user disable --now typst-preview.socket >/dev/null 2>&1 || true; \
-		echo "  zathura missing — socket disabled (this host is preview-source only)"; \
 	fi
 
 _sync-restic:
