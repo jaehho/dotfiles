@@ -32,18 +32,22 @@ endif
 # (which sync runs once on first install of a new machine).
 #
 # Flags:
-# - HOST_DEV_TOOLS  : 1 = build hypr-tools submodule into ~/.local/bin (overrides AUR)
-# - HOST_RESTIC     : 1 = enable restic backup timer; 0 = disable
-# - HOST_DROP_PKGS  : whitespace-separated stow packages to skip on this host
+# - HOST_DEV_TOOLS   : 1 = build hypr-tools submodule into ~/.local/bin (overrides AUR)
+# - HOST_RESTIC      : 1 = enable restic backup timer; 0 = disable
+# - HOST_DROP_PKGS   : whitespace-separated stow packages to skip on this host
+# - HOST_SSHFS_SKIP  : whitespace-separated sshfs mounts to skip (any of: mililab ice cdn msi)
 HOSTNAME := $(shell uname -n)
 -include $(REPO_ROOT)/hosts/$(HOSTNAME).mk
 
 # Conservative defaults for any flag the host file didn't set.
-HOST_DEV_TOOLS ?= 0
-HOST_RESTIC    ?= 1
-HOST_DROP_PKGS ?=
+HOST_DEV_TOOLS  ?= 0
+HOST_RESTIC     ?= 1
+HOST_DROP_PKGS  ?=
+HOST_SSHFS_SKIP ?=
 
 STOW_PACKAGES := $(filter-out $(HOST_DROP_PKGS),$(STOW_PACKAGES))
+SSHFS_MOUNTS  := $(filter-out $(HOST_SSHFS_SKIP),mililab ice cdn msi)
+SSHFS_SKIPPED := $(filter $(HOST_SSHFS_SKIP),mililab ice cdn msi)
 
 PKGDIR := $(REPO_ROOT)/packages
 
@@ -332,16 +336,33 @@ _sync-rclone:
 
 _sync-sshfs:
 	@echo "==> sshfs..."
+ifneq (,$(strip $(SSHFS_SKIPPED)))
+	@echo "  skipping (HOST_SSHFS_SKIP): $(SSHFS_SKIPPED)"
+	@# Tear down any skipped mount that a previous sync left enabled or active.
+	@for m in $(SSHFS_SKIPPED); do \
+		case $$m in \
+			mililab|ice) systemctl --user disable --now sshfs-$$m >/dev/null 2>&1 || true ;; \
+			cdn|msi)     systemctl --user stop sshfs-$$m >/dev/null 2>&1 || true ;; \
+		esac; \
+		fusermount3 -uz "$$HOME/$$m" 2>/dev/null || true; \
+	done
+endif
+ifneq (,$(filter ice,$(HOST_SSHFS_SKIP)))
+	@systemctl --user disable --now sshfs-ice-watchdog.timer >/dev/null 2>&1 || true
+endif
+ifeq (,$(strip $(SSHFS_MOUNTS)))
+	@echo "  all mounts in HOST_SSHFS_SKIP — nothing to set up."
+else
 	@command -v sshfs >/dev/null 2>&1 || { \
 		if command -v pacman >/dev/null 2>&1; then sudo pacman -S --needed --noconfirm sshfs; \
 		elif command -v apt-get >/dev/null 2>&1; then sudo apt-get install -y sshfs; \
 		else echo "  no supported package manager — skipping"; exit 0; fi; \
 	}
-	@mkdir -p ~/ice ~/mililab ~/cdn ~/msi
+	@for m in $(SSHFS_MOUNTS); do mkdir -p "$$HOME/$$m"; done
 	@systemctl --user daemon-reload
-	@# Always-on mounts: ice (jump-host), mililab (tailscale).
-	@# Skip + clean up the mililab mount when running on mililab itself; sshfs
-	@# would otherwise loop the host's / onto ~/mililab.
+ifneq (,$(filter mililab,$(SSHFS_MOUNTS)))
+	@# Always-on tailscale mount. Skip + clean up when running on mililab
+	@# itself; sshfs would otherwise loop the host's / onto ~/mililab.
 	@if [ "$(HOSTNAME)" = "mililab" ]; then \
 		systemctl --user disable --now sshfs-mililab >/dev/null 2>&1 || true; \
 		fusermount3 -uz "$$HOME/mililab" 2>/dev/null || true; \
@@ -349,6 +370,9 @@ _sync-sshfs:
 	else \
 		systemctl --user enable --now sshfs-mililab >/dev/null 2>&1 && echo "  mililab mounted at ~/mililab" || true; \
 	fi
+endif
+ifneq (,$(filter ice,$(SSHFS_MOUNTS)))
+	@# Always-on jump-host mount, gated on jump_pass.
 	@if [ ! -f "$$HOME/.ssh/jump_pass" ]; then \
 		echo "  ~/.ssh/jump_pass missing — skipping ice mount"; \
 		echo "    Create with: echo PASSWORD > ~/.ssh/jump_pass && chmod 600 ~/.ssh/jump_pass"; \
@@ -357,17 +381,23 @@ _sync-sshfs:
 		systemctl --user enable --now sshfs-ice-watchdog.timer >/dev/null 2>&1 && \
 		echo "  ice mounted at ~/ice"; \
 	fi
-	@# Opt-in mounts: only attach if the remote is already reachable. The
-	@# manual `make sshfs-cdn-mount` target handles the start-instance case.
+endif
+ifneq (,$(filter cdn,$(SSHFS_MOUNTS)))
+	@# Opt-in: only attach if the GCE instance is already running.
 	@if command -v gcloud >/dev/null 2>&1; then \
 		state=$$(gcloud compute instances describe cdn-project --zone=us-east4-b --format='value(status)' 2>/dev/null); \
 		if [ "$$state" = RUNNING ]; then \
 			systemctl --user start sshfs-cdn >/dev/null 2>&1 && echo "  cdn mounted at ~/cdn (instance running)" || true; \
 		fi; \
 	fi
+endif
+ifneq (,$(filter msi,$(SSHFS_MOUNTS)))
+	@# Opt-in: only attach if msi is reachable via ssh.
 	@if ssh -o ConnectTimeout=2 -o BatchMode=yes msi true 2>/dev/null; then \
 		systemctl --user start sshfs-msi >/dev/null 2>&1 && echo "  msi mounted at ~/msi (host reachable)" || true; \
 	fi
+endif
+endif
 
 _sync-restic:
 ifneq ($(HOST_RESTIC),1)
