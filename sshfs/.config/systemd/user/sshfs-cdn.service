@@ -10,10 +10,10 @@ StartLimitIntervalSec=0
 # GCP instance stops, sshfs disconnects, the wrapper observes
 # state != RUNNING, and exits 0 — systemd cleanly stops the unit.
 Type=simple
-ExecStartPre=-/usr/bin/fusermount3 -uz %h/cdn
-ExecStartPre=/usr/bin/mkdir -p %h/cdn
+ExecStartPre=-/usr/bin/fusermount3 -uz %h/mnt/cdn
+ExecStartPre=/usr/bin/mkdir -p %h/mnt/cdn
 ExecStart=%h/.local/bin/sshfs-cdn
-ExecStop=-/usr/bin/fusermount3 -uz %h/cdn
+ExecStop=-/usr/bin/fusermount3 -uz %h/mnt/cdn
 # Network blips return non-zero from the wrapper → restart with backoff.
 # Clean shutdowns (instance stopped) return 0 → no retry.
 Restart=on-failure

@@ -6,7 +6,7 @@ SHELL := /bin/bash
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # Stow packages split by distro
-COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic zathura visidata tridactyl
+COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic zathura visidata tridactyl tailscale
 ARCH_PACKAGES   := hypr swaync rofi waybar
 
 # Detect distro family by package manager rather than os-release ID. This
@@ -326,10 +326,10 @@ _sync-rclone:
 		echo "  No 'onedrive' remote — starting interactive config (choose 'onedrive', blank client_id/secret, auto-config: yes)..."; \
 		rclone config; \
 	fi
-	@mkdir -p ~/OneDrive
+	@mkdir -p ~/mnt/OneDrive
 	@systemctl --user daemon-reload
 	@if rclone listremotes 2>/dev/null | grep -q '^onedrive:'; then \
-		systemctl --user enable --now rclone-onedrive >/dev/null 2>&1 && echo "  OneDrive mounted at ~/OneDrive" || true; \
+		systemctl --user enable --now rclone-onedrive >/dev/null 2>&1 && echo "  OneDrive mounted at ~/mnt/OneDrive" || true; \
 	else \
 		echo "  'onedrive' remote not configured — re-run sync once it exists."; \
 	fi
@@ -344,7 +344,7 @@ ifneq (,$(strip $(SSHFS_SKIPPED)))
 			mililab|ice) systemctl --user disable --now sshfs-$$m >/dev/null 2>&1 || true ;; \
 			cdn|msi)     systemctl --user stop sshfs-$$m >/dev/null 2>&1 || true ;; \
 		esac; \
-		fusermount3 -uz "$$HOME/$$m" 2>/dev/null || true; \
+		fusermount3 -uz "$$HOME/mnt/$$m" 2>/dev/null || true; \
 	done
 endif
 ifneq (,$(filter ice,$(HOST_SSHFS_SKIP)))
@@ -358,17 +358,18 @@ else
 		elif command -v apt-get >/dev/null 2>&1; then sudo apt-get install -y sshfs; \
 		else echo "  no supported package manager — skipping"; exit 0; fi; \
 	}
-	@for m in $(SSHFS_MOUNTS); do mkdir -p "$$HOME/$$m"; done
+	@mkdir -p "$$HOME/mnt"
+	@for m in $(SSHFS_MOUNTS); do mkdir -p "$$HOME/mnt/$$m"; done
 	@systemctl --user daemon-reload
 ifneq (,$(filter mililab,$(SSHFS_MOUNTS)))
 	@# Always-on tailscale mount. Skip + clean up when running on mililab
-	@# itself; sshfs would otherwise loop the host's / onto ~/mililab.
+	@# itself; sshfs would otherwise loop the host's / onto ~/mnt/mililab.
 	@if [ "$(HOSTNAME)" = "mililab" ]; then \
 		systemctl --user disable --now sshfs-mililab >/dev/null 2>&1 || true; \
-		fusermount3 -uz "$$HOME/mililab" 2>/dev/null || true; \
+		fusermount3 -uz "$$HOME/mnt/mililab" 2>/dev/null || true; \
 		echo "  on mililab — skipping self-mount"; \
 	else \
-		systemctl --user enable --now sshfs-mililab >/dev/null 2>&1 && echo "  mililab mounted at ~/mililab" || true; \
+		systemctl --user enable --now sshfs-mililab >/dev/null 2>&1 && echo "  mililab mounted at ~/mnt/mililab" || true; \
 	fi
 endif
 ifneq (,$(filter ice,$(SSHFS_MOUNTS)))
@@ -379,7 +380,7 @@ ifneq (,$(filter ice,$(SSHFS_MOUNTS)))
 	else \
 		systemctl --user enable --now sshfs-ice >/dev/null 2>&1 && \
 		systemctl --user enable --now sshfs-ice-watchdog.timer >/dev/null 2>&1 && \
-		echo "  ice mounted at ~/ice"; \
+		echo "  ice mounted at ~/mnt/ice"; \
 	fi
 endif
 ifneq (,$(filter cdn,$(SSHFS_MOUNTS)))
@@ -387,14 +388,14 @@ ifneq (,$(filter cdn,$(SSHFS_MOUNTS)))
 	@if command -v gcloud >/dev/null 2>&1; then \
 		state=$$(gcloud compute instances describe cdn-project --zone=us-east4-b --format='value(status)' 2>/dev/null); \
 		if [ "$$state" = RUNNING ]; then \
-			systemctl --user start sshfs-cdn >/dev/null 2>&1 && echo "  cdn mounted at ~/cdn (instance running)" || true; \
+			systemctl --user start sshfs-cdn >/dev/null 2>&1 && echo "  cdn mounted at ~/mnt/cdn (instance running)" || true; \
 		fi; \
 	fi
 endif
 ifneq (,$(filter msi,$(SSHFS_MOUNTS)))
 	@# Opt-in: only attach if msi is reachable via ssh.
 	@if ssh -o ConnectTimeout=2 -o BatchMode=yes msi true 2>/dev/null; then \
-		systemctl --user start sshfs-msi >/dev/null 2>&1 && echo "  msi mounted at ~/msi (host reachable)" || true; \
+		systemctl --user start sshfs-msi >/dev/null 2>&1 && echo "  msi mounted at ~/mnt/msi (host reachable)" || true; \
 	fi
 endif
 endif

@@ -5,4 +5,4 @@ ConditionPathExists=%h/.config/systemd/user/sshfs-ice.service
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/sshfs-watchdog %h/ice sshfs-ice.service
+ExecStart=%h/.local/bin/sshfs-watchdog %h/mnt/ice sshfs-ice.service

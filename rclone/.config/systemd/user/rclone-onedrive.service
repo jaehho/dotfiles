@@ -9,9 +9,10 @@ Type=notify
 # start (nothing to unmount); `-z` is a lazy unmount so a wedged mountpoint is
 # detached even if something is stat'ing it. Without this, the Restart=always
 # loop wedges forever on "directory already mounted" and hangs ~.
-ExecStartPre=-/bin/fusermount -uz %h/OneDrive
-ExecStart=/usr/bin/rclone mount onedrive: %h/OneDrive --vfs-cache-mode full --dir-cache-time 30s
-ExecStop=/bin/fusermount -u %h/OneDrive
+ExecStartPre=/bin/mkdir -p %h/mnt/OneDrive
+ExecStartPre=-/bin/fusermount -uz %h/mnt/OneDrive
+ExecStart=/usr/bin/rclone mount onedrive: %h/mnt/OneDrive --vfs-cache-mode full --dir-cache-time 30s
+ExecStop=/bin/fusermount -u %h/mnt/OneDrive
 Restart=always
 RestartSec=10
 

@@ -9,15 +9,15 @@ StartLimitIntervalSec=0
 [Service]
 Type=forking
 TimeoutStartSec=20
-ExecStartPre=-/usr/bin/fusermount3 -uz %h/mililab
-ExecStartPre=/usr/bin/mkdir -p %h/mililab
+ExecStartPre=-/usr/bin/fusermount3 -uz %h/mnt/mililab
+ExecStartPre=/usr/bin/mkdir -p %h/mnt/mililab
 # No `reconnect`: on connection loss, sshfs must exit so in-flight FUSE
 # calls return EIO instead of hanging forever (see BOOT_ISSUES.md).
-ExecStart=/usr/bin/sshfs mililab:/ %h/mililab \
+ExecStart=/usr/bin/sshfs mililab:/ %h/mnt/mililab \
   -o ServerAliveInterval=5,ServerAliveCountMax=2 \
   -o ConnectTimeout=10 \
   -o dir_cache=no,no_readahead
-ExecStop=/usr/bin/fusermount3 -uz %h/mililab
+ExecStop=/usr/bin/fusermount3 -uz %h/mnt/mililab
 # Exponential backoff: 10s → ~17s → ~30s → ~50s → ~60s (cap).
 # 60s cap keeps post-resume mount-down bounded; the NetworkManager
 # dispatcher hook (50-restart-sshfs) triggers immediate remount when

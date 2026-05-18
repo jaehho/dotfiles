@@ -7,7 +7,7 @@ function ssh-cdn
         gcloud compute instances start $name --zone=$zone
     end
 
-    # Mount cdn at ~/cdn as a side effect. --no-block returns immediately;
+    # Mount cdn at ~/mnt/cdn as a side effect. --no-block returns immediately;
     # the systemd unit will run sshfs in the background and auto-unmount
     # when the instance stops. Idempotent — no-op if already mounted.
     systemctl --user start --no-block sshfs-cdn.service 2>/dev/null

@@ -9,16 +9,16 @@ StartLimitIntervalSec=0
 [Service]
 Type=forking
 TimeoutStartSec=20
-ExecStartPre=-/usr/bin/fusermount3 -uz %h/ice
-ExecStartPre=/usr/bin/mkdir -p %h/ice
+ExecStartPre=-/usr/bin/fusermount3 -uz %h/mnt/ice
+ExecStartPre=/usr/bin/mkdir -p %h/mnt/ice
 # No `reconnect`: on connection loss, sshfs must exit so in-flight FUSE
 # calls return EIO instead of hanging forever (see BOOT_ISSUES.md).
-ExecStart=/usr/bin/sshfs ice:/ %h/ice \
+ExecStart=/usr/bin/sshfs ice:/ %h/mnt/ice \
   -o ServerAliveInterval=5,ServerAliveCountMax=2 \
   -o ConnectTimeout=10 \
   -o dir_cache=no,no_readahead \
   -o "ssh_command=sshpass -f %h/.ssh/jump_pass ssh"
-ExecStop=/usr/bin/fusermount3 -uz %h/ice
+ExecStop=/usr/bin/fusermount3 -uz %h/mnt/ice
 # Exponential backoff: 10s → ~17s → ~30s → ~50s → ~60s (cap).
 # 60s cap keeps post-resume mount-down bounded; the NetworkManager
 # dispatcher hook (50-restart-sshfs) triggers immediate remount when

@@ -16,7 +16,7 @@ set -euo pipefail
 INSTANCE=cdn-project
 ZONE=us-east4-b
 REMOTE_USER=jaeho
-MOUNT="$HOME/cdn"
+MOUNT="$HOME/mnt/cdn"
 GCLOUD=/usr/bin/gcloud
 SSHFS=/usr/bin/sshfs
 
