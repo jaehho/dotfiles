@@ -3,7 +3,7 @@
     "commit": "",
     "pr": ""
   },
-  "model": "sonnet",
+  "model": "opus[1m]",
   "hooks": {
     "Stop": [
       {
@@ -58,5 +58,6 @@
     "hookify@claude-plugins-official": true
   },
   "effortLevel": "high",
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+  "tui": "fullscreen"
 }

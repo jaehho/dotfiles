@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: run pyright on Python edits and surface errors to Claude.
+"""PostToolUse hook: run pyright on Python edits and surface diagnostics to Claude.
 
 Reads tool-input JSON from stdin (Claude Code hook contract). If the edited
 file is Python and the project has pyright configured, runs pyright on the
-project root and emits errors to stderr (exit 2 → blocking-feedback to Claude).
+project root and emits all diagnostics (errors, warnings, informations, hints)
+to stderr (exit 2 → blocking-feedback to Claude). Hints catch unused-symbol
+issues that nvim LSP shows but the CLI summary suppresses.
 Silent + exit 0 on clean runs or when pyright doesn't apply.
 
 A hash-based cache at $XDG_CACHE_HOME/claude-hooks/pyright-cache.json
@@ -125,15 +127,16 @@ def main() -> int:
     except json.JSONDecodeError:
         return 0
 
+    REPORTED = {"error", "warning", "information", "hint"}
     diags = [
-        d for d in data.get("generalDiagnostics", []) if d.get("severity") == "error"
+        d for d in data.get("generalDiagnostics", []) if d.get("severity") in REPORTED
     ]
     if not diags:
         cache[str(root)] = fp
         save_cache(cache)
         return 0
 
-    lines = [f"pyright: {len(diags)} error(s) in {root}"]
+    lines = [f"pyright: {len(diags)} issue(s) in {root}"]
     for d in diags[:MAX_DIAGS]:
         f = d["file"]
         try:
@@ -142,9 +145,10 @@ def main() -> int:
             rel = f
         ln = d["range"]["start"]["line"] + 1
         rule = d.get("rule", "")
+        sev = d.get("severity", "error")
         msg = d["message"].split("\n", 1)[0]
         suffix = f" ({rule})" if rule else ""
-        lines.append(f"  {rel}:{ln}  {msg}{suffix}")
+        lines.append(f"  [{sev}] {rel}:{ln}  {msg}{suffix}")
     if len(diags) > MAX_DIAGS:
         lines.append(f"  ... {len(diags) - MAX_DIAGS} more")
 

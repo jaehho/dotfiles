@@ -185,6 +185,17 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
   ' _ "${WINDOW_ADDR:-}" "${TMUX_SOCKET:-}" "${TMUX_TARGET:-}" \
     "${NOTIFY_ARGS[@]}" "$TITLE" "$BODY" </dev/null &>/dev/null &
 else
+  # SSH/remote: kitty OSC 99 desktop notification. Clicking focuses the kitty
+  # window but doesn't natively switch tmux — arm a one-shot client-focus-in
+  # hook so kitty focus → CSI I → switch-client to the source pane.
+  # Requires `focus-events on` in the remote tmux config.
+  if [[ -n "${TMUX:-}" ]]; then
+    SOURCE_PANE=$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)
+    if [[ -n "$SOURCE_PANE" ]]; then
+      tmux set-hook -g 'client-focus-in[99]' \
+        "switch-client -t '$SOURCE_PANE' ; set-hook -gu 'client-focus-in[99]'" 2>/dev/null || true
+    fi
+  fi
   "$HOME/.local/bin/notify" "$TITLE" "$BODY" &
 fi
 

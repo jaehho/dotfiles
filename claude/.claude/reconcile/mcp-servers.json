@@ -1,1 +1,11 @@
-{}
+{
+  "zotero": {
+    "command": "uvx",
+    "args": ["--from", "zotero-mcp-server[all]", "zotero-mcp"],
+    "env": {
+      "ZOTERO_API_KEY": "${ZOTERO_API_KEY}",
+      "ZOTERO_LIBRARY_ID": "${ZOTERO_LIBRARY_ID}",
+      "ZOTERO_LIBRARY_TYPE": "user"
+    }
+  }
+}
