@@ -5,9 +5,9 @@
 }
 
 window#waybar {
-    background-color: rgba(48, 52, 70, 0.9);
-    color: #c6d0f5;
-    border-bottom: 2px solid rgba(140, 170, 238, 0.3);
+    background-color: rgba(20, 28, 30, 0.9);
+    color: #cfdadc;
+    border-bottom: 2px solid rgba(63, 125, 174, 0.3);
 }
 
 /* ── Base pill styling for all modules ── */
@@ -29,7 +29,7 @@ window#waybar {
 #bluetooth,
 #network,
 #custom-power {
-    background-color: rgba(65, 69, 89, 0.6);
+    background-color: rgba(32, 40, 42, 0.6);
     padding: 0 10px;
     margin: 4px 2px;
     transition: all 0.3s ease;
@@ -54,7 +54,7 @@ window#waybar {
 /* System group: cpu + memory */
 #cpu {
     border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(115, 121, 148, 0.3);
+    border-right: 1px solid rgba(86, 95, 98, 0.3);
 }
 #memory {
     border-radius: 0 12px 12px 0;
@@ -63,7 +63,7 @@ window#waybar {
 /* A/V group: pulseaudio + backlight */
 #pulseaudio {
     border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(115, 121, 148, 0.3);
+    border-right: 1px solid rgba(86, 95, 98, 0.3);
 }
 #backlight {
     border-radius: 0 12px 12px 0;
@@ -78,7 +78,7 @@ window#waybar {
 /* Connectivity group: bluetooth + network */
 #bluetooth {
     border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(115, 121, 148, 0.3);
+    border-right: 1px solid rgba(86, 95, 98, 0.3);
 }
 #network {
     border-radius: 0 12px 12px 0;
@@ -103,7 +103,7 @@ window#waybar {
 #bluetooth:hover,
 #network:hover,
 #custom-power:hover {
-    background-color: rgba(81, 87, 109, 0.8);
+    background-color: rgba(47, 55, 57, 0.8);
 }
 
 /* ── Workspaces ── */
@@ -113,7 +113,7 @@ window#waybar {
 
 #workspaces button {
     padding: 0 8px;
-    color: #737994;
+    color: #565f62;
     background: transparent;
     border: none;
     border-radius: 8px;
@@ -121,62 +121,62 @@ window#waybar {
 }
 
 #workspaces button.active {
-    color: #8caaee;
-    background-color: rgba(140, 170, 238, 0.15);
-    border-bottom: 2px solid #8caaee;
+    color: #3f7dae;
+    background-color: rgba(63, 125, 174, 0.15);
+    border-bottom: 2px solid #3f7dae;
 }
 
 #workspaces button.urgent {
-    color: #e78284;
+    color: #ab5e59;
 }
 
 
 
 /* ── Window ── */
 #window {
-    color: #a5adce;
+    color: #9da7a9;
 }
 
 /* ── Clock ── */
 #clock {
-    color: #c6d0f5;
+    color: #cfdadc;
     font-weight: bold;
 }
 
 /* ── CPU ── */
 #cpu {
-    color: #ef9f76;
+    color: #a6653e;
 }
 
 /* ── Memory ── */
 #memory {
-    color: #ca9ee6;
+    color: #7c6bac;
 }
 
 /* ── Bluetooth ── */
 #bluetooth {
-    color: #8caaee;
+    color: #3f7dae;
 }
 
 #bluetooth.off {
-    color: #737994;
+    color: #565f62;
 }
 
 /* ── Battery ── */
 #battery {
-    color: #a6d189;
+    color: #4f8751;
 }
 
 #battery.charging {
-    color: #a6d189;
+    color: #4f8751;
 }
 
 #battery.warning:not(.charging) {
-    color: #ef9f76;
+    color: #a6653e;
 }
 
 #battery.critical:not(.charging) {
-    color: #e78284;
+    color: #ab5e59;
     animation: blink 0.5s linear infinite alternate;
 }
 
@@ -188,68 +188,68 @@ window#waybar {
 
 /* ── Power Profiles ── */
 #power-profiles-daemon {
-    color: #81c8be;
+    color: #118a7a;
 }
 
 /* ── Network ── */
 #network {
-    color: #99d1db;
+    color: #04869c;
 }
 
 #network.disconnected {
-    color: #e78284;
+    color: #ab5e59;
 }
 
 /* ── Pulseaudio ── */
 #pulseaudio {
-    color: #e5c890;
+    color: #8e7426;
 }
 
 #pulseaudio.muted {
-    color: #737994;
+    color: #565f62;
 }
 
 /* ── Backlight ── */
 #backlight {
-    color: #e5c890;
+    color: #8e7426;
 }
 
 /* ── Special workspace indicators ── */
 #custom-scratchpad,
 #custom-tray {
-    color: #737994;
+    color: #565f62;
 }
 
 #custom-scratchpad.active,
 #custom-tray.active {
-    color: #ca9ee6;
-    background-color: rgba(202, 158, 230, 0.15);
+    color: #7c6bac;
+    background-color: rgba(124, 107, 172, 0.15);
 }
 
 /* ── Desktop indicator ── */
 #custom-desktop {
-    color: #8caaee;
+    color: #3f7dae;
     font-weight: bold;
 }
 
 /* ── Idle Inhibitor ── */
 #custom-idle-inhibitor {
-    color: #737994;
+    color: #565f62;
 }
 
 #custom-idle-inhibitor.on {
-    color: #e5c890;
+    color: #8e7426;
 }
 
 /* ── Notifications + DND ── */
 #custom-swaync {
-    color: #737994;
+    color: #565f62;
 }
 
 /* Blue when there are pending notifications */
 #custom-swaync.notification,
 #custom-swaync.inhibited-notification {
-    color: #8caaee;
+    color: #3f7dae;
 }
 
 /* Red whenever DND is active (overrides notification color) */
@@ -257,22 +257,22 @@ window#waybar {
 #custom-swaync.dnd-notification,
 #custom-swaync.dnd-inhibited-none,
 #custom-swaync.dnd-inhibited-notification {
-    color: #e78284;
+    color: #ab5e59;
 }
 
 /* ── Reboot needed (pill only visible when class=pending, i.e. kernel upgrade pending) ── */
 #custom-reboot-needed.pending {
-    background-color: rgba(65, 69, 89, 0.6);
+    background-color: rgba(32, 40, 42, 0.6);
     padding: 0 10px;
     margin: 4px 2px;
     border-radius: 12px;
-    color: #e78284;
+    color: #ab5e59;
     font-weight: bold;
     transition: all 0.3s ease;
 }
 
 #custom-reboot-needed.pending:hover {
-    background-color: rgba(81, 87, 109, 0.8);
+    background-color: rgba(47, 55, 57, 0.8);
 }
 
 /* ── Tray ── */
@@ -282,13 +282,13 @@ window#waybar {
 
 /* ── Power ── */
 #custom-power {
-    color: #e78284;
+    color: #ab5e59;
     font-size: 16px;
 }
 
 /* ── Tooltip ── */
 tooltip {
-    background-color: #303446;
-    border: 1px solid #8caaee;
+    background-color: #141c1e;
+    border: 1px solid #3f7dae;
     border-radius: 8px;
 }
