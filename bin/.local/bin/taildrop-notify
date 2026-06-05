@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Block on the local tailscaled until a Taildrop arrives, download each file
+# into $1 (default ~/Taildrop), and fire a desktop notification per file.
+
+set -euo pipefail
+
+DIR="${1:-$HOME/Taildrop}"
+mkdir -p "$DIR"
+
+while true; do
+    marker=$(mktemp --suffix=.taildrop-notify)
+
+    if ! tailscale file get --wait --conflict=rename "$DIR" >/dev/null 2>&1; then
+        rm -f "$marker"
+        sleep 5
+        continue
+    fi
+
+    while IFS= read -r -d '' f; do
+        (
+            key=$(notify-send --wait --action=default=Open \
+                -a Taildrop "Taildrop" "Received: $(basename "$f")")
+            [ "$key" = "default" ] && xdg-open "$f" >/dev/null 2>&1
+        ) &
+    done < <(find "$DIR" -newer "$marker" -type f -print0)
+
+    rm -f "$marker"
+done
