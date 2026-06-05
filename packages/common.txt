@@ -1,0 +1,20 @@
+# Listed here once instead of in both arch.txt and ubuntu.txt.
+# Packages whose name is the same on Arch (pacman/AUR) and Debian (apt).
+# When a package has different names per distro (e.g. fd vs fd-find), keep
+# the per-distro entry in arch.txt or ubuntu.txt instead.
+bat
+direnv
+fish
+fzf
+git
+jq
+luarocks
+neovim
+nodejs
+npm
+rclone
+ripgrep
+sshpass
+stow
+tmux
+unzip

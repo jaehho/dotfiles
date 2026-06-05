@@ -1,0 +1,53 @@
+# Essential packages — removing any of these breaks the boot path,
+# login, audio/graphics, the Hyprland session, or the dotfiles sync
+# workflow. The TUI marks them with a yellow ! prefix and shows a
+# red error when you try to mark one for uninstall.
+#
+# Names are matched across all backends. No per-host tags supported
+# (essential is global).
+
+# Boot + base system
+base
+base-devel
+cpio
+efibootmgr
+grub
+kernel-modules-hook
+linux
+linux-firmware
+linux-headers
+pacman-contrib
+paru
+sudo
+
+# Dotfiles sync workflow
+fish
+git
+neovim
+stow
+tmux
+
+# Graphics + audio
+intel-media-driver
+mesa
+nvidia-beta-dkms
+nvidia-prime
+pipewire
+pipewire-pulse
+sof-firmware
+wireplumber
+
+# Hyprland session
+hyprland
+polkit-gnome
+sddm
+xdg-desktop-portal-gtk
+xdg-desktop-portal-hyprland
+
+# Networking + remote access
+bluez
+bluez-utils
+dnsmasq
+networkmanager
+openssh
+tailscale

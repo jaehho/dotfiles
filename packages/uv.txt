@@ -1,0 +1,5 @@
+meeting-copilot
+pyright
+ruff
+typ2pptx
+zotero-mcp-server

@@ -1,0 +1,4 @@
+@mermaid-js/mermaid-cli
+@playwright/mcp
+mermaid-filter
+neovim

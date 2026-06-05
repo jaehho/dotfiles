@@ -8,39 +8,23 @@
 #   fd         — available as 'fdfind'; `make sync` symlinks ~/.local/bin/fd
 
 # Shell
-fish
 
 # Core tools
-git
 curl
-stow
-tmux
-neovim
 
 # File tools
-fzf
 fd-find
-ripgrep
-bat
 
 # Dev
-direnv
-jq
 gcc
 make
-nodejs
-npm
 python3
 python3-pip
-luarocks
 
 # Keyd build deps (no apt package — built from source by make system-install)
 libudev-dev
 
 # Misc
-rclone
-sshpass
 libnotify-bin
 ffmpeg
 openssh-client
-unzip

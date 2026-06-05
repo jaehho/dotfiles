@@ -111,29 +111,7 @@ sync: ## One-shot, idempotent: pkgs, dotfiles, system, services, Claude config, 
 # --- internal _sync-* helpers (not in help) -------------------------------
 
 _sync-pkgs:
-	@echo "==> Packages..."
-ifeq ($(DISTRO_FAMILY),arch)
-	@cat $(PKGDIR)/arch/*.txt | grep -vE '^(#|$$)' | sort -u | sudo pacman -S --needed -
-	@command -v paru >/dev/null 2>&1 || { echo "paru not found — install it first for AUR packages."; exit 1; }
-	@# Strip comments/blanks and *-debug split packages (auto-produced by makepkg
-	@# OPTIONS=(debug); they show up in pacman -Qm but aren't installable). Also
-	@# skip AUR copies of hypr-tools when HOST_DEV_TOOLS=1, since _sync-tools will
-	@# build the submodule into ~/.local/bin and shadow them on PATH.
-	@# --batchinstall: build all queued AUR packages first, then install them in
-	@# a single pacman transaction. Without it, paru installs each as it builds,
-	@# which breaks for tightly-coupled packages (e.g., nvidia-beta-dkms pins
-	@# nvidia-utils-beta to an exact version — the new utils can't install
-	@# alone, but the pair upgrades fine atomically).
-	@grep -vE '^(#|$$)' $(PKGDIR)/aur.txt \
-		| grep -vE -- '-debug$$' \
-		$(if $(filter 1,$(HOST_DEV_TOOLS)),| grep -vE '^(hypr-wallpaper-git|hypr-monitor-git)$$',) \
-		| paru -S --needed --batchinstall -
-else ifeq ($(DISTRO_FAMILY),debian)
-	@sudo apt-get update -qq
-	@sudo apt-get install -y $$(grep -v '^#' $(PKGDIR)/ubuntu.txt | grep -v '^$$')
-else
-	@echo "  skipped: unsupported distro ($(DISTRO_FAMILY))."
-endif
+	@DOTFILES=$(REPO_ROOT) HOST_DEV_TOOLS=$(HOST_DEV_TOOLS) bash $(REPO_ROOT)/scripts/packages.sh
 
 # Submodule-built tool overrides (Arch + dev hosts only). HOST_DEV_TOOLS=1 builds
 # hypr-tools from the submodule into ~/.local/bin, shadowing the AUR /usr/bin
@@ -456,7 +434,7 @@ _sync-shell:
 	fi
 
 ## Status (read-only)
-status: ## Show stow / system / service state
+status: ## Show stow / system / service / package state
 	@echo "Stow packages:"
 	@for pkg in $(STOW_PACKAGES); do \
 		stowed=0; \
@@ -501,6 +479,9 @@ status: ## Show stow / system / service state
 		if [ "$$active" = "active" ]; then echo "  $$svc: active"; \
 		else echo "  $$svc: inactive"; fi; \
 	done
+	@echo ""
+	@echo "Packages:"
+	@DOTFILES=$(REPO_ROOT) bash $(REPO_ROOT)/scripts/packages.sh --status | sed 's/^/  /'
 
 .PHONY: help sync status \
 	_sync-pkgs _sync-ubuntu-extras _sync-tools _sync-stow _sync-mime _sync-system \
