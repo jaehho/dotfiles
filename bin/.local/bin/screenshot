@@ -30,6 +30,21 @@ notify() {
     fi
 }
 
+# notify-send with a default action that opens the file. -A implies
+# --wait, so detach and let the helper outlive the script — clicking
+# the notification fires xdg-open against $file.
+notify_open() {
+    local file=$1
+    (
+        action=$(notify-send -A "default=Open" -i "$file" -t 5000 \
+            "Screenshot saved" "$(basename "$file")" 2>/dev/null) || true
+        if [ "$action" = "default" ]; then
+            xdg-open "$file" >/dev/null 2>&1 || true
+        fi
+    ) </dev/null >/dev/null 2>&1 &
+    disown
+}
+
 tmp=$(mktemp --suffix=.png)
 trap 'rm -f "$tmp"' EXIT
 
@@ -61,7 +76,7 @@ case "$action" in
     copy)
         cp "$tmp" "$file"
         wl-copy --type image/png < "$file"
-        notify "Screenshot saved" "$(basename "$file")" "$file"
+        notify_open "$file"
         ;;
     clip)
         wl-copy --type image/png < "$tmp"
