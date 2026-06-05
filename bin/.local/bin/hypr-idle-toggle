@@ -22,3 +22,7 @@ else
     fi
     rm -f "$PIDFILE"
 fi
+
+# Refresh the waybar idle-inhibitor module so the icon updates immediately
+# instead of waiting for its 2-second poll.
+pkill -RTMIN+11 waybar 2>/dev/null || true

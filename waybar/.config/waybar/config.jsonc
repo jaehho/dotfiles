@@ -195,6 +195,7 @@
         "exec": "if pgrep -x hypridle > /dev/null; then echo '{\"text\": \"󰾪\", \"tooltip\": \"Stay awake: OFF\", \"class\": \"off\"}'; else echo '{\"text\": \"󰅶\", \"tooltip\": \"Stay awake: ON (idle + lid)\", \"class\": \"on\"}'; fi",
         "return-type": "json",
         "interval": 2,
+        "signal": 11,
         "on-click": "~/.local/bin/hypr-idle-toggle"
     },
 
