@@ -10,7 +10,7 @@
 
   "notification-2fa-action": true,
   "notification-inline-replies": false,
-  "notification-grouping": false,
+  "notification-grouping": true,
   "notification-icon-size": 48,
   "notification-body-image-height": 100,
   "notification-body-image-width": 200,
@@ -40,7 +40,7 @@
   "widgets": [
     "title",
     "dnd",
-    "buttons-grid",
+    "script-switch",
     "mpris",
     "notifications"
   ],
@@ -54,16 +54,11 @@
     "dnd": {
       "text": "D̲o Not Disturb"
     },
-    "buttons-grid": {
-      "buttons-per-row": 1,
-      "actions": [
-        {
-          "label": "I̲dle Inhibitor",
-          "type": "toggle",
-          "command": "~/.local/bin/hypr-idle-toggle",
-          "update-command": "if pgrep -x hypridle > /dev/null; then echo false; else echo true; fi"
-        }
-      ]
+    "script-switch": {
+      "text": "I̲dle Inhibitor",
+      "key": "i",
+      "command": "~/.local/bin/hypr-idle-toggle",
+      "update-command": "if pgrep -x hypridle > /dev/null; then echo false; else echo true; fi"
     },
     "mpris": {
       "image-size": 96,
