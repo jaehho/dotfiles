@@ -21,6 +21,13 @@ text/plain=nvim-kitty.desktop
 application/x-openscad=openscad.desktop
 model/3mf=OrcaSlicer.desktop
 application/vnd.ms-package.3dmanufacturing-3dmodel+xml=OrcaSlicer.desktop
+image/png=imv.desktop
+image/jpeg=imv.desktop
+image/gif=imv.desktop
+image/webp=imv.desktop
+image/bmp=imv.desktop
+image/tiff=imv.desktop
+image/svg+xml=imv.desktop
 
 [Added Associations]
 x-scheme-handler/http=firefox-developer-edition.desktop;
