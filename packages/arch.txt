@@ -148,6 +148,7 @@ ttf-jetbrains-mono-nerd
 tumbler
 typst
 typstyle
+tzupdate
 udiskie
 uncrustify
 vala

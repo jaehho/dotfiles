@@ -221,7 +221,7 @@ _sync-mime:
 
 # Boot/system configs (require sudo). Symlinked configs are runtime-read; copied
 # configs (grub, mkinitcpio, modprobe) need to survive broken /home mounts.
-# nvidia.conf splits by driver variant. NetworkManager dispatcher hook is
+# nvidia.conf splits by driver variant. NetworkManager dispatcher hooks are
 # install-copied (NM refuses symlinks/non-root for security).
 # system-sleep hooks live in /usr/lib/, not /etc/ — systemd-sleep(8) v260+
 # only scans /usr/lib/systemd/system-sleep/.
@@ -246,6 +246,9 @@ _sync-system:
 	@sudo install -D -m 0755 -o root -g root \
 		$(REPO_ROOT)/NetworkManager/dispatcher.d/50-restart-sshfs \
 		/etc/NetworkManager/dispatcher.d/50-restart-sshfs
+	@sudo install -D -m 0755 -o root -g root \
+		$(REPO_ROOT)/NetworkManager/dispatcher.d/60-tzupdate \
+		/etc/NetworkManager/dispatcher.d/60-tzupdate
 	@changed=""; \
 	for pair in $(SYSTEM_COPIES); do \
 		src=$${pair%%:*}; dst=$${pair##*:}; \

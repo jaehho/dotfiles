@@ -1,0 +1,35 @@
+#!/bin/sh
+# NetworkManager dispatcher hook: refresh the system timezone from IP
+# geolocation when an interface comes up, so a travelling laptop lands on
+# local time without a manual `timedatectl set-timezone`. systemd-timesyncd
+# keeps the clock in UTC; this only swaps the /etc/localtime symlink.
+#
+# Installed to /etc/NetworkManager/dispatcher.d/ via Makefile _sync-system.
+# Must be root-owned, mode 755 — NetworkManager refuses to run otherwise.
+# Pairs with the `tzupdate` AUR package.
+#
+# Note: lookup is IP-based, so an active Tailscale exit node can mislocate
+# you. The interface filter below ignores tailscale* events, but it can't
+# override default-route egress — drop the exit node if the zone looks wrong.
+
+set -u
+
+iface="$1"
+action="$2"
+
+case "$action" in
+    up|connectivity-change) ;;
+    *) exit 0 ;;
+esac
+
+case "$iface" in
+    lo|docker*|virbr*|vnet*|tailscale*|veth*) exit 0 ;;
+esac
+
+command -v tzupdate >/dev/null 2>&1 || exit 0
+
+# Runs as root here, so tzupdate sets the zone directly; bound the network
+# call so a slow geolocation API can't stall the dispatcher.
+timeout 20 tzupdate >/dev/null 2>&1 || true
+
+exit 0
