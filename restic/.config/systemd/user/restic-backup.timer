@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily restic backup to OneDrive
+Description=Daily restic backup to homelab Nextcloud
 
 [Timer]
 OnCalendar=daily

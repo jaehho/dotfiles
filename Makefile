@@ -6,7 +6,7 @@ SHELL := /bin/bash
 REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 # Stow packages split by distro
-COMMON_PACKAGES := fish git tmux nvim claude rclone sshfs bin kitty ssh mime restic zathura visidata tridactyl tailscale
+COMMON_PACKAGES := fish git tmux nvim claude sshfs bin kitty ssh mime restic zathura visidata tridactyl tailscale
 ARCH_PACKAGES   := hypr swaync rofi waybar
 
 # Detect distro family by package manager rather than os-release ID. This
@@ -297,23 +297,12 @@ _sync-system:
 	esac
 
 _sync-rclone:
-	@echo "==> rclone OneDrive..."
+	@echo "==> rclone..."
 	@command -v rclone >/dev/null 2>&1 || { \
 		if command -v pacman >/dev/null 2>&1; then sudo pacman -S --needed --noconfirm rclone; \
 		elif command -v apt-get >/dev/null 2>&1; then sudo apt-get install -y rclone; \
 		else echo "  no supported package manager — skipping"; exit 0; fi; \
 	}
-	@if ! rclone listremotes 2>/dev/null | grep -q '^onedrive:'; then \
-		echo "  No 'onedrive' remote — starting interactive config (choose 'onedrive', blank client_id/secret, auto-config: yes)..."; \
-		rclone config; \
-	fi
-	@mkdir -p ~/mnt/OneDrive
-	@systemctl --user daemon-reload
-	@if rclone listremotes 2>/dev/null | grep -q '^onedrive:'; then \
-		systemctl --user enable --now rclone-onedrive >/dev/null 2>&1 && echo "  OneDrive mounted at ~/mnt/OneDrive" || true; \
-	else \
-		echo "  'onedrive' remote not configured — re-run sync once it exists."; \
-	fi
 
 _sync-sshfs:
 	@echo "==> sshfs..."
@@ -402,14 +391,14 @@ else
 		printf '%s' "$$pw" > "$(HOME)/.config/restic/password" && \
 		echo "  Password saved to ~/.config/restic/password"; \
 	fi
-	@if ! rclone listremotes 2>/dev/null | grep -q '^onedrive:'; then \
-		echo "  'onedrive' remote not configured — skipping repo init."; \
+	@if ! rclone listremotes 2>/dev/null | grep -q '^nextcloud:'; then \
+		echo "  'nextcloud' remote not configured — skipping repo init."; \
 	else \
-		if ! RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
+		if ! RESTIC_REPOSITORY=rclone:nextcloud:Backups/restic \
 			RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
 			restic snapshots >/dev/null 2>&1; then \
-			echo "  Initializing restic repo at onedrive:Backups/restic..."; \
-			RESTIC_REPOSITORY=rclone:onedrive:Backups/restic \
+			echo "  Initializing restic repo at nextcloud:Backups/restic..."; \
+			RESTIC_REPOSITORY=rclone:nextcloud:Backups/restic \
 			RESTIC_PASSWORD_FILE=$(HOME)/.config/restic/password \
 			restic init; \
 		fi; \
@@ -475,7 +464,7 @@ status: ## Show stow / system / service / package state
 	done
 	@echo ""
 	@echo "Services:"
-	@for svc in keyd rclone-onedrive sshfs-ice sshfs-mililab sshfs-cdn sshfs-msi restic-backup.timer; do \
+	@for svc in keyd sshfs-ice sshfs-mililab sshfs-cdn sshfs-msi restic-backup.timer; do \
 		case "$$svc" in keyd) \
 			active=$$(systemctl is-active "$$svc" 2>/dev/null);; *) \
 			active=$$(systemctl --user is-active "$$svc" 2>/dev/null);; esac; \
