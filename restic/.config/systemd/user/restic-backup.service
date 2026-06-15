@@ -1,15 +1,18 @@
 [Unit]
-Description=Restic backup to OneDrive
+Description=Restic backup to homelab Nextcloud
 Wants=network-online.target
-After=network-online.target rclone-onedrive.service
-Requires=rclone-onedrive.service
+After=network-online.target
 
 [Service]
 Type=oneshot
-Environment=RESTIC_REPOSITORY=rclone:onedrive:Backups/restic
+# restic exit 3 = some source files couldn't be read (e.g. a file changed mid-backup);
+# the snapshot is still saved, so don't mark the unit failed.
+SuccessExitStatus=3
+Environment=RESTIC_REPOSITORY=rclone:nextcloud:Backups/restic
 Environment=RESTIC_PASSWORD_FILE=%h/.config/restic/password
 ExecStart=/usr/bin/restic backup \
     --exclude-file %h/.config/restic/excludes \
+    --exclude %h/mnt \
     --one-file-system \
     --tag systemd.timer \
     --verbose \
