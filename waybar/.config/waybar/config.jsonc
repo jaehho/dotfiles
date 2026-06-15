@@ -3,12 +3,15 @@
     "position": "top",
     "height": 34,
     "spacing": 4,
+    "margin-top": 6,
+    "margin-bottom": 0,
+    "margin-left": 8,
+    "margin-right": 8,
 
     "modules-left": [
         "hyprland/workspaces",
         "custom/scratchpad",
-        "custom/tray",
-        "hyprland/window"
+        "custom/tray"
     ],
     "modules-center": [
         "mpris",
@@ -77,10 +80,6 @@
         }
     },
 
-    "hyprland/window": {
-        "max-length": 50
-    },
-
     "clock": {
         "format": "{:%a %b %d  %H:%M}",
         "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
@@ -104,7 +103,7 @@
         "status-icons": {
             "paused": "⏸"
         },
-        "dynamic-len": 50,
+        "dynamic-len": 45,
         "on-click": "playerctl play-pause",
         "on-click-right": "playerctl next",
         "on-click-middle": "playerctl previous"
@@ -112,28 +111,36 @@
 
     "cpu": {
         "interval": 5,
-        "format": "CPU {usage}%",
-        "tooltip-format": "{avg_frequency} GHz\n{usage}% usage",
+        "states": {
+            "critical": 90
+        },
+        "format": "{icon} {usage}%",
+        "format-icons": ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
+        "tooltip-format": "CPU {usage}%  ·  {avg_frequency} GHz",
         "on-click": "kitty -e btop"
     },
 
     "memory": {
         "interval": 10,
-        "format": "RAM {percentage}%",
-        "tooltip-format": "{used:0.1f} GiB / {total:0.1f} GiB\n{swapUsed:0.1f} GiB swap",
+        "states": {
+            "critical": 90
+        },
+        "format": "{icon} {percentage}%",
+        "format-icons": ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
+        "tooltip-format": "RAM {percentage}%  ({used:0.1f} / {total:0.1f} GiB)\nSwap {swapUsed:0.1f} GiB",
         "on-click": "kitty -e btop"
     },
 
     "bluetooth": {
         "format": "󰂯",
-        "format-connected": "󰂱 {device_alias}",
-        "format-connected-battery": "󰂱 {device_alias} {device_battery_percentage}%",
+        "format-connected": "󰂱",
+        "format-connected-battery": "󰂱",
         "format-off": "󰂲",
         "format-alt": "󰂯 {num_connections}",
         "on-click-right": "kitty --class floating-tui -e bluetui",
         "tooltip-format": "{controller_alias}\t{controller_address}",
         "tooltip-format-connected": "{controller_alias}\t{controller_address}\n\n{device_enumerate}",
-        "tooltip-format-enumerate-connected": "{device_alias}\t{device_address}"
+        "tooltip-format-enumerate-connected": "{device_alias}\t{device_address}\t{device_battery_percentage}%"
     },
 
     "battery": {
@@ -146,7 +153,7 @@
         "format-plugged": "󰚥 {capacity}%",
         "format-alt": "{icon} {time}",
         "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
-        "tooltip-format": "{timeTo}\n{power:.1f}W\nHealth: {health}%"
+        "tooltip-format": "{capacity}%  ·  {timeTo}\n{power:.1f} W  ·  Health {health}%"
     },
 
     "power-profiles-daemon": {
@@ -161,12 +168,14 @@
     },
 
     "network": {
-        "format-wifi": "󰤨 {essid}",
-        "format-ethernet": "󰈀 {ipaddr}/{cidr}",
-        "format-linked": "󰈀 {ifname} (No IP)",
-        "format-disconnected": "󰤭 Disconnected",
-        "format-alt": "{ifname}: {ipaddr}/{cidr}",
+        "format-wifi": "󰤨",
+        "format-ethernet": "󰈀",
+        "format-linked": "󰈀",
+        "format-disconnected": "󰤭",
+        "format-alt": "{ifname}  {ipaddr}/{cidr}",
         "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ifname} via {gwaddr}\n{ipaddr}/{cidr}\n↑ {bandwidthUpBits} ↓ {bandwidthDownBits}",
+        "tooltip-format-ethernet": "{ifname} via {gwaddr}\n{ipaddr}/{cidr}\n↑ {bandwidthUpBits} ↓ {bandwidthDownBits}",
+        "tooltip-format-disconnected": "Disconnected",
         "tooltip-format": "{ifname} via {gwaddr}\n{ipaddr}/{cidr}",
         "on-click-right": "kitty --class floating-tui -e nmtui"
     },
@@ -174,10 +183,11 @@
     "pulseaudio": {
         "format": "{icon} {volume}%",
         "format-bluetooth": "󰂰 {volume}%",
-        "format-muted": "󰝟 Muted",
+        "format-muted": "󰝟",
         "format-icons": {
             "default": ["󰕿", "󰖀", "󰕾"]
         },
+        "tooltip-format": "{desc}  ·  {volume}%",
         "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
         "on-click-right": "kitty --class floating-tui -e wiremix",
         "on-scroll-up": "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+",
@@ -187,6 +197,7 @@
     "backlight": {
         "format": "{icon} {percent}%",
         "format-icons": ["󰃞", "󰃟", "󰃠"],
+        "tooltip-format": "Brightness {percent}%",
         "on-scroll-up": "brightnessctl -e4 -n2 set 5%+",
         "on-scroll-down": "brightnessctl -e4 -n2 set 5%-"
     },

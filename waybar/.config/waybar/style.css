@@ -1,3 +1,10 @@
+/* ── Forest · minimal floating islands ───────────────────────────────────────
+   Layout : transparent bar; modules-left / -center / -right float as 3 islands.
+   Colour : monochrome (subtext grey) + ONE accent (blue) on the active
+            workspace. Other hues survive only as semantic state (warn/alert).
+   Theme  : every colour is a palette hex/decimal so `theme-apply`'s sed reskins
+            it. Do not introduce off-palette colours except the blink flash. */
+
 * {
     font-family: "JetBrainsMono Nerd Font", "Noto Sans", monospace;
     font-size: 13px;
@@ -5,21 +12,27 @@
 }
 
 window#waybar {
-    background-color: rgba(20, 28, 30, 0.9);
-    color: #cfdadc;
-    border-bottom: 2px solid rgba(63, 125, 174, 0.3);
+    background: transparent;
 }
 
-/* ── Base pill styling for all modules ── */
-#custom-desktop,
+/* ── Islands ── */
+.modules-left,
+.modules-center,
+.modules-right {
+    background-color: rgba(20, 28, 30, 0.88);
+    border: 1px solid rgba(63, 125, 174, 0.18);
+    border-radius: 14px;
+    margin: 4px 0;
+    padding: 0 6px;
+}
+
+/* ── Modules sit flat on the island: monochrome, no per-pill background ── */
+#workspaces,
 #custom-scratchpad,
 #custom-tray,
-#workspaces,
-#window,
+#mpris,
 #clock,
 #tray,
-#custom-idle-inhibitor,
-#custom-swaync,
 #cpu,
 #memory,
 #pulseaudio,
@@ -28,231 +41,92 @@ window#waybar {
 #power-profiles-daemon,
 #bluetooth,
 #network,
-#custom-power {
-    background-color: rgba(32, 40, 42, 0.6);
-    padding: 0 10px;
-    margin: 4px 2px;
-    transition: all 0.3s ease;
-}
-
-/* ── Pill shapes ── */
-
-/* Standalone pills */
-#workspaces,
-#window,
-#clock,
-#tray,
-#custom-desktop,
-#custom-scratchpad,
-#custom-tray,
 #custom-idle-inhibitor,
 #custom-swaync,
+#custom-reboot-needed,
 #custom-power {
-    border-radius: 12px;
+    background: transparent;
+    color: #9da7a9;
+    padding: 0 7px;
+    transition: color 0.2s ease;
 }
 
-/* System group: cpu + memory */
-#cpu {
-    border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(86, 95, 98, 0.3);
-}
-#memory {
-    border-radius: 0 12px 12px 0;
-}
-
-/* A/V group: pulseaudio + backlight */
-#pulseaudio {
-    border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(86, 95, 98, 0.3);
-}
-#backlight {
-    border-radius: 0 12px 12px 0;
-}
-
-/* Power group: battery + power-profiles (drawer — profiles expand on hover) */
-#battery,
-#power-profiles-daemon {
-    border-radius: 12px;
-}
-
-/* Connectivity group: bluetooth + network */
-#bluetooth {
-    border-radius: 12px 0 0 12px;
-    border-right: 1px solid rgba(86, 95, 98, 0.3);
-}
-#network {
-    border-radius: 0 12px 12px 0;
-}
-
-/* ── Hover ── */
-#workspaces button:hover,
-#window:hover,
-#clock:hover,
-#tray:hover,
-#custom-desktop:hover,
+/* Hover: glyph brightens to full text colour */
 #custom-scratchpad:hover,
 #custom-tray:hover,
-#custom-idle-inhibitor:hover,
-#custom-swaync:hover,
-#cpu:hover,
-#memory:hover,
+#mpris:hover,
+#clock:hover,
 #pulseaudio:hover,
 #backlight:hover,
 #battery:hover,
 #power-profiles-daemon:hover,
 #bluetooth:hover,
 #network:hover,
+#custom-idle-inhibitor:hover,
+#custom-swaync:hover,
 #custom-power:hover {
-    background-color: rgba(47, 55, 57, 0.8);
+    color: #cfdadc;
 }
 
-/* ── Workspaces ── */
+/* ── Workspaces — the single accent lives here ── */
 #workspaces {
-    padding: 0 4px;
+    padding: 0 2px;
 }
 
 #workspaces button {
-    padding: 0 8px;
     color: #565f62;
     background: transparent;
     border: none;
-    border-radius: 8px;
-    margin: 2px 1px;
+    border-radius: 9px;
+    margin: 3px 2px;
+    padding: 0 7px;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+#workspaces button:hover {
+    color: #cfdadc;
+    background-color: rgba(63, 125, 174, 0.14);
 }
 
 #workspaces button.active {
-    color: #3f7dae;
-    background-color: rgba(63, 125, 174, 0.15);
-    border-bottom: 2px solid #3f7dae;
+    color: #141c1e;
+    background-color: #3f7dae;
 }
 
 #workspaces button.urgent {
-    color: #ab5e59;
+    color: #141c1e;
+    background-color: #ab5e59;
 }
 
-
-
-/* ── Window ── */
-#window {
-    color: #9da7a9;
-}
-
-/* ── Clock ── */
+/* ── Clock — primary info: brighter, bold, never coloured ── */
 #clock {
     color: #cfdadc;
     font-weight: bold;
 }
 
-/* ── CPU ── */
-#cpu {
-    color: #a6653e;
+/* ── Media — brightens while playing ── */
+#mpris.playing {
+    color: #cfdadc;
 }
 
-/* ── Memory ── */
-#memory {
-    color: #7c6bac;
-}
-
-/* ── Bluetooth ── */
-#bluetooth {
-    color: #3f7dae;
-}
-
-#bluetooth.off {
-    color: #565f62;
-}
-
-/* ── Battery ── */
-#battery {
-    color: #4f8751;
-}
-
-#battery.charging {
-    color: #4f8751;
-}
-
-#battery.warning:not(.charging) {
-    color: #a6653e;
-}
-
-#battery.critical:not(.charging) {
-    color: #ab5e59;
-    animation: blink 0.5s linear infinite alternate;
-}
-
-@keyframes blink {
-    to {
-        color: #ffffff;
-    }
-}
-
-/* ── Power Profiles ── */
-#power-profiles-daemon {
-    color: #118a7a;
-}
-
-/* ── Network ── */
-#network {
-    color: #04869c;
-}
-
-#network.disconnected {
-    color: #ab5e59;
-}
-
-/* ── Pulseaudio ── */
-#pulseaudio {
-    color: #8e7426;
-}
-
-#pulseaudio.muted {
-    color: #565f62;
-}
-
-/* ── Backlight ── */
-#backlight {
-    color: #8e7426;
-}
-
-/* ── Special workspace indicators ── */
-#custom-scratchpad,
-#custom-tray {
-    color: #565f62;
-}
-
+/* ── Special-workspace toggles, lit when populated ── */
 #custom-scratchpad.active,
 #custom-tray.active {
-    color: #7c6bac;
-    background-color: rgba(124, 107, 172, 0.15);
-}
-
-/* ── Desktop indicator ── */
-#custom-desktop {
     color: #3f7dae;
-    font-weight: bold;
 }
 
-/* ── Idle Inhibitor ── */
-#custom-idle-inhibitor {
-    color: #565f62;
-}
+/* ── Semantic state — the ONLY non-accent colours on the bar ── */
 
+/* Stay-awake engaged */
 #custom-idle-inhibitor.on {
     color: #8e7426;
 }
 
-/* ── Notifications + DND ── */
-#custom-swaync {
-    color: #565f62;
-}
-
-/* Blue when there are pending notifications */
+/* Pending notifications = accent; DND = alert */
 #custom-swaync.notification,
 #custom-swaync.inhibited-notification {
     color: #3f7dae;
 }
-
-/* Red whenever DND is active (overrides notification color) */
 #custom-swaync.dnd-none,
 #custom-swaync.dnd-notification,
 #custom-swaync.dnd-inhibited-none,
@@ -260,35 +134,77 @@ window#waybar {
     color: #ab5e59;
 }
 
-/* ── Reboot needed (pill only visible when class=pending, i.e. kernel upgrade pending) ── */
+/* Muted / off recede further */
+#pulseaudio.muted,
+#bluetooth.off {
+    color: #565f62;
+}
+
+/* CPU = warm, RAM = cool: a complementary "teal & orange" pair so the two
+   metrics read as distinct at a glance. Hue marks which metric; the ramp
+   glyph (▁▂▃▄▅▆▇█) carries the load. Both flash red only when pegged. */
+#cpu {
+    color: #a6653e;
+}
+#memory {
+    color: #118a7a;
+}
+#cpu.critical,
+#memory.critical {
+    color: #ab5e59;
+    animation: blink 0.5s linear infinite alternate;
+}
+
+/* Battery — green when healthy, amber low, red critical */
+#battery {
+    color: #4f8751;
+}
+#battery.warning:not(.charging) {
+    color: #8e7426;
+}
+#battery.critical:not(.charging) {
+    color: #ab5e59;
+    animation: blink 0.5s linear infinite alternate;
+}
+@keyframes blink {
+    to {
+        color: #ffffff;
+    }
+}
+
+/* Network down */
+#network.disconnected {
+    color: #ab5e59;
+}
+
+/* Kernel-upgrade reboot pending (module only renders when class=pending) */
 #custom-reboot-needed.pending {
-    background-color: rgba(32, 40, 42, 0.6);
-    padding: 0 10px;
-    margin: 4px 2px;
-    border-radius: 12px;
     color: #ab5e59;
     font-weight: bold;
-    transition: all 0.3s ease;
 }
 
-#custom-reboot-needed.pending:hover {
-    background-color: rgba(47, 55, 57, 0.8);
-}
-
-/* ── Tray ── */
-#tray > * {
-    padding: 0 3px;
-}
-
-/* ── Power ── */
+/* ── Power glyph ── */
 #custom-power {
     color: #ab5e59;
-    font-size: 16px;
+    font-size: 15px;
 }
 
-/* ── Tooltip ── */
+/* ── System tray ── */
+#tray > * {
+    padding: 0 4px;
+}
+#tray menu {
+    background-color: #141c1e;
+    color: #cfdadc;
+}
+
+/* ── Tooltips ── */
 tooltip {
     background-color: #141c1e;
     border: 1px solid #3f7dae;
     border-radius: 8px;
+}
+tooltip label {
+    color: #cfdadc;
+    padding: 2px;
 }
