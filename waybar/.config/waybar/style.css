@@ -140,11 +140,11 @@ window#waybar {
     color: #565f62;
 }
 
-/* CPU = warm, RAM = cool: a complementary "teal & orange" pair so the two
-   metrics read as distinct at a glance. Hue marks which metric; the ramp
-   glyph (▁▂▃▄▅▆▇█) carries the load. Both flash red only when pegged. */
+/* CPU = mauve, RAM = teal: two cool hues, so the metrics stay distinct
+   without a warm tone that reads as "unhealthy". Hue marks which metric;
+   the ramp glyph (▁▂▃▄▅▆▇█) carries the load. Both flash red when pegged. */
 #cpu {
-    color: #a6653e;
+    color: #7c6bac;
 }
 #memory {
     color: #118a7a;
