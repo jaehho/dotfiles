@@ -26,7 +26,7 @@ window#waybar {
     padding: 0 6px;
 }
 
-/* ── Modules sit flat on the island: monochrome, no per-pill background ── */
+/* ── Modules sit flat on the island: monochrome; hover lifts a faint pill ── */
 #workspaces,
 #custom-scratchpad,
 #custom-tray,
@@ -48,10 +48,11 @@ window#waybar {
     background: transparent;
     color: #9da7a9;
     padding: 0 7px;
-    transition: color 0.2s ease;
+    border-radius: 9px;
+    transition: color 0.2s ease, background-color 0.2s ease;
 }
 
-/* Hover: glyph brightens to full text colour */
+/* Hover: glyph brightens and a faint accent pill lifts under it */
 #custom-scratchpad:hover,
 #custom-tray:hover,
 #mpris:hover,
@@ -66,6 +67,13 @@ window#waybar {
 #custom-swaync:hover,
 #custom-power:hover {
     color: #cfdadc;
+    background-color: rgba(63, 125, 174, 0.14);
+}
+
+/* CPU/RAM keep their hue on hover but still get the pill */
+#cpu:hover,
+#memory:hover {
+    background-color: rgba(63, 125, 174, 0.14);
 }
 
 /* ── Workspaces — the single accent lives here ── */
@@ -170,6 +178,12 @@ window#waybar {
     to {
         color: #ffffff;
     }
+}
+
+/* Wifi glyph sits right-heavy in its cell — shift it back toward centre in the
+   pill (left/right padding swapped, total width unchanged so layout is stable) */
+#network {
+    padding: 0 9px 0 5px;
 }
 
 /* Network down */
