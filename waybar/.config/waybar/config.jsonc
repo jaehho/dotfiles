@@ -46,6 +46,9 @@
         "format": "{name} {windows}",
         "format-window-separator": " ",
         "on-click": "activate",
+        "on-scroll-up": "hyprctl dispatch workspace e-1",
+        "on-scroll-down": "hyprctl dispatch workspace e+1",
+        "smooth-scrolling-threshold": 6,
         "sort-by-number": true,
         "window-rewrite-default": "󰏗",
         "window-rewrite": {
