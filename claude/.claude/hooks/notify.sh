@@ -78,6 +78,26 @@ resolve_window_address() {
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 # Desktop: notify-send on local Wayland; OSC 99 for SSH/remote.
+# tmux only refreshes env on client attach, so a pane created before the
+# graphical session (or restored by tmux-resurrect) can carry an empty
+# WAYLAND_DISPLAY/HYPRLAND_INSTANCE_SIGNATURE. That misroutes a *local* pane
+# into the SSH/remote branch below, which arms a global client-focus-in hook
+# that yanks the session on the next unrelated focus. Recover the env from
+# XDG_RUNTIME_DIR so local panes always take the desktop-notify path.
+if [[ -z "${SSH_CONNECTION:-}" ]]; then
+  _runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+  if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+    for _sock in "$_runtime"/wayland-*; do
+      [[ -S "$_sock" ]] && { export WAYLAND_DISPLAY="${_sock##*/}"; break; }
+    done
+  fi
+  if [[ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" && -d "$_runtime/hypr" ]]; then
+    for _d in "$_runtime"/hypr/*/; do
+      [[ -d "$_d" ]] && { export HYPRLAND_INSTANCE_SIGNATURE="$(basename "$_d")"; break; }
+    done
+  fi
+fi
+
 if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]; then
   play_sound
   WINDOW_ADDR=$(resolve_window_address) || true
@@ -186,16 +206,9 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
     "${NOTIFY_ARGS[@]}" "$TITLE" "$BODY" </dev/null &>/dev/null &
 else
   # SSH/remote: kitty OSC 99 desktop notification. Clicking focuses the kitty
-  # window but doesn't natively switch tmux — arm a one-shot client-focus-in
-  # hook so kitty focus → CSI I → switch-client to the source pane.
-  # Requires `focus-events on` in the remote tmux config.
-  if [[ -n "${TMUX:-}" ]]; then
-    SOURCE_PANE=$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)
-    if [[ -n "$SOURCE_PANE" ]]; then
-      tmux set-hook -g 'client-focus-in[99]' \
-        "switch-client -t '$SOURCE_PANE' ; set-hook -gu 'client-focus-in[99]'" 2>/dev/null || true
-    fi
-  fi
+  # window; we deliberately do NOT auto-switch tmux. The only available trigger
+  # would be a global client-focus-in hook, but that fires on any unrelated
+  # refocus (not just the notification click) and can yank a different session.
   "$HOME/.local/bin/notify" "$TITLE" "$BODY" &
 fi
 
