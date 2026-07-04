@@ -352,14 +352,19 @@ ifneq (,$(filter mililab,$(SSHFS_MOUNTS)))
 	fi
 endif
 ifneq (,$(filter ice,$(SSHFS_MOUNTS)))
-	@# Always-on jump-host mount, gated on jump_pass.
+	@# Always-on jump-host mount, gated on jump_pass. Best-effort: ice is often
+	@# off-network, so a failed initial mount must not abort sync. Always enable
+	@# the watchdog timer (it remounts once ice is reachable), then try the mount.
 	@if [ ! -f "$$HOME/.ssh/jump_pass" ]; then \
 		echo "  ~/.ssh/jump_pass missing — skipping ice mount"; \
 		echo "    Create with: echo PASSWORD > ~/.ssh/jump_pass && chmod 600 ~/.ssh/jump_pass"; \
 	else \
-		systemctl --user enable --now sshfs-ice >/dev/null 2>&1 && \
-		systemctl --user enable --now sshfs-ice-watchdog.timer >/dev/null 2>&1 && \
-		echo "  ice mounted at ~/mnt/ice"; \
+		systemctl --user enable --now sshfs-ice-watchdog.timer >/dev/null 2>&1 || true; \
+		if systemctl --user enable --now sshfs-ice >/dev/null 2>&1; then \
+			echo "  ice mounted at ~/mnt/ice"; \
+		else \
+			echo "  ice unreachable — watchdog timer will retry"; \
+		fi; \
 	fi
 endif
 ifneq (,$(filter cdn,$(SSHFS_MOUNTS)))
