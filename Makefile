@@ -36,6 +36,7 @@ endif
 # - HOST_RESTIC      : 1 = enable restic backup timer; 0 = disable
 # - HOST_DROP_PKGS   : whitespace-separated stow packages to skip on this host
 # - HOST_SSHFS_SKIP  : whitespace-separated sshfs mounts to skip (any of: mililab ice cdn msi)
+# - HOST_NO_AAAA     : 1 = install NM dispatcher forcing 'options no-aaaa' (hosts with no IPv6)
 HOSTNAME := $(shell uname -n)
 -include $(REPO_ROOT)/hosts/$(HOSTNAME).mk
 
@@ -44,6 +45,7 @@ HOST_DEV_TOOLS  ?= 0
 HOST_RESTIC     ?= 1
 HOST_DROP_PKGS  ?=
 HOST_SSHFS_SKIP ?=
+HOST_NO_AAAA    ?= 0
 
 STOW_PACKAGES := $(filter-out $(HOST_DROP_PKGS),$(STOW_PACKAGES))
 SSHFS_MOUNTS  := $(filter-out $(HOST_SSHFS_SKIP),mililab ice cdn msi)
@@ -249,6 +251,13 @@ _sync-system:
 	@sudo install -D -m 0755 -o root -g root \
 		$(REPO_ROOT)/NetworkManager/dispatcher.d/60-tzupdate \
 		/etc/NetworkManager/dispatcher.d/60-tzupdate
+	@if [ "$(HOST_NO_AAAA)" = "1" ]; then \
+		sudo install -D -m 0755 -o root -g root \
+			$(REPO_ROOT)/NetworkManager/dispatcher.d/90-no-aaaa \
+			/etc/NetworkManager/dispatcher.d/90-no-aaaa; \
+	else \
+		sudo rm -f /etc/NetworkManager/dispatcher.d/90-no-aaaa; \
+	fi
 	@changed=""; \
 	for pair in $(SYSTEM_COPIES); do \
 		src=$${pair%%:*}; dst=$${pair##*:}; \

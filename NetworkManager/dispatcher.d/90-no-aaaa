@@ -1,0 +1,36 @@
+#!/bin/sh
+# NetworkManager dispatcher hook: some networks' DHCP resolvers hang on
+# AAAA/IPv6 lookups on hosts with no IPv6 (symptom: getaddrinfo ETIMEDOUT,
+# e.g. Claude Code login failing). Force `options no-aaaa timeout:2` into
+# resolv.conf so AAAA queries are never sent and any resolver stall is capped.
+# Does NOT change which resolver is used, so captive portals and homelab
+# split-horizon DNS keep working.
+#
+# Installed to /etc/NetworkManager/dispatcher.d/ via Makefile _sync-system,
+# gated behind HOST_NO_AAAA. Must be root-owned, mode 755 — NetworkManager
+# refuses to run otherwise.
+#
+# NM rewrites resolv.conf several times during activation; this re-adds the
+# option on each matching event (idempotent via the grep guard).
+
+set -u
+
+action="$2"
+
+case "$action" in
+    up|dhcp4-change|dhcp6-change|connectivity-change) ;;
+    *) exit 0 ;;
+esac
+
+# Only suppress AAAA when this host has no IPv6 *internet*. Test the default
+# ROUTE, not addresses: Tailscale assigns a global-scope fd7a::/48 ULA that
+# would otherwise masquerade as real IPv6. A tailnet route is not internet
+# IPv6, so ignore tailscale* when deciding. If a real IPv6 default route
+# exists, leave AAAA alone.
+if ip -6 route show default 2>/dev/null | grep -qv tailscale; then
+    exit 0
+fi
+
+RC=/etc/resolv.conf
+grep -q 'no-aaaa' "$RC" 2>/dev/null && exit 0
+printf 'options no-aaaa timeout:2\n' >> "$RC"
