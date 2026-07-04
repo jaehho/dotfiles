@@ -32,6 +32,21 @@ case "$DISTRO" in
   *)      BACKENDS=(cargo npm uv) ;;
 esac
 
+# mermaid-cli and mermaid-filter pull in puppeteer, which otherwise downloads a
+# private ~150MB Chrome on every version bump — and hard-fails the whole npm
+# sync if a prior download was interrupted (it leaves an empty cache dir and
+# refuses to re-fetch, erroring instead). Point puppeteer at the system chromium
+# and skip the bundled download. Guarded so hosts without chromium fall back to
+# puppeteer's default behavior.
+for _chrome in /usr/bin/chromium /usr/bin/chromium-browser /usr/bin/google-chrome-stable; do
+  if [ -x "$_chrome" ]; then
+    export PUPPETEER_SKIP_DOWNLOAD=1
+    export PUPPETEER_EXECUTABLE_PATH="$_chrome"
+    break
+  fi
+done
+unset _chrome
+
 MODE=sync
 [ "${1:-}" = "--status" ] && MODE=status
 
