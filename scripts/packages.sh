@@ -158,8 +158,14 @@ backend_install_missing() {
 
   case "$backend" in
     arch)
-      echo "$pkgs" | backend_filter_for_install arch \
-        | paru -S --needed --batchinstall -
+      # Pass as args (not piped) so stdin stays on the TTY and pacman's
+      # confirmation prompts work. Piping closes stdin once the package list
+      # is consumed, which makes pacman bail at "Proceed with installation?".
+      local filtered
+      filtered=$(echo "$pkgs" | backend_filter_for_install arch)
+      [ -z "$filtered" ] && return 0
+      # shellcheck disable=SC2086
+      paru -S --needed --batchinstall $filtered
       ;;
     ubuntu)
       # shellcheck disable=SC2086
