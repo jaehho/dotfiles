@@ -56,7 +56,7 @@ if [ -t 0 ] && [ -t 1 ] && [ "${NONINTERACTIVE:-0}" != 1 ]; then
   read -r -p "    Enable restic backups to homelab Nextcloud? [Y/n] " ans
   case "$ans" in n|N|no|NO) RESTIC=0 ;; esac
 
-  read -r -p "    sshfs mounts to skip (any of: mililab ice cdn msi; blank for none): " SSHFS_SKIP
+  read -r -p "    sshfs mounts to skip (any of: ice cdn msi; blank for none): " SSHFS_SKIP
 
   read -r -p "    Stow packages to skip on this host (space-separated, blank for none): " DROP
 fi

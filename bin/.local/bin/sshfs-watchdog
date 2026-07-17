@@ -2,7 +2,7 @@
 # Periodic health check for an sshfs mount. If the mount is unresponsive,
 # abort the FUSE channel and restart the systemd user service that owns it.
 #
-# Why this exists: sshfs-{ice,mililab}.service relies on
+# Why this exists: sshfs-ice.service relies on
 # ServerAliveInterval=5/CountMax=2 to make sshfs exit on connection loss,
 # at which point in-flight FUSE calls return EIO. But if the SSH peer goes
 # silent without sending RST (NAT eviction, dropped link without TCP RST),

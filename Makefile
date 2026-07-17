@@ -35,7 +35,7 @@ endif
 # - HOST_DEV_TOOLS   : 1 = build hypr-tools submodule into ~/.local/bin (overrides AUR)
 # - HOST_RESTIC      : 1 = enable restic backup timer; 0 = disable
 # - HOST_DROP_PKGS   : whitespace-separated stow packages to skip on this host
-# - HOST_SSHFS_SKIP  : whitespace-separated sshfs mounts to skip (any of: mililab ice cdn msi)
+# - HOST_SSHFS_SKIP  : whitespace-separated sshfs mounts to skip (any of: ice cdn msi)
 # - HOST_NO_AAAA     : 1 = install NM dispatcher forcing 'options no-aaaa' (hosts with no IPv6)
 HOSTNAME := $(shell uname -n)
 -include $(REPO_ROOT)/hosts/$(HOSTNAME).mk
@@ -48,8 +48,8 @@ HOST_SSHFS_SKIP ?=
 HOST_NO_AAAA    ?= 0
 
 STOW_PACKAGES := $(filter-out $(HOST_DROP_PKGS),$(STOW_PACKAGES))
-SSHFS_MOUNTS  := $(filter-out $(HOST_SSHFS_SKIP),mililab ice cdn msi)
-SSHFS_SKIPPED := $(filter $(HOST_SSHFS_SKIP),mililab ice cdn msi)
+SSHFS_MOUNTS  := $(filter-out $(HOST_SSHFS_SKIP),ice cdn msi)
+SSHFS_SKIPPED := $(filter $(HOST_SSHFS_SKIP),ice cdn msi)
 
 PKGDIR := $(REPO_ROOT)/packages
 
@@ -320,7 +320,7 @@ ifneq (,$(strip $(SSHFS_SKIPPED)))
 	@# Tear down any skipped mount that a previous sync left enabled or active.
 	@for m in $(SSHFS_SKIPPED); do \
 		case $$m in \
-			mililab|ice) systemctl --user disable --now sshfs-$$m >/dev/null 2>&1 || true ;; \
+			ice)         systemctl --user disable --now sshfs-$$m >/dev/null 2>&1 || true ;; \
 			cdn|msi)     systemctl --user stop sshfs-$$m >/dev/null 2>&1 || true ;; \
 		esac; \
 		fusermount3 -uz "$$HOME/mnt/$$m" 2>/dev/null || true; \
@@ -340,17 +340,6 @@ else
 	@mkdir -p "$$HOME/mnt"
 	@for m in $(SSHFS_MOUNTS); do mkdir -p "$$HOME/mnt/$$m"; done
 	@systemctl --user daemon-reload
-ifneq (,$(filter mililab,$(SSHFS_MOUNTS)))
-	@# Always-on tailscale mount. Skip + clean up when running on mililab
-	@# itself; sshfs would otherwise loop the host's / onto ~/mnt/mililab.
-	@if [ "$(HOSTNAME)" = "mililab" ]; then \
-		systemctl --user disable --now sshfs-mililab >/dev/null 2>&1 || true; \
-		fusermount3 -uz "$$HOME/mnt/mililab" 2>/dev/null || true; \
-		echo "  on mililab — skipping self-mount"; \
-	else \
-		systemctl --user enable --now sshfs-mililab >/dev/null 2>&1 && echo "  mililab mounted at ~/mnt/mililab" || true; \
-	fi
-endif
 ifneq (,$(filter ice,$(SSHFS_MOUNTS)))
 	@# Always-on jump-host mount, gated on jump_pass. Best-effort: ice is often
 	@# off-network, so a failed initial mount must not abort sync. Always enable
@@ -478,7 +467,7 @@ status: ## Show stow / system / service / package state
 	done
 	@echo ""
 	@echo "Services:"
-	@for svc in keyd sshfs-ice sshfs-mililab sshfs-cdn sshfs-msi restic-backup.timer; do \
+	@for svc in keyd sshfs-ice sshfs-cdn sshfs-msi restic-backup.timer; do \
 		case "$$svc" in keyd) \
 			active=$$(systemctl is-active "$$svc" 2>/dev/null);; *) \
 			active=$$(systemctl --user is-active "$$svc" 2>/dev/null);; esac; \

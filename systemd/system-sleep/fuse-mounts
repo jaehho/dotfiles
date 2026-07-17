@@ -15,7 +15,7 @@ set -u
 TARGET_UID=1000
 TARGET_USER=jaeho
 # Auto-start mounts: always restart on resume.
-AUTO_MOUNTS=(sshfs-ice.service sshfs-mililab.service)
+AUTO_MOUNTS=(sshfs-ice.service)
 # Opt-in mounts: capture pre-suspend state, restore only what was active.
 # (Otherwise resume would auto-start a service the user had deliberately
 # stopped — same policy as the NM dispatcher hook 50-restart-sshfs.)

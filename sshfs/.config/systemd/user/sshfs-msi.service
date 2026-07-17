@@ -11,8 +11,8 @@ ExecStartPre=-/usr/bin/fusermount3 -uz %h/mnt/msi
 ExecStartPre=/usr/bin/mkdir -p %h/mnt/msi
 # No `reconnect`: on connection loss, sshfs must exit so in-flight FUSE
 # calls return EIO instead of hanging forever (see BOOT_ISSUES.md).
-# DERP-relayed Tailscale link is high-latency; aggressive caching (vs
-# mililab's dir_cache=no) avoids per-entry roundtrips on `ls`.
+# DERP-relayed Tailscale link is high-latency; aggressive caching
+# avoids per-entry roundtrips on `ls`.
 ExecStart=/usr/bin/sshfs msi:/C:/ %h/mnt/msi \
   -o ServerAliveInterval=15,ServerAliveCountMax=4 \
   -o ConnectTimeout=15 \

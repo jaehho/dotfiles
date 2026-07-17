@@ -10,7 +10,7 @@ Per-host columns reflect tag syntax in the list files:
   firefox                       everywhere
   blender @omnibook             only omnibook
   nvidia-beta-dkms @host1,host2 only those
-  ruby !mililab                 everywhere except mililab
+  ruby !host1                   everywhere except host1
 
 Keys
   hjkl / ↑↓←→  navigate cells

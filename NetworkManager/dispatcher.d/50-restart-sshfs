@@ -1,6 +1,6 @@
 #!/bin/sh
 # NetworkManager dispatcher hook: restart user sshfs mounts when an interface
-# comes up. Pairs with the exponential backoff in sshfs-{ice,mililab}.service
+# comes up. Pairs with the exponential backoff in sshfs-ice.service
 # so suspend/resume and wifi roaming get a fast remount instead of waiting
 # for the next backoff timer to fire.
 #
@@ -24,7 +24,7 @@ esac
 TARGET_UID=1000
 TARGET_USER=jaeho
 
-for svc in sshfs-ice.service sshfs-mililab.service; do
+for svc in sshfs-ice.service; do
     runuser -u "$TARGET_USER" -- env \
         "XDG_RUNTIME_DIR=/run/user/$TARGET_UID" \
         "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus" \
