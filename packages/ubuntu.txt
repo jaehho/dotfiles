@@ -27,4 +27,5 @@ libudev-dev
 # Misc
 libnotify-bin
 ffmpeg
+gstreamer1.0-libav
 openssh-client
