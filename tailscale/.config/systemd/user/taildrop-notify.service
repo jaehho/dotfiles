@@ -1,0 +1,11 @@
+[Unit]
+Description=Taildrop inbox watcher — desktop notification per arrival
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/taildrop-notify
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
