@@ -1,8 +1,0 @@
-# Pinned packages — ones you rely on day-to-day but that aren't
-# strictly essential. The TUI shows them with a magenta * prefix
-# and gives a soft "are you sure?" warning when you mark one for
-# uninstall.
-#
-# Toggle with `f` in the TUI, or edit this file by hand. The TUI
-# rewrites this file on save (sorted, comments above this line
-# preserved).
