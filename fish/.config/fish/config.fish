@@ -2,6 +2,12 @@
 set -gx EDITOR nvim
 set -gx VISUAL nvim
 
+# Python writes __pycache__ next to the script it runs. Scripts in ~/.local/bin
+# are stow symlinks into the dotfiles repo, so that put build artifacts inside
+# the repo, which stow then linked back into $HOME. Redirect the cache instead
+# of disabling it, so bytecode caching still works.
+set -gx PYTHONPYCACHEPREFIX ~/.cache/python
+
 # ── GitHub ───────────────────────────────────────────────────────────────────
 if test -f ~/dotfiles/.env
     set -l pat (string match -r 'GITHUB_PERSONAL_ACCESS_TOKEN="([^"]+)"' < ~/dotfiles/.env)[2]
