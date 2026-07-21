@@ -6,8 +6,10 @@ GNU Stow-based dotfiles. Primary target Arch + Hyprland; also supports Ubuntu/De
 
 ## Non-obvious gotchas
 
-- **Boot-critical configs** (`grub`, `mkinitcpio`, `modprobe`) are **copied** by `_sync-system`, not symlinked — they survive a broken `/home` mount.
+- **Boot-critical configs** (`grub`, `mkinitcpio`, `modprobe`) are **copied** by the `system` sync phase, not symlinked — they survive a broken `/home` mount.
 - **Stow uses `--no-folding`** (individual symlinks, not directory symlinks).
-- **Per-machine choices** live in `hosts/<hostname>.mk` (committed). Sync prompts on first run for any new host.
+- **Per-machine choices** live in `hosts/<hostname>.sh` (committed, sourced by `scripts/lib.sh`). Sync prompts on first run for any new host.
+- **The Makefile is a dispatcher only** — logic lives in `scripts/`. Shared lists are in `scripts/lib.sh`; run one phase with `./scripts/sync.sh --list` / `./scripts/sync.sh <phase>`.
+- **Package upgrades are gated to once per 24h** (read from `pacman.log`), so re-syncing after a config edit is cheap. `FORCE_UPGRADE=1` overrides.
 - **Claude Code config** is declarative — see `claude/.claude/reconcile/README.md` for reconcile and MCP secrets.
 - **`hypr-tools`** is a submodule (Rust, two AUR packages). AUR binaries run by default; submodule is for development. See `hypr-tools/README.md`.

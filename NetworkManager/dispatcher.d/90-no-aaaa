@@ -6,7 +6,7 @@
 # Does NOT change which resolver is used, so captive portals and homelab
 # split-horizon DNS keep working.
 #
-# Installed to /etc/NetworkManager/dispatcher.d/ via Makefile _sync-system,
+# Installed to /etc/NetworkManager/dispatcher.d/ by the `system` sync phase,
 # gated behind HOST_NO_AAAA. Must be root-owned, mode 755 — NetworkManager
 # refuses to run otherwise.
 #

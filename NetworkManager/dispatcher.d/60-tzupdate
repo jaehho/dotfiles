@@ -4,7 +4,7 @@
 # local time without a manual `timedatectl set-timezone`. systemd-timesyncd
 # keeps the clock in UTC; this only swaps the /etc/localtime symlink.
 #
-# Installed to /etc/NetworkManager/dispatcher.d/ via Makefile _sync-system.
+# Installed to /etc/NetworkManager/dispatcher.d/ by the `system` sync phase.
 # Must be root-owned, mode 755 — NetworkManager refuses to run otherwise.
 # Pairs with the `tzupdate` AUR package.
 #

@@ -1,0 +1,9 @@
+# Stow ignore list for the `hypr` package.
+#
+# monitors.conf is rewritten by hypr-monitor on every hotplug, so the live file
+# is machine state and the repo copy is only a first-boot template. The stow
+# phase in scripts/sync.sh seeds it when absent and never touches it after.
+# Keep this in step with STOW_SKIP in scripts/lib.sh.
+#
+# Patterns are Perl regex; one without a slash matches a basename (see `man stow`).
+monitors\.conf
