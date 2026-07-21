@@ -135,7 +135,6 @@ reel-git
 reflector
 restic
 rofi
-rofimoji
 rsync
 rustup
 sassc
