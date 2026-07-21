@@ -132,6 +132,7 @@ qt5-wayland
 qt6-wayland
 raw-thumbnailer
 reel-git
+reflector
 restic
 rofi
 rofimoji

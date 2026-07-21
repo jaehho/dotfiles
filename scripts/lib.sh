@@ -112,6 +112,7 @@ if [ "$DISTRO_FAMILY" = arch ]; then
   SYSTEM_LINKS+=(
     "systemd/paccache.service.d/10-uninstalled.conf:/etc/systemd/system/paccache.service.d/10-uninstalled.conf"
     "systemd/linux-modules-cleanup.service.d/10-prune-old.conf:/etc/systemd/system/linux-modules-cleanup.service.d/10-prune-old.conf"
+    "reflector/reflector.conf:/etc/xdg/reflector/reflector.conf"
   )
 fi
 
