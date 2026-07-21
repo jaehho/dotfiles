@@ -1,6 +1,7 @@
 acpica
 alsa-tools
 alsa-utils
+android-file-transfer
 awww
 base
 base-devel
@@ -13,6 +14,7 @@ bluez-utils
 bolt
 brightnessctl
 btop
+cargo-update
 chromium
 clang
 cliphist
@@ -70,6 +72,8 @@ hyprwhenthen-bin
 ifuse
 imv
 intel-media-driver
+jdk-openjdk
+jdk21-openjdk
 kdenlive
 kernel-modules-hook
 keyd
@@ -155,6 +159,7 @@ texlive-latexrecommended
 texlive-mathscience
 texlive-xetex
 thunar
+thunderbird
 tree-sitter-cli
 ttf-dejavu
 ttf-jetbrains-mono-nerd
@@ -165,6 +170,7 @@ tzupdate
 udiskie
 uncrustify
 usbmuxd
+usbutils
 vala
 visidata
 visual-studio-code-bin

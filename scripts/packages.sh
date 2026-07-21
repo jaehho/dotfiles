@@ -10,6 +10,11 @@
 # Usage:
 #   packages.sh             # upgrade, prompt on drift, install missing
 #   packages.sh --status    # read-only drift report
+#
+# Env:
+#   SKIP_UPGRADE=1  skip the upgrade pass, still reconcile drift and install
+#                   what's missing. sync.sh sets this when a full upgrade ran
+#                   recently, so re-syncing after a config edit stays cheap.
 
 set -euo pipefail
 export LC_ALL=C  # `comm` requires byte-order sort.
@@ -50,6 +55,22 @@ unset _chrome
 MODE=sync
 [ "${1:-}" = "--status" ] && MODE=status
 
+# --- unattended operation -------------------------------------------------
+# A long AUR build outlives sudo's timestamp: nvidia's 440 MB download plus a
+# Rust rebuild ran ~20 minutes here, and paru then died at the install step
+# with "sudo: timed out reading password", losing the whole run. --sudoloop is
+# the load-bearing flag — it refreshes the timestamp in the background.
+# --noconfirm alone still stalls on a password prompt nobody is watching.
+#
+# --skipreview applies AUR PKGBUILD diffs without showing them. That is a real
+# trade: an upstream AUR maintainer's change lands unread. Set PKG_INTERACTIVE=1
+# to restore both the review step and the confirmation prompts.
+if [ "${PKG_INTERACTIVE:-0}" = 1 ]; then
+  PARU_FLAGS=(--sudoloop --review)
+else
+  PARU_FLAGS=(--sudoloop --noconfirm --skipreview)
+fi
+
 # --- backend abstraction --------------------------------------------------
 
 backend_file() { echo "$PKGDIR/$1.txt"; }
@@ -75,7 +96,26 @@ backend_list_installed() {
       apt-mark showmanual 2>/dev/null | sort -u
       ;;
     cargo)
-      cargo install --list 2>/dev/null | awk '/^[^ ]/ { sub(/ v.*/, ""); print }' | sort -u
+      # Report a crate as installed only if the binaries cargo recorded for it
+      # are actually on disk. cargo's metadata outlives both manual deletions
+      # and `--path` installs whose source directory is gone, so trusting it
+      # blindly lets a phantom entry read as "in sync" forever. Verifying
+      # against $CARGO_HOME/bin makes such entries surface as drift instead.
+      local cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+      local meta="$cargo_home/.crates2.json"
+      if [ ! -r "$meta" ] || ! command -v jq >/dev/null 2>&1; then
+        cargo install --list 2>/dev/null | awk '/^[^ ]/ { sub(/ v.*/, ""); print }' | sort -u
+        return 0
+      fi
+      local crate bins b ok
+      while read -r crate bins; do
+        [ -n "$bins" ] || continue
+        ok=1
+        for b in $bins; do [ -x "$cargo_home/bin/$b" ] || ok=0; done
+        [ "$ok" = 1 ] && echo "$crate"
+      done < <(jq -r '.installs | to_entries[]
+                      | (.key | split(" ")[0]) + " " + ((.value.bins // []) | join(" "))' \
+                 "$meta") | sort -u
       ;;
     npm)
       # Filter out packages whose global node_modules dir is owned by
@@ -165,7 +205,7 @@ backend_install_missing() {
       filtered=$(echo "$pkgs" | backend_filter_for_install arch)
       [ -z "$filtered" ] && return 0
       # shellcheck disable=SC2086
-      paru -S --needed --batchinstall $filtered
+      paru -S --needed --batchinstall "${PARU_FLAGS[@]}" $filtered
       ;;
     ubuntu)
       # shellcheck disable=SC2086
@@ -174,7 +214,7 @@ backend_install_missing() {
     cargo)
       local installed; installed=$(backend_list_installed cargo)
       while IFS= read -r pkg; do
-        echo "$installed" | grep -qx "$pkg" || cargo install "$pkg"
+        grep -qx "$pkg" <<<"$installed" || cargo install "$pkg"
       done <<< "$pkgs"
       ;;
     npm)
@@ -197,11 +237,21 @@ backend_install_missing() {
 # rather than mandate an extra dependency (e.g., cargo-update).
 backend_upgrade() {
   case "$1" in
-    arch)   paru -Syu --batchinstall ;;
+    arch)   paru -Syu --batchinstall "${PARU_FLAGS[@]}" ;;
     ubuntu) sudo apt-get update -qq && sudo apt-get upgrade -y ;;
     uv)     uv tool upgrade --all 2>&1 || true ;;
     npm)    npm update -g 2>&1 || true ;;
-    cargo)  : ;;  # use `cargo-update` (cargo install-update -a) if you want this
+    # cargo has no built-in upgrade-all; cargo-update (tracked in arch.txt)
+    # supplies one. Guard on the binary rather than the package so a fresh host
+    # — where cargo-update is still queued for install later in this same run —
+    # skips the step instead of failing it.
+    cargo)
+      if command -v cargo-install-update >/dev/null 2>&1; then
+        cargo install-update --all 2>&1 || true
+      else
+        echo "  cargo-update not installed yet — skipping (installs later this run)"
+      fi
+      ;;
   esac
 }
 
@@ -303,25 +353,60 @@ auto_dedup() {
 
 cmd_sync() {
   auto_dedup
+  local failed=() install_failed=()
+
   # 1. Upgrade
-  for backend in "${BACKENDS[@]}"; do
-    backend_available "$backend" || continue
-    echo "==> [$backend] upgrade"
-    backend_upgrade "$backend"
-  done
+  if [ "${SKIP_UPGRADE:-0}" = 1 ]; then
+    echo "==> upgrade skipped"
+  else
+    for backend in "${BACKENDS[@]}"; do
+      backend_available "$backend" || continue
+      echo "==> [$backend] upgrade"
+      backend_upgrade "$backend" || failed+=("$backend/upgrade")
+    done
+  fi
 
-  # 2. Drift handling (interactive)
-  for backend in "${BACKENDS[@]}"; do
-    backend_available "$backend" || continue
-    handle_drift "$backend"
-  done
-
-  # 3. Install whatever's listed but missing
+  # 2. Install whatever's listed but missing.
+  #
+  # This MUST come before drift handling. Drift reports anything tracked but
+  # not installed as "stale" and offers to delete it from the list — so a
+  # package you just added by hand (or one a previous failed run never got to)
+  # gets offered for removal before anything ever tried to install it. Running
+  # the install first means the only entries drift can still call stale are the
+  # ones that genuinely could not be installed.
   for backend in "${BACKENDS[@]}"; do
     backend_available "$backend" || continue
     echo "==> [$backend] install missing"
-    backend_install_missing "$backend"
+    backend_install_missing "$backend" || {
+      failed+=("$backend/install")
+      install_failed+=("$backend")
+      echo "  !! [$backend] install failed — continuing with other backends"
+    }
   done
+
+  # 3. Drift handling (interactive) — left interactive on purpose. These
+  # prompts are curation decisions about what belongs in the manifest, not
+  # package-manager noise, and auto-answering them silently rewrites the lists.
+  #
+  # Skipped entirely for any backend whose install just failed: the failure
+  # leaves tracked-but-not-installed entries that drift would then offer to
+  # delete from the manifest. That is exactly how cargo-update got dropped —
+  # one unrelated AUR package broke the transaction, and the next prompt
+  # proposed removing the package that never got its chance to install.
+  for backend in "${BACKENDS[@]}"; do
+    backend_available "$backend" || continue
+    if [[ " ${install_failed[*]:-} " == *" $backend "* ]]; then
+      echo "==> [$backend] drift check skipped (install failed this run)"
+      continue
+    fi
+    handle_drift "$backend"
+  done
+
+  if [ ${#failed[@]} -gt 0 ]; then
+    echo
+    echo "!! package steps that failed: ${failed[*]}"
+    return 1
+  fi
 }
 
 cmd_status() {
