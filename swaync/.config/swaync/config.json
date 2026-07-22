@@ -20,7 +20,6 @@
   "timeout-critical": 0,
 
   "fit-to-screen": true,
-  "hide-on-clear": true,
   "control-center-width": 420,
   "control-center-height": 600,
   "control-center-margin-top": 10,
@@ -40,7 +39,6 @@
   "widgets": [
     "title",
     "dnd",
-    "script-switch",
     "mpris",
     "notifications"
   ],
@@ -53,12 +51,6 @@
     },
     "dnd": {
       "text": "D̲o Not Disturb"
-    },
-    "script-switch": {
-      "text": "I̲dle Inhibitor",
-      "key": "i",
-      "command": "~/.local/bin/hypr-idle-toggle",
-      "update-command": "if pgrep -x hypridle > /dev/null; then echo false; else echo true; fi"
     },
     "mpris": {
       "image-size": 96,

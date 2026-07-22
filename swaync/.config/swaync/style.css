@@ -11,30 +11,8 @@
    as a short stub offset to the right). */
 .widget-title button label,
 .widget-dnd > label,
-.widget-script-switch > label,
 .widget-buttons-grid button label {
   font-family: "Inter", "DejaVu Sans", sans-serif;
-}
-
-/* In-CC help overlay (toggled with ?) */
-.help-overlay {
-  background-color: rgba(48, 52, 70, 0.96);
-  color: #cfdadc;
-  border: 2px solid #3f7dae;
-  border-radius: 12px;
-  padding: 16px 20px;
-  min-width: 280px;
-}
-
-.help-overlay-title {
-  font-weight: 700;
-  font-size: 16px;
-  padding-bottom: 6px;
-}
-
-.help-overlay-body {
-  font-family: "JetBrainsMono Nerd Font", monospace;
-  font-size: 12px;
 }
 
 /* ── Floating notifications (overlay layer) ──────────────────────────────── */
