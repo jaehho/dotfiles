@@ -1,12 +1,80 @@
-# Boot / Sleep / Hibernate Issues Log
+# System Issues Log
 
-Persistent record of boot failures, hibernate/resume failures, hangs, and forced shutdowns on `omnibook` (HP OmniBook 17, Lunar Lake + RTX 4050 Max-Q).
+Persistent record of failures on `omnibook` (HP OmniBook 17, Lunar Lake + RTX 4050 Max-Q): boot, sleep/hibernate, and package-management breakage.
 
-Newest entries at the top. Each entry should include: date, symptom, what the logs showed, and what was done (if anything).
-
-See also: `~/.claude/projects/-home-jaeho-dotfiles/memory/project_nvidia_hibernate_fix.md` for the running root-cause notes.
+Two parts. **Recurring failures** is what to read when something that worked last month breaks today — each entry is a known trap with a fix to copy. **Incident log** is dated history, newest first; each entry: date, symptom, what the logs showed, what was done.
 
 ---
+
+# Recurring failures
+
+## `make sync`: nvidia beta upgrade deadlocks paru
+
+**Symptom:** the `arch` phase fails — three identical times, since paru retries — with
+
+```
+error: failed to prepare transaction (could not satisfy dependencies)
+:: installing nvidia-utils-beta (NEW) breaks dependency
+   'nvidia-utils-beta=OLD' required by nvidia-beta-dkms
+```
+
+**Not a real conflict.** `nvidia-beta-dkms`'s `.SRCINFO` pins `nvidia-utils-beta=<pkgver>` exactly. paru installs a built AUR dependency *before* building its dependent, so it tries to install the new utils while the old dkms package still demands the old utils — and never gets as far as building the new dkms. Recurs on every bump where both packages move.
+
+**Fix** — build the dkms package with dependency resolution off, then install the whole set in one transaction (paru has already built the utils set by the time it dies, so only dkms is missing):
+
+```bash
+cd ~/.cache/paru/clone/nvidia-beta-dkms
+makepkg -df --noconfirm --nocheck
+
+sudo pacman -U \
+  ~/.cache/paru/clone/nvidia-beta-dkms/nvidia-beta-dkms-<VER>-x86_64.pkg.tar.zst \
+  ~/.cache/paru/clone/nvidia-utils-beta/nvidia-utils-beta-<VER>-x86_64.pkg.tar.zst \
+  ~/.cache/paru/clone/nvidia-utils-beta/opencl-nvidia-beta-<VER>-x86_64.pkg.tar.zst \
+  ~/.cache/paru/clone/nvidia-utils-beta/nvidia-settings-beta-<VER>-x86_64.pkg.tar.zst
+```
+
+Reboot after (the module and the userspace libs are only in sync again post-reboot), then re-run `make sync` — the arch drift check skips itself on any run where install failed.
+
+**The exit, if this stops being worth it:** the 2026-04-20 entry below says to leave DKMS "if proprietary nvidia returns to `extra/`". It hasn't, and won't — `extra/` ships only `nvidia-open*` now. The only way off the AUR is accepting the open modules, which is what the April suspend failures were about.
+
+## `make sync`: global cargo tools stop building
+
+**Symptom:** the `cargo` phase fails with `requires rustc X or newer, while the currently active rustc version is Y`.
+
+**Cause:** Arch's `rustup` package updates the installer, never the toolchain — `stable` sits at whatever version it was installed at while crates raise their MSRV. It drifted three releases (1.94 → 1.97) before biting.
+
+**Fix:** handled in `scripts/packages.sh` — the cargo upgrade step runs `rustup update` first.
+
+## `nextcloud.wonhomelab.net` unreachable on the home LAN
+
+**Symptom:** browser and `curl` fail outright — `Failed to connect`, `No route to host` — while the server is fine from anywhere else. `ping` the pinned IP gives `Destination Host Unreachable` and `ip neigh` shows it `FAILED` (ARP never resolves).
+
+**Cause:** a hand-written split-horizon override in `/etc/hosts`
+
+```
+192.168.1.42	nextcloud.wonhomelab.net # reel: nextcloud LAN override
+```
+
+It was added to dodge a NAT-hairpin problem: LAN clients reaching the name via the router's WAN IP used to get the router's snakeoil cert instead of the real one. That is **no longer true** — the hairpin now serves the valid Let's Encrypt `*.wonhomelab.net` cert. Meanwhile the server left `192.168.1.42`, so the override points at nothing. The workaround outlived the problem and became the outage.
+
+**Check before assuming DNS or the server is at fault** — this separates a dead LAN pin from a genuinely down service:
+
+```bash
+getent hosts nextcloud.wonhomelab.net          # what the pin forces
+curl -sS --resolve nextcloud.wonhomelab.net:443:24.47.180.85 \
+  -o /dev/null -w '%{http_code} ssl_verify=%{ssl_verify_result}\n' \
+  https://nextcloud.wonhomelab.net/status.php  # real path, strict cert check
+```
+
+`200 ssl_verify=0` means the server and cert are healthy and only the pin is wrong.
+
+**Fix:** delete the override line from `/etc/hosts` and let public DNS answer (`24.47.180.85`). Nothing in this repo writes that line — it is a manual edit, so `make sync` will not bring it back.
+
+**Do not re-add a static pin.** If hairpin ever regresses, fix it at the router with split-horizon DNS so every device on the LAN benefits, rather than pinning one IP in one machine's `/etc/hosts` — that is what silently rotted here.
+
+---
+
+# Incident log
 
 ## 2026-04-25 — Hyprland NULL ptr deref in nvidia_modeset on suspend resume; SysRq R/E recovery + reboot
 
