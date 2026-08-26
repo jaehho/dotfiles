@@ -1,0 +1,8 @@
+[Unit]
+Description=Health check + reaper for sshfs-conway
+# Don't run if sshfs-conway is intentionally inactive (e.g. unit disabled).
+ConditionPathExists=%h/.config/systemd/user/sshfs-conway.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/sshfs-watchdog %h/mnt/conway sshfs-conway.service

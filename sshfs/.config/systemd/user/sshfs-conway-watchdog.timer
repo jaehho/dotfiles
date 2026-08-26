@@ -1,5 +1,5 @@
 [Unit]
-Description=Periodic health check for sshfs-ice
+Description=Periodic health check for sshfs-conway
 
 [Timer]
 # Skip the first 2 min after boot so post-boot mount race doesn't trigger
@@ -7,7 +7,7 @@ Description=Periodic health check for sshfs-ice
 OnBootSec=2min
 OnUnitActiveSec=30s
 AccuracySec=5s
-Unit=sshfs-ice-watchdog.service
+Unit=sshfs-conway-watchdog.service
 
 [Install]
 WantedBy=timers.target

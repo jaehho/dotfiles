@@ -1,5 +1,5 @@
 [Unit]
-Description=SSHFS mount ice
+Description=SSHFS mount conway
 Wants=network-online.target
 After=network-online.target
 # Disable systemd's default start-rate-limit (5 starts / 10s) so the
@@ -9,16 +9,16 @@ StartLimitIntervalSec=0
 [Service]
 Type=forking
 TimeoutStartSec=20
-ExecStartPre=-/usr/bin/fusermount3 -uz %h/mnt/ice
-ExecStartPre=/usr/bin/mkdir -p %h/mnt/ice
+ExecStartPre=-/usr/bin/fusermount3 -uz %h/mnt/conway
+ExecStartPre=/usr/bin/mkdir -p %h/mnt/conway
 # No `reconnect`: on connection loss, sshfs must exit so in-flight FUSE
-# calls return EIO instead of hanging forever (see BOOT_ISSUES.md).
-ExecStart=/usr/bin/sshfs ice:/ %h/mnt/ice \
+# calls return EIO instead of hanging forever (see ISSUES.md).
+ExecStart=/usr/bin/sshfs conway:/ %h/mnt/conway \
   -o ServerAliveInterval=5,ServerAliveCountMax=2 \
   -o ConnectTimeout=10 \
   -o dir_cache=no,no_readahead \
   -o "ssh_command=sshpass -f %h/.ssh/jump_pass ssh"
-ExecStop=/usr/bin/fusermount3 -uz %h/mnt/ice
+ExecStop=/usr/bin/fusermount3 -uz %h/mnt/conway
 # Exponential backoff: 10s → ~17s → ~30s → ~50s → ~60s (cap).
 # 60s cap keeps post-resume mount-down bounded; the NetworkManager
 # dispatcher hook (50-restart-sshfs) triggers immediate remount when

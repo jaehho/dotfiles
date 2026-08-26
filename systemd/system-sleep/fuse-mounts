@@ -15,7 +15,7 @@ set -u
 TARGET_UID=1000
 TARGET_USER=jaeho
 # Auto-start mounts: always restart on resume.
-AUTO_MOUNTS=(sshfs-ice.service)
+AUTO_MOUNTS=(sshfs-conway.service)
 # Opt-in mounts: capture pre-suspend state, restore only what was active.
 # (Otherwise resume would auto-start a service the user had deliberately
 # stopped — same policy as the NM dispatcher hook 50-restart-sshfs.)
@@ -24,12 +24,16 @@ OPT_IN_MOUNTS=(sshfs-cdn.service sshfs-msi.service)
 # (which is what we want — pre-reboot state is meaningless on resume).
 STATE_FILE=/run/fuse-mounts-was-active
 
-run_user() {
-    runuser -u "$TARGET_USER" -- env \
-        "XDG_RUNTIME_DIR=/run/user/$TARGET_UID" \
-        "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus" \
-        "$@"
-}
+USER_ENV=(runuser -u "$TARGET_USER" -- env
+    "XDG_RUNTIME_DIR=/run/user/$TARGET_UID"
+    "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus")
+
+run_user() { "${USER_ENV[@]}" "$@"; }
+
+# `timeout` is a binary, so it cannot invoke a shell function -- `timeout 10
+# run_user ...` silently fails with "failed to run command 'run_user'" and the
+# stop never happens. Apply the timeout to the whole runuser tree instead.
+run_user_t() { local secs=$1; shift; timeout -k 2 "$secs" "${USER_ENV[@]}" "$@"; }
 
 case "$1" in
     pre)
@@ -40,16 +44,16 @@ case "$1" in
             fi
         done
         for svc in "${AUTO_MOUNTS[@]}" "${OPT_IN_MOUNTS[@]}"; do
-            timeout 10 run_user systemctl --user stop "$svc" || true
+            run_user_t 10 systemctl --user stop "$svc" || true
         done
         ;;
     post)
         for svc in "${AUTO_MOUNTS[@]}"; do
-            run_user systemctl --user start "$svc" || true
+            run_user_t 15 systemctl --user start "$svc" || true
         done
         if [[ -f "$STATE_FILE" ]]; then
             while IFS= read -r svc; do
-                [[ -n "$svc" ]] && run_user systemctl --user start "$svc" || true
+                [[ -n "$svc" ]] && run_user_t 15 systemctl --user start "$svc" || true
             done < "$STATE_FILE"
             rm -f "$STATE_FILE"
         fi

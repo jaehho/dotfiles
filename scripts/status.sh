@@ -44,7 +44,7 @@ done
 
 echo
 echo "Services:"
-for svc in keyd sshfs-ice sshfs-cdn sshfs-msi restic-backup.timer; do
+for svc in keyd sshfs-conway sshfs-cdn sshfs-msi restic-backup.timer; do
   case "$svc" in
     keyd) active="$(systemctl is-active "$svc" 2>/dev/null || true)" ;;
     *)    active="$(systemctl --user is-active "$svc" 2>/dev/null || true)" ;;
@@ -115,5 +115,7 @@ if [ "$DISTRO_FAMILY" = arch ]; then
   pacnew="$(find /etc -name '*.pacnew' -o -name '*.pacsave' 2>/dev/null || true)"
   n_pacnew="$(printf '%s' "$pacnew" | grep -c . || true)"
   row ".pacnew/.pacsave:" "$n_pacnew"
-  [ "$n_pacnew" -gt 0 ] && printf '%s\n' "$pacnew" | sed 's/^/      /'
+  # `if` (not `&&`) so a zero count — the clean state — doesn't become the
+  # script's non-zero exit status under `set -e`.
+  if [ "$n_pacnew" -gt 0 ]; then printf '%s\n' "$pacnew" | sed 's/^/      /'; fi
 fi
