@@ -1,0 +1,12 @@
+intel-media-driver
+lib32-nvidia-utils-beta
+lib32-vulkan-intel
+mesa
+mesa-utils
+nvidia-beta-dkms
+nvidia-prime
+nvidia-settings-beta
+ollama-cuda
+opencl-nvidia-beta
+vulkan-intel
+vulkan-tools

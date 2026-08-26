@@ -1,0 +1,16 @@
+espeak-ng
+ffmpegthumbnailer
+gst-libav
+gst-plugin-pipewire
+gst-plugins-bad
+gst-plugins-base
+gst-plugins-good
+gthumb
+imv
+kdenlive
+libgsf
+losslesscut-bin
+mpv
+raw-thumbnailer
+spotify-player
+tumbler

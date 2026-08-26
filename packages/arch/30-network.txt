@@ -1,0 +1,10 @@
+cloudflared
+dnsmasq
+network-manager-applet
+networkmanager
+nm-connection-editor
+nss-mdns
+sshfs
+tailscale
+tzupdate
+x2goclient

@@ -1,0 +1,11 @@
+firefox-developer-edition
+gnome-keyring
+google-chrome
+nextcloud-client
+perl-file-mimeinfo
+prismlauncher
+reel-git
+steam
+thunar
+thunderbird
+zoom

@@ -3,9 +3,15 @@
 # apt, cargo, npm, and uv. Interactive — every untracked install and every
 # stale list entry is confirmed before files are modified.
 #
-# Source of truth: packages/<backend>.txt (one package per line, # comments).
-# packages/common.txt is read in addition to arch.txt and ubuntu.txt — put
+# Source of truth: packages/<backend>.txt (one package per line, # comments),
+# except arch, which is a directory of category files: packages/arch/*.txt.
+# packages/common.txt is read in addition to both arch and ubuntu — put
 # packages with identical names across distros there.
+#
+# To add an arch package, drop it in whichever packages/arch/ category fits.
+# Packages this script discovers on its own land in packages/arch/99-inbox.txt;
+# file them by hand when convenient. Only the inbox is machine-sorted, so
+# comments and grouping in the category files are preserved.
 #
 # Usage:
 #   packages.sh             # upgrade, prompt on drift, install missing
@@ -40,10 +46,11 @@ esac
 # mermaid-cli and mermaid-filter pull in puppeteer, which otherwise downloads a
 # private ~150MB Chrome on every version bump — and hard-fails the whole npm
 # sync if a prior download was interrupted (it leaves an empty cache dir and
-# refuses to re-fetch, erroring instead). Point puppeteer at the system chromium
-# and skip the bundled download. Guarded so hosts without chromium fall back to
-# puppeteer's default behavior.
-for _chrome in /usr/bin/chromium /usr/bin/chromium-browser /usr/bin/google-chrome-stable; do
+# refuses to re-fetch, erroring instead). Point puppeteer at the system
+# Chromium-based browser and skip the bundled download. First match wins; arch
+# uses chrome, debian/ubuntu chromium. Guarded so hosts with neither fall back
+# to puppeteer's default behavior.
+for _chrome in /usr/bin/google-chrome-stable /usr/bin/chromium /usr/bin/chromium-browser; do
   if [ -x "$_chrome" ]; then
     export PUPPETEER_SKIP_DOWNLOAD=1
     export PUPPETEER_EXECUTABLE_PATH="$_chrome"
@@ -73,7 +80,36 @@ fi
 
 # --- backend abstraction --------------------------------------------------
 
-backend_file() { echo "$PKGDIR/$1.txt"; }
+# Where newly-detected packages get appended. For arch this is an inbox rather
+# than a category file: drift can't know that `libgsf` is a media dependency,
+# so it lands in 99-inbox.txt for you to file by hand later.
+backend_file() {
+  case "$1" in
+    arch) echo "$PKGDIR/arch/99-inbox.txt" ;;
+    *)    echo "$PKGDIR/$1.txt" ;;
+  esac
+}
+
+# Every file contributing tracked packages for a backend, one path per line.
+#
+# arch is split into packages/arch/<NN>-<category>.txt so the manifest is
+# readable by category instead of one 200-line alphabetical wall. Only the
+# inbox is ever machine-sorted (see handle_drift), so section comments and
+# hand-curated ordering inside the category files survive `make sync`.
+backend_files() {
+  local f
+  case "$1" in
+    arch)
+      for f in "$PKGDIR"/arch/*.txt; do [ -e "$f" ] && echo "$f"; done
+      echo "$PKGDIR/common.txt"
+      ;;
+    ubuntu)
+      echo "$PKGDIR/ubuntu.txt"
+      echo "$PKGDIR/common.txt"
+      ;;
+    *) echo "$PKGDIR/$1.txt" ;;
+  esac
+}
 
 backend_available() {
   case "$1" in
@@ -149,8 +185,7 @@ backend_list_installed() {
 backend_list_tracked() {
   local hostname; hostname="$(uname -n)"
   local files=()
-  files+=("$(backend_file "$1")")
-  case "$1" in arch|ubuntu) files+=("$PKGDIR/common.txt") ;; esac
+  mapfile -t files < <(backend_files "$1")
 
   local file
   for file in "${files[@]}"; do
@@ -246,6 +281,11 @@ backend_upgrade() {
     # — where cargo-update is still queued for install later in this same run —
     # skips the step instead of failing it.
     cargo)
+      # Arch's rustup package updates the installer, not the toolchain: `stable`
+      # stays pinned at whatever version it was installed at while crates raise
+      # their MSRV, and the upgrade eventually fails with "requires rustc X or
+      # newer". Update the toolchain first. See ISSUES.md.
+      command -v rustup >/dev/null 2>&1 && { rustup update 2>&1 || true; }
       if command -v cargo-install-update >/dev/null 2>&1; then
         cargo install-update --all 2>&1 || true
       else
@@ -282,6 +322,7 @@ handle_drift() {
   local backend="$1"
   local file new stale tracked installed
   file=$(backend_file "$backend")
+  mkdir -p "$(dirname "$file")"
   [ -f "$file" ] || : > "$file"
 
   installed=$(backend_list_installed "$backend")
@@ -303,16 +344,19 @@ handle_drift() {
          done <<< "$new" ;;
       n) ;;
     esac
+    # Only the append target is machine-sorted. For arch that's the inbox, so
+    # the category files keep their comments and hand-curated grouping.
     LC_ALL=C sort -u -o "$file" "$file"
   fi
 
   if [ -n "$stale" ]; then
-    echo "  Tracked in $file but not installed:"
+    echo "  Tracked but not installed:"
     echo "$stale" | sed 's/^/    - /'
-    # Stale entries may live in either the per-distro file or common.txt;
-    # sed -i is a no-op when there's no match, so passing both is safe.
-    local sed_targets=("$file")
-    case "$backend" in arch|ubuntu) sed_targets+=("$PKGDIR/common.txt") ;; esac
+    # A stale entry may live in any of the backend's files (for arch, any
+    # category file or common.txt); sed -i is a no-op where there's no match,
+    # so passing all of them is safe.
+    local sed_targets=()
+    mapfile -t sed_targets < <(backend_files "$backend")
     case "$(ask_yni "Remove these from the list?")" in
       y) while IFS= read -r pkg; do
            sed -i "/^${pkg}\$/d" "${sed_targets[@]}"
@@ -330,14 +374,17 @@ handle_drift() {
 # might mean different things on the two distros.
 auto_dedup() {
   local common="$PKGDIR/common.txt"
-  local arch_f="$PKGDIR/arch.txt"
   local ubuntu_f="$PKGDIR/ubuntu.txt"
-  [ -f "$arch_f" ] && [ -f "$ubuntu_f" ] || return 0
+  # arch is a directory of category files; exclude common.txt from that side or
+  # every shared package would trivially "match" itself.
+  local arch_files=()
+  mapfile -t arch_files < <(backend_files arch | grep -v "/common\.txt$")
+  [ ${#arch_files[@]} -gt 0 ] && [ -f "$ubuntu_f" ] || return 0
 
   local dupes already new
   dupes=$(comm -12 \
-    <(awk '!/^(#|$)/ && NF==1 { print $1 }' "$arch_f"   | sort -u) \
-    <(awk '!/^(#|$)/ && NF==1 { print $1 }' "$ubuntu_f" | sort -u))
+    <(awk '!/^(#|$)/ && NF==1 { print $1 }' "${arch_files[@]}" | sort -u) \
+    <(awk '!/^(#|$)/ && NF==1 { print $1 }' "$ubuntu_f"        | sort -u))
   already=$(awk '!/^(#|$)/ && NF==1 { print $1 }' "$common" 2>/dev/null | sort -u || true)
   new=$(comm -23 <(echo "$dupes") <(echo "$already") || true)
   [ -z "$new" ] && return 0
@@ -347,7 +394,7 @@ auto_dedup() {
   echo "$new" >> "$common"
   sort -u -o "$common" "$common"
   while IFS= read -r pkg; do
-    sed -i "/^${pkg}\$/d" "$arch_f" "$ubuntu_f"
+    sed -i "/^${pkg}\$/d" "${arch_files[@]}" "$ubuntu_f"
   done <<< "$new"
 }
 

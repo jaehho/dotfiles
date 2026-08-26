@@ -1,0 +1,16 @@
+cargo-update
+clang
+cmake
+docker
+docker-buildx
+docker-compose
+git-filter-repo
+github-cli
+google-cloud-cli
+jdk-openjdk
+meson
+python-pygments
+python-pynvim
+rustup
+tea
+tree-sitter-cli

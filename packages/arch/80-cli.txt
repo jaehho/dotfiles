@@ -1,0 +1,13 @@
+btop
+csvlens
+eza
+fastfetch
+fd
+glow
+htop
+kitty
+qalculate-gtk
+restic
+starship
+visidata
+zoxide

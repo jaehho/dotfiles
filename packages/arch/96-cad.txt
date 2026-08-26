@@ -1,0 +1,8 @@
+blender
+f3d
+freecad
+kicad
+kicad-library
+kicad-library-3d
+openscad-snapshot-appimage
+orca-slicer-bin

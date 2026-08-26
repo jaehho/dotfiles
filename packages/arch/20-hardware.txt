@@ -1,0 +1,15 @@
+alsa-tools
+alsa-utils
+bluetui
+bluez
+bluez-utils
+guvcview
+keyd
+libinput-tools
+pipewire
+pipewire-pulse
+power-profiles-daemon
+powertop
+turbostat
+wiremix
+wireplumber
