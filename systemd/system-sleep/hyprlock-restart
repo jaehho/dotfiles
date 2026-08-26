@@ -9,7 +9,7 @@
 # Must be in /usr/lib/systemd/system-sleep/ (not /etc/), since systemd-sleep(8)
 # v260 only scans /usr/lib/.
 #
-# See BOOT_ISSUES.md 2026-04-16 evening entries.
+# See ISSUES.md 2026-04-16 evening entries.
 
 set -u
 LOG=/var/log/hyprlock-restart.log

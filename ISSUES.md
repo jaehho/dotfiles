@@ -72,9 +72,411 @@ curl -sS --resolve nextcloud.wonhomelab.net:443:24.47.180.85 \
 
 **Do not re-add a static pin.** If hairpin ever regresses, fix it at the router with split-horizon DNS so every device on the LAN benefits, rather than pinning one IP in one machine's `/etc/hosts` — that is what silently rotted here.
 
+## Cooper `conway`/`ice00`: REMOTE HOST IDENTIFICATION HAS CHANGED
+
+**Symptom:** `ssh conway` (or `ice`) refuses with `Host key verification failed`, and `sshfs-conway.service` sits in a restart loop logging `read: Connection reset by peer`.
+
+**Do not just `ssh-keygen -R` and reconnect.** Cooper auth is a *plaintext password* (`sshpass -f ~/.ssh/jump_pass`, see `ssh/.ssh/config`), so accepting a forged key hands over the account on the first connect. Pubkey auth would fail safe here; password auth does not.
+
+Two traps specific to these hosts:
+
+- **`conway` and `ice00` used to share one host key set** — imaged from a common template, so a fingerprint matching across both proved nothing and a rotation hit both at once. **This stopped being true on 2026-08-23**, when conway rotated alone and ice00 kept the 2026-08-17 keys. Check both before assuming, and re-pin only the host that actually moved: needlessly clearing the other throws away a known-good pin. The divergence also makes the unchanged host a useful control — if only one moved, the problem is not your `known_hosts`.
+- **The warning names one offending line, but more are stale.** `ssh` reports whichever key type it negotiated; the others are usually stale too. Remove by host (`ssh-keygen -R "[host]:31415"` clears all types) rather than deleting the cited line number.
+
+**Fix** — verify the fingerprint over a second network path before trusting it. The script stops the mount loop, scans over the current network, waits while you switch to a phone hotspot, re-scans, and only re-pins if both paths agree:
+
+```bash
+bash /tmp/fix-conway-hostkey.sh            # guided two-path check
+bash /tmp/fix-conway-hostkey.sh --verified # skip it, if Cooper IT confirmed the fingerprint
+```
+
+Regenerate that script by asking Claude, or do it by hand:
+
+```bash
+systemctl --user stop sshfs-conway.service sshfs-conway-watchdog.timer
+ssh-keyscan -p 31415 conway.ee.cooper.edu | ssh-keygen -lf -   # compare over 2 paths
+ssh-keygen -R "[conway.ee.cooper.edu]:31415"
+ssh-keygen -R "[ice00.ee.cooper.edu]:31415"
+ssh-keyscan -p 31415 conway.ee.cooper.edu ice00.ee.cooper.edu >> ~/.ssh/known_hosts
+systemctl --user start sshfs-conway-watchdog.timer sshfs-conway.service
+```
+
+Matching fingerprints from two independent paths rules out interception near you, not at Cooper's edge — if the stakes ever rise, get the fingerprint from the EE sysadmin instead.
+
+**Rotation history:**
+
+- **2026-08-17** — both hosts, all three key types at once (OpenSSH 8.0, RHEL-family), consistent with a re-image. Verified over home ISP + cellular.
+- **2026-08-23** — **conway only**, all three types; ice00 still serves the 2026-08-17 set. Found because `sshfs-conway.service` had looped 435 restarts (~120 failures/hour) since roughly 10:00 that day.
+
+  ```
+  key      pinned 2026-08-17   conway now      ice00 now
+  RSA      bKqjCGVn...ohgo     IREj0O7G...kgOY  bKqjCGVn...ohgo
+  ECDSA    MZBj7tCg...gczc     1wUFOrOy...oMkw  MZBj7tCg...gczc
+  ED25519  YybSGkTt...wIuk     kP1YalCw...UBsA  YybSGkTt...wIuk
+  ```
+
+  **Explained by an EEAdmin notice (Thu 2026-08-20 08:52, "ICE System Updates"):**
+  ice00-12 and conway were migrated CentOS 7 -> Rocky Linux 8. The migration is
+  staggered, which is why hosts change on different days and why the old shared
+  key set is breaking up — rebuilt hosts generate their own keys, in-place
+  upgrades keep the template ones. As of 2026-08-25 every host answers
+  `SSH-2.0-OpenSSH_8.0` (Rocky 8; CentOS 7 shipped 7.4), and conway, ice00 and
+  ice03 all serve *different* key sets. Expect the remaining shared pins to
+  diverge as the rollout continues.
+
+**Verifying a rotation using a published sibling fingerprint.** The notice quoted
+a fingerprint for one host (ice03, ED25519
+`SHA256:XNYw3U/hTEfXLtElzR+kqrDJhcIyv3y8DVNReIhrjIQ`). Scanning that host and
+comparing is a *better* check than the two-path hotspot dance, because it
+compares what you see against an independently published value rather than
+against a second observation of your own:
+
+```bash
+timeout 25 ssh-keyscan -p 31415 ice03.ee.cooper.edu | ssh-keygen -lf -
+```
+
+A match proves your path to `*.ee.cooper.edu:31415` returns genuine keys. It is
+not proof for a *different* host — an attacker could pass ice03 through and forge
+only conway — but combined with an announcement that explains the change, it
+clears the bar. Use `--verified` in that case. With no published fingerprint for
+any host, fall back to the two-path check.
+
+**Re-pinned 2026-08-25:** conway (`--verified`, mount healthy again after 435
+failed restarts) and ice03 (its pin was stale too, and its live ED25519 matched
+the published fingerprint exactly — direct verification, the strongest case of
+the three). ice00 still serves its 2026-08-17 keys and was left alone.
+
+**Gotcha: `ssh-keyscan` writes `# host:port SSH-2.0-...` banner lines to STDOUT**,
+not stderr. Piping it straight into `known_hosts` appends those as comments —
+harmless, since `#` is ignored, but they accumulate a few per host per rotation
+and make any `grep -c` count of "keys" wrong. Filter with `grep -v '^#'` when
+appending, and count real entries with `grep -c '^\['`.
+
+**Do not try to replace the password with an SSH key.** Investigated 2026-08-18; it cannot work from off campus:
+
+- Home is AFS (`/afs/ee.cooper.edu/user/j/jaeho.cho`). sshd runs as root with no AFS token, so it cannot read `~/.ssh/authorized_keys` — pubkey auth fails before it starts. Granting `fs setacl ~ system:anyuser l` + `fs setacl ~/.ssh system:anyuser rl` makes it readable, at the cost of exposing home-dir filenames cell-wide.
+- Even then, a pubkey session gets **no AFS token**, so it cannot read your own home. The password is not just an auth method here: PAM turns it into a Kerberos ticket and runs `aklog`. A key cannot do that.
+- GSSAPI would be the right answer, but the FreeIPA realm `EE.COOPER.EDU` declares no KDC in `[realms]` and relies on internal SRV records that do not resolve off campus (`_kerberos._udp.ee.cooper.edu` → NXDOMAIN).
+
+**Beware a false positive when testing this.** sssd-kcm caches credentials per-user per-machine, so shortly after a password login a pubkey session inherits the live cache and looks like it works. Check `klist` — if the cache ID matches the earlier password session (e.g. both `KCM:5340:80342`), the token is borrowed and dies with it. Test on a host you have not password-logged into recently.
+
+**Conclusion:** `sshpass` + `~/.ssh/jump_pass` stays. What actually mitigates the risk is the host-key pinning above plus `StrictHostKeyChecking` defaulting to `ask` — the `no` in `/etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf` is scoped to `unix/*`/`vsock/*`/`machine/*` and does not apply to these hosts.
+
+## Laptop dead in the morning, "it died in sleep"
+
+**It probably did not die in sleep.** Check whether it was ever asleep for that
+whole window:
+
+```bash
+journalctl -k -g 'PM: suspend (entry|exit)|PM: hibernation' --since '-2 days'
+awk '$1>'"$(date -d '2 days ago' +%s)" /var/lib/upower/history-rate-FZ06083XL-83-1152.dat \
+  | awk '{print strftime("%m-%d %H:%M", $1), $2" W"}'
+```
+
+A `suspend exit` with no matching re-entry, followed by hours of ~13 W samples
+in the upower log, means it **woke and stayed awake**, not that s2idle is
+leaky. s2idle on this box costs roughly 1 %/h; awake-with-screen-off costs
+~13 W, which flattens a full battery in about five hours.
+
+**Why it can happen:** there is exactly one automatic path back to sleep, the
+30-min hypridle listener in `hypr/.config/hypr/hypridle.conf`. logind
+`IdleAction` is `ignore`, and the lid switch cannot re-fire while the lid is
+already open. If hypridle is dead or its config failed to parse, nothing
+sleeps the machine.
+
+```bash
+pgrep -a hypridle || setsid hypridle &   # must be running
+loginctl show-session $XDG_SESSION_ID -p IdleHint -p IdleSinceHint
+```
+
+**Then check the drain is not itself the bug:** ~13 W idle with the panel off
+is high for Lunar Lake. `/tmp/measure-idle-power.sh` (see the 2026-08-18 entry)
+attributes it between CPU package, dGPU, and the rest of the board.
+
+## Hibernate resumes into a cold boot (session lost, looks like a shutdown)
+
+**Symptom:** you hibernated, and the machine came back on a fresh desktop with
+everything gone. It looks identical to a power-off, so it gets misread as "it
+died" or "I must have shut down".
+
+```bash
+journalctl -b 0 -k -g 'Image successfully loaded|nv_pmops_freeze|resume failed'
+```
+
+If the image *loaded* and then the handoff died, you will see:
+
+```
+PM: Image successfully loaded
+NVRM: GPU 0000:2b:00.0: PreserveVideoMemoryAllocations module parameter is set.
+      System Power Management attempted without driver procfs suspend interface.
+nvidia 0000:2b:00.0: PM: pci_pm_freeze(): nv_pmops_freeze [nvidia] returns -5
+PM: hibernation: Failed to load image, recovering.
+PM: hibernation: resume failed (-5)
+```
+
+Hibernating is fine; only the resume side breaks. Nothing is wrong with the
+image (it reads back at ~2 GB/s), and the swap/`resume=` setup is fine.
+
+**Cause:** nvidia is in `MODULES=` in `mkinitcpio.conf`. With
+`NVreg_PreserveVideoMemoryAllocations=1`, the driver requires userspace to
+prime `/proc/driver/nvidia/suspend` before any kernel PM freeze. On the resume
+side no userspace has run yet — the boot kernel loads the image and must freeze
+devices to hand off — so a dGPU bound in the initramfs refuses to freeze and
+the kernel throws the image away.
+
+**Fix:** `MODULES=(xe)` in `mkinitcpio/mkinitcpio.conf`, then `sudo mkinitcpio -P`.
+nvidia loads from the real root after switch-root; `nvidia-drm.modeset=1` still
+applies, and the panel is on the iGPU so late loading costs nothing.
+
+**This has regressed once already.** It was fixed in April 2026, then commit
+`30be42a` ("migrate to proprietary nvidia") put nvidia back, on the reasoning
+that proprietary exposes the procfs interface so early-KMS was safe again. That
+covers the hibernate side only. Do not re-add it — the comment above `MODULES=`
+in the repo says so.
+
+**Keep `NVreg_PreserveVideoMemoryAllocations=1`.** On proprietary nvidia the
+procfs interface exists and `nvidia-sleep.sh` works, so VRAM survives sleep.
+Only the initramfs binding has to go. (April also removed the parameter, but
+that was for nvidia-open, where the interface never exists at all.)
+
+## logind ignores its drop-in (and `cat-config` lies about it)
+
+**Symptom:** `/etc/systemd/logind.conf.d/10-lid.conf` sets something,
+`systemd-analyze cat-config systemd/logind.conf` shows it applied, and logind
+behaves as though the file does not exist.
+
+```bash
+busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+    org.freedesktop.login1.Manager HandleLidSwitch
+```
+
+If that disagrees with the file, the file is not reaching logind.
+
+**Cause:** `systemd-logind.service` runs `ProtectHome=yes` + `ProtectSystem=strict`,
+so `/home` is an empty tmpfs inside its mount namespace. A drop-in symlinked to
+`/home/jaeho/dotfiles/...` dangles in there and logind skips it without logging
+anything. `systemd-analyze` is not sandboxed, so it happily resolves the link —
+which is why this reads as a systemd precedence bug and is not one.
+
+Prove it in one command:
+
+```bash
+systemd-run --quiet --pipe --property=ProtectHome=yes --property=ProtectSystem=strict \
+    -- /bin/sh -c 'cat /etc/systemd/logind.conf.d/10-lid.conf'
+# -> No such file or directory, while a plain `cat` works fine
+```
+
+**Fix:** the destination must be a real root-owned file. `10-lid.conf` lives in
+`SYSTEM_INSTALLS` in `scripts/lib.sh` for exactly this reason (same class as
+`reflector.conf` in `SYSTEM_COPIES`). Re-run `./scripts/sync.sh system`, or
+`/tmp/fix-logind-lid.sh`.
+
+**Applying it afterwards:** `systemctl reload systemd-logind` is safe *and*
+sufficient — verified 2026-08-18, it set both `HandleLidSwitch` and
+`HandleLidSwitchExternalPower` correctly the moment the file was readable.
+`make sync` does the reload for you.
+
+The older belief that "SIGHUP only partially re-reads properties, so you need a
+restart" (2026-04-21) was a misreading of this same bug: the drop-in was
+invisible, so `HandleLidSwitchExternalPower` reported empty because it was
+genuinely unset, not because reload half-worked. **Do not
+`systemctl restart systemd-logind` to force it** — that kills the Hyprland
+session, as it did on 2026-08-18, dropping the user to tty1
+(`Leader of session '11' is gone while deserializing`). Reboot if you ever
+truly need a fresh logind.
+
+**Which of our files are affected:** only logind. `systemd-{suspend,hibernate,
+suspend-then-hibernate}.service` all run `ProtectHome=no`, so `systemd/sleep.conf`
+and the `system-sleep/` hooks work fine as symlinks. Before assuming a config is
+live, check the consuming unit:
+`systemctl show <unit> -p ProtectHome -p ProtectSystem`.
+
 ---
 
 # Incident log
+
+## 2026-08-19 — Hibernate resumed into a cold boot; nvidia back in `MODULES` (April regression)
+
+**Trigger:** user asked "check if hibernate worked, i think i shut down". Two
+separate hibernations were in play and only one had failed.
+
+**The one that worked (same day, 19:51 → 21:45):** the new sleep policy from the
+2026-08-18 entry ran end to end for the first time.
+
+```
+19:51:03  woke from s2idle after exactly 1h0m1s   (HibernateDelaySec=1h fired)
+19:51:06  PM: hibernation: hibernation entry
+21:45:46  PM: hibernation: hibernation exit       (nvidia-resume ran, no NVRM errors)
+```
+
+Session survived: Hyprland pid 8664 started 12:21:06 and was still running
+afterwards, spanning the hibernation. So s-t-h itself is healthy.
+
+**The one that failed (Aug 18 23:32 → Aug 19 12:18):** hibernate wrote the image
+cleanly. The next power-on found it, read all 11 GB back at 1962 MB/s, and then
+died on the handoff:
+
+```
+12:18:24  PM: Image successfully loaded
+12:18:24  NVRM: GPU 0000:2b:00.0: PreserveVideoMemoryAllocations module parameter is set.
+                System Power Management attempted without driver procfs suspend interface.
+12:18:24  nvidia 0000:2b:00.0: PM: pci_pm_freeze(): nv_pmops_freeze [nvidia] returns -5
+12:18:24  PM: hibernation: Failed to load image, recovering.
+12:18:24  PM: hibernation: resume failed (-5)
+12:18:24  systemd-hibernate-resume: Unable to resume from device ... continuing boot process.
+12:18:25  Switching root.
+```
+
+Fell through to a normal boot, so the session was lost and it read as a shutdown.
+
+**Diagnosis: a regression of the 2026-04-15 fix, not a new bug.** This is the
+identical failure and the identical NVRM message as April. `MODULES=(xe)` fixed
+it then; commit `30be42a` ("migrate to proprietary nvidia, lid suspends again")
+re-added `nvidia nvidia_modeset nvidia_uvm nvidia_drm` with a comment arguing
+that proprietary nvidia exposes `/proc/driver/nvidia/suspend`, so early-KMS was
+now correct for hibernate/resume. That argument holds for the hibernate side,
+where `nvidia-hibernate.service` runs in userspace first. It does not hold for
+the resume side, where no userspace has run at all. The bug went unnoticed for
+four months because nothing exercised hibernate-resume until the 2026-08-18
+sleep policy started hibernating nightly.
+
+**Why it is intermittent:** it only bites when the resume-side initramfs has the
+dGPU bound *and* the driver has VRAM state to preserve. The 21:45 resume the
+same evening succeeded on the same initramfs, so a passing resume proves nothing.
+
+**Action taken:**
+- `mkinitcpio/mkinitcpio.conf`: `MODULES=(xe nvidia nvidia_modeset nvidia_uvm
+  nvidia_drm)` → `MODULES=(xe)`, with a comment recording why it must not be
+  re-added a third time.
+- `/tmp/fix-hibernate-resume.sh`: backs the working image up to
+  `/var/cache/hibernate-fix` (**not** `/boot` — 511M partition, ~170M free,
+  and the image was 324M), rewrites `MODULES`, rebuilds, then diffs the old and
+  new module lists and rolls back automatically if anything under
+  `drivers/{nvme,ata,scsi,block,md,mmc,usb}/`, `fs/`, `crypto/` or `xe.ko`
+  disappeared. Dry-run tested against stubs for the happy path, a failing
+  `mkinitcpio`, and a rebuild that loses `nvme.ko`.
+- Same script adds a `fallback` preset. There was **no recovery image at all**
+  on this box — `PRESETS=('default')`. `grub.cfg` was deliberately not
+  regenerated; to use the fallback, press `e` at the GRUB menu and point
+  `initrd` at `initramfs-linux-fallback.img`.
+- Result: default image 324M -> 129M, fallback 195M, /boot down to 157M free.
+
+**Leftover, not yet acted on:** the default image still carries 661
+`usr/lib/firmware/nvidia/` GSP blobs — about 100M of the remaining 129M. They
+come from **nouveau**, which the `kms` hook pulls in because the RTX matches its
+modalias, and nouveau needs those blobs. nouveau is blacklisted in
+`/usr/lib/modprobe.d/nvidia-utils-beta.conf` and never loads, so this is pure
+dead weight; `i915` is in there too and Lunar Lake uses `xe`. This mkinitcpio
+has no `MODULES=(!nouveau)` exclusion syntax, so the only lever is dropping
+`kms` from `HOOKS`. That is safe here — `MODULES=(xe)` already pulls xe and its
+deps, and `/sys/class/drm/card0` is xe (the dGPU is card1) — and would reclaim
+roughly 200M across the two images. Not urgent: mkinitcpio checks free space
+and writes straight to the target instead of a temp file when it is tight
+(`mkinitcpio:379`), so a low `/boot` degrades rather than failing a kernel
+update.
+
+**Kept deliberately:** `NVreg_PreserveVideoMemoryAllocations=1`. April removed it
+too, but that was on nvidia-open where `/proc/driver/nvidia/suspend` never
+exists. On proprietary 610.57.04 it does exist, `nvidia-sleep.sh` works, and VRAM
+preservation is why suspend/resume looks clean. Only the initramfs binding was
+the problem.
+
+**Unresolved:** `sshfs-conway.service` fails to start on the intermediate wake
+between s2idle and hibernate ("read: Connection reset by peer") because the
+network is not up yet; it is stopped again three seconds later for the hibernate.
+Harmless but noisy — the resume-side `start` races the network.
+
+---
+
+## 2026-08-18 — Battery flat overnight: woke at 01:17 and never slept again; no idle→sleep path existed
+
+**Trigger:** User reported the machine "keeps dying in sleep" and asked whether
+hibernate was set up.
+
+**What the logs showed:**
+
+```
+Aug 17 19:08:54  systemd-logind: Lid closed.        → PM: suspend entry (s2idle)
+Aug 18 01:17:01  systemd-logind: Lid opened.        → PM: suspend exit
+Aug 18 01:17 → 05:04   AWAKE, panel off, steady 13.3 W, 79 % → 2 %
+Aug 18 05:04:37  suspend-then-hibernate requested from client PID 3648 ('upowerd')
+Aug 18 06:04:41  PM: hibernation entry              (after HibernateDelaySec=1h)
+Aug 18 14:11:50  PM: hibernation exit               — clean, 2 s, no NVRM errors
+```
+
+The lid open at 01:17 was real (restic and the wallpaper timer fired as
+catch-up jobs on resume, then restic died in 6 s on DNS). Battery history
+confirms a flat ~13.3 W for the next 3 h 45 m — for comparison, *active* daytime
+use that afternoon averaged 10.3 W.
+
+**Diagnosis: hibernate was never the problem; the absence of an idle→sleep path
+was.** Three things had to line up:
+
+1. `HandleLidSwitch=suspend` meant lid close bought only s2idle, never hibernate.
+2. `hypridle.conf` stopped at dpms-off (15 min). Its trailing comment explicitly
+   refused to auto-hibernate — but that rule was written against nvidia-open 595,
+   where hibernate was a GSP coin flip. We have run proprietary nvidia with
+   `NVreg_EnableGpuFirmware=0` since 2026-04-20; the constraint was stale.
+3. logind `IdleAction=ignore`, and a lid switch cannot re-fire while the lid is
+   open. So once awake, nothing anywhere would ever sleep the machine again.
+
+The only reason it hibernated at all was upower's critical-battery action at 2 %.
+That cycle was *flawless* — which is the useful finding: suspend-then-hibernate
+works end to end on the current driver, unprompted, including the hyprlock
+restart hook.
+
+**Latent bug found while reading the sleep hooks** — `systemd/system-sleep/fuse-mounts`:
+
+```bash
+timeout 10 run_user systemctl --user stop "$svc"   # BROKEN
+```
+
+`timeout` is a binary and cannot invoke a shell function. Every sleep since this
+was written logged `timeout: failed to run command 'run_user': No such file or
+directory` three times, and **the pre-sleep FUSE unmount never once ran** — the
+exact condition the 2026-04-18 entry blames for wedging suspend-then-hibernate.
+Fixed by hoisting the runuser invocation into a `USER_ENV` array and wrapping
+the whole tree: `run_user_t 10 systemctl --user stop "$svc"`.
+
+**Changes made:**
+
+- `systemd/system-sleep/fuse-mounts` — fixed the `timeout`-on-a-function bug;
+  added a 15 s cap on the resume-side `start` for the same failure mode.
+- `systemd/logind.conf.d/10-lid.conf` — `HandleLidSwitch=suspend-then-hibernate`
+  on battery; `HandleLidSwitchExternalPower=suspend` on AC.
+- `systemd/sleep.conf` — added `HibernateOnACPower=no`, so the 1 h countdown
+  only runs unplugged and closing the lid while docked just stays suspended.
+- `hypr/.config/hypr/hypridle.conf` — new 1800 s listener, battery-gated:
+  `grep -qx 1 /sys/class/power_supply/*/online || systemctl suspend-then-hibernate`.
+  Fails toward sleeping if the AC device is ever renamed.
+- `packages/arch/20-hardware.txt` — added `powertop`, `turbostat`.
+
+All three system files were already symlinks into the repo, so only
+`systemctl reload systemd-logind` was needed (`/tmp/apply-sleep-config.sh`,
+which falls back to a full restart when SIGHUP under-applies — see 2026-04-21).
+
+**Follow-on discovery: the lid drop-in had never worked at all.** After the
+config change, `busctl` still reported `HandleLidSwitch=suspend`. Cause:
+`systemd-logind.service` runs `ProtectHome=yes` + `ProtectSystem=strict`, so the
+symlink `/etc/systemd/logind.conf.d/10-lid.conf -> /home/jaeho/dotfiles/...`
+dangles inside its namespace and is skipped silently. This is the real
+explanation for the 2026-04-21 note that the drop-in "violates systemd's
+documented precedence rules but was empirically reproducible" — it was never a
+precedence bug. Fixed by adding `SYSTEM_INSTALLS` to `scripts/lib.sh` and
+install-copying the file. See the recurring entry above.
+
+Cost of finding out: `/tmp/apply-sleep-config.sh` auto-escalated to
+`systemctl restart systemd-logind` when the reload appeared not to take, which
+killed the Hyprland session and dropped the user to tty1. The session came back
+on re-login. Sleep-path scripts must not restart logind unattended.
+
+**Still open: ~13 W idle with the panel off is too high.** The dGPU is pinned
+out of RTD3 (`NVreg_DynamicPowerManagement=0x00`, `power/control=on`, idling at
+P8 / 2.5 W), which is the prime suspect, and a dGPU held out of D3cold also
+blocks deep package C-states. Deliberately **not** changed — that value is part
+of the config that finally made suspend work in April. `/tmp/measure-idle-power.sh`
+splits the draw into CPU package (RAPL) / dGPU / remainder and reports PC8/PC10
+residency; decide from those numbers, not from the hypothesis.
 
 ## 2026-04-25 — Hyprland NULL ptr deref in nvidia_modeset on suspend resume; SysRq R/E recovery + reboot
 
@@ -223,6 +625,13 @@ rclone died uncleanly at some earlier point (suspend/resume is the likely trigge
 **Migration (2026-04-20, evening):** Ran `/tmp/hsperfdata_jaeho/migrate-nvidia-beta.sh`:
 - Swapped `nvidia-open` + `nvidia-utils` for `nvidia-beta-dkms` + `nvidia-utils-beta`.
 - Reverted `MODULES=(xe)` back to `MODULES=(xe nvidia nvidia_modeset nvidia_uvm nvidia_drm)` — early-KMS is correct for proprietary.
+  - **WRONG, corrected 2026-08-19.** Proprietary exposing `/proc/driver/nvidia/suspend`
+    makes early-KMS safe on the *hibernate* side, where `nvidia-hibernate.service`
+    primes it. On the *resume* side no userspace runs before the kernel freezes
+    devices, so a dGPU bound in the initramfs still fails `nv_pmops_freeze` with -5
+    and throws away a fully loaded image. This line reintroduced the April 15 bug;
+    it only surfaced in August when the machine started hibernating nightly.
+    Reverted to `MODULES=(xe)`.
 - Restored `options nvidia NVreg_PreserveVideoMemoryAllocations=1` in `/etc/modprobe.d/nvidia.conf`.
 - Kept `NVreg_EnableGpuFirmware=0` (now honored; was silently ignored on nvidia-open).
 - Re-enabled `nvidia-{suspend,hibernate,resume,suspend-then-hibernate}.service` (no longer no-ops — `/proc/driver/nvidia/suspend` exists on proprietary).
@@ -239,7 +648,7 @@ rclone died uncleanly at some earlier point (suspend/resume is the likely trigge
 
 **Lid handler update (2026-04-21):** Bumped lid close from `lock` to `suspend` via new dotfiles-managed drop-in `/home/jaeho/dotfiles/systemd/logind.conf.d/10-lid.conf` symlinked to `/etc/systemd/logind.conf.d/10-lid.conf`. Tracked in Makefile `system-install`.
 
-Wrinkle: drop-in failed to override the main `/etc/systemd/logind.conf` that had `HandleLidSwitch=suspend-then-hibernate` uncommented (residue from a 2026-04-12 manual edit). This violates systemd's documented precedence rules (drop-ins should override main) but was empirically reproducible. Resolution: commented out the offending lines in `/etc/systemd/logind.conf` via `/tmp/hsperfdata_jaeho/fix-logind-lid.sh` (backup left at `/etc/systemd/logind.conf.bak-20260420-232740`). Also found that SIGHUP reload of systemd-logind only partially re-reads properties — `HandleLidSwitch` reloaded cleanly but `HandleLidSwitchExternalPower` went to empty string; full `systemctl restart systemd-logind` is needed for a clean busctl report (not functionally required because unset `HandleLidSwitchExternalPower` inherits from `HandleLidSwitch`).
+Wrinkle: drop-in failed to override the main `/etc/systemd/logind.conf` that had `HandleLidSwitch=suspend-then-hibernate` uncommented (residue from a 2026-04-12 manual edit). This looked like a violation of systemd's documented precedence rules (drop-ins should override main) but was empirically reproducible. **Resolved 2026-08-18: it was not a precedence bug at all** — logind runs `ProtectHome=yes`, so the drop-in *symlink into `/home`* was invisible to it and the main file was simply the only input it could read. See the recurring entry “logind ignores its drop-in”. Resolution: commented out the offending lines in `/etc/systemd/logind.conf` via `/tmp/hsperfdata_jaeho/fix-logind-lid.sh` (backup left at `/etc/systemd/logind.conf.bak-20260420-232740`). Also found that SIGHUP reload of systemd-logind only partially re-reads properties — `HandleLidSwitch` reloaded cleanly but `HandleLidSwitchExternalPower` went to empty string; full `systemctl restart systemd-logind` is needed for a clean busctl report (not functionally required because unset `HandleLidSwitchExternalPower` inherits from `HandleLidSwitch`). **Also wrong, same root cause:** with the drop-in unreadable the property really was unset, so reload had nothing to apply. Once the file is a real file, plain reload sets both cleanly.
 
 **Status:**
 - Direct hibernate: **works** (unchanged from 2026-04-16).
@@ -534,7 +943,10 @@ The `20-` prefix sorts after the nvidia `10-` drop-in, so the override wins. Upd
 How this fixes things: with user-session freezing re-enabled, systemd freezes the entire `user-1000.slice` cgroup (including any `find` and the FUSE backend processes) cleanly before invoking the kernel freezer. Pending FUSE requests don't get answered during the cgroup freeze, but they also don't matter — the requesters are already in TASK_FROZEN, not D-state, so the kernel freezer pass succeeds.
 
 **Status:**
-- Nvidia hibernate fix: **resolved.**
+- Nvidia hibernate fix: **resolved** — but silently reverted five days later by
+  commit `30be42a` during the proprietary-driver swap, and it stayed broken until
+  2026-08-19. The `MODULES=(xe)` half of this fix is driver-independent; only the
+  `NVreg_PreserveVideoMemoryAllocations` half was specific to nvidia-open.
 - FUSE freezer issue: **fix staged, not yet verified.** User needs to run the install script and exercise a hibernate cycle.
 
 **Verification plan:**
