@@ -62,4 +62,4 @@ else
     target_idx=$(( (cur_idx - 1 + ${#slots[@]}) % ${#slots[@]} ))
 fi
 
-hyprctl dispatch workspace "${slots[$target_idx]}" >/dev/null
+hyprctl dispatch "hl.dsp.focus({ workspace = ${slots[$target_idx]} })" >/dev/null

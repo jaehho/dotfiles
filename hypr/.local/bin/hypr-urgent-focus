@@ -22,7 +22,7 @@ socat -u "UNIX-CONNECT:$SOCKET" - | while IFS= read -r event; do
       class=$(hyprctl clients -j 2>/dev/null \
         | jq -r --arg a "$addr" '.[] | select(.address == $a) | .class' 2>/dev/null)
       [[ $class == kitty ]] || continue
-      hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
+      hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null 2>&1
       ;;
   esac
 done

@@ -232,7 +232,7 @@ def window_switcher():
 		user_choice = ""
 
 	if user_choice != "":
-		print( subprocess.check_output( "hyprctl dispatch focuswindow address:" + user_choice, shell=True ) )
+		print( subprocess.check_output( "hyprctl dispatch 'hl.dsp.focus({ window = \"address:" + user_choice + "\" })'", shell=True ) )
 
 def workspace_switcher( workspace_name : str ):
 	if workspace_name != "":
@@ -240,7 +240,10 @@ def workspace_switcher( workspace_name : str ):
 		#subprocess.check_output( "hyprctl dispatch workspace name:\"" + workspace + "\"", shell=True )
 
 		# XMonad style workspace switching. It will swap 2 workspaces, bringing the new one to the current monitor we're on. If both workspaces are on monitors, you will see them swap places.
-		subprocess.check_output( "hyprctl dispatch focusworkspaceoncurrentmonitor name:\"" + workspace_name + "\"", shell=True )
+		# NOTE: hl.dsp has no focusworkspaceoncurrentmonitor equivalent, so this is a plain
+		# focus. Single-monitor behaviour is identical; on multi-monitor the workspace is no
+		# longer pulled to the active monitor. Revisit when docked.
+		subprocess.check_output( "hyprctl dispatch 'hl.dsp.focus({ workspace = \"name:" + workspace_name + "\" })'", shell=True )
 
 def workspace_switcher_with_confirmation():
 	workspace = ask_user_which_workspace( "Switch to workspace:" )
@@ -249,7 +252,7 @@ def workspace_switcher_with_confirmation():
 def move_window_to_workspace():
 	workspace = ask_user_which_workspace( "Move window to workspace" )
 	if workspace != "":
-		subprocess.check_output( "hyprctl dispatch movetoworkspace name:\"" + workspace + "\"", shell=True )
+		subprocess.check_output( "hyprctl dispatch 'hl.dsp.window.move({ workspace = \"name:" + workspace + "\" })'", shell=True )
 
 
 def move_current_windows_to_workspace_with_confirmation():
@@ -300,7 +303,7 @@ def move_current_windows_to_workspace( new_workspace_name, allow_move_to_special
 	# Move windows one by one.
 	for i in range(window_count):
 		print( "Moving window to : " + new_workspace_name )
-		subprocess.check_output( "hyprctl dispatch movetoworkspacesilent name:\"" + new_workspace_name + "\"", shell=True )
+		subprocess.check_output( "hyprctl dispatch 'hl.dsp.window.move({ workspace = \"name:" + new_workspace_name + "\", follow = false })'", shell=True )
 		time.sleep( 0.1 ) # Give the computer a chance to catch up.
 
 	# Switch focus to the new workspace.

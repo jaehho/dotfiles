@@ -195,7 +195,7 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
       date +%s > /tmp/hypr-notification-invoke
       if [[ -n "$WINDOW_ADDR" ]] && hyprctl clients -j 2>/dev/null \
            | jq -e --arg a "$WINDOW_ADDR" ".[] | select(.address == \$a)" >/dev/null 2>&1; then
-        hyprctl dispatch focuswindow "address:$WINDOW_ADDR" >/dev/null 2>&1
+        hyprctl dispatch "hl.dsp.focus({ window = \"address:$WINDOW_ADDR\" })" >/dev/null 2>&1
       fi
       if [[ -n "$TMUX_TARGET" ]]; then
         tmux -S "$TMUX_SOCKET" select-window -t "${TMUX_TARGET%.*}" 2>/dev/null

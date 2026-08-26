@@ -10,7 +10,7 @@ class_to_glyph() {
     case "$1" in
         kitty|foot|Alacritty) echo -n "󰄛" ;;
         firefox*) echo -n "󰈹" ;;
-        chromium) echo -n "󰊯" ;;
+        [Gg]oogle-chrome) echo -n "󰊯" ;;
         org.mozilla.Thunderbird) echo -n "󰺻" ;;
         Zotero) echo -n "󱉟" ;;
         code*) echo -n "󰨞" ;;

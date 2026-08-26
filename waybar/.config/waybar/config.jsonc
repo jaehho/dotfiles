@@ -28,6 +28,7 @@
         "backlight",
         "group/power",
         "bluetooth",
+        "custom/vpn",
         "network",
         "custom/power"
     ],
@@ -46,8 +47,8 @@
         "format": "{name} {windows}",
         "format-window-separator": " ",
         "on-click": "activate",
-        "on-scroll-up": "hyprctl dispatch workspace e-1",
-        "on-scroll-down": "hyprctl dispatch workspace e+1",
+        "on-scroll-up": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"e-1\" })'",
+        "on-scroll-down": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"e+1\" })'",
         "smooth-scrolling-threshold": 6,
         "sort-by-number": true,
         "window-rewrite-default": "󰏗",
@@ -56,7 +57,7 @@
             "foot": "󰄛",
             "Alacritty": "󰄛",
             "firefox.*": "󰈹",
-            "chromium": "󰊯",
+            "[Gg]oogle-chrome": "󰊯",
             "brave-browser": "󰊯",
             "thunar": "󰉋",
             "nautilus": "󰉋",
@@ -101,7 +102,7 @@
             "discord": "󰙯",
             "vlc": "󰐌",
             "firefox": "󰈹",
-            "chromium": "󰊯"
+            "[Gg]oogle-chrome": "󰊯"
         },
         "status-icons": {
             "paused": "⏸"
@@ -234,6 +235,14 @@
         "escape": true
     },
 
+    "custom/vpn": {
+        "exec": "~/.local/bin/vpn-status --waybar",
+        "return-type": "json",
+        "interval": 30,
+        "signal": 12,
+        "on-click": "kitty --class floating-tui --hold -e ~/.local/bin/vpn-status --ip"
+    },
+
     "custom/reboot-needed": {
         "exec": "~/.config/waybar/scripts/reboot-needed.sh",
         "return-type": "json",
@@ -251,7 +260,7 @@
         "return-type": "json",
         "interval": 5,
         "signal": 9,
-        "on-click": "hyprctl dispatch togglespecialworkspace 󰏫; pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar"
+        "on-click": "hyprctl dispatch 'hl.dsp.workspace.toggle_special(\"󰏫\")'; pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar"
     },
 
     "custom/tray": {
@@ -259,12 +268,12 @@
         "return-type": "json",
         "interval": 5,
         "signal": 10,
-        "on-click": "hyprctl dispatch togglespecialworkspace 󰘸; pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar"
+        "on-click": "hyprctl dispatch 'hl.dsp.workspace.toggle_special(\"󰘸\")'; pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar"
     },
 
     "custom/power": {
         "format": "⏻",
         "tooltip": false,
-        "on-click": "rofi -dmenu -p 'Power' -theme-str 'listview { lines: 5; }' <<< $'Lock\nLogout\nSuspend\nReboot\nShutdown' | xargs -I {} sh -c 'case \"{}\" in Lock) loginctl lock-session;; Logout) hyprctl dispatch exit;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'"
+        "on-click": "rofi -dmenu -p 'Power' -theme-str 'listview { lines: 5; }' <<< $'Lock\nLogout\nSuspend\nReboot\nShutdown' | xargs -I {} sh -c 'case \"{}\" in Lock) loginctl lock-session;; Logout) hyprctl dispatch \"hl.dsp.exit()\";; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'"
     }
 }

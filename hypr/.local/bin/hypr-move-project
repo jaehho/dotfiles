@@ -147,10 +147,10 @@ move_project() {
     _clients_json | jq -r --argjson ws "$current_ws" \
         '.[] | select(.workspace.id == $ws) | .address' | while IFS= read -r addr; do
         [[ -z "$addr" ]] && continue
-        hyprctl dispatch movetoworkspacesilent "$target_ws,address:$addr" >/dev/null
+        hyprctl dispatch "hl.dsp.window.move({ workspace = $target_ws, window = \"address:$addr\", follow = false })" >/dev/null
     done
 
-    hyprctl dispatch workspace "$target_ws" >/dev/null
+    hyprctl dispatch "hl.dsp.focus({ workspace = $target_ws })" >/dev/null
 
     notify-send -u low -t 2000 \
         -h "string:x-canonical-private-synchronous:hypr-move-project" \

@@ -2,8 +2,9 @@
 # Open the wallpaper TUI on an empty workspace so the desktop is visible.
 # If the TUI is already open, focus it instead.
 if hyprctl clients -j | jq -e '.[] | select(.class == "hypr-wallpaper-menu")' >/dev/null 2>&1; then
-    hyprctl dispatch focuswindow class:hypr-wallpaper-menu
+    hyprctl dispatch 'hl.dsp.focus({ window = "class:hypr-wallpaper-menu" })'
 else
-    hyprctl dispatch workspace first-empty
+    # "first-empty" is a hyprlang-only alias; the Lua selector is "emptynm".
+    hyprctl dispatch 'hl.dsp.focus({ workspace = "emptynm" })'
     kitty --class hypr-wallpaper-menu --title Wallpaper -e hypr-wallpaper tui
 fi

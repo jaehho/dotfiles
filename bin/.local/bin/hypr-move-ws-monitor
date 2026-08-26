@@ -3,4 +3,4 @@
 # Usage: hypr-move-ws-monitor +1   (right)
 #        hypr-move-ws-monitor -1   (left)
 ws_id=$(hyprctl activeworkspace -j | jq .id)
-hyprctl dispatch moveworkspacetomonitor "$ws_id" "$1"
+hyprctl dispatch "hl.dsp.workspace.move({ workspace = $ws_id, monitor = \"$1\" })"

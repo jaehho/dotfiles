@@ -10,6 +10,7 @@ ws_id=$(hyprctl activeworkspace -j | jq .id)
 hyprctl clients -j | \
     jq -r --argjson ws "$ws_id" '.[] | select(.workspace.id == $ws) | .address' | \
     while IFS= read -r addr; do
-        hyprctl dispatch movetoworkspacesilent "$target,address:$addr"
+        # follow=false is the key that suppresses the focus jump; `silent` is accepted and ignored.
+        hyprctl dispatch "hl.dsp.window.move({ workspace = $target, window = \"address:$addr\", follow = false })"
     done
-hyprctl dispatch workspace "$target"
+hyprctl dispatch "hl.dsp.focus({ workspace = $target })"
