@@ -5,6 +5,11 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/hypr-wallpaper fetch
+# Deliberately /usr/bin, not %h/.local/bin. The Rust rewrite in ~/.local/bin
+# shadows the AUR build on PATH but has no `fetch` subcommand yet — its fetchers
+# are still stubbed `#[allow(dead_code)] // (future)`. Pointing at %h here made
+# this unit fail on all three daily firings. Switch back to the Rust binary once
+# it implements fetch.
+ExecStart=/usr/bin/hypr-wallpaper fetch
 Environment=DISPLAY=:0
 Environment=WAYLAND_DISPLAY=wayland-1

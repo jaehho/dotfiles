@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# vpn-status — is my internet traffic actually going through a tunnel?
+#
+# Separates the two states that get conflated:
+#   full   internet egress resolves to a tunnel device — everything is tunnelled
+#   split  a tunnel is up but egress is still the physical NIC. Tailscale with
+#          no exit node lives here: peers reachable, public IP unchanged.
+#   off    no tunnel device at all
+#
+# Egress is resolved with `ip route get`, not `ip route show default`, because
+# full-tunnel setups usually leave the default route alone: wg-quick installs
+# 0.0.0.0/1 + 128.0.0.0/1 to outrank it, and Tailscale uses fwmark policy rules
+# into table 52. Asking the kernel where one public address would go resolves
+# both without special-casing either.
+#
+#   vpn-status            human report
+#   vpn-status --waybar   JSON for the waybar custom/vpn module
+#   vpn-status --ip       report plus a public-IP lookup (contacts ifconfig.co)
+#   vpn-status --quiet    no output; exit 0 if tunnelled, 1 if not
+
+set -uo pipefail
+
+PROBE=1.1.1.1   # only fed to `ip route get`; no packet is sent
+
+mode=report
+case "${1:-}" in
+    --waybar) mode=waybar ;;
+    --ip)     mode=ip ;;
+    --quiet|-q) mode=quiet ;;
+    -h|--help) awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "$0"; exit 0 ;;
+    "")       ;;
+    *)        echo "vpn-status: unknown option $1" >&2; exit 2 ;;
+esac
+
+# ── Which interfaces are tunnels ─────────────────────────────────────────────
+# wireguard / ppp / tun, minus tap (that is bridged L2 for VMs). Docker's veth
+# and bridge devices fall out for free since they report their own kinds.
+tunnels=$(ip -d -j link show up 2>/dev/null | jq -r '
+    .[]
+    | select(.linkinfo.info_kind == "wireguard"
+          or .linkinfo.info_kind == "ppp"
+          or (.linkinfo.info_kind == "tun"
+              and (.linkinfo.info_data.type // "tun") != "tap"))
+    | .ifname')
+
+route=$(ip -j route get "$PROBE" 2>/dev/null)
+egress_dev=$(jq -r '.[0].dev // empty' <<<"$route")
+egress_gw=$(jq -r '.[0].gateway // empty' <<<"$route")
+egress_src=$(jq -r '.[0].prefsrc // empty' <<<"$route")
+
+if [ -n "$egress_dev" ] && grep -qxF "$egress_dev" <<<"$tunnels"; then
+    state=full
+elif [ -n "$tunnels" ]; then
+    state=split
+else
+    state=off
+fi
+
+[ "$mode" = quiet ] && { [ "$state" = full ]; exit; }
+
+# ── Per-tunnel detail ────────────────────────────────────────────────────────
+# Tailscale gets its own probe because its interesting state (which peer is the
+# exit node) lives in the daemon, not the routing table. Everything else is
+# described by the routes pointing at it — 0.0.0.0/0 means full tunnel.
+# Resolved once up here, not inside describe_tunnel: that runs in a command
+# substitution, so anything it assigns is lost to the subshell.
+ts_exit=""
+if grep -qxF tailscale0 <<<"$tunnels" && command -v tailscale >/dev/null; then
+    ts_exit=$(tailscale status --json 2>/dev/null | jq -r '
+        (.Peer // {}) | to_entries
+        | map(select(.value.ExitNode)) | .[0].value.DNSName // empty
+    ' | sed 's/\.$//')
+fi
+
+describe_tunnel() {
+    local ifname=$1
+    if [ "$ifname" = tailscale0 ]; then
+        if [ -n "$ts_exit" ]; then
+            echo "exit node $ts_exit"
+        else
+            echo "tailnet only, no exit node"
+        fi
+        return
+    fi
+    local dsts
+    dsts=$(ip -j route show dev "$ifname" 2>/dev/null | jq -r '.[].dst' | paste -sd' ' -)
+    echo "${dsts:-no routes}"
+}
+
+# ── Waybar ───────────────────────────────────────────────────────────────────
+if [ "$mode" = waybar ]; then
+    text="" tooltip=""
+    if [ "$state" != off ]; then
+        lines=()
+        while read -r t; do
+            [ -n "$t" ] && lines+=("$t — $(describe_tunnel "$t")")
+        done <<<"$tunnels"
+        # Label the bar with the exit node when there is one; the glyph alone
+        # cannot say *where* the traffic is coming out.
+        if [ "$state" = full ] && [ -n "$ts_exit" ]; then
+            text="󰖂 ${ts_exit%%.*}"
+        else
+            text="󰖂"
+        fi
+        if [ "$state" = full ]; then
+            header="All traffic tunnelled via $egress_dev"
+        else
+            header="Split tunnel — internet still goes out $egress_dev"
+        fi
+        tooltip=$(printf '%s\n%s' "$header" "$(printf '%s\n' "${lines[@]}")")
+    fi
+    jq -cn --arg text "$text" --arg tooltip "$tooltip" --arg class "$state" \
+        '{text:$text, tooltip:$tooltip, class:$class}'
+    exit 0
+fi
+
+# ── Human report ─────────────────────────────────────────────────────────────
+case $state in
+    full)  echo "VPN: ON — all internet traffic is tunnelled" ;;
+    split) echo "VPN: SPLIT — a tunnel is up, but internet traffic bypasses it" ;;
+    off)   echo "VPN: OFF — no tunnel interface is up" ;;
+esac
+echo
+
+if [ -n "$tunnels" ]; then
+    while read -r t; do
+        [ -n "$t" ] && printf '  tunnel   %-12s %s\n' "$t" "$(describe_tunnel "$t")"
+    done <<<"$tunnels"
+fi
+printf '  egress   %-12s %s\n' "${egress_dev:-none}" \
+    "${egress_gw:+via $egress_gw }${egress_src:+(src $egress_src)}"
+
+if [ "$mode" = ip ]; then
+    echo
+    if info=$(curl -fsS --max-time 5 https://ifconfig.co/json 2>/dev/null); then
+        printf '  public   %s\n' "$(jq -r '"\(.ip)  \(.country // "?")  \(.asn_org // "?")"' <<<"$info")"
+    else
+        printf '  public   lookup failed\n'
+    fi
+elif [ "$state" != full ]; then
+    echo
+    echo "Your public IP is your ISP's. Run \`vpn-status --ip\` to confirm."
+fi
