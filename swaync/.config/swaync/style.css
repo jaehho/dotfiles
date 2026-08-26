@@ -1,5 +1,5 @@
-/* swaync style — Catppuccin Frappé palette by default; theme-apply rewrites
-   hex values in place when the active theme changes. */
+/* swaync style — Solarized palette; theme-apply rewrites the hex values in
+   place when the palette changes. */
 
 * {
   font-family: "JetBrainsMono Nerd Font", monospace;

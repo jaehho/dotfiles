@@ -1,4 +1,4 @@
-/* ── Forest · minimal floating islands ───────────────────────────────────────
+/* ── Solarized · minimal floating islands ────────────────────────────────────
    Layout : transparent bar; modules-left / -center / -right float as 3 islands.
    Colour : monochrome (subtext grey) + ONE accent (blue) on the active
             workspace. Other hues survive only as semantic state (warn/alert).
@@ -44,6 +44,7 @@ window#waybar {
 #custom-idle-inhibitor,
 #custom-swaync,
 #custom-reboot-needed,
+#custom-vpn,
 #custom-power {
     background: transparent;
     color: #9da7a9;
@@ -65,6 +66,7 @@ window#waybar {
 #network:hover,
 #custom-idle-inhibitor:hover,
 #custom-swaync:hover,
+#custom-vpn:hover,
 #custom-power:hover {
     color: #cfdadc;
     background-color: rgba(63, 125, 174, 0.14);
@@ -189,6 +191,16 @@ window#waybar {
 /* Network down */
 #network.disconnected {
     color: #ab5e59;
+}
+
+/* Tunnel state — dim when only the tailnet is reachable (normal resting state,
+   so it must not shout), green when all internet traffic is tunnelled.
+   Renders nothing when no tunnel is up. */
+#custom-vpn.split {
+    color: #565f62;
+}
+#custom-vpn.full {
+    color: #4f8751;
 }
 
 /* Kernel-upgrade reboot pending (module only renders when class=pending) */
