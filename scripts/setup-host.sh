@@ -50,7 +50,7 @@ if [ -t 0 ] && [ -t 1 ] && [ "${NONINTERACTIVE:-0}" != 1 ]; then
   echo
 
   if [ "$DISTRO_FAMILY" = arch ]; then
-    read -r -p "    Build hypr-tools from submodule (overrides AUR)? [y/N] " ans
+    read -r -p "    Build hypr-tools from ~/projects/hypr-tools (overrides AUR)? [y/N] " ans
     case "$ans" in y|Y|yes|YES) DEV=1 ;; esac
   fi
 

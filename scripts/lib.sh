@@ -24,11 +24,12 @@ fi
 # Capability-based variation (distro, gcloud, ssh reachability) is detected at
 # use site. This file holds *choices* only, persisted by scripts/setup-host.sh.
 #
-# HOST_DEV_TOOLS  : 1 = build hypr-tools from the submodule into ~/.local/bin,
+# HOST_DEV_TOOLS  : 1 = build hypr-tools from a local checkout into ~/.local/bin,
 #                   shadowing the AUR copies in /usr/bin
+# HOST_DEV_TOOLS_SRC : where that checkout lives (default below)
 # HOST_RESTIC     : 1 = enable the restic backup timer
 # HOST_DROP_PKGS  : stow packages to skip on this host
-# HOST_SSHFS_SKIP : sshfs mounts to skip (any of: ice cdn msi)
+# HOST_SSHFS_SKIP : sshfs mounts to skip (any of: conway cdn msi)
 # HOST_NO_AAAA    : 1 = install the NM dispatcher forcing 'options no-aaaa'
 HOST_NAME="$(uname -n)"
 HOST_FILE="$DOTFILES/hosts/$HOST_NAME.sh"
@@ -36,6 +37,7 @@ HOST_FILE="$DOTFILES/hosts/$HOST_NAME.sh"
 [ -f "$HOST_FILE" ] && . "$HOST_FILE"
 
 HOST_DEV_TOOLS="${HOST_DEV_TOOLS:-0}"
+HOST_DEV_TOOLS_SRC="${HOST_DEV_TOOLS_SRC:-$HOME/projects/hypr-tools}"
 HOST_RESTIC="${HOST_RESTIC:-1}"
 HOST_DROP_PKGS="${HOST_DROP_PKGS:-}"
 HOST_SSHFS_SKIP="${HOST_SSHFS_SKIP:-}"
@@ -43,7 +45,7 @@ HOST_NO_AAAA="${HOST_NO_AAAA:-0}"
 
 # --- stow packages --------------------------------------------------------
 COMMON_STOW=(fish git tmux nvim claude sshfs bin kitty ssh mime restic zathura
-             visidata tridactyl tailscale)
+             visidata tridactyl tailscale theme)
 ARCH_STOW=(hypr swaync rofi waybar)
 
 STOW_PACKAGES=()
@@ -70,7 +72,6 @@ unset _p _kept
 # it to .bak on every run, clobbering the previous backup each time.
 STOW_SKIP=(
   "mime/.config/mimeapps.list"       # absolute symlink; GLib safe-write needs it
-  "hypr/.config/hypr/monitors.conf"  # rewritten by hypr-monitor on every hotplug
 )
 
 stow_skipped() {
@@ -84,7 +85,7 @@ stow_skipped() {
 # --- sshfs mounts ---------------------------------------------------------
 SSHFS_MOUNTS=()
 SSHFS_SKIPPED=()
-for _m in ice cdn msi; do
+for _m in conway cdn msi; do
   if [[ " $HOST_SSHFS_SKIP " == *" $_m "* ]]; then
     SSHFS_SKIPPED+=("$_m")
   else
@@ -101,7 +102,6 @@ SYSTEM_LINKS=(
   "libinput/local-overrides.quirks:/etc/libinput/local-overrides.quirks"
   "sysctl/99-sysrq.conf:/etc/sysctl.d/99-sysrq.conf"
   "systemd/sleep.conf:/etc/systemd/sleep.conf"
-  "systemd/logind.conf.d/10-lid.conf:/etc/systemd/logind.conf.d/10-lid.conf"
   "systemd/system-sleep/fuse-mounts:/usr/lib/systemd/system-sleep/fuse-mounts"
   "systemd/system-sleep/hyprlock-restart:/usr/lib/systemd/system-sleep/hyprlock-restart"
   "/usr/share/alsa/alsa.conf.d/99-pipewire-default.conf:/etc/alsa/conf.d/99-pipewire-default.conf"
@@ -112,18 +112,35 @@ if [ "$DISTRO_FAMILY" = arch ]; then
   SYSTEM_LINKS+=(
     "systemd/paccache.service.d/10-uninstalled.conf:/etc/systemd/system/paccache.service.d/10-uninstalled.conf"
     "systemd/linux-modules-cleanup.service.d/10-prune-old.conf:/etc/systemd/system/linux-modules-cleanup.service.d/10-prune-old.conf"
-    "reflector/reflector.conf:/etc/xdg/reflector/reflector.conf"
   )
 fi
 
-# Copied, not symlinked: these are read before /home is mounted, so they must
-# survive a broken /home and work from a rescue/chroot environment.
+# Installed as real root-owned files (not symlinks, not prompted): ours alone,
+# no upstream version to diff against, but the reader is sandboxed away from
+# /home so a link into the repo silently does nothing.
+#   - systemd-logind runs ProtectHome=yes + ProtectSystem=strict, so /home is an
+#     empty tmpfs in its namespace and a drop-in symlinked there just dangles.
+#     logind skips it without a word -- `systemd-analyze cat-config` still shows
+#     it, which is what made this look like a precedence bug in April 2026.
+#     Verify with: busctl get-property org.freedesktop.login1 \
+#       /org/freedesktop/login1 org.freedesktop.login1.Manager HandleLidSwitch
+SYSTEM_INSTALLS=(
+  "systemd/logind.conf.d/10-lid.conf:/etc/systemd/logind.conf.d/10-lid.conf"
+)
+
+# Copied, not symlinked, for two different "the reader can't see /home" reasons:
+#   - boot configs (grub/mkinitcpio/modprobe) are read before /home is mounted,
+#     so they must survive a broken /home and work from a rescue/chroot env;
+#   - reflector.conf is read by reflector.service, which runs ProtectHome=true
+#     (+ ProtectSystem=strict) and gets EACCES following a symlink into /home —
+#     it must be a real root-owned file at the destination.
 SYSTEM_COPIES=()
 if [ "$DISTRO_FAMILY" = arch ]; then
   SYSTEM_COPIES=(
     "grub/grub:/etc/default/grub"
     "mkinitcpio/mkinitcpio.conf:/etc/mkinitcpio.conf"
     "modprobe/nvidia.conf:/etc/modprobe.d/nvidia.conf"
+    "reflector/reflector.conf:/etc/xdg/reflector/reflector.conf"
   )
 fi
 
@@ -131,7 +148,7 @@ fi
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# Resolve a SYSTEM_LINKS/SYSTEM_COPIES src to an absolute path.
+# Resolve a SYSTEM_LINKS/SYSTEM_INSTALLS/SYSTEM_COPIES src to an absolute path.
 src_path() {
   case "$1" in
     /*) echo "$1" ;;

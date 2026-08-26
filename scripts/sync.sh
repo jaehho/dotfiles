@@ -67,17 +67,26 @@ phase_pkgs() {
 
 # --- tools ----------------------------------------------------------------
 
-# HOST_DEV_TOOLS=1 builds hypr-tools from the submodule into ~/.local/bin,
+# HOST_DEV_TOOLS=1 builds hypr-tools from a local checkout into ~/.local/bin,
 # shadowing the AUR copies in /usr/bin. packages.sh already skips the AUR
 # packages on such hosts.
+#
+# The checkout lives outside this repo (HOST_DEV_TOOLS_SRC, default
+# ~/projects/hypr-tools) — it's a Rust project, not config, and its target/ dir
+# dwarfs everything else here. A missing checkout is not an error: clone it
+# only when you actually want to develop against source.
 phase_tools() {
   if [ "$HOST_DEV_TOOLS" != 1 ] || [ "$DISTRO_FAMILY" != arch ]; then
     return 0
   fi
   say "hypr-tools (dev override active)..."
-  git -C "$DOTFILES" submodule update --init --recursive hypr-tools 2>&1 | sed 's/^/  /'
-  if make -C "$DOTFILES/hypr-tools" install >/dev/null 2>&1; then
-    echo "  hypr-tools: installed to ~/.local/bin"
+  if [ ! -d "$HOST_DEV_TOOLS_SRC/.git" ]; then
+    echo "  hypr-tools: no checkout at $HOST_DEV_TOOLS_SRC" >&2
+    echo "  clone it, or set HOST_DEV_TOOLS=0 in hosts/$HOST_NAME.sh to use the AUR build" >&2
+    return 0
+  fi
+  if make -C "$HOST_DEV_TOOLS_SRC" install >/dev/null 2>&1; then
+    echo "  hypr-tools: installed to ~/.local/bin from $HOST_DEV_TOOLS_SRC"
   else
     echo "  hypr-tools: build failed" >&2
   fi
@@ -139,20 +148,6 @@ phase_stow() {
   if [ ! -L "$link" ] || [ "$(readlink "$link")" != "$target" ]; then
     ln -sfn "$target" "$link"
   fi
-
-  # monitors.conf is machine state, not config: hypr-monitor rewrites it on
-  # every hotplug. hyprland.conf sources it unconditionally, so seed it from the
-  # repo template on a fresh machine and then leave it alone forever. Linking it
-  # would make hypr-monitor write back into the repo; backing it up each run
-  # would clobber the previous .bak.
-  if [[ " ${STOW_PACKAGES[*]} " == *" hypr "* ]]; then
-    local mon="$HOME/.config/hypr/monitors.conf"
-    if [ ! -e "$mon" ]; then
-      mkdir -p "$(dirname "$mon")"
-      cp "$DOTFILES/hypr/.config/hypr/monitors.conf" "$mon"
-      echo "  monitors.conf: seeded from repo (hypr-monitor owns it from here)"
-    fi
-  fi
 }
 
 # --- system ---------------------------------------------------------------
@@ -167,7 +162,7 @@ phase_system() {
   # One sudo call for every parent directory, so the password prompt lands once
   # up front rather than N times through the phase.
   local pair src dst dirs=()
-  for pair in "${SYSTEM_LINKS[@]}" "${SYSTEM_COPIES[@]}"; do
+  for pair in "${SYSTEM_LINKS[@]}" "${SYSTEM_INSTALLS[@]}" "${SYSTEM_COPIES[@]}"; do
     dirs+=("$(dirname "${pair##*:}")")
   done
   sudo mkdir -p "${dirs[@]}"
@@ -177,12 +172,24 @@ phase_system() {
     sudo ln -sf "$src" "$dst"
   done
 
+  # Real files, not links -- the reader is sandboxed out of /home. `install`
+  # writes *through* a symlink at the destination, so clear any stale link an
+  # older sync left behind or we would just rewrite the repo file in place.
+  for pair in "${SYSTEM_INSTALLS[@]}"; do
+    src="$(src_path "${pair%%:*}")"; dst="${pair##*:}"
+    if [ -L "$dst" ]; then sudo rm -f "$dst"; fi
+    sudo install -D -m 0644 -o root -g root "$src" "$dst"
+  done
+
   # systemd-sleep(8) v260+ only scans /usr/lib/systemd/system-sleep/, so drop
   # the copies an older sync left in /etc.
   sudo rm -f /etc/systemd/system-sleep/fuse-mounts \
              /etc/systemd/system-sleep/hyprlock-restart \
              /etc/systemd/logind.conf.d/10-lid-hibernate.conf
   sudo sysctl --system >/dev/null
+  # Reload is enough for the lid drop-in above, and is safe. Never *restart*
+  # logind here: that kills the Hyprland session. See ISSUES.md "logind ignores
+  # its drop-in".
   sudo systemctl reload systemd-logind.service
 
   # NetworkManager refuses symlinked or non-root dispatcher scripts, so these
@@ -257,10 +264,11 @@ phase_system() {
     fi
   fi
 
-  # reflector keeps the mirrorlist ranked by measured speed; config is linked
-  # above. Generate one immediately the first time, otherwise the machine waits
-  # up to a week for the timer. reflector stamps a header into the file it
-  # writes, which doubles as the idempotency check.
+  # reflector keeps the mirrorlist ranked by measured speed; config is copied
+  # above (it can't be symlinked — reflector.service runs ProtectHome=true and
+  # gets EACCES on a link into /home). Generate one immediately the first time,
+  # otherwise the machine waits up to a week for the timer. reflector stamps a
+  # header into the file it writes, which doubles as the idempotency check.
   if [ "$DISTRO_FAMILY" = arch ] && systemctl cat reflector.timer >/dev/null 2>&1; then
     sudo systemctl enable --now reflector.timer >/dev/null 2>&1 &&
       echo "  reflector.timer: enabled (weekly mirror ranking)"
@@ -292,8 +300,8 @@ phase_sshfs() {
     local m
     for m in "${SSHFS_SKIPPED[@]}"; do
       case "$m" in
-        ice) systemctl --user disable --now sshfs-ice >/dev/null 2>&1 || true
-             systemctl --user disable --now sshfs-ice-watchdog.timer >/dev/null 2>&1 || true ;;
+        conway) systemctl --user disable --now sshfs-conway >/dev/null 2>&1 || true
+             systemctl --user disable --now sshfs-conway-watchdog.timer >/dev/null 2>&1 || true ;;
         *)   systemctl --user stop "sshfs-$m" >/dev/null 2>&1 || true ;;
       esac
       fusermount3 -uz "$HOME/mnt/$m" 2>/dev/null || true
@@ -322,20 +330,20 @@ phase_sshfs() {
 
   for m in "${SSHFS_MOUNTS[@]}"; do
     case "$m" in
-      # Always-on jump-host mount. Best-effort: ice is often off-network, so a
-      # failed mount must not abort sync. Enable the watchdog either way — it
-      # remounts once ice becomes reachable.
-      ice)
+      # Always-on jump-host mount. Best-effort: conway is often off-network, so
+      # a failed mount must not abort sync. Enable the watchdog either way — it
+      # remounts once conway becomes reachable.
+      conway)
         if [ ! -f "$HOME/.ssh/jump_pass" ]; then
-          echo "  ~/.ssh/jump_pass missing — skipping ice mount"
+          echo "  ~/.ssh/jump_pass missing — skipping conway mount"
           echo "    Create with: echo PASSWORD > ~/.ssh/jump_pass && chmod 600 ~/.ssh/jump_pass"
           continue
         fi
-        systemctl --user enable --now sshfs-ice-watchdog.timer >/dev/null 2>&1 || true
-        if systemctl --user enable --now sshfs-ice >/dev/null 2>&1; then
-          echo "  ice mounted at ~/mnt/ice"
+        systemctl --user enable --now sshfs-conway-watchdog.timer >/dev/null 2>&1 || true
+        if systemctl --user enable --now sshfs-conway >/dev/null 2>&1; then
+          echo "  conway mounted at ~/mnt/conway"
         else
-          echo "  ice unreachable — watchdog timer will retry"
+          echo "  conway unreachable — watchdog timer will retry"
         fi
         ;;
       # Opt-in: only attach if the GCE instance is already running.
