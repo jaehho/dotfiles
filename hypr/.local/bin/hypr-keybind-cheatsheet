@@ -1,7 +1,7 @@
 #!/bin/bash
 # Show keybind cheatsheet — auto-parsed from config files and running apps
 
-HYPR_CONFIG="$HOME/.config/hypr/hyprland.conf"
+HYPR_CONFIG="$HOME/.config/hypr/hyprland.lua"
 KITTY_DEFAULTS="/usr/share/doc/kitty/kitty.conf"
 KITTY_CONFIG="$HOME/.config/kitty/kitty.conf"
 CUSTOM="$HOME/.config/hypr/cheatsheet.conf"
@@ -9,44 +9,115 @@ CUSTOM="$HOME/.config/hypr/cheatsheet.conf"
 {
     echo "── Hyprland ──"
 
-    # Parse bind lines with submap awareness
+    # Parse hl.bind() calls out of the Lua config. Hyprland IPC is no help
+    # here: under a Lua config `hyprctl binds` reports every dispatcher as
+    # __lua with an opaque callback index for an argument, so the config file
+    # is the only place the actions are still readable.
     awk '
-    /^submap\s*=/ {
-        sub(/^submap\s*=\s*/, "")
-        gsub(/^ +| +$/, "")
-        if ($0 == "reset") {
-            submap = ""
-        } else {
-            submap = $0
+    # Parse hl.bind() calls out of hyprland.lua into a readable cheatsheet.
+    # Handles multi-line calls, [[long strings]], submaps, `for` loops and the
+    # `local name = "value"` indirections (terminal, menu, fileManager, ...).
+
+    function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+
+    # Replace whole-word occurrences of `word`. gsub in awk has no backreferences,
+    # so walk the string instead of trying to express the boundaries in the regex.
+    function subst_word(s, word, repl,   out, i, n, before, after) {
+        out = ""
+        while ((i = index(s, word)) > 0) {
+            before = (i == 1) ? "" : substr(s, i - 1, 1)
+            after  = substr(s, i + length(word), 1)
+            if (before !~ /[A-Za-z0-9_]/ && after !~ /[A-Za-z0-9_]/) {
+                out = out substr(s, 1, i - 1) repl
+            } else {
+                out = out substr(s, 1, i + length(word) - 1)
+            }
+            s = substr(s, i + length(word))
         }
-        next
+        return out s
     }
-    /^bind/ {
-        sub(/^bind[elmd]*\s*=\s*/, "")
-        n = split($0, parts, ",")
-        if (n < 2) next
 
-        mod = parts[1]; gsub(/^ +| +$/, "", mod)
-        key = parts[2]; gsub(/^ +| +$/, "", key)
+    /^local [A-Za-z_]+ *= *"/ { split($0, v, /"/); var[$2] = v[2]; next }
+    /^[ \t]*local [A-Za-z_]+ *= *[a-z]+ *% *10/ { alias = $2; next }
 
-        action = ""
-        for (i = 3; i <= n; i++) {
-            gsub(/^ +| +$/, "", parts[i])
-            action = action (action ? ", " : "") parts[i]
+    /^[ \t]*hl\.define_submap\(/ {
+        match($0, /"[^"]*"/); submap = substr($0, RSTART + 1, RLENGTH - 2); next
+    }
+    /^end\)/ { submap = ""; next }
+
+    /^for [a-z]+ = [0-9]+, [0-9]+ do/ {
+        split($0, f, /[ ,]+/); loopvar = f[2]; lo = f[4]; hi = f[5]
+        # `local key = i % 10` maps 10 -> 0, so the keys actually bound are 0-9.
+        if (hi == 10) { lo = 0; hi = 9 }
+        range = "<" lo "-" hi ">"; next
+    }
+    /^end$/ { loopvar = ""; alias = ""; range = ""; next }
+
+    /hl\.bind\(/ { buf = $0 }
+    buf != "" {
+        if (buf != $0) buf = buf " " trim($0)
+        n = split(buf, ch, ""); depth = 0; instr = 0
+        for (i = 1; i <= n; i++) {
+            if (ch[i] == "\"") instr = !instr
+            if (instr) continue
+            if (ch[i] == "(") depth++
+            if (ch[i] == ")") depth--
         }
-
-        if (key == "catchall" || action ~ /submap.*reset/) next
-        gsub(/\$mainMod/, "SUPER", mod)
-
-        prefix = ""
-        if (submap != "") prefix = "[" submap "] "
-
-        if (mod != "")
-            printf "  %-35s  %s%s\n", mod " + " key, prefix, action
-        else
-            printf "  %-35s  %s%s\n", key, prefix, action
+        if (depth > 0) next
+        emit(buf); buf = ""
     }
-    ' "$HYPR_CONFIG" | sort
+
+    function emit(s,   n, ch, i, d, instr, comma, key, act, nw, w, wi) {
+        sub(/^[ \t]*hl\.bind\(/, "", s)
+        sub(/\)[ \t]*(--.*)?$/, "", s)
+
+        # Split key from action at the first comma outside strings and brackets.
+        n = split(s, ch, ""); d = 0; instr = 0; comma = 0
+        for (i = 1; i <= n; i++) {
+            if (ch[i] == "\"") instr = !instr
+            if (instr) continue
+            if (ch[i] == "(" || ch[i] == "{") d++
+            if (ch[i] == ")" || ch[i] == "}") d--
+            if (ch[i] == "," && d == 0) { comma = i; break }
+        }
+        if (!comma) return
+        key = trim(substr(s, 1, comma - 1))
+        act = trim(substr(s, comma + 1))
+
+        # Key: mainMod .. " + SHIFT + Q"  ->  SUPER + SHIFT + Q
+        key = subst_word(key, "mainMod", "SUPER")
+        if (loopvar != "") {
+            key = subst_word(key, loopvar, range)
+            if (alias != "") key = subst_word(key, alias, range)
+        }
+        gsub(/ *\.\. */, " ", key); gsub(/"/, "", key)
+        gsub(/  +/, " ", key); gsub(/ +\+ +/, " + ", key)
+        key = trim(key)
+        if (key ~ /catchall/) return
+
+        # Action: drop the hl.dsp namespace, unwrap exec_cmd and [[long strings]].
+        sub(/^hl\.dsp\./, "", act)
+        # The action range need not match that of the key (the CTRL loop binds keys
+        # 0-9 but passes 1-10), so show a neutral placeholder there.
+        if (loopvar != "") {
+            act = subst_word(act, loopvar, "<n>")
+            if (alias != "") act = subst_word(act, alias, "<n>")
+        }
+        if (act ~ /^exec_cmd\(/) {
+            sub(/^exec_cmd\(/, "", act); sub(/\)$/, "", act)
+            act = trim(act); sub(/^\[\[/, "", act); sub(/\]\]$/, "", act)
+            gsub(/ *\.\. */, " ", act); gsub(/"/, "", act)
+            act = trim(act)
+            nw = split(act, w, " ")
+            for (wi = 1; wi <= nw; wi++) if (w[wi] in var) w[wi] = var[w[wi]]
+            act = w[1]; for (wi = 2; wi <= nw; wi++) act = act " " w[wi]
+            act = "exec " act
+        }
+        gsub(/  +/, " ", act); act = trim(act)
+        if (length(act) > 78) act = substr(act, 1, 75) "..."
+        printf "  %-32s  %s%s\n", key, (submap != "" ? "[" submap "] " : ""), act
+    }
+' "$HYPR_CONFIG" | sort
 
     # Tmux — live keybinds (defaults + custom)
     if tmux info >/dev/null 2>&1; then

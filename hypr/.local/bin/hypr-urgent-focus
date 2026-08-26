@@ -10,7 +10,7 @@
 # does switch workspace.
 #
 # Scoped to kitty so other apps marking urgent don't pull focus.
-# Daemon: started via exec-once from hyprland.conf.
+# Daemon: started via exec_cmd from hyprland.lua.
 set -euo pipefail
 
 SOCKET="${XDG_RUNTIME_DIR:?}/hypr/${HYPRLAND_INSTANCE_SIGNATURE:?}/.socket2.sock"
