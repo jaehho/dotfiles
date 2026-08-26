@@ -2,7 +2,7 @@
 Name=Zotero
 GenericName=Reference management tool
 Comment=Your personal research assistant
-Exec=/home/jaeho/.local/bin/zotero-focus
+Exec=zotero-focus
 Icon=zotero
 Type=Application
 Terminal=false
