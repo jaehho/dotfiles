@@ -345,6 +345,10 @@ hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("~/.local/bin/hypr-settings-m
 -- Read screen aloud (toggle — press again to stop)
 hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("~/.local/bin/hypr-read-screen"))
 
+-- Taildrop: send files to a tailnet device (+CTRL sends the clipboard)
+hl.bind(mainMod .. " + SHIFT + D", hl.dsp.exec_cmd("~/.local/bin/taildrop-send"))
+hl.bind(mainMod .. " + CTRL + SHIFT + D", hl.dsp.exec_cmd("~/.local/bin/taildrop-send --clip"))
+
 -- Move focus with mainMod + hjkl
 hl.bind(mainMod .. " + h", hl.dsp.focus({ direction = "left" }))
 hl.bind(mainMod .. " + l", hl.dsp.focus({ direction = "right" }))

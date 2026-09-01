@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Send to Phone
+GenericName=Taildrop
+Comment=Send a file to a tailnet device over Taildrop
+Exec=taildrop-send
+Icon=phone
+Terminal=false
+Categories=Network;FileTransfer;
+Keywords=taildrop;tailscale;phone;send;share;file;transfer;

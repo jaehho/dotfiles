@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# Send files to another tailnet device over Taildrop — the outbound half of
+# taildrop-notify.service.
+#
+# Usage:
+#   taildrop-send FILE...            send files (directories are tarred first)
+#   taildrop-send                    no args → GUI file chooser
+#   taildrop-send --to NAME FILE...  skip the device picker
+#   taildrop-send --clip             send the clipboard (image → .png, else .txt)
+#
+# With one online target it just sends; with several it asks (rofi under a
+# launcher, a numbered prompt in a terminal).
+
+set -euo pipefail
+
+# Launcher/Thunar invocations have no terminal, so report through the
+# notification daemon instead of stderr.
+gui=0
+[ -t 2 ] || gui=1
+
+say() {
+    local urgency=$1 body=$2
+    if [ "$gui" = 1 ]; then
+        notify-send -a Taildrop -u "$urgency" "Taildrop" "$body"
+    else
+        printf '%s\n' "$body" >&2
+    fi
+}
+die() { say critical "$1"; exit 1; }
+
+tmpdir=""
+scratch() {
+    [ -n "$tmpdir" ] || tmpdir=$(mktemp -d /tmp/taildrop-send.XXXXXX)
+    printf '%s' "$tmpdir"
+}
+trap '[ -n "$tmpdir" ] && rm -rf "$tmpdir" || :' EXIT
+
+# `tailscale file cp --targets` prints "IP<TAB>name", plus a third field only
+# when the peer is offline. Taildrop cannot queue for an offline peer, so the
+# two-field lines are the whole menu.
+online_targets() {
+    tailscale file cp --targets 2>/dev/null | awk -F'\t' 'NF == 2 { print $2 }'
+}
+
+# Column 4 of `tailscale status` is the peer OS.
+icon_for() {
+    case "$(tailscale status 2>/dev/null | awk -v n="$1" '$2 == n { print $4 }')" in
+        iOS|android) printf '󰄜' ;;
+        macOS)       printf '󰀵' ;;
+        windows)     printf '󰖳' ;;
+        *)           printf '󰌢' ;;
+    esac
+}
+
+pick_target() {
+    local -a names
+    mapfile -t names < <(online_targets)
+
+    case ${#names[@]} in
+        0) die "No online Taildrop targets." ;;
+        1) printf '%s' "${names[0]}"; return ;;
+    esac
+
+    if [ "$gui" = 0 ] && [ -t 0 ]; then
+        local reply
+        PS3="Send to: "
+        select reply in "${names[@]}"; do
+            [ -n "$reply" ] && { printf '%s' "$reply"; return; }
+        done
+        exit 0
+    fi
+
+    local name chosen
+    chosen=$(for name in "${names[@]}"; do
+                 printf '%s  %s\n' "$(icon_for "$name")" "$name"
+             done | rofi -dmenu -i -p "Send to" \
+                         -theme-str "listview { lines: ${#names[@]}; }") || exit 0
+    [ -n "$chosen" ] || exit 0
+    printf '%s' "${chosen#*  }"
+}
+
+clipboard_file() {
+    local types out
+    types=$(wl-paste --list-types 2>/dev/null) || die "Clipboard is empty."
+    out="$(scratch)/clipboard-$(date +%Y-%m-%d_%H-%M-%S)"
+
+    if grep -q '^image/png' <<<"$types"; then
+        wl-paste --type image/png > "$out.png" && printf '%s' "$out.png"
+    elif grep -q '^image/jpeg' <<<"$types"; then
+        wl-paste --type image/jpeg > "$out.jpg" && printf '%s' "$out.jpg"
+    elif [ -n "$types" ]; then
+        wl-paste --no-newline > "$out.txt" && printf '%s' "$out.txt"
+    else
+        die "Clipboard is empty."
+    fi
+}
+
+usage() { sed -n '2,12p' "$0" | sed 's/^# \?//'; }
+
+target=""
+mode=files
+files=()
+
+while [ $# -gt 0 ]; do
+    case $1 in
+        --to)       target=${2:?--to needs a device name}; shift 2 ;;
+        --clip|-c)  mode=clip; shift ;;
+        -h|--help)  usage; exit 0 ;;
+        --)         shift; files+=("$@"); break ;;
+        *)          files+=("$1"); shift ;;
+    esac
+done
+
+if [ "$mode" = clip ]; then
+    files=("$(clipboard_file)")
+elif [ ${#files[@]} -eq 0 ]; then
+    mapfile -t files < <(zenity --file-selection --multiple --separator=$'\n' \
+                                --title="Send over Taildrop" 2>/dev/null) || exit 0
+    [ ${#files[@]} -gt 0 ] || exit 0
+fi
+
+# Taildrop moves single files only; a directory (easy to hit from Thunar's
+# Send To) becomes a tarball instead of a confusing failure.
+for i in "${!files[@]}"; do
+    f=${files[$i]}
+    if [ -d "$f" ]; then
+        tar=$(scratch)/$(basename "${f%/}").tar.gz
+        say normal "Packing $(basename "${f%/}")/ …"
+        tar czf "$tar" -C "$(dirname "${f%/}")" "$(basename "${f%/}")"
+        files[i]=$tar
+    elif [ ! -f "$f" ]; then
+        die "Not a file: $f"
+    fi
+done
+
+if [ -n "$target" ]; then
+    match=$(online_targets | grep -ix -m1 -- "$target") ||
+    match=$(online_targets | grep -i  -m1 -- "$target") ||
+    die "No online target matching '$target'."
+    target=$match
+else
+    target=$(pick_target)
+fi
+[ -n "$target" ] || exit 1
+
+if tailscale file cp "${files[@]}" "$target:"; then
+    n=${#files[@]}
+    say normal "Sent $n file$([ "$n" -eq 1 ] && echo '' || echo 's') to $target"
+else
+    die "Failed to send to $target."
+fi
