@@ -1,6 +1,7 @@
 biber
 libreoffice-fresh
 pandoc-cli
+pdfarranger
 poppler
 poppler-glib
 texlive-bibtexextra
@@ -12,6 +13,7 @@ texlive-mathscience
 texlive-xetex
 typst
 typstyle
+xournalpp
 zathura
 zathura-pdf-mupdf
 zotero-bin
