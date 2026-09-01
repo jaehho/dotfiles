@@ -26,4 +26,8 @@
   base: #141c1e;
   mantle: #101719;
   crust: #0c1315;
+
+  /* translucent variants — let the Hyprland rofi-blur layer rule show through */
+  base-blur: #141c1ed9;
+  surface0-blur: #20282ae6;
 }

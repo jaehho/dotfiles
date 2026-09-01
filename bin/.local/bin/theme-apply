@@ -117,6 +117,10 @@ cat > "$DOTFILES/rofi/.config/rofi/colors.rasi" << EOF
   base: $(hex base);
   mantle: $(hex mantle);
   crust: $(hex crust);
+
+  /* translucent variants — let the Hyprland rofi-blur layer rule show through */
+  base-blur: $(hex base)d9;
+  surface0-blur: $(hex surface0)e6;
 }
 EOF
 echo "  rofi colors.rasi"

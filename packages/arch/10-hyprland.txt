@@ -9,6 +9,7 @@ hyprlock
 hyprscratch
 hyprsunset
 hyprwhenthen-bin
+papirus-icon-theme
 polkit-gnome
 qrencode
 qt5-wayland
