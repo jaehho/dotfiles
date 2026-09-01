@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Watch the Taildrop inbox, downloading each arrival into $1 (default
+# ~/Taildrop) and firing a desktop notification per file.
+#
+# `tailscale file get --loop` does the blocking and the receiving; --verbose
+# makes it name each file it wrote ("wrote NAME as /abs/path (N bytes)"),
+# which is the only thing the notification needs. It retries internally every
+# 5s on error, so a tailscaled restart does not need handling here.
+
+set -euo pipefail
+
+DIR=$(realpath -m "${1:-$HOME/Taildrop}")
+mkdir -p "$DIR"
+
+# No ^ anchor: --verbose prints "waiting for file..." WITHOUT a newline, so the
+# record arrives glued to the end of it. The written path is absolute, so
+# requiring the leading / keeps a filename containing " as " from confusing the
+# greedy match.
+tailscale file get --loop --verbose --conflict=rename "$DIR" |
+while IFS= read -r line; do
+    [[ $line =~ wrote\ .*\ as\ (/.+)\ \([0-9]+\ bytes\)$ ]] || continue
+    f=${BASH_REMATCH[1]}
+    (
+        key=$(notify-send --wait --action=default=Open \
+            -a Taildrop "Taildrop" "Received: $(basename "$f")")
+        [ "$key" = "default" ] && xdg-open "$f" >/dev/null 2>&1
+    ) &
+done

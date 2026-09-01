@@ -4,7 +4,7 @@ Description=Taildrop inbox watcher — desktop notification per arrival
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/taildrop-notify
-Restart=on-failure
+Restart=always
 RestartSec=5
 
 [Install]
