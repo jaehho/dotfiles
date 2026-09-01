@@ -164,6 +164,70 @@ appending, and count real entries with `grep -c '^\['`.
 
 ---
 
+## Cooper X2Go: seconds per keypress, and closed windows leave ghosts
+
+Two separate faults that look like one "the connection is slow". Neither is the
+network — check that first and stop blaming the coffee-shop wifi:
+
+```sh
+ping -c8 conway.ee.cooper.edu                       # ~40 ms, 0% loss is normal
+r1=$(cat /sys/class/net/wlo1/statistics/rx_bytes); sleep 5
+echo $(( ($(cat /sys/class/net/wlo1/statistics/rx_bytes)-r1)/5/1024 )) KiB/s
+```
+
+**Both ends pegged at ~100% CPU while the link moves <50 KiB/s means the
+bottleneck is rendering, not bandwidth.** Keystrokes are seconds late because
+they queue behind a saturated X server at each hop, not because they are in
+flight. Measure both ends before changing anything:
+
+```sh
+top -bn1 -o %CPU | head            # local: Xwayland / nxproxy
+sshpass -f ~/.ssh/jump_pass ssh conway 'top -bn2 -d2 -u $USER | grep x2goagent'
+```
+
+**Ghosting — remote xfwm4 compositing.** Closing a window leaves its rectangle
+on screen showing whatever was underneath; mousing over the area clears it
+piece by piece. xfwm4's compositor redirects windows off-screen and nxagent's
+damage tracking does not follow redirected windows, so the region a destroyed
+window covered is never re-sent. Hovering clears it because motion generates
+fresh damage there. It also gives the agent a constant stream of damage to
+encode, so it costs latency as well as looks wrong.
+
+```sh
+sshpass -f ~/.ssh/jump_pass ssh conway '
+  wpid=$(pgrep -u $USER -x xfwm4 | head -1)
+  eval "$(tr "\0" "\n" < /proc/$wpid/environ |
+          grep -E "^(DISPLAY|DBUS_SESSION_BUS_ADDRESS|XAUTHORITY)=" | sed "s/^/export /")"
+  xfconf-query -c xfwm4 -p /general/use_compositing -s false
+  xrefresh'
+```
+
+Takes effect live and persists — xfconf writes it to `~/.config/xfce4/
+xfconf/xfce-perchannel-xml/xfwm4.xml` in AFS, so new sessions inherit it. It
+comes back `true` on any fresh profile: that is xfwm4's own compiled-in
+default and conway has no `/etc/xdg/xfce4/.../xfwm4.xml` overriding it. X2Go
+starts a stock XFCE session and nothing in the stack knows the display is a
+network agent, so expect to redo this on a new account.
+
+**Latency — client-side settings.** Two knobs in `~/.x2goclient/sessions`:
+
+- `quality=9` with `pack=16m-jpeg` is near-lossless JPEG: PNG-sized payloads
+  *and* JPEG's encode cost, on both ends. Use `quality=5`, or `16m-png` if the
+  session is mostly text.
+- `speed` sets the NX link profile. `speed=4` (LAN) is right for campus; the
+  session's live options are readable on the server at
+  `~/.x2go/C-*/options` (`link=lan,pack=16m-jpeg-5,...`).
+
+**Do not run the client inside Xephyr.** A `bin/.local/bin/x2go-launch`
+wrapper did this until 2026-09-01 to "isolate X11 from Hyprland". It cost a
+full core — a nested software X server re-blitting every frame on its way to
+XWayland — and bought nothing: Hyprland's binds are compositor-level, so Super
+was intercepted before XWayland either way. `x2goclient` on plain XWayland is
+correct. With compositing off and quality 5, idle CPU is ~0% on both ends
+where it used to be 93% local / 80% remote.
+
+---
+
 ## Dock: keyboard/mouse dead after resume, monitors and ethernet fine
 
 The Anker 364 exposes two independent USB trees: a SuperSpeed path (`usb 2-1`,
@@ -199,6 +263,194 @@ Check: `uname -r` against `pacman -Q linux` and `ls /lib/modules/`. The fix is
 a reboot; there is no runtime workaround.
 
 ---
+
+## Media/brightness keys dead after a package upgrade
+
+`make sync` upgrades packages but never restarts the daemons Hyprland already
+launched, so a long-lived session keeps running the *deleted* old binary. When
+swayosd bumps its D-Bus signature, the new `swayosd-client` and the stale
+in-memory `swayosd-server` stop agreeing and every volume/brightness key
+silently does nothing. (0.3.1 -> 0.3.2 changed `HandleAction` from `(ss)` to
+`(ssa(ss))`.)
+
+The binds are not the problem — don't go hunting in `hyprland.lua`, `keyd`, or
+xkb. `hyprctl binds | grep XF86` lists them and `hyprctl configerrors` is empty.
+
+Confirm it. A healthy server answers `b true`:
+
+```sh
+busctl --user call org.erikreider.swayosd-server /org/erikreider/swayosd \
+  org.erikreider.swayosd HandleAction 'ssa(ss)' SINK-VOLUME-RAISE "" 0
+```
+
+Fix:
+
+```sh
+pkill -x swayosd-server; hyprctl dispatch 'hl.dsp.exec_cmd("swayosd-server")'
+```
+
+Why it fails *silently*: `swayosd-client` exits non-zero only when nothing
+owns the bus name at all. A stale server answers and refuses, and the client
+still exits 0 — so the `|| wpctl ...` fallbacks in `hyprland.lua` cover the
+wrong failure. Exit status proves nothing here; only the D-Bus reply does.
+
+`make sync` now restarts a stale swayosd-server after an upgrade, so this
+should not recur. The manual fix above still applies to a session that has
+not synced since.
+
+Same trap, other daemons — list everything still running an upgraded-away
+binary before blaming config:
+
+```sh
+for p in /proc/[0-9]*; do
+  readlink "$p/exe" 2>/dev/null | grep -q '(deleted)' &&
+    printf '%s\t%s\n' "${p#/proc/}" "$(readlink "$p/exe")"
+done
+```
+
+---
+
+## dGPU wedges during a sleep cycle and silently burns ~18 W
+
+**Symptom:** nothing looks broken. The desktop is fine (the panel is on the
+iGPU), but the battery empties two to three times faster than usual.
+
+```bash
+nvidia-smi   # "Unable to determine the device handle for GPU0 ... Unknown Error"
+cat /sys/bus/pci/devices/0000:2b:00.0/power/{control,runtime_status}   # on / active
+cat /sys/bus/pci/devices/0000:2b:00.0/power_state                      # D0
+```
+
+D0 + driver bound + unreachable = wedged. Measured cost on 2026-08-31:
+
+```
+Aug 27 baseline            10.26 W
+2026-08-31 before 09:04    13.06 W
+2026-08-31 after  09:04    31.34 W    <- +18 W
+```
+
+It also pins `Pkg%pc2/pc6/pc10` and `SLP_S0` at **0%** — a device stuck in D0
+stops the package reaching any deep C-state — so it poisons any power
+measurement taken while it is wedged.
+
+**What it looks like in the journal** (this is the moment it happens, during
+`suspend-then-hibernate`):
+
+```
+WARNING: nvidia/nv.c:4472 at nv_set_system_power_state+0x589 [nvidia]
+WARNING: nvidia/nv.c:4713 at nv_set_system_power_state+0x5a5 [nvidia]
+WARNING: nvidia/nv.c:4422 at nv_restore_user_channels+0x4e [nvidia]
+nvidia-sleep.sh: line 45: echo: write error: Input/output error
+nvidia-suspend-then-hibernate.service: Failed with result 'exit-code'
+```
+
+then afterwards, on every later sleep attempt:
+
+```
+[drm:drm_setmaster_ioctl] *ERROR* [nvidia-drm] Failed to grab modeset ownership
+[drm:__nv_drm_connector_detect_internal] *ERROR* Failed to detect display state
+/usr/lib/systemd/system-sleep/nvidia: line 22: echo: write error: Input/output error
+```
+
+The `Input/output error` is `/proc/driver/nvidia/suspend` refusing writes — the
+VRAM save/restore that `NVreg_PreserveVideoMemoryAllocations=1` depends on died
+mid-transition and the driver's power-state machine never recovered.
+
+**Recovery: reboot.** `nvidia-smi -r` cannot work (it cannot reach the GPU), and
+unbind/rebind is unsafe while `nvidia_drm` has users. There is no runtime fix.
+
+**Detection is the real problem** — it is invisible until you notice the battery.
+Worth a check in `hypr-battery-monitor` or a sleep hook:
+
+```bash
+nvidia-smi -L >/dev/null 2>&1 || notify-send -u critical "dGPU wedged" "Reboot: ~18 W wasted"
+```
+
+**Open:** whether `NVreg_DynamicPowerManagement=0x02` (RTD3 on) makes this less
+likely by keeping the GPU powered down when unused, so system sleep has far less
+GPU state to preserve. Currently `0x00`, which pins it out of RTD3 — that is why
+it sits in D0 rather than D3cold. Not yet tested.
+
+## Woke up on its own and then never slept again (battery flat)
+
+The damaging failure is not the wake — a spurious wake is harmless if the box
+goes back to sleep. It is that **hypridle is the only thing that sleeps this
+machine**, and logind's idle tracking is inert here (`IdleSinceHint=0`), so
+there is no second line of defence. When the sleep path declines, nothing
+retries and the battery runs to empty.
+
+**First: did the sleep listener fire, and what did it decide?**
+
+```bash
+journalctl -t hypr-sleep -t hypr-idle --since '-2 days'
+```
+
+`hypr-idle` is a 120 s heartbeat and `hypr-sleep` logs every sleep decision, so
+you can tell the three cases apart:
+
+| journal | meaning |
+|---|---|
+| no `hypr-idle` lines at all | idle clock never advanced — something holds a **Wayland** idle inhibitor (a browser tab is the usual culprit; these are invisible to `systemd-inhibit --list`) |
+| `hypr-idle` but no `hypr-sleep` | never reached 30 min idle |
+| `hypr-sleep ... staying awake` | it fired and the gate declined — read the reason it logged |
+
+Before that instrumentation existed the whole path was silent, which is what
+made 2026-08-27 take so long to pin down.
+
+**The trap that caused it: `online` is not the same as "on AC".**
+
+```sh
+grep -qx 1 /sys/class/power_supply/*/online || systemctl suspend-then-hibernate   # WRONG
+```
+
+That glob matches the `ucsi-source-psy-USBC000:*` USB-C nodes as well as `ADP1`.
+A docked machine whose PD state has latched (the `ucsi_acpi ... -110` signature,
+see the Anker dock entry) can report `online=1` on a ucsi node while `ADP1=0`
+and the battery genuinely drains. The gate reads "on AC" and skips the sleep,
+and since hypridle fires `on-timeout` only **once per idle period**, it never
+retries. Use the battery's own `status` instead — `Discharging` is unambiguous —
+and **fail toward sleeping** on anything unrecognised. A spurious sleep costs a
+keypress; a spurious stay-awake costs the session. Lives in
+`hypr/.local/bin/hypr-sleep-if-idle`.
+
+**Backstop:** `hypr-battery-monitor` hibernates at 7% (below its own `CRIT=10`
+notification so the ladder still works, and well above UPower's `PercentageAction=2`,
+which at ~10 W leaves only about 8 minutes). It gates on `status == Discharging`
+and is deliberately independent of hypridle and of *why* the machine is awake.
+
+**Attributing a wake — do this before disabling any wake source.** Counters are
+cumulative since boot:
+
+```bash
+sudo awk 'NR==1 || ($3+0)>0' /sys/kernel/debug/wakeup_sources   # wakeup_count column
+cat /sys/bus/usb/devices/*/power/wakeup_count
+grep '\*enabled' /proc/acpi/wakeup
+```
+
+**A worked example of getting this wrong.** On 2026-08-28 a
+`disable-usb-s4-wakeup.service` was written to disarm `XHCI`/`TXHC`/`TDM0`/`TRP0`,
+on the reasoning that no RTC alarm was armed, no timer sets `WakeSystem=true`,
+and those controllers *were* armed — so it must be USB. The counters said
+otherwise: the Logitech receiver's `wakeup_count` was **0**, and every
+`wakeup_count` in `wakeup_sources` was 0. Elimination is not attribution. It was
+reverted; it cost wake-on-external-keyboard for no demonstrated benefit. The
+wake source remains unidentified — `ucsi` (`active_count=101`) is the open
+candidate, given the dock logged `-110` at the moment of that resume. If
+spurious wakes recur, investigate `TXHC`/`TDM0`/`TRP0`, **not** `XHCI`.
+
+**`/proc/acpi/wakeup` is a toggle, not a setting** — writing a name flips it, so
+anything re-applying unconditionally re-arms what it just disabled. Test state
+first, and anchor the pattern, because `enabled` is a substring of `disabled`:
+`grep -qE "^$d[[:space:]]+S4[[:space:]]+[*]enabled"`.
+
+**Never disarm `AWAC`.** It is the ACPI wake alarm `suspend-then-hibernate` uses
+to wake itself once `HibernateDelaySec` expires. Disable it and the machine sits
+in s2idle forever and never hibernates — a worse version of the bug.
+
+**Not every long wake is a bug.** On AC the policy is plain `suspend` by design
+(`HandleLidSwitchExternalPower=suspend`, `HibernateOnACPower=no`), so hours in
+s2idle while plugged in is correct. Check `Performing sleep operation 'suspend'`
+vs `'hibernate'` first.
 
 ## Laptop dead in the morning, "it died in sleep"
 
