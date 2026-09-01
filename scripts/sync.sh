@@ -58,11 +58,56 @@ upgrade_is_stale() {
   return 1
 }
 
+# An upgrade replaces the binary under any daemon already running; the old
+# process keeps serving the old interface until something restarts it. Only
+# swayosd is restarted automatically, because it is the one that fails
+# *silently*: a stale server still answers D-Bus but refuses every action, and
+# swayosd-client exits 0 anyway, so volume/brightness keys quietly go dead and
+# hyprland.lua's `|| wpctl` fallbacks cover the wrong failure. See ISSUES.md.
+# The rest
+# are only named — restarting them costs state (wallpaper, tray, bar layout).
+SESSION_DAEMONS="swaync waybar hypridle awww-daemon udiskie playerctld hypr-monitor"
+
+restart_stale_session_daemons() {
+  have hyprctl || return 0
+  hyprctl monitors >/dev/null 2>&1 || return 0   # not inside a live session
+
+  local d exe name stale=""
+  for d in /proc/[0-9]*; do
+    [ -O "$d" ] || continue                      # our own processes only
+    exe=$(readlink "$d/exe" 2>/dev/null) || continue
+    case "$exe" in *' (deleted)') ;; *) continue ;; esac
+    name=${exe%' (deleted)'}; name=${name##*/}
+    case " $stale " in *" $name "*) continue ;; esac
+    stale="$stale $name"
+  done
+
+  case " $stale " in
+    *' swayosd-server '*)
+      pkill -x swayosd-server 2>/dev/null || true
+      hyprctl dispatch 'hl.dsp.exec_cmd("swayosd-server")' >/dev/null 2>&1 || true
+      say "packages: restarted swayosd-server (upgraded out from under it)"
+      ;;
+  esac
+
+  local n hits=""
+  for n in $SESSION_DAEMONS; do
+    case " $stale " in *" $n "*) hits="$hits $n" ;; esac
+  done
+  if [ -n "$hits" ]; then
+    say "packages: still on pre-upgrade binaries —$hits (restart the session to refresh)"
+  fi
+  return 0
+}
+
 phase_pkgs() {
   local skip=1
   upgrade_is_stale && skip=0
   DOTFILES="$DOTFILES" HOST_DEV_TOOLS="$HOST_DEV_TOOLS" SKIP_UPGRADE="$skip" \
     bash "$DOTFILES/scripts/packages.sh"
+  if [ "$skip" = 0 ]; then                       # an upgrade actually ran
+    restart_stale_session_daemons
+  fi
 }
 
 # --- tools ----------------------------------------------------------------
@@ -241,7 +286,17 @@ phase_system() {
   done
 
   if have keyd; then
-    sudo systemctl enable --now keyd >/dev/null 2>&1 || sudo systemctl restart keyd
+    # `enable --now` succeeds and does nothing when the unit is already
+    # running, so the old `|| restart` fallback was unreachable and an edit to
+    # the (symlinked) config never took effect. Reload explicitly. Check first:
+    # a config keyd rejects would leave the keyboard with no remaps at all.
+    sudo systemctl enable --now keyd >/dev/null 2>&1 || true
+    if sudo keyd check >/dev/null 2>&1; then
+      sudo keyd reload >/dev/null 2>&1 || true
+    else
+      echo "  keyd: config rejected, keeping the running mapping:"
+      sudo keyd check 2>&1 | sed 's/^/    /'
+    fi
   fi
 
   # pacman-contrib ships paccache.timer disabled. Weekly, keeps the 3 newest

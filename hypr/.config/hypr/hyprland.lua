@@ -435,7 +435,17 @@ hl.define_submap("resize", "reset", function()
     hl.bind("catchall", hl.dsp.submap("reset"))
 end)
 
--- Volume (SwayOSD with fallback)
+-- Volume and brightness (SwayOSD, with a partial fallback)
+--
+-- The `|| ...` fallbacks only cover SwayOSD being *absent*. swayosd-client
+-- exits non-zero when nothing owns the bus name, but exits 0 when a server
+-- answers and refuses the call -- which is what a server still running a
+-- binary that an upgrade deleted does, so these keys go silently dead until it
+-- restarts. `make sync` now handles that; see ISSUES.md.
+--
+-- Do not "fix" this by calling busctl with a literal signature here: the
+-- signature is what moved in swayosd 0.3.1 -> 0.3.2, so pinning it just
+-- re-breaks on the next bump. Probing the server costs more than the keypress.
 hl.bind("XF86AudioRaiseVolume",
     hl.dsp.exec_cmd("swayosd-client --output-volume raise 2>/dev/null || wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"),
     { locked = true, repeating = true })
@@ -449,7 +459,7 @@ hl.bind("XF86AudioMicMute",
     hl.dsp.exec_cmd("swayosd-client --input-volume mute-toggle 2>/dev/null || wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"),
     { locked = true, repeating = true })
 
--- Brightness (SwayOSD with fallback)
+-- Brightness (see the note above)
 hl.bind("XF86MonBrightnessUp",
     hl.dsp.exec_cmd("swayosd-client --brightness raise 2>/dev/null || brightnessctl -e4 -n2 set 5%+"),
     { locked = true, repeating = true })
