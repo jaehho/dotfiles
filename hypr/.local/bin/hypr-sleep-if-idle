@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# hypridle's 30-min on-timeout action: sleep, but only when really on battery.
+#
+# Replaces the earlier inline gate:
+#     grep -qx 1 /sys/class/power_supply/*/online || systemctl suspend-then-hibernate
+#
+# That glob matches the ucsi-source-psy USB-C entries as well as ADP1. A docked
+# machine whose PD state has latched (the `ucsi_acpi ... -110` signature) can
+# report online=1 on a ucsi node while ADP1=0 and the battery genuinely drains.
+# The gate then reads "on AC" and skips the sleep -- and because hypridle fires
+# on-timeout only ONCE per idle period, it never retries. The machine stays
+# awake until the battery dies. See ISSUES.md 2026-08-27: awake 5h33m, 91% -> 11%.
+#
+# The battery's own status is unambiguous; "Discharging" means discharging.
+#
+# This also logs its decision. The old gate was silent, so after the fact there
+# was no way to distinguish "hypridle never fired" from "it fired and the gate
+# said no" -- which is exactly what made the 08-27 incident hard to pin down.
+
+set -uo pipefail
+TAG=hypr-sleep
+
+bat=""
+for b in /sys/class/power_supply/BAT*; do
+    [ -r "$b/status" ] && bat="$b" && break
+done
+
+if [ -z "$bat" ]; then
+    logger -t "$TAG" "no battery found -> suspend-then-hibernate"
+    exec systemctl suspend-then-hibernate
+fi
+
+status=$(cat "$bat/status" 2>/dev/null || echo unknown)
+cap=$(cat "$bat/capacity" 2>/dev/null || echo '?')
+
+# Fail toward sleeping. Only a positively-known mains state blocks the sleep;
+# anything unrecognised sleeps anyway. The bug this replaces failed the other
+# way -- an unexpected reading meant "assume AC, stay awake" -- and that is how
+# the machine sat up for 5h33m and flattened the battery. A spurious sleep is a
+# keypress to undo; a spurious stay-awake costs the session.
+case "$status" in
+    Charging|Full|"Not charging")
+        logger -t "$TAG" "idle timeout, on mains (${cap}%, ${status}) -> staying awake"
+        exit 0
+        ;;
+esac
+
+logger -t "$TAG" "idle timeout, on battery (${cap}%, ${status}) -> suspend-then-hibernate"
+exec systemctl suspend-then-hibernate

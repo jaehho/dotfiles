@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
-# Battery monitor — sends notifications at low/critical thresholds
+# Battery monitor — notifies at low/critical, and hibernates as a last resort.
 # Runs as background process via exec-once
 
 WARN=20
+HIBERNATE=7    # last resort; below CRIT so both notifications still fire
 CRIT=10
 INTERVAL=60
+
+# Why hibernate here: hypridle is otherwise the ONLY thing that puts this
+# machine to sleep, and logind's idle tracking is inert on this session
+# (IdleSinceHint=0), so there is no second line of defence. On 2026-08-27 the
+# box woke from hibernate unattended and stayed up 5h33m at ~10 W, draining
+# 91% -> 11%, because the sleep listener's gate wrongly read "on AC". UPower's
+# own critical action does not fire until 2%, which is far too late to be a
+# safety net. This is deliberately independent of hypridle and of why the
+# machine is awake: if it is discharging and this low, save the session.
 
 # Find battery path
 for bat in /sys/class/power_supply/BAT*; do
@@ -14,13 +24,27 @@ done
 
 warned=false
 critical=false
+hibernate_armed=false
 
 while true; do
     capacity=$(< "$BAT_PATH/capacity")
     status=$(< "$BAT_PATH/status")
 
     if [[ "$status" == "Discharging" ]]; then
-        if (( capacity <= CRIT )) && [[ "$critical" == false ]]; then
+        if (( capacity <= HIBERNATE )); then
+            if [[ "$hibernate_armed" == false ]]; then
+                # One INTERVAL of grace so a present user can plug in; an
+                # absent one loses nothing by waiting another minute.
+                notify-send -u critical " Hibernating soon" \
+                    "${capacity}% — plug in within ${INTERVAL}s or the session is saved to disk"
+                logger -t hypr-battery "at ${capacity}%, arming hibernate (grace ${INTERVAL}s)"
+                hibernate_armed=true
+            else
+                logger -t hypr-battery "still discharging at ${capacity}% -> hibernating"
+                systemctl hibernate
+                hibernate_armed=false
+            fi
+        elif (( capacity <= CRIT )) && [[ "$critical" == false ]]; then
             notify-send -u critical " Battery Critical" "${capacity}% — plug in now!"
             critical=true
         elif (( capacity <= WARN )) && [[ "$warned" == false ]]; then
@@ -30,6 +54,7 @@ while true; do
     else
         warned=false
         critical=false
+        hibernate_armed=false
     fi
 
     sleep "$INTERVAL"
