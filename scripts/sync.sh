@@ -235,6 +235,10 @@ phase_system() {
   # Reload is enough for the lid drop-in above, and is safe. Never *restart*
   # logind here: that kills the Hyprland session. See ISSUES.md "logind ignores
   # its drop-in".
+  # Rules only fire on the next uevent, so replay bind for the devices they
+  # match -- otherwise the no-wake rule does nothing until the next reboot.
+  sudo udevadm control --reload
+  sudo udevadm trigger --action=bind --subsystem-match=i2c
   sudo systemctl reload systemd-logind.service
 
   # NetworkManager refuses symlinked or non-root dispatcher scripts, so these

@@ -709,6 +709,139 @@ was.** Three things had to line up:
    `NVreg_EnableGpuFirmware=0` since 2026-04-20; the constraint was stale.
 3. logind `IdleAction=ignore`, and a lid switch cannot re-fire while the lid is
    open. So once awake, nothing anywhere would ever sleep the machine again.
+## Black screen after resume, but the compositor is fine
+
+Hibernate aborted at the very last step and the display never came back. The
+session is healthy in every way you would normally check -- `hyprctl` answers,
+Hyprland is on the right VT, no crash, no OOM -- and the panel is still dark.
+
+**The one diagnostic that settles it.** From a text VT, force the graphical
+session active and see whether Hyprland actually drives the output:
+
+```bash
+loginctl activate 17          # the Hyprland session id, from `loginctl`
+sleep 3
+loginctl show-session 17 -p Active --value    # -> yes
+grep -c Modesetting /run/user/1000/hypr/*/hyprland.log
+```
+
+`Active=yes` with a **Modesetting count that does not increase** is the whole
+finding: the compositor holds the VT and refuses to light the connector. That
+rules out the VT path entirely and sends you to the kernel log. Chasing it from
+the Hyprland side instead costs an hour (2026-09-02).
+
+**Confirm in the kernel log.** The abort is unmistakable once you look:
+
+```
+PM: hibernation: Allocated 12790568 kbytes in 63.71 seconds
+ACPI: PM: Preparing to enter system sleep state S4
+ACPI: PM: Saving platform NVS memory
+ACPI: PM: Restoring platform NVS memory      <- bounced, never entered S4
+ACPI: PM: Waking up from system sleep state S4
+PM: hibernation: hibernation exit
+systemd-logind: Lid opened.
+```
+
+A wake event landing during the snapshot makes the S4 entry bounce straight
+back out. The image is never written, and the half-finished transition leaves
+the GPU in a state Hyprland will not modeset out of. Opening the lid while it
+is writing a 12.8 GB image is enough -- that is a ~60s window, and
+`HibernateDelaySec=1h` on battery means you hit it regularly. Cross-check the
+gap with `journalctl -t tailscaled | grep "time jump"`.
+
+**Recovery** is a compositor restart; nothing softer works (`dpms`,
+`hl.monitor`, VT cycling and `loginctl activate` all return success and change
+nothing, because IPC is alive and DRM is not).
+
+```bash
+loginctl terminate-session 17   # from tty2; agetty respawns a TEXT login on tty1
+```
+
+`fish/conf.d/arch.fish` does `exec start-hyprland` on tty1, so logging back in
+restarts it. A tmux session under `user@1000.service` survives this
+(`KillUserProcesses=no`); anything in `session-17.scope` does not.
+
+**Three things this is NOT** -- each cost time on 2026-09-02:
+
+- **Not a compositor wedge.** On an *inactive* VT, `grim` timing
+  out, `hyprctl dispatch` returning `ok` with no effect, and hyprlock's threads
+  sitting in `futex_do_wait` are all NORMAL. Check
+  `loginctl show-session <id> -p Active` **before** reading anything else into
+  those. State `S` is idle waiting, not a hang.
+- **Not seatd.** `Backend 'seatd' failed to open seat, skipping` is on every
+  boot; the next line reads `Seat opened with backend 'logind'`.
+  `seatd.service` is disabled by preset and should stay that way.
+- **Not dpms, and not a `monitors.lua` bug.** Grep the log for `Modesetting` --
+  if the last one is a clean `1920x1080@60.00Hz`, the layout code is innocent.
+
+---
+
+## Suspend bounces back in seconds, or the screen won't stay off
+
+Both are the same device. The **ELAN touchpad** (`i2c-ELAN012C:00`, IRQ 84) is
+armed as a system wake source and emits phantom contacts while nobody is
+touching it. As a wake source it kicks the box out of s2idle; as an input
+device it defeats `dpms off`.
+
+**Name the culprit — the kernel keeps it, and it survives until the next
+suspend, so there is no rush:**
+
+```bash
+cat /sys/power/pm_wakeup_irq                  # -> 84
+grep -E "^\s*84:" /proc/interrupts           # -> ELAN012C:00
+cat /sys/power/suspend_stats/last_hw_sleep    # microseconds ACTUALLY asleep
+```
+
+`last_hw_sleep` in the low millions means seconds, not a real sleep. Note the
+sleep still logs as a *success* — `suspend_stats/fail` stays 0 — so nothing in
+the journal calls this an error.
+
+**Why a 5-second wake costs the whole night:** systemd treats a wake that is
+not its own RTC alarm as "the user woke it", so `suspend-then-hibernate`
+returns instead of re-suspending. hypridle fires `on-timeout` once per idle
+period. Nothing retries. See "Woke up on its own and then never slept again".
+
+**Check for phantom input on a machine nobody is touching:**
+
+```bash
+# hands off the laptop for this
+a=$(awk '$1=="84:"{s=0;for(i=2;i<=NF;i++)if($i~/^[0-9]+$/)s+=$i;print s}' /proc/interrupts)
+timeout 10 tail -f /dev/null
+awk -v a="$a" '$1=="84:"{s=0;for(i=2;i<=NF;i++)if($i~/^[0-9]+$/)s+=$i;print "delta",s-a}' /proc/interrupts
+```
+
+Idle should be 0. Anything sustained is phantom; corroborate with
+`ERR ... Touch jump detected and discarded` in the Hyprland log.
+
+**Fix** — `udev/rules.d/90-no-wake-i2c-hid.rules`, installed by `make sync`.
+Matched on `DRIVER=="i2c_hid_acpi"`, not on the ACPI HID, and `ACTION` must
+include `bind`: `power/wakeup` does not exist until the driver probes, so a
+rule firing on `add` alone is silently dropped. Verify:
+
+```bash
+cat /sys/devices/.../i2c-ELAN012C:00/power/wakeup   # -> disabled
+```
+
+The keyboard (`serio0`), lid (`PNP0C0D:00`) and power button are untouched and
+still wake the machine.
+
+**Do not chase the dispatcher.** `hl.dsp.dpms("off")` is correct on 0.56.x and
+returns `ok` — `hyprctl dispatch dpms off` is the *stale* spelling and errors.
+A working dispatcher that leaves `dpmsStatus: true` is the touchpad, not a
+config typo:
+
+```bash
+hyprctl dispatch 'hl.dsp.dpms("off")'; sleep 2
+hyprctl monitors -j | grep dpmsStatus     # false = worked; true = re-woken
+```
+
+**Unrelated but visible in the same logs:** the Goodix touchscreen
+(`GTX7937:00`, IRQ 108) free-runs at ~525 interrupts/s untouched — millions per
+session. It is not a wake source so it does not block sleep, but it holds the
+package out of deep C-states and costs idle battery. Not yet fixed.
+
+---
+
 
 The only reason it hibernated at all was upower's critical-battery action at 2 %.
 That cycle was *flawless* — which is the useful finding: suspend-then-hibernate

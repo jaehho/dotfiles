@@ -120,8 +120,12 @@ fi
 # /home so a link into the repo silently does nothing.
 #   - systemd-logind runs ProtectHome=yes + ProtectSystem=strict, so /home is an
 #     empty tmpfs in its namespace and a drop-in symlinked there just dangles.
+#   - udev rules are read by systemd-udevd, which runs PrivateMounts=yes and can
+#     be invoked from the initramfs, where /home does not exist at all. A real
+#     root-owned file is the only form that is guaranteed readable in both.
 #     logind skips it without a word -- `systemd-analyze cat-config` still shows
 #     it, which is what made this look like a precedence bug in April 2026.
+  "udev/rules.d/90-no-wake-i2c-hid.rules:/etc/udev/rules.d/90-no-wake-i2c-hid.rules"
 #     Verify with: busctl get-property org.freedesktop.login1 \
 #       /org/freedesktop/login1 org.freedesktop.login1.Manager HandleLidSwitch
 SYSTEM_INSTALLS=(

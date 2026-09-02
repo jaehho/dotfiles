@@ -1,0 +1,20 @@
+# Stop i2c-HID pointing devices from waking the machine.
+#
+# The ELAN touchpad (i2c-ELAN012C:00, IRQ 84) is armed as a system wake source
+# and fires spuriously: on 2026-09-01 a suspend-then-hibernate got 4.7s of real
+# hardware sleep before /sys/power/pm_wakeup_irq came back reading 84. systemd
+# treats a non-RTC wake as "the user woke it", so the whole sts operation
+# returns instead of re-suspending -- and hypridle fires on-timeout only once
+# per idle period, so nothing retries. The machine then sat awake on battery
+# for 70 minutes. Same device also emits phantom contacts while untouched
+# (~5 IRQ/s idle, plus libinput "Touch jump detected and discarded"), which is
+# what makes dpms-off fail to stick. See ISSUES.md 2026-09-01.
+#
+# Matched by driver, not by ACPI HID, so this holds on any host and survives a
+# touchpad swap. Nothing here should ever wake a closed laptop; the keyboard
+# (serio0/i8042), lid (PNP0C0D:00) and power button are untouched and still do.
+#
+# ACTION must include bind: power/wakeup is only created when the driver probes
+# (device_init_wakeup), so a rule that fires on add alone writes to an
+# attribute that does not exist yet and is silently dropped.
+ACTION=="add|change|bind", SUBSYSTEM=="i2c", DRIVER=="i2c_hid_acpi", ATTR{power/wakeup}="disabled"
