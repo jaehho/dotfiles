@@ -1,0 +1,12 @@
+[Unit]
+Description=Fetch the day's photograph
+After=graphical-session.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# --wait retries for a few minutes. A user unit cannot order itself after the
+# network: network-online.target belongs to the system manager and nothing in
+# the user manager pulls it in, so this fires at login with no DNS and every
+# source fails. See ISSUES.md.
+ExecStart=/usr/bin/paperboy fetch --wait

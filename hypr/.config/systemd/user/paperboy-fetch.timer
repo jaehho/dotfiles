@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily photograph fetch
+
+[Timer]
+OnCalendar=daily
+# Catch up after a suspend or a day powered off, so a missed day still lands a
+# photo instead of silently skipping.
+Persistent=true
+# Bing rolls over at 00:00 UTC and every client on earth hits it at once.
+RandomizedDelaySec=2h
+
+[Install]
+WantedBy=timers.target
