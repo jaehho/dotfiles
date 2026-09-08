@@ -96,6 +96,7 @@ vim.g.have_nerd_font = true
 -- Provider configuration
 vim.g.node_host_prog = vim.fn.expand('~/.npm-global/bin/neovim-node-host')
 vim.g.loaded_perl_provider = 0
+vim.g.loaded_ruby_provider = 0
 
 -- [[ Setting options ]]
 -- See `:help vim.o`
@@ -862,8 +863,6 @@ require('lazy').setup({
         tinymist = {},
         openscad_lsp = {},
 
-        stylua = {}, -- Used to format Lua code
-
         -- Special Lua Config, as recommended by neovim help docs
         lua_ls = {
           on_init = function(client)
@@ -903,6 +902,7 @@ require('lazy').setup({
       -- You can press `g?` for help in this menu.
       local ensure_installed = vim.tbl_keys(servers or {})
       vim.list_extend(ensure_installed, {
+        'stylua', -- Used to format Lua code
         'prettier',
         'black',
         'isort',
@@ -957,7 +957,6 @@ require('lazy').setup({
         yaml = { 'prettier' },
         sh = { 'shfmt' },
         bash = { 'shfmt' },
-        typst = { 'typstfmt' },
       },
     },
   },
@@ -1041,14 +1040,10 @@ require('lazy').setup({
 
       snippets = { preset = 'luasnip' },
 
-      -- Blink.cmp includes an optional, recommended rust fuzzy matcher,
-      -- which automatically downloads a prebuilt binary when enabled.
-      --
-      -- By default, we use the Lua implementation instead, but you may enable
-      -- the rust implementation via `'prefer_rust_with_warning'`
-      --
+      -- Rust fuzzy matcher: downloads a prebuilt binary, falls back to the Lua
+      -- implementation with a warning if unavailable.
       -- See :h blink-cmp-config-fuzzy for more information
-      fuzzy = { implementation = 'lua' },
+      fuzzy = { implementation = 'prefer_rust_with_warning' },
 
       -- Shows a signature help window while you type arguments for a function
       signature = {
@@ -1223,7 +1218,6 @@ require('lazy').setup({
         jump_prev_field_start = { '<S-Tab>', mode = { 'n', 'v' } },
       },
     },
-    ft = { 'csv' },
   },
 
   { -- Jump anywhere on screen with labeled targets
@@ -1401,7 +1395,7 @@ require('lazy').setup({
   -- In normal mode type `<space>sh` then write `lazy.nvim-plugin`
   -- you can continue same window with `<space>sr` which resumes last telescope search
 }, { ---@diagnostic disable-line: missing-fields
-  rocks = { hererocks = true },
+  rocks = { enabled = false },
   ui = {
     -- If you are using a Nerd Font: set icons to an empty table which will use the
     -- default lazy.nvim defined Nerd Font icons, otherwise define a unicode icons table
