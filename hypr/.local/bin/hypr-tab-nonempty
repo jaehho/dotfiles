@@ -2,16 +2,9 @@
 set -euo pipefail
 
 # hypr-tab-nonempty — cycle through non-empty workspaces on the current
-# monitor/desktop, skipping workspaces with no windows.
-# Drop-in replacement for `hypr-desktop tab` when you only want occupied slots.
+# monitor, skipping workspaces with no windows.
 
 direction="${1:-next}"
-
-RUNTIME_DIR="/tmp/hypr-desktops-$(id -u)"
-CURRENT_FILE="$RUNTIME_DIR/current"
-DESKTOP_OFFSET=10
-
-desk=$(cat "$CURRENT_FILE" 2>/dev/null || echo 1)
 
 mon_json=$(hyprctl monitors -j)
 current_mon=$(echo "$mon_json" | jq -r '.[] | select(.focused) | .name')
@@ -42,7 +35,7 @@ mapfile -t occupied < <(hyprctl clients -j | jq '[.[].workspace.id] | unique | .
 slots=()
 for slot in $(seq 1 10); do
     (( (slot - 1) % mon_count == mon_idx )) || continue
-    ws_id=$(( (desk - 1) * DESKTOP_OFFSET + slot ))
+    ws_id=$slot
     for occ in "${occupied[@]}"; do
         (( occ == ws_id )) && { slots+=("$ws_id"); break; }
     done

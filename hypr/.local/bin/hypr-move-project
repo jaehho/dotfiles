@@ -71,15 +71,10 @@ get_monitor_workspaces() {
     done
     ((target_idx < 0)) && return 1
 
-    # Desktop-aware workspace range (read from hypr-desktop state)
-    local desktop_id
-    desktop_id=$(cat "/tmp/hypr-desktops-$(id -u)/current" 2>/dev/null || echo 1)
-    local offset=$(( (desktop_id - 1) * 10 ))
-
     # Round-robin: slot N belongs to monitor (N-1) % count
     for slot in $(seq 1 10); do
         if (( (slot - 1) % count == target_idx )); then
-            echo "$((offset + slot))"
+            echo "$slot"
         fi
     done
 }
