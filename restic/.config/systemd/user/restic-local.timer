@@ -1,0 +1,10 @@
+[Unit]
+Description=Local fallback restic backup
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target

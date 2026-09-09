@@ -45,32 +45,57 @@ Reboot after (the module and the userspace libs are only in sync again post-rebo
 
 **Fix:** handled in `scripts/packages.sh` — the cargo upgrade step runs `rustup update` first.
 
-## `nextcloud.wonhomelab.net` unreachable on the home LAN
+## AUR node packages fail to build (nvm prefix, npm 12 defaults)
 
-**Symptom:** browser and `curl` fail outright — `Failed to connect`, `No route to host` — while the server is fine from anywhere else. `ping` the pinned IP gives `Destination Host Unreachable` and `ip neigh` shows it `FAILED` (ARP never resolves).
-
-**Cause:** a hand-written split-horizon override in `/etc/hosts`
+**Symptom:** any AUR package that builds with node dies in `build()`, in one of four places:
 
 ```
-192.168.1.42	nextcloud.wonhomelab.net # reel: nextcloud LAN override
+Your user's .npmrc file (${HOME}/.npmrc) has a `globalconfig` and/or a `prefix` setting,
+which are incompatible with nvm.                                  # nvm refuses to activate
+npm error code EALLOWGIT ... Refusing to fetch "pkg@git+ssh://git@github.com/..."
+git@github.com: Permission denied (publickey)                     # after allow-git is on
+npm warn install-scripts N packages had install scripts blocked because they are not
+covered by allowScripts                                           # native modules never build
 ```
 
-It was added to dodge a NAT-hairpin problem: LAN clients reaching the name via the router's WAN IP used to get the router's snakeoil cert instead of the real one. That is **no longer true** — the hairpin now serves the valid Let's Encrypt `*.wonhomelab.net` cert. Meanwhile the server left `192.168.1.42`, so the override points at nothing. The workaround outlived the problem and became the outage.
+**Causes** — four independent ones, hit in that order:
 
-**Check before assuming DNS or the server is at fault** — this separates a dead LAN pin from a genuinely down service:
+1. `~/.npmrc` sets `prefix=~/.npm-global`, and nvm hard-refuses any user npmrc with `prefix`/`globalconfig`. **Do not delete that line** — the sudo-free npm backend in `scripts/packages.sh` depends on it.
+2. npm 12 defaults `allow-git=none` and `allow-remote=none`; git/tarball-URL deps are refused.
+3. Those git deps use `git+ssh://git@github.com/`, and there is no GitHub SSH key on this machine.
+4. npm 12 blocks dependency install scripts unless listed in `allowScripts`, so `node-gyp` never runs and the build fails a later check on a missing `.node`.
+
+**Fix** — all four are env-only; nothing in `~/.npmrc` or `~/.gitconfig` changes:
 
 ```bash
-getent hosts nextcloud.wonhomelab.net          # what the pin forces
-curl -sS --resolve nextcloud.wonhomelab.net:443:24.47.180.85 \
-  -o /dev/null -w '%{http_code} ssl_verify=%{ssl_verify_result}\n' \
-  https://nextcloud.wonhomelab.net/status.php  # real path, strict cert check
+env NVM_DIR=/usr/share/nvm \
+    npm_config_allow_git=all npm_config_allow_remote=all \
+    npm_config_dangerously_allow_all_scripts=true \
+    GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' \
+    GIT_CONFIG_VALUE_0='ssh://git@github.com/' \
+    paru -S <pkg>
 ```
 
-`200 ssl_verify=0` means the server and cert are healthy and only the pin is wrong.
+`NVM_DIR` works because these PKGBUILDs early-return from their nvm helper when it is already set — the build then uses system node, which `pacman` keeps at the same version nvm would have downloaded. The scripts flag re-enables arbitrary install-script execution for every dependency; that is what a source build implies either way, but keep it env-scoped, never in `~/.npmrc`.
 
-**Fix:** delete the override line from `/etc/hosts` and let public DNS answer (`24.47.180.85`). Nothing in this repo writes that line — it is a manual edit, so `make sync` will not bring it back.
+Retry a half-finished build in place with `makepkg -e` (skips extract/prepare, no sudo) in `~/.cache/paru/clone/<pkg>`, then `sudo pacman -U` the result. Wipe `node_modules` first if a previous run installed deps with scripts blocked — npm will not re-run install scripts for packages already on disk.
 
-**Do not re-add a static pin.** If hairpin ever regresses, fix it at the router with split-horizon DNS so every device on the LAN benefits, rather than pinning one IP in one machine's `/etc/hosts` — that is what silently rotted here.
+**Also check the electron major.** `mailspring` 1.23.0-3 declares `electron43` in `.SRCINFO` while upstream `package.json` pins 41, so paru installs 43, `prepare()` resolves 41, and the built package depends on `electron41` — two 95 MB electrons for one app. `pacman -Qi electron*` after installing; `pacman -Rns electron` drops the unused meta and its version package.
+
+**The durable fix is to not build node from source at all.** Prefer a `-bin` package when one exists: it sidesteps every cause above, and the popular ones still link the system electron rather than bundling their own. On 2026-09-01 this machine tried `mailspring` (source) → `mailspring-bin` → dropped it entirely and stayed on `thunderbird`. Nothing installed here builds with node now, so the recipe above is for the next package, not for anything current.
+
+## `nextcloud.wonhomelab.net` unreachable on the home LAN (and restic backups fail)
+
+**Two different causes have produced this. Tell them apart before touching anything.**
+
+**Cause 1 — which network you roamed onto.** `HappyFamily` hands out *two*
+subnets, and only one of them can reach the server:
+
+| attachment point | hairpin | backups |
+|---|---|---|
+| `192.168.1.0/24`, gateway `.1` (main router) | real `*.wonhomelab.net` cert, `status.php` 200 | succeed |
+| `192.168.68.0/22` (Deco mesh) | `Server: micro_httpd`, snakeoil `CN=example.com, O=Dis, ST=Denial` | fail |
 
 ## Cooper `conway`/`ice00`: REMOTE HOST IDENTIFICATION HAS CHANGED
 
@@ -190,6 +215,44 @@ on screen showing whatever was underneath; mousing over the area clears it
 piece by piece. xfwm4's compositor redirects windows off-screen and nxagent's
 damage tracking does not follow redirected windows, so the region a destroyed
 window covered is never re-sent. Hovering clears it because motion generates
+Nothing is misconfigured when this happens and nothing needs fixing at the
+router; the laptop simply roamed. It looks exactly like a deleted port-forward,
+and in September 2026 it was misdiagnosed as one. **Check `ip -4 -o addr show`
+first**, and re-probe from the other subnet before concluding anything. The
+Deco side also sometimes fails to resolve the name at all (`Temporary failure
+in name resolution`), which is the same cause wearing a different error.
+
+**Cause 2 — a stale `/etc/hosts` pin.** Symptom is different: `No route to
+host`, and `ip neigh` shows the pinned address `FAILED`. A hand-written
+`192.168.1.42 nextcloud.wonhomelab.net # reel: nextcloud LAN override` was
+added years ago to dodge the hairpin, the server later left that address, and
+the workaround became the outage. **Delete the line.** Nothing in this repo
+writes it, so `make sync` will not bring it back, and **do not re-add a pin** —
+if the hairpin regresses, fix it at the router with split-horizon DNS so every
+device benefits.
+
+**Triage, in this order:**
+
+```bash
+ip -4 -o addr show                             # cause 1: which subnet?
+grep -i wonhomelab /etc/hosts                  # cause 2: any pin at all?
+curl -sS --resolve nextcloud.wonhomelab.net:443:24.47.180.85 \
+  -o /dev/null -w '%{http_code} ssl_verify=%{ssl_verify_result}\n' \
+  https://nextcloud.wonhomelab.net/status.php
+```
+
+`200 ssl_verify=0` means the server and its certificate are healthy, so the
+problem is on this machine's side of the wire. `/tmp/find-nextcloud.sh` runs the
+whole sequence including a subnet sweep, if it is still around.
+
+**Backups do not depend on catching this quickly.** Both restic units carry
+`OnFailure=backup-failed@%n.service`, which raises a critical notification —
+added after `restic-backup.service` failed three nights running in September
+2026 in complete silence. `restic-local.timer` writes a second repo to
+`~/.local/state/restic-local` covering the small irreplaceable things (~13 GiB,
+under a minute); it is on the same disk, so it answers an `rm`, not a dead
+drive. Retire it with `systemctl --user disable --now restic-local.timer` once
+the network stops flapping.
 fresh damage there. It also gives the agent a constant stream of damage to
 encode, so it costs latency as well as looks wrong.
 

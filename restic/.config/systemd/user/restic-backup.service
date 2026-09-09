@@ -2,6 +2,7 @@
 Description=Restic backup to homelab Nextcloud
 Wants=network-online.target
 After=network-online.target
+OnFailure=backup-failed@%n.service
 
 [Service]
 Type=oneshot

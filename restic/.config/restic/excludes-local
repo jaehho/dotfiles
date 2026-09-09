@@ -1,0 +1,9 @@
+# Extra excludes for the local fallback repo, on top of ~/.config/restic/excludes.
+# Browser and editor profiles: large, mostly cache, and re-creatable by signing
+# back in. The cloud repo keeps them; the same-disk stopgap does not.
+.config/google-chrome
+.config/chromium
+.config/mozilla
+.config/Code
+.config/playwright-profile
+.config/OrcaSlicer

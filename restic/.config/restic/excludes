@@ -20,3 +20,8 @@ build
 .local/share/Steam
 .local/share/bottles
 .local/share/lutris
+
+# The local fallback repo (restic-local.service). Excluded from both repos:
+# from the cloud one because it is a duplicate of what is already there, and
+# from itself because a repo cannot contain itself.
+.local/state/restic-local
