@@ -262,6 +262,13 @@ phase_system() {
   local changed="" apply
   for pair in "${SYSTEM_COPIES[@]}"; do
     src="$(src_path "${pair%%:*}")"; dst="${pair##*:}"
+    # A link an older sync left would pass both checks below (-f follows it,
+    # and cmp then compares the repo file with itself), so it was never
+    # replaced. reflector.service failed that way for weeks.
+    if [ -L "$dst" ]; then
+      sudo rm -f "$dst"
+      echo "  $dst: was a symlink into the repo, replacing with a copy"
+    fi
     if [ ! -f "$dst" ]; then
       sudo cp "$src" "$dst"
       echo "  $dst: installed (new)"

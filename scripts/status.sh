@@ -33,7 +33,9 @@ done
 echo "System configs (copied):"
 for pair in "${SYSTEM_COPIES[@]}"; do
   src="$(src_path "${pair%%:*}")"; dst="${pair##*:}"
-  if [ ! -f "$dst" ]; then
+  if [ -L "$dst" ]; then
+    printf '  %s: %ssymlink, not a copy%s\n' "$dst" "$YELLOW" "$RESET"
+  elif [ ! -f "$dst" ]; then
     echo "  $dst: missing"
   elif cmp -s "$src" "$dst"; then
     echo "  $dst: synced"
