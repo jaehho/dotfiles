@@ -1,0 +1,97 @@
+#!/usr/bin/env python
+"""Emit the focused window's title as JSON lines for waybar's custom module.
+
+waybar's built-in hyprland/window module cannot see special workspaces. It
+resolves the title through `activeworkspace`, and Hyprland reports the
+*underlying* normal workspace there even while a special workspace holds focus:
+
+    $ hyprctl activewindow -j    | .workspace.name -> "special:<scratchpad>"
+    $ hyprctl activeworkspace -j | .name           -> "1"
+
+So with the scratchpad raised the bar would name whatever window is sitting
+behind it. `separate-outputs` does not help -- both branches of that module go
+through workspace data, never through the focused window. This asks Hyprland
+the question waybar should have asked: `activewindow`, which is always the
+window that actually has focus.
+
+Long-running: it follows the .socket2.sock event stream and re-queries on every
+event rather than polling, so the title is current within a frame and idles at
+zero cost. Every event is treated as interesting and the output is deduped --
+cheaper than tracking which of Hyprland's ~40 event names can move focus, and
+it cannot silently rot when that list changes across releases.
+"""
+
+import json
+import os
+import socket
+import sys
+import time
+
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+SIG = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+SOCKET_DIR = f"{RUNTIME}/hypr/{SIG}"
+
+
+def request(command):
+    """Ask socket1 (the hyprctl socket) directly -- no fork per event."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+        sock.connect(f"{SOCKET_DIR}/.socket.sock")
+        sock.sendall(command.encode())
+        chunks = []
+        while chunk := sock.recv(8192):
+            chunks.append(chunk)
+    return b"".join(chunks).decode(errors="replace")
+
+
+def payload():
+    try:
+        window = json.loads(request("j/activewindow"))
+    except (OSError, ValueError):
+        window = {}
+
+    title = window.get("title") or ""
+    app = window.get("class") or ""
+    if not title and not app:
+        # Empty workspace, or focus on a layer surface. The CSS collapses
+        # .empty to zero width so the island does not keep a hole open.
+        return {"text": "", "tooltip": "", "class": "empty"}
+
+    workspace = window.get("workspace", {}).get("name", "")
+    return {
+        "text": title or app,
+        "tooltip": f"{app}  ·  {title}" if app and title else (app or title),
+        # Special workspaces are pink everywhere else on this bar; the title
+        # follows so a raised scratchpad never reads as the normal workspace.
+        "class": "special" if workspace.startswith("special:") else "window",
+    }
+
+
+def emit(last):
+    current = payload()
+    if current != last:
+        json.dump(current, sys.stdout)
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+    return current
+
+
+def main():
+    if not SIG:
+        sys.exit("HYPRLAND_INSTANCE_SIGNATURE is unset -- not inside Hyprland")
+
+    last = None
+    while True:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as events:
+                events.connect(f"{SOCKET_DIR}/.socket2.sock")
+                last = emit(last)
+                for _ in events.makefile("r", errors="replace"):
+                    last = emit(last)
+        except OSError:
+            # Hyprland restarted or is still coming up. waybar keeps the last
+            # line on screen, so back off rather than spinning.
+            time.sleep(2)
+
+
+if __name__ == "__main__":
+    main()
