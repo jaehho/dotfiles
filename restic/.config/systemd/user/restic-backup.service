@@ -2,7 +2,6 @@
 Description=Restic backup to homelab Nextcloud
 Wants=network-online.target
 After=network-online.target
-OnFailure=backup-failed@%n.service
 
 [Service]
 Type=oneshot
@@ -23,3 +22,5 @@ ExecStart=/usr/bin/restic forget \
     --keep-weekly 4 \
     --keep-monthly 6 \
     --prune
+# Records the success, or complains if there hasn't been one in two days.
+ExecStopPost=%h/.local/bin/backup-outcome

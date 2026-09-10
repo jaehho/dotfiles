@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# backup-outcome — ExecStopPost for restic-backup.service. Runs on every
+# outcome, successful or not.
+#
+# The alarm is deliberately NOT "the last run failed". The backup runs four
+# times a day, and the homelab repo is reachable from only one of the two
+# subnets this laptop roams between (see ISSUES.md), so individual failures
+# are expected and there is nothing to do about one. What matters is whether
+# a run has succeeded *recently* -- so a success leaves a marker, and a
+# failure only speaks up when that marker has gone stale.
+set -uo pipefail
+
+MARKER="${XDG_STATE_HOME:-$HOME/.local/state}/restic-last-success"
+STALE_HOURS=48
+
+if [ "${SERVICE_RESULT:-}" = success ]; then
+    mkdir -p "$(dirname "$MARKER")"
+    touch "$MARKER"
+    exit 0
+fi
+
+last=$(stat -c %Y "$MARKER" 2>/dev/null || echo 0)
+now=$(date +%s)
+hours=$(( (now - last) / 3600 ))
+
+if [ "$last" -ne 0 ] && [ "$hours" -lt "$STALE_HOURS" ]; then
+    exit 0   # a recent run worked; this one can fail quietly
+fi
+
+if [ "$last" -eq 0 ]; then
+    when="never"
+else
+    when="${hours}h ago"
+fi
+
+# A timer-started unit does not necessarily inherit the session bus.
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus}"
+
+# No x-canonical-private-synchronous hint here, tempting as it is: notification-log
+# skips synchronous notifications, so the alarm would never make it into
+# ~/.local/state/notifications.db. The 48 h gate above is the deduplication.
+notify-send -u critical -a backup \
+    "Backup is stale" \
+    "Last success: ${when}. journalctl --user -u restic-backup.service -n 30"

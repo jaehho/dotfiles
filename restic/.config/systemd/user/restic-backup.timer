@@ -1,10 +1,13 @@
 [Unit]
-Description=Daily restic backup to homelab Nextcloud
+Description=Restic backup to homelab Nextcloud
 
 [Timer]
-OnCalendar=daily
+# Four attempts a day, not one. The repo is only reachable from one of the two
+# subnets this laptop roams between, so a single nightly shot loses a whole day
+# whenever it lands on the wrong one. A run with nothing new costs ~9s of scan.
+OnCalendar=*-*-* 00,06,12,18:10:00
 Persistent=true
-RandomizedDelaySec=30min
+RandomizedDelaySec=20min
 
 [Install]
 WantedBy=timers.target

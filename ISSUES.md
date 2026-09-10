@@ -97,6 +97,54 @@ subnets, and only one of them can reach the server:
 | `192.168.1.0/24`, gateway `.1` (main router) | real `*.wonhomelab.net` cert, `status.php` 200 | succeed |
 | `192.168.68.0/22` (Deco mesh) | `Server: micro_httpd`, snakeoil `CN=example.com, O=Dis, ST=Denial` | fail |
 
+Nothing is misconfigured when this happens and nothing needs fixing at the
+router; the laptop simply roamed. It looks exactly like a deleted port-forward,
+and in September 2026 it was misdiagnosed as one. **Check `ip -4 -o addr show`
+first**, and re-probe from the other subnet before concluding anything. The
+Deco side also sometimes fails to resolve the name at all (`Temporary failure
+in name resolution`), which is the same cause wearing a different error.
+
+**Cause 2 — a stale `/etc/hosts` pin.** Symptom is different: `No route to
+host`, and `ip neigh` shows the pinned address `FAILED`. A hand-written
+`192.168.1.42 nextcloud.wonhomelab.net # reel: nextcloud LAN override` was
+added years ago to dodge the hairpin, the server later left that address, and
+the workaround became the outage. **Delete the line.** Nothing in this repo
+writes it, so `make sync` will not bring it back, and **do not re-add a pin** —
+if the hairpin regresses, fix it at the router with split-horizon DNS so every
+device benefits.
+
+**Triage, in this order:**
+
+```bash
+ip -4 -o addr show                             # cause 1: which subnet?
+grep -i wonhomelab /etc/hosts                  # cause 2: any pin at all?
+curl -sS --resolve nextcloud.wonhomelab.net:443:24.47.180.85 \
+  -o /dev/null -w '%{http_code} ssl_verify=%{ssl_verify_result}\n' \
+  https://nextcloud.wonhomelab.net/status.php
+```
+
+`200 ssl_verify=0` means the server and its certificate are healthy, so the
+problem is on this machine's side of the wire. `/tmp/find-nextcloud.sh` runs the
+whole sequence including a subnet sweep, if it is still around.
+
+**Backups do not depend on you catching this quickly.** The timer makes four
+attempts a day (`00,06,12,18:10`, jittered), so a stretch on the wrong subnet
+costs hours rather than a day. Individual failures are therefore normal and are
+*not* announced -- announcing them would train you to dismiss the notification.
+`ExecStopPost=` runs `~/.local/bin/backup-outcome` on every outcome: a success
+touches `~/.local/state/restic-last-success`, and a failure speaks up only when
+that marker is more than 48 h old. To see where you stand without waiting for it:
+
+```bash
+stat -c %y ~/.local/state/restic-last-success   # last successful run
+systemctl --user list-timers restic-backup.timer
+```
+
+This replaced a silent setup in which `restic-backup.service` failed three
+nights running in September 2026 and nothing said so; the gap was found by
+hand, three days in.
+
+
 ## Cooper `conway`/`ice00`: REMOTE HOST IDENTIFICATION HAS CHANGED
 
 **Symptom:** `ssh conway` (or `ice`) refuses with `Host key verification failed`, and `sshfs-conway.service` sits in a restart loop logging `read: Connection reset by peer`.
@@ -215,44 +263,6 @@ on screen showing whatever was underneath; mousing over the area clears it
 piece by piece. xfwm4's compositor redirects windows off-screen and nxagent's
 damage tracking does not follow redirected windows, so the region a destroyed
 window covered is never re-sent. Hovering clears it because motion generates
-Nothing is misconfigured when this happens and nothing needs fixing at the
-router; the laptop simply roamed. It looks exactly like a deleted port-forward,
-and in September 2026 it was misdiagnosed as one. **Check `ip -4 -o addr show`
-first**, and re-probe from the other subnet before concluding anything. The
-Deco side also sometimes fails to resolve the name at all (`Temporary failure
-in name resolution`), which is the same cause wearing a different error.
-
-**Cause 2 — a stale `/etc/hosts` pin.** Symptom is different: `No route to
-host`, and `ip neigh` shows the pinned address `FAILED`. A hand-written
-`192.168.1.42 nextcloud.wonhomelab.net # reel: nextcloud LAN override` was
-added years ago to dodge the hairpin, the server later left that address, and
-the workaround became the outage. **Delete the line.** Nothing in this repo
-writes it, so `make sync` will not bring it back, and **do not re-add a pin** —
-if the hairpin regresses, fix it at the router with split-horizon DNS so every
-device benefits.
-
-**Triage, in this order:**
-
-```bash
-ip -4 -o addr show                             # cause 1: which subnet?
-grep -i wonhomelab /etc/hosts                  # cause 2: any pin at all?
-curl -sS --resolve nextcloud.wonhomelab.net:443:24.47.180.85 \
-  -o /dev/null -w '%{http_code} ssl_verify=%{ssl_verify_result}\n' \
-  https://nextcloud.wonhomelab.net/status.php
-```
-
-`200 ssl_verify=0` means the server and its certificate are healthy, so the
-problem is on this machine's side of the wire. `/tmp/find-nextcloud.sh` runs the
-whole sequence including a subnet sweep, if it is still around.
-
-**Backups do not depend on catching this quickly.** Both restic units carry
-`OnFailure=backup-failed@%n.service`, which raises a critical notification —
-added after `restic-backup.service` failed three nights running in September
-2026 in complete silence. `restic-local.timer` writes a second repo to
-`~/.local/state/restic-local` covering the small irreplaceable things (~13 GiB,
-under a minute); it is on the same disk, so it answers an `rm`, not a dead
-drive. Retire it with `systemctl --user disable --now restic-local.timer` once
-the network stops flapping.
 fresh damage there. It also gives the agent a constant stream of damage to
 encode, so it costs latency as well as looks wrong.
 
