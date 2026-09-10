@@ -144,6 +144,9 @@ done; wait
 attempts a day (`00,06,12,18:10`, jittered), so a stretch on the wrong subnet
 costs hours rather than a day. Individual failures are therefore normal and are
 *not* announced -- announcing them would train you to dismiss the notification.
+An attempt that cannot reach `status.php` (with a valid cert) is skipped by
+`ExecCondition=` instead of failing, so it does not light waybar's failed-units
+indicator; a unit that *does* fail got through to the server and broke anyway.
 `ExecStopPost=` runs `~/.local/bin/backup-outcome` on every outcome: a success
 touches `~/.local/state/restic-last-success`, and a failure speaks up only when
 that marker is more than 48 h old. To see where you stand without waiting for it:

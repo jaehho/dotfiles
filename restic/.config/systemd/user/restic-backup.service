@@ -8,6 +8,14 @@ Type=oneshot
 # restic exit 3 = some source files couldn't be read (e.g. a file changed mid-backup);
 # the snapshot is still saved, so don't mark the unit failed.
 SuccessExitStatus=3
+# Skip, don't fail, when the repo can't be reached: off the home network, or on
+# the home subnet whose hairpin serves a snakeoil cert (curl rejects it). A
+# failing ExecCondition leaves the unit inactive rather than failed, and
+# ExecStopPost still runs (SERVICE_RESULT=exec-condition), so the stale-backup
+# alarm below still counts it. The retries ride out DNS coming up after resume.
+ExecCondition=/usr/bin/curl -sf -o /dev/null --max-time 10 \
+    --retry 3 --retry-delay 5 --retry-all-errors --retry-max-time 60 \
+    https://nextcloud.wonhomelab.net/status.php
 Environment=RESTIC_REPOSITORY=rclone:nextcloud:Backups/restic
 Environment=RESTIC_PASSWORD_FILE=%h/.config/restic/password
 ExecStart=/usr/bin/restic backup \
