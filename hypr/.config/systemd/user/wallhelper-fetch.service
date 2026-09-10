@@ -9,4 +9,5 @@ Type=oneshot
 # network: network-online.target belongs to the system manager and nothing in
 # the user manager pulls it in, so this fires at login with no DNS and every
 # source fails. See ISSUES.md.
+Environment=WALLHELPER_DIR=%h/Media/wallpapers
 ExecStart=/usr/bin/wallhelper fetch --wait

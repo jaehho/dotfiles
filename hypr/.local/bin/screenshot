@@ -14,7 +14,7 @@
 #   clip     — clipboard only, no disk persistence
 set -euo pipefail
 
-dir=${SCREENSHOT_DIR:-$HOME/Pictures/screenshots}
+dir=${SCREENSHOT_DIR:-$HOME/Media/screenshots}
 mkdir -p "$dir"
 file="$dir/$(date +%Y-%m-%d_%H-%M-%S-%3N).png"
 

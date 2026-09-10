@@ -91,6 +91,10 @@ hl.env("MOZ_ENABLE_WAYLAND", "1")
 -- Electron/Chromium
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
 
+-- ~/Media layout (wallhelper-fetch.service sets WALLHELPER_DIR itself)
+hl.env("REEL_LIB", "/home/jaeho/Media/trips")
+hl.env("WALLHELPER_DIR", "/home/jaeho/Media/wallpapers")
+
 
 -----------------------
 ----- PERMISSIONS -----
