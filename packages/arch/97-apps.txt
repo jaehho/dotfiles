@@ -2,7 +2,7 @@ firefox-developer-edition
 gnome-keyring
 google-chrome
 nextcloud-client
-paperboy-git
+wallhelper-git
 perl-file-mimeinfo
 prismlauncher
 reel-git
