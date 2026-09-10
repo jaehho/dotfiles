@@ -124,8 +124,21 @@ curl -sS --resolve nextcloud.wonhomelab.net:443:24.47.180.85 \
 ```
 
 `200 ssl_verify=0` means the server and its certificate are healthy, so the
-problem is on this machine's side of the wire. `/tmp/find-nextcloud.sh` runs the
-whole sequence including a subnet sweep, if it is still around.
+problem is on this machine's side of the wire.
+
+From the Deco side the server cannot be found by name, and the main router's
+`/24` does not contain it. To locate it, sweep the subnet you are actually on
+for anything serving HTTPS:
+
+```bash
+base=$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 |
+       head -1 | cut -d. -f1-3)
+for i in $(seq 1 254); do
+  ( timeout 1 bash -c "echo > /dev/tcp/$base.$i/443" 2>/dev/null &&
+    curl -sk --max-time 5 "https://$base.$i/status.php" | grep -q '"installed"' &&
+    echo "$base.$i  <- Nextcloud" ) &
+done; wait
+```
 
 **Backups do not depend on you catching this quickly.** The timer makes four
 attempts a day (`00,06,12,18:10`, jittered), so a stretch on the wrong subnet
@@ -143,7 +156,6 @@ systemctl --user list-timers restic-backup.timer
 This replaced a silent setup in which `restic-backup.service` failed three
 nights running in September 2026 and nothing said so; the gap was found by
 hand, three days in.
-
 
 ## Cooper `conway`/`ice00`: REMOTE HOST IDENTIFICATION HAS CHANGED
 
