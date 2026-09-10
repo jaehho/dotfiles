@@ -40,7 +40,12 @@ local menu        = "rofi -show drun"
 -------------------
 
 hl.on("hyprland.start", function()
-    hl.exec_cmd([[waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' &]])
+    -- Started from its own config dir on purpose: waybar's reload_style_on_change
+    -- follows the style.css symlink with a raw read_symlink and resolves stow's
+    -- *relative* target (../../dotfiles/...) against its working directory, not
+    -- the link's. From anywhere else it watches a path that does not exist and
+    -- CSS edits never apply live. Same in the Super+B bind below.
+    hl.exec_cmd([[cd ~/.config/waybar && waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' &]])
     hl.exec_cmd("awww-daemon")
     hl.exec_cmd("swaync")
     hl.exec_cmd("~/.local/bin/hypr-urgent-focus")
@@ -323,10 +328,12 @@ hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen())
 -- Browser
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("firefox-developer-edition"))
 
--- Toggle waybar
+-- Toggle waybar. SIGUSR1 hides and shows the running bar in place; killing it
+-- instead left each custom module's child (steno bar) orphaned to PID 1, one
+-- more per press. pkill exits 1 when nothing matched, so a missing bar starts.
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd(
-    [[pkill waybar || waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' &]]
-))
+    [[pkill -SIGUSR1 -x waybar || { cd ~/.config/waybar && waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP'; } &]]
+)) -- show/hide bar
 
 -- Notifications
 hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("swaync-client -t"))

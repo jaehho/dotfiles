@@ -1,0 +1,20 @@
+[Unit]
+Description=Tailscale tray icon and menu
+
+# A unit, not an XDG autostart entry: this Hyprland session runs no XDG
+# autostart, so a .desktop file would silently never start.
+#
+# It talks only to the session bus, so it needs no display and no ordering
+# against waybar: with no tray host up yet it waits, and it re-registers on its
+# own whenever waybar (the StatusNotifierWatcher) comes back.
+ConditionPathExists=/usr/bin/tailscale
+
+[Service]
+# dark is Tailscale's own app-icon look (white dots on a black tile), which sits
+# on the dark bar beside the other apps' colour icons; light's white tile glares
+ExecStart=/usr/bin/tailscale systray --theme dark
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

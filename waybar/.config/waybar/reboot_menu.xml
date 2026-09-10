@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Menu for custom/reboot-needed: opening it is the question, the one item is
+     the answer. The id is a key in that module's "menu-actions". -->
+<interface>
+  <object class="GtkMenu" id="menu">
+    <child>
+      <object class="GtkMenuItem" id="reboot">
+        <property name="label">Reboot now</property>
+      </object>
+    </child>
+  </object>
+</interface>

@@ -26,13 +26,30 @@ window#waybar {
     padding: 0 6px;
 }
 
+/* ── Right-island clusters ──
+   A short hairline before each cluster after the first. Drawn as a 1px
+   background gradient rather than a border: a border runs the full height and
+   would hit the island's edge, and shrinking the group with margin would also
+   shrink the hover pills of the modules inside it. The bar's own 4px spacing
+   sits left of the line, so margin + 4 must equal padding to centre it. */
+#load,
+#output,
+#link,
+#session {
+    margin-left: 2px;
+    padding-left: 6px;
+    background-image: linear-gradient(rgba(96, 159, 210, 0.28), rgba(96, 159, 210, 0.28));
+    background-size: 1px 14px;
+    background-position: left center;
+    background-repeat: no-repeat;
+}
+
 /* ── Modules sit flat on the island: monochrome; hover lifts a faint pill ── */
 #workspaces,
 #custom-scratchpad,
 #custom-tray,
 #mpris,
 #clock,
-#tray,
 #cpu,
 #memory,
 #pulseaudio,
@@ -41,10 +58,12 @@ window#waybar {
 #power-profiles-daemon,
 #bluetooth,
 #network,
+#custom-tray-toggle,
 #custom-idle-inhibitor,
 #custom-swaync,
 #custom-reboot-needed,
-#custom-vpn,
+#privacy,
+#systemd-failed-units,
 #custom-power {
     background: transparent;
     color: #9da7a9;
@@ -64,9 +83,10 @@ window#waybar {
 #power-profiles-daemon:hover,
 #bluetooth:hover,
 #network:hover,
+#custom-tray-toggle:hover,
 #custom-idle-inhibitor:hover,
 #custom-swaync:hover,
-#custom-vpn:hover,
+#systemd-failed-units:hover,
 #custom-power:hover {
     color: #cfdadc;
     background-color: rgba(63, 125, 174, 0.14);
@@ -193,14 +213,19 @@ window#waybar {
     color: #ab5e59;
 }
 
-/* Tunnel state — dim when only the tailnet is reachable (normal resting state,
-   so it must not shout), green when all internet traffic is tunnelled.
-   Renders nothing when no tunnel is up. */
-#custom-vpn.split {
-    color: #565f62;
+/* Something is recording the mic or sharing the screen. Amber for the mic,
+   red for the screen: the screen is the one that can leak what you did not
+   mean to show. */
+#privacy-item.audio-in {
+    color: #b0954a;
 }
-#custom-vpn.full {
-    color: #4f8751;
+#privacy-item.screenshare {
+    color: #cf7f79;
+}
+
+/* A failed systemd unit (module only renders while one is failed) */
+#systemd-failed-units.degraded {
+    color: #cf7f79;
 }
 
 /* Kernel-upgrade reboot pending (module only renders when class=pending) */
@@ -215,13 +240,58 @@ window#waybar {
     font-size: 15px;
 }
 
-/* ── System tray ── */
+/* ── System tray ──
+   The tray is one module but N children, so it is deliberately NOT in the
+   shared module-padding rule above: #tray's own padding and the per-item
+   padding stack, and 7px + 4px punched a visible hole between the tray and
+   whatever module sits beside it. The items carry all of it instead, so the
+   tray's outer edge lands on the same 7px as every other module while the
+   icons themselves sit 14px apart and read as one group.
+   Which icons appear is not this file's decision — see the tray block in
+   config.jsonc. */
+#tray {
+    color: #9da7a9;
+    padding: 0 3px;
+}
+
 #tray > * {
     padding: 0 4px;
+    border-radius: 9px;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
 }
-#tray menu {
+
+/* Same hover pill the glyph modules get, so a tray icon behaves like a
+   neighbour rather than a foreign object dropped into the row. */
+#tray > *:hover {
+    background-color: rgba(96, 159, 210, 0.14);
+}
+
+/* An app that marks itself Passive (idle, nothing to report) rests dimmed.
+   The tray hides those unless "show-passive-items" is on. */
+#tray > .passive {
+    opacity: 0.55;
+}
+
+/* The one case that may shout */
+#tray > .needs-attention {
+    color: #cf7f79;
+}
+
+/* ── Popup menus: tray items' right-click menus and the native module menus
+   (power, reboot) alike ── */
+menu {
     background-color: #141c1e;
     color: #cfdadc;
+    border: 1px solid rgba(96, 159, 210, 0.18);
+    border-radius: 10px;
+    padding: 4px;
+}
+menuitem {
+    border-radius: 6px;
+    padding: 4px 12px;
+}
+menuitem:hover {
+    background-color: rgba(96, 159, 210, 0.14);
 }
 
 /* ── Tooltips ── */

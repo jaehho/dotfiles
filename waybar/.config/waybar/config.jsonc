@@ -1,5 +1,8 @@
 {
     "layer": "top",
+    // style.css (and anything it @imports) applies on save; config changes
+    // still need a restart
+    "reload_style_on_change": true,
     "position": "top",
     "height": 34,
     "spacing": 4,
@@ -17,21 +20,85 @@
         "mpris",
         "clock"
     ],
+    // Clustered by what a glance is for; style.css draws a divider before each
+    // cluster after the first. Groups default to vertical on a top bar, so
+    // every one needs "orientation": "horizontal".
     "modules-right": [
-        "tray",
-        "custom/idle-inhibitor",
-        "custom/swaync",
-        "custom/reboot-needed",
-        "cpu",
-        "memory",
-        "pulseaudio",
-        "backlight",
-        "group/power",
-        "bluetooth",
-        "custom/vpn",
-        "network",
-        "custom/power"
+        "group/status",
+        "group/load",
+        "group/output",
+        "group/link",
+        "group/session"
     ],
+
+    // Things that want your attention: recording, apps, notifications
+    "group/status": {
+        "orientation": "horizontal",
+        "modules": [
+            // Drawer first: the bar is right-anchored, so an opening drawer
+            // only grows the island's left edge instead of shoving the
+            // always-visible indicators after it sideways.
+            "group/tray-drawer",
+            "privacy",
+            "custom/idle-inhibitor",
+            "custom/swaync",
+            "custom/reboot-needed",
+            "systemd-failed-units"
+        ]
+    },
+    // The tray lives behind one glyph, like Windows' hidden-icons chevron.
+    // Click the glyph to slide the icons out to its left; click it again to
+    // tuck them away. Leaving with the pointer does not close it, so a tray
+    // icon's right-click menu is safe to reach. Not "group/tray": a group's CSS
+    // id is its name, and #tray is already the tray module itself.
+    "group/tray-drawer": {
+        "orientation": "horizontal",
+        "drawer": {
+            "transition-duration": 250,
+            "transition-left-to-right": false,
+            "click-to-reveal": true
+        },
+        "modules": ["custom/tray-toggle", "tray"]
+    },
+    // No on-click: the group's own click handler does the toggling, and a
+    // module that handles the click itself would swallow it.
+    "custom/tray-toggle": {
+        "format": "󰅁",
+        "tooltip": false
+    },
+    // Which app has the mic or is sharing the screen. Steno says when it is
+    // recording; this says who is listening. Hidden while nothing is. No
+    // audio-out: anything playing music would keep it lit.
+    "privacy": {
+        "icon-size": 14,
+        "icon-spacing": 6,
+        "modules": [
+            { "type": "screenshare" },
+            { "type": "audio-in" }
+        ]
+    },
+    // Hidden while nothing has failed. Counts system and user units alike.
+    "systemd-failed-units": {
+        "format": "󰀨 {nr_failed}",
+        "on-click": "kitty --class floating-tui --hold -e sh -c 'systemctl --failed; echo; systemctl --user --failed'"
+    },
+    "group/load": {
+        "orientation": "horizontal",
+        "modules": ["cpu", "memory"]
+    },
+    "group/output": {
+        "orientation": "horizontal",
+        "modules": ["pulseaudio", "backlight"]
+    },
+    // Battery and the radios: what keeps the machine up and connected
+    "group/link": {
+        "orientation": "horizontal",
+        "modules": ["group/power", "bluetooth", "network"]
+    },
+    "group/session": {
+        "orientation": "horizontal",
+        "modules": ["custom/power"]
+    },
 
     "group/power": {
         "orientation": "horizontal",
@@ -235,24 +302,39 @@
         "escape": true
     },
 
-    "custom/vpn": {
-        "exec": "~/.local/bin/vpn-status --waybar",
-        "return-type": "json",
-        "interval": 30,
-        "signal": 12,
-        "on-click": "kitty --class floating-tui --hold -e ~/.local/bin/vpn-status --ip"
-    },
-
     "custom/reboot-needed": {
         "exec": "~/.config/waybar/scripts/reboot-needed.sh",
         "return-type": "json",
         "interval": 300,
-        "on-click": "rofi -dmenu -p 'Reboot now?' -theme-str 'listview { lines: 2; }' <<< $'No\\nYes' | grep -q Yes && systemctl reboot"
+        // A one-item menu is the confirmation: click, then click "Reboot now"
+        "menu": "on-click",
+        "menu-file": "~/.config/waybar/reboot_menu.xml",
+        "menu-actions": {
+            "reboot": "systemctl reboot"
+        }
     },
 
+    // Which icons appear here is not decided in this file: the tray is a
+    // StatusNotifierItem host, so it shows whatever running app registers on
+    // D-Bus (`busctl --user call org.kde.StatusNotifierWatcher \
+    // /StatusNotifierWatcher org.freedesktop.DBus.Properties Get ss \
+    // org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems` lists them).
+    // To drop one, stop the app tray-ing itself; there is no filter here.
+    // Passive items (udiskie with no removable media) are hidden by default.
     "tray": {
-        "icon-size": 18,
-        "spacing": 8
+        "icon-size": 16,
+        // Per-app icon swap, keyed by the item's Id. waybar applies it once, so
+        // it only holds for apps that never change their own icon -- fine for
+        // EasyEffects, pointless for Nextcloud or Tailscale, which redraw on
+        // every sync or state change.
+        "icons": {
+            "easyeffects": "com.github.wwmm.easyeffects"
+        },
+        // Adds to the 4px each item carries in the stylesheet: 14px between
+        // icons. Tray icons fill their whole 16px square (glyphs have side
+        // bearings, these do not), so they need more box gap than the text
+        // modules to look as far apart.
+        "spacing": 6
     },
 
     "custom/scratchpad": {
@@ -274,6 +356,14 @@
     "custom/power": {
         "format": "⏻",
         "tooltip": false,
-        "on-click": "rofi -dmenu -p 'Power' -theme-str 'listview { lines: 5; }' <<< $'Lock\nLogout\nSuspend\nReboot\nShutdown' | xargs -I {} sh -c 'case \"{}\" in Lock) loginctl lock-session;; Logout) hyprctl dispatch \"hl.dsp.exit()\";; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'"
+        "menu": "on-click",
+        "menu-file": "~/.config/waybar/power_menu.xml",
+        "menu-actions": {
+            "lock": "loginctl lock-session",
+            "logout": "hyprctl dispatch 'hl.dsp.exit()'",
+            "suspend": "systemctl suspend",
+            "reboot": "systemctl reboot",
+            "shutdown": "systemctl poweroff"
+        }
     }
 }
