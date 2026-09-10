@@ -4,17 +4,17 @@ return {
   base00 = "#141c1e", -- default background
   base01 = "#20282a", -- lighter bg (status, line highlight)
   base02 = "#2f3739", -- selection background
-  base03 = "#565f62", -- comments, invisibles
-  base04 = "#848e91", -- dark foreground (line numbers)
+  base03 = "#778184", -- comments, invisibles
+  base04 = "#929ca0", -- dark foreground (line numbers)
   base05 = "#cfdadc", -- default foreground
   base06 = "#b6c0c2", -- light foreground
   base07 = "#9da7a9", -- lightest (rarely used)
-  base08 = "#ab5e59", -- variables, errors
-  base09 = "#a6653e", -- constants, numbers
-  base0A = "#8e7426", -- classes, search
-  base0B = "#4f8751", -- strings
-  base0C = "#118a7a", -- support, regex
-  base0D = "#3f7dae", -- functions
-  base0E = "#7c6bac", -- keywords
-  base0F = "#aa5d64", -- deprecated, brackets
+  base08 = "#cf7f79", -- variables, errors
+  base09 = "#ca865e", -- constants, numbers
+  base0A = "#b0954a", -- classes, search
+  base0B = "#70a971", -- strings
+  base0C = "#43ac9b", -- support, regex
+  base0D = "#609fd2", -- functions
+  base0E = "#9d8ccf", -- keywords
+  base0F = "#cf7e84", -- deprecated, brackets
 }
