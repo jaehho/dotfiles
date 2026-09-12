@@ -1,0 +1,341 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "kokoro-onnx",
+#   # misaki's English frontend without its [en] extra, which drags in torch and
+#   # the CUDA stack for a transformer tagger this does not use.
+#   "misaki", "num2words", "spacy",
+#   "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+# ]
+# ///
+"""Kokoro TTS for speech-dispatcher, so browsers and Zotero get it as a local voice.
+
+POST /speak?voice=af_heart&rate=<speechd rate> with the text as the body; the
+reply is raw s16le 24 kHz mono, streamed chunk by chunk so playback starts
+before the whole utterance is synthesized. Rates other than 1x go through
+ffmpeg's atempo. Socket-activated by
+kokoro-tts.socket; exits after IDLE_SECS without a request.
+
+Text goes through normalize() (academic shorthand, citations) and then misaki,
+Kokoro's own phonemizer, with espeak-ng only for words misaki does not know.
+"""
+import os, re, socket, socketserver, subprocess, sys, threading, time
+import urllib.request
+from http.server import BaseHTTPRequestHandler
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+import numpy as np
+
+DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "kokoro-tts"
+RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1"
+# fp32, not int8: the quantized graph runs ~3.5x slower on CPU.
+MODEL, VOICES = "kokoro-v1.0.onnx", "voices-v1.0.bin"
+SAMPLE_RATE = 24000
+IDLE_SECS = 600
+# Phonemes in the first chunk (how soon audio starts) and the most in any later
+# one (how far the model sees ahead for prosody).
+FIRST_CHUNK, CHUNK = 60, 400
+# Logs the text itself -- off by default, since it is whatever you are reading.
+DEBUG = os.environ.get("KOKORO_TTS_DEBUG") == "1"
+# "(Smith et al., 2017)" and "[4]" are skipped unless this is set to "read".
+CITATIONS = os.environ.get("KOKORO_TTS_CITATIONS", "skip")
+
+
+def log(*a):
+    print(*a, file=sys.stderr, flush=True)
+
+
+# --- text -------------------------------------------------------------------
+
+YEAR = r"(?:19|20)\d{2}[a-z]?"
+# One author-year item: "Smith, 2019", "Smith and Jones 2019a", "van der Berg et
+# al., 2020, 2021", optionally led by "see"/"e.g."/"cf.".
+CITE_ITEM = re.compile(
+    rf"^\s*(?:(?:see|e\.g\.|cf\.)\s*,?\s*)?"
+    rf"(?=[^,\d]*[A-Z])[A-Za-z][^,\d;()]*?,?\s+{YEAR}(?:\s*,\s*{YEAR})*\s*$"
+)
+NUMERIC_CITE = re.compile(r"\s?\[\d+(?:\s*[-–,]\s*\d+)*\]")
+
+ABBREVIATIONS = [
+    (r"\bFigs\.(?=\s*\d)", "Figures"), (r"\bFig\.(?=\s*\d)", "Figure"),
+    (r"\bEqs\.(?=\s*\(?\d)", "Equations"), (r"\bEq\.(?=\s*\(?\d)", "Equation"),
+    (r"\bTab\.(?=\s*\d)", "Table"), (r"\bSecs?\.(?=\s*\d)", "Section"),
+    (r"\bRefs?\.(?=\s*\[?\d)", "Reference"), (r"\bNo\.(?=\s*\d)", "number"),
+    (r"\bSuppl?\.", "Supplementary"), (r"\bapprox\.", "approximately"),
+    (r"\be\.g\.,?", "for example,"), (r"\bi\.e\.,?", "that is,"),
+    (r"\bcf\.", "compare"), (r"\bvs\.?(?=\s)", "versus"), (r"\bet al\.", "et al"),
+    (r"\bresp\.", "respectively"), (r"\bca\.(?=\s*\d)", "circa"),
+]
+
+# Units only right after a number and a space, so "h" and "s" stay letters elsewhere.
+UNITS = {
+    "h": "hours", "hr": "hours", "hrs": "hours", "min": "minutes", "s": "seconds",
+    "sec": "seconds", "ms": "milliseconds", "µs": "microseconds", "°C": "degrees Celsius",
+    "°F": "degrees Fahrenheit", "°": "degrees", "kg": "kilograms", "mg": "milligrams",
+    "µg": "micrograms", "mL": "milliliters", "ml": "milliliters", "µL": "microliters",
+    "µl": "microliters", "mM": "millimolar", "µM": "micromolar", "nM": "nanomolar",
+    "mm": "millimeters", "cm": "centimeters", "km": "kilometers", "µm": "micrometers",
+    "nm": "nanometers", "Hz": "hertz", "kHz": "kilohertz", "MHz": "megahertz",
+    "GHz": "gigahertz", "kB": "kilobytes", "MB": "megabytes", "GB": "gigabytes",
+    "TB": "terabytes",
+}
+UNIT = re.compile(
+    r"(\d)\s?(" + "|".join(sorted(map(re.escape, UNITS), key=len, reverse=True)) + r")(?![\w°])"
+)
+# "5 mg/kg" -> "5 milligrams per kilogram"; only after a word, so "and/or" stays.
+PER_UNITS = {"kg": "kilogram", "g": "gram", "mL": "milliliter", "ml": "milliliter",
+             "L": "liter", "h": "hour", "min": "minute", "s": "second", "day": "day", "m": "meter"}
+PER = re.compile(r"(?<=[a-z])/(" + "|".join(PER_UNITS) + r")\b")
+MAGNITUDE = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?)([KMBT])\b")
+MAGNITUDES = {"K": "thousand", "M": "million", "B": "billion", "T": "trillion"}
+LABEL_BEFORE = re.compile(r"(?:Figures?|Tables?|Sections?|Equations?|[Pp]anels?|[Ss]tep)\s*$")
+
+
+def _drop_author_year(m: re.Match) -> str:
+    parts = m.group(1).split(";")
+    return "" if all(CITE_ITEM.match(p) for p in parts) else m.group(0)
+
+
+def _magnitude(m: re.Match) -> str:
+    # "Figure 3B" is a panel, not three billion.
+    if LABEL_BEFORE.search(m.string[: m.start()]):
+        return m.group(0)
+    return f"{m.group(1)} {MAGNITUDES[m.group(2)]}"
+
+
+def normalize(text: str) -> str:
+    text = text.replace("μ", "µ")  # Greek mu and the micro sign look the same in PDFs
+    if CITATIONS != "read":
+        text = re.sub(r"\s?\(([^()]*)\)", _drop_author_year, text)
+        text = NUMERIC_CITE.sub("", text)
+    for pattern, spoken in ABBREVIATIONS:
+        text = re.sub(pattern, spoken, text)
+    text = MAGNITUDE.sub(_magnitude, text)
+    text = re.sub(r"(\d)\s*[x×]\s*g\b", r"\1 times g", text)
+    text = UNIT.sub(lambda m: f"{m.group(1)} {UNITS[m.group(2)]}", text)
+    text = PER.sub(lambda m: f" per {PER_UNITS[m.group(1)]}", text)
+    text = re.sub(r"(\d)\s*[–-]\s*(\d)", r"\1 to \2", text)
+    text = re.sub(r"(\d)\s*×\s*(\d)", r"\1 times \2", text)
+    text = re.sub(r"±\s*", " plus or minus ", text)
+    text = re.sub(r"(?:~|≈)\s*(?=\d)", "approximately ", text)
+    text = re.sub(r"≤\s*", " less than or equal to ", text)
+    text = re.sub(r"≥\s*", " greater than or equal to ", text)
+    text = re.sub(r"<\s*(?=\d)", " less than ", text)
+    text = re.sub(r">\s*(?=\d)", " greater than ", text)
+    text = re.sub(r"\s+([,.;:])", r"\1", text)
+    return re.sub(r"\s{2,}", " ", text).strip()
+
+
+class Phonemizer:
+    """misaki, one per accent, built on first use (spaCy takes a second to load)."""
+
+    def __init__(self):
+        self._g2p = {}
+
+    def __call__(self, text: str, british: bool) -> str:
+        if british not in self._g2p:
+            from misaki import en, espeak
+            self._g2p[british] = en.G2P(
+                trf=False, british=british, fallback=espeak.EspeakFallback(british=british)
+            )
+        phonemes, _ = self._g2p[british](text)
+        return " ".join(phonemes.split())
+
+
+# --- audio ------------------------------------------------------------------
+
+def multiplier(rate: int) -> float:
+    # Inverse of Gecko's mapping: rate = log10(m)/log10(2.5)*100 above 1x, and
+    # log10(m)/log10(0.5)*-100 below, so ±100 is 2.5x and 0.5x.
+    return 2.5 ** (rate / 100) if rate >= 0 else 0.5 ** (-rate / 100)
+
+
+def trim_tail(audio: np.ndarray, keep: float = 0.06) -> np.ndarray:
+    level = np.convolve(np.abs(audio), np.ones(240) / 240, "same")
+    loud = np.flatnonzero(level > 0.002)
+    return audio[: loud[-1] + int(keep * SAMPLE_RATE)] if len(loud) else audio
+
+
+def chunks(phonemes: str) -> list[str]:
+    """Growing sizes: a short first chunk starts audio soon. Synthesis runs at
+    ~0.45x real time against 2.5x playback, so a chunk can be at most ~2x the
+    one playing before it; 1.5x leaves room for a busy CPU."""
+    from kokoro_onnx.chunker import split_phonemes
+    out, size = [], FIRST_CHUNK
+    while phonemes:
+        head, *rest = split_phonemes(phonemes, size)
+        out.append(head)
+        phonemes, size = " ".join(rest), min(max(int(len(head) * 1.5), FIRST_CHUNK), CHUNK)
+    return out
+
+
+def synthesize(kokoro, phonemize, text: str, voice: str):
+    """Yield 1x audio pieces for one utterance as they are ready."""
+    from kokoro_onnx.chunker import pause_after
+    phonemes = phonemize(normalize(text), british=voice.startswith("b"))
+    pieces = chunks(phonemes)
+    for i, piece in enumerate(pieces):
+        audio, _ = kokoro.create(piece, voice=voice, speed=1.0, lang="en-us", is_phonemes=True)
+        if i < len(pieces) - 1:
+            # The pause punctuation calls for between chunks; the model trims its own.
+            gap = pause_after(piece, 0.25, 0.1)
+            audio = np.concatenate([audio, np.zeros(int(gap * SAMPLE_RATE), audio.dtype)])
+        else:
+            # The model leaves ~0.3 s of near-silence at the end, which becomes a
+            # stall between sentences since each one is its own utterance.
+            audio = trim_tail(audio)
+        yield audio
+
+
+def at_tempo(pcm, tempo: float):
+    """Stream s16le chunks through ffmpeg's atempo (WSOLA), fed from a thread.
+
+    All of the rate is done here: Kokoro's own speed garbles the first word of
+    nearly every sentence above ~1.3 (Whisper: 6/6 missed at 2.0). WSOLA keeps
+    consonants crisper than Rubber Band's R3 at 2.5x and costs ~2% of its CPU."""
+    ff = subprocess.Popen(
+        ["ffmpeg", "-nostdin", "-loglevel", "error", "-fflags", "nobuffer",
+         "-probesize", "32", "-analyzeduration", "0",
+         "-f", "s16le", "-ar", str(SAMPLE_RATE), "-ac", "1", "-i", "pipe:0",
+         "-af", f"atempo={tempo:.4f}", "-f", "s16le", "-flush_packets", "1", "pipe:1"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    )
+
+    def feed():
+        try:
+            for data in pcm:
+                ff.stdin.write(data)
+            ff.stdin.close()
+        except (BrokenPipeError, ValueError):
+            pass  # ffmpeg was killed because the client left
+
+    feeder = threading.Thread(target=feed, daemon=True)
+    feeder.start()
+    try:
+        while data := ff.stdout.read1(16384):
+            yield data
+    finally:
+        ff.kill()
+        ff.wait()
+        feeder.join()
+
+
+def pcm16(audio: np.ndarray) -> bytes:
+    return (np.clip(audio, -1, 1) * 32767).astype("<i2").tobytes()
+
+
+# --- server -----------------------------------------------------------------
+
+def fetch_models():
+    DATA.mkdir(parents=True, exist_ok=True)
+    for name in (MODEL, VOICES):
+        dest = DATA / name
+        if not dest.exists():
+            log(f"downloading {name}")
+            tmp = dest.with_suffix(".part")
+            urllib.request.urlretrieve(f"{RELEASE}/{name}", tmp)
+            tmp.rename(dest)
+
+
+def load():
+    from kokoro_onnx import Kokoro
+    fetch_models()
+    return Kokoro(str(DATA / MODEL), str(DATA / VOICES)), Phonemizer()
+
+
+def main():
+    kokoro, phonemize = load()
+    lock = threading.Lock()
+    state = {"last": time.monotonic(), "busy": 0}
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.0"
+
+        def log_message(self, fmt, *args):
+            pass
+
+        def do_GET(self):
+            if urlparse(self.path).path != "/voices":
+                return self.send_error(404)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write("\n".join(kokoro.get_voices()).encode())
+
+        def do_POST(self):
+            url = urlparse(self.path)
+            if url.path != "/speak":
+                return self.send_error(404)
+            q = parse_qs(url.query)
+            voice = q.get("voice", ["af_heart"])[0]
+            if voice not in kokoro.voices:
+                voice = "af_heart"
+            try:
+                rate = int(float(q.get("rate", ["0"])[0]))
+            except ValueError:
+                rate = 0
+            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            text = body.decode("utf-8", "replace").strip()
+            self.send_response(200)
+            self.send_header("Content-Type", f"audio/L16;rate={SAMPLE_RATE};channels=1")
+            self.end_headers()
+            state["busy"] += 1
+            t0 = time.monotonic()
+            try:
+                with lock:
+                    pcm = (pcm16(a) for a in synthesize(kokoro, phonemize, text, voice)) if text else iter(())
+                    tempo = multiplier(rate)
+                    stream = at_tempo(pcm, tempo) if text and abs(tempo - 1) > 0.02 else pcm
+                    try:
+                        for i, data in enumerate(stream):
+                            if i == 0:
+                                if DEBUG:
+                                    log(f"text={text!r} normalized={normalize(text)!r}")
+                                log(f"rate={rate} voice={voice} chars={len(text)} "
+                                    f"first-audio={time.monotonic() - t0:.2f}s")
+                            self.wfile.write(data)
+                            self.wfile.flush()
+                    finally:
+                        stream.close()
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # speech-dispatcher stopped or skipped: the player went away
+            finally:
+                state["busy"] -= 1
+                state["last"] = time.monotonic()
+
+    class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+        daemon_threads = True
+
+        def __init__(self):
+            # LISTEN_PID names uv, which runs this as a child, so only the fd count is checked.
+            if os.environ.get("LISTEN_FDS") == "1":
+                socketserver.BaseServer.__init__(self, None, Handler)
+                self.socket = socket.socket(fileno=3)
+            else:
+                path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "kokoro-tts.sock"
+                path.unlink(missing_ok=True)
+                super().__init__(str(path), Handler)
+
+        def get_request(self):
+            conn, _ = self.socket.accept()
+            return conn, ("local", 0)
+
+    server = Server()
+
+    def reaper():
+        while True:
+            time.sleep(30)
+            if state["busy"] == 0 and time.monotonic() - state["last"] > IDLE_SECS:
+                log("idle, exiting")
+                server.shutdown()
+                return
+
+    threading.Thread(target=reaper, daemon=True).start()
+    log("ready")
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

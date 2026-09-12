@@ -1,0 +1,9 @@
+[Unit]
+Description=Kokoro TTS socket (speech-dispatcher voice)
+
+[Socket]
+ListenStream=%t/kokoro-tts.sock
+SocketMode=0600
+
+[Install]
+WantedBy=sockets.target

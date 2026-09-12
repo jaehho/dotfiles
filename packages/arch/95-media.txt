@@ -1,4 +1,5 @@
 espeak-ng
+ffmpeg
 ffmpegthumbnailer
 gst-libav
 gst-plugin-pipewire
@@ -12,5 +13,6 @@ libgsf
 losslesscut-bin
 mpv
 raw-thumbnailer
+speech-dispatcher
 spotify-player
 tumbler

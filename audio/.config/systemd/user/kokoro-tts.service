@@ -1,0 +1,11 @@
+[Unit]
+Description=Kokoro TTS server (speech-dispatcher voice)
+Requires=kokoro-tts.socket
+
+[Service]
+ExecStart=%h/.local/bin/kokoro-tts-server
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
+# Exits by itself after ten idle minutes; the socket starts it again.
+Restart=on-failure
+# uv exits 143 when systemd stops it with SIGTERM.
+SuccessExitStatus=143
