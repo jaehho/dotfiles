@@ -164,7 +164,7 @@ hand, three days in.
 
 **Symptom:** `ssh conway` (or `ice`) refuses with `Host key verification failed`, and `sshfs-conway.service` sits in a restart loop logging `read: Connection reset by peer`.
 
-**Do not just `ssh-keygen -R` and reconnect.** Cooper auth is a *plaintext password* (`sshpass -f ~/.ssh/jump_pass`, see `ssh/.ssh/config`), so accepting a forged key hands over the account on the first connect. Pubkey auth would fail safe here; password auth does not.
+**Do not just `ssh-keygen -R` and reconnect.** Cooper auth is a *plaintext password* (`sshpass -f ~/.ssh/jump_pass`, see `home/ssh/.ssh/config`), so accepting a forged key hands over the account on the first connect. Pubkey auth would fail safe here; password auth does not.
 
 Two traps specific to these hosts:
 
@@ -306,7 +306,7 @@ network agent, so expect to redo this on a new account.
   session's live options are readable on the server at
   `~/.x2go/C-*/options` (`link=lan,pack=16m-jpeg-5,...`).
 
-**Do not run the client inside Xephyr.** A `bin/.local/bin/x2go-launch`
+**Do not run the client inside Xephyr.** A `home/bin/.local/bin/x2go-launch`
 wrapper did this until 2026-09-01 to "isolate X11 from Hyprland". It cost a
 full core — a nested software X server re-blitting every frame on its way to
 XWayland — and bought nothing: Hyprland's binds are compositor-level, so Super
@@ -499,7 +499,7 @@ and since hypridle fires `on-timeout` only **once per idle period**, it never
 retries. Use the battery's own `status` instead — `Discharging` is unambiguous —
 and **fail toward sleeping** on anything unrecognised. A spurious sleep costs a
 keypress; a spurious stay-awake costs the session. Lives in
-`hypr/.local/bin/hypr-sleep-if-idle`.
+`home/hypr/.local/bin/hypr-sleep-if-idle`.
 
 **Backstop:** `hypr-battery-monitor` hibernates at 7% (below its own `CRIT=10`
 notification so the ladder still works, and well above UPower's `PercentageAction=2`,
@@ -557,7 +557,7 @@ leaky. s2idle on this box costs roughly 1 %/h; awake-with-screen-off costs
 ~13 W, which flattens a full battery in about five hours.
 
 **Why it can happen:** there is exactly one automatic path back to sleep, the
-30-min hypridle listener in `hypr/.config/hypr/hypridle.conf`. logind
+30-min hypridle listener in `home/hypr/.config/hypr/hypridle.conf`. logind
 `IdleAction` is `ignore`, and the lid switch cannot re-fire while the lid is
 already open. If hypridle is dead or its config failed to parse, nothing
 sleeps the machine.
@@ -602,7 +602,7 @@ side no userspace has run yet — the boot kernel loads the image and must freez
 devices to hand off — so a dGPU bound in the initramfs refuses to freeze and
 the kernel throws the image away.
 
-**Fix:** `MODULES=(xe)` in `mkinitcpio/mkinitcpio.conf`, then `sudo mkinitcpio -P`.
+**Fix:** `MODULES=(xe)` in `system/mkinitcpio/mkinitcpio.conf`, then `sudo mkinitcpio -P`.
 nvidia loads from the real root after switch-root; `nvidia-drm.modeset=1` still
 applies, and the panel is on the iGPU so late loading costs nothing.
 
@@ -664,7 +664,7 @@ session, as it did on 2026-08-18, dropping the user to tty1
 truly need a fresh logind.
 
 **Which of our files are affected:** only logind. `systemd-{suspend,hibernate,
-suspend-then-hibernate}.service` all run `ProtectHome=no`, so `systemd/sleep.conf`
+suspend-then-hibernate}.service` all run `ProtectHome=no`, so `system/systemd/sleep.conf`
 and the `system-sleep/` hooks work fine as symlinks. Before assuming a config is
 live, check the consuming unit:
 `systemctl show <unit> -p ProtectHome -p ProtectSystem`.
@@ -723,7 +723,7 @@ dGPU bound *and* the driver has VRAM state to preserve. The 21:45 resume the
 same evening succeeded on the same initramfs, so a passing resume proves nothing.
 
 **Action taken:**
-- `mkinitcpio/mkinitcpio.conf`: `MODULES=(xe nvidia nvidia_modeset nvidia_uvm
+- `system/mkinitcpio/mkinitcpio.conf`: `MODULES=(xe nvidia nvidia_modeset nvidia_uvm
   nvidia_drm)` → `MODULES=(xe)`, with a comment recording why it must not be
   re-added a third time.
 - `/tmp/fix-hibernate-resume.sh`: backs the working image up to
@@ -901,7 +901,7 @@ awk -v a="$a" '$1=="84:"{s=0;for(i=2;i<=NF;i++)if($i~/^[0-9]+$/)s+=$i;print "del
 Idle should be 0. Anything sustained is phantom; corroborate with
 `ERR ... Touch jump detected and discarded` in the Hyprland log.
 
-**Fix** — `udev/rules.d/90-no-wake-i2c-hid.rules`, installed by `make sync`.
+**Fix** — `system/udev/rules.d/90-no-wake-i2c-hid.rules`, installed by `make sync`.
 Matched on `DRIVER=="i2c_hid_acpi"`, not on the ACPI HID, and `ACTION` must
 include `bind`: `power/wakeup` does not exist until the driver probes, so a
 rule firing on `add` alone is silently dropped. Verify:
@@ -936,7 +936,7 @@ That cycle was *flawless* — which is the useful finding: suspend-then-hibernat
 works end to end on the current driver, unprompted, including the hyprlock
 restart hook.
 
-**Latent bug found while reading the sleep hooks** — `systemd/system-sleep/fuse-mounts`:
+**Latent bug found while reading the sleep hooks** — `system/systemd/system-sleep/fuse-mounts`:
 
 ```bash
 timeout 10 run_user systemctl --user stop "$svc"   # BROKEN
@@ -951,13 +951,13 @@ the whole tree: `run_user_t 10 systemctl --user stop "$svc"`.
 
 **Changes made:**
 
-- `systemd/system-sleep/fuse-mounts` — fixed the `timeout`-on-a-function bug;
+- `system/systemd/system-sleep/fuse-mounts` — fixed the `timeout`-on-a-function bug;
   added a 15 s cap on the resume-side `start` for the same failure mode.
-- `systemd/logind.conf.d/10-lid.conf` — `HandleLidSwitch=suspend-then-hibernate`
+- `system/systemd/logind.conf.d/10-lid.conf` — `HandleLidSwitch=suspend-then-hibernate`
   on battery; `HandleLidSwitchExternalPower=suspend` on AC.
-- `systemd/sleep.conf` — added `HibernateOnACPower=no`, so the 1 h countdown
+- `system/systemd/sleep.conf` — added `HibernateOnACPower=no`, so the 1 h countdown
   only runs unplugged and closing the lid while docked just stays suspended.
-- `hypr/.config/hypr/hypridle.conf` — new 1800 s listener, battery-gated:
+- `home/hypr/.config/hypr/hypridle.conf` — new 1800 s listener, battery-gated:
   `grep -qx 1 /sys/class/power_supply/*/online || systemctl suspend-then-hibernate`.
   Fails toward sleeping if the AC device is ever renamed.
 - `packages/arch/20-hardware.txt` — added `powertop`, `turbostat`.

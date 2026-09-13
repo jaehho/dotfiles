@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # claude-reconcile: enforce dotfiles-declared Claude Code state at user scope.
-# Source manifests live in claude/.claude/reconcile/ and claude/.claude/skills/.
+# Source manifests live in home/claude/.claude/reconcile/ and home/claude/.claude/skills/.
 
 set -euo pipefail
 
 DOTFILES="${DOTFILES:-$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)}"
-RECONCILE_DIR="$DOTFILES/claude/.claude/reconcile"
-CUSTOM_SKILLS_DIR="$DOTFILES/claude/.claude/skills"
+RECONCILE_DIR="$DOTFILES/home/claude/.claude/reconcile"
+CUSTOM_SKILLS_DIR="$DOTFILES/home/claude/.claude/skills"
 SECRETS_FILE="${CLAUDE_MCP_SECRETS_FILE:-$HOME/.config/claude-mcp-secrets.env}"
 
 CLAUDE_DIR="$HOME/.claude"
@@ -33,10 +33,10 @@ anything not declared gets removed silently (strict). With --interactive,
 removals are confirmed once per category.
 
   - Plugins:      settings.json -> enabledPlugins
-  - Marketplaces: claude/.claude/reconcile/marketplaces.json
-  - MCP servers:  claude/.claude/reconcile/mcp-servers.json
+  - Marketplaces: home/claude/.claude/reconcile/marketplaces.json
+  - MCP servers:  home/claude/.claude/reconcile/mcp-servers.json
                   (\${VAR} from \$CLAUDE_MCP_SECRETS_FILE or ~/.config/claude-mcp-secrets.env)
-  - Skills:       custom (claude/.claude/skills/) + third-party (skills-sources.json)
+  - Skills:       custom (home/claude/.claude/skills/) + third-party (skills-sources.json)
 
 Flags:
   -n, --dry-run       show what would change without applying

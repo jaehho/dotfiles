@@ -152,7 +152,7 @@ phase_stow() {
   local pkg file rel target real link
   for pkg in "${STOW_PACKAGES[@]}"; do
     while IFS= read -r -d '' file; do
-      rel="${file#"$DOTFILES/$pkg/"}"
+      rel="${file#"$STOW_DIR/$pkg/"}"
       target="$HOME/$rel"
       # Runtime-generated files are handled explicitly below, never by the
       # cleanup loop — see STOW_SKIP in lib.sh.
@@ -171,8 +171,8 @@ phase_stow() {
              echo "  backed up $target -> $target.bak" ;;
         esac
       fi
-    done < <(find "$DOTFILES/$pkg" -type f -print0)
-    stow -d "$DOTFILES" -t ~ --no-folding "$pkg"
+    done < <(find "$STOW_DIR/$pkg" -type f -print0)
+    stow -d "$STOW_DIR" -t ~ --no-folding "$pkg"
   done
 
   # mimeapps.list is owned here, not by stow (mime/.stow-local-ignore excludes
@@ -183,7 +183,7 @@ phase_stow() {
   if have update-mime-database && [ -d "$HOME/.local/share/mime/packages" ]; then
     update-mime-database "$HOME/.local/share/mime"
   fi
-  target="$DOTFILES/mime/.config/mimeapps.list"
+  target="$STOW_DIR/mime/.config/mimeapps.list"
   link="$HOME/.config/mimeapps.list"
   mkdir -p "$(dirname "$link")"
   if [ -e "$link" ] && [ ! -L "$link" ]; then
@@ -244,14 +244,14 @@ phase_system() {
   # NetworkManager refuses symlinked or non-root dispatcher scripts, so these
   # are install-copied rather than linked.
   sudo install -D -m 0755 -o root -g root \
-    "$DOTFILES/NetworkManager/dispatcher.d/50-restart-sshfs" \
+    "$DOTFILES/system/NetworkManager/dispatcher.d/50-restart-sshfs" \
     /etc/NetworkManager/dispatcher.d/50-restart-sshfs
   sudo install -D -m 0755 -o root -g root \
-    "$DOTFILES/NetworkManager/dispatcher.d/60-tzupdate" \
+    "$DOTFILES/system/NetworkManager/dispatcher.d/60-tzupdate" \
     /etc/NetworkManager/dispatcher.d/60-tzupdate
   if [ "$HOST_NO_AAAA" = 1 ]; then
     sudo install -D -m 0755 -o root -g root \
-      "$DOTFILES/NetworkManager/dispatcher.d/90-no-aaaa" \
+      "$DOTFILES/system/NetworkManager/dispatcher.d/90-no-aaaa" \
       /etc/NetworkManager/dispatcher.d/90-no-aaaa
   else
     sudo rm -f /etc/NetworkManager/dispatcher.d/90-no-aaaa

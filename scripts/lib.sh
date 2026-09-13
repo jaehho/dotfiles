@@ -8,6 +8,7 @@
 
 DOTFILES="${DOTFILES:-$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)}"
 PKGDIR="$DOTFILES/packages"
+STOW_DIR="$DOTFILES/home"     # stow packages; system/ holds what the system phase installs
 
 # --- distro ---------------------------------------------------------------
 # Detect by package manager rather than os-release ID so derivatives
@@ -96,7 +97,7 @@ unset _m
 
 # --- system configs -------------------------------------------------------
 # Symlinked: read at runtime, so a link into the repo is fine.
-# Format "src:dst"; src is repo-relative unless it starts with '/'.
+# Format "src:dst"; src is relative to system/ unless it starts with '/'.
 SYSTEM_LINKS=(
   "keyd/default.conf:/etc/keyd/default.conf"
   "libinput/local-overrides.quirks:/etc/libinput/local-overrides.quirks"
@@ -156,7 +157,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 src_path() {
   case "$1" in
     /*) echo "$1" ;;
-    *)  echo "$DOTFILES/$1" ;;
+    *)  echo "$DOTFILES/system/$1" ;;
   esac
 }
 
@@ -164,10 +165,10 @@ src_path() {
 pkg_is_stowed() {
   local pkg="$1" file rel target real
   while IFS= read -r -d '' file; do
-    rel="${file#"$DOTFILES/$pkg/"}"
+    rel="${file#"$STOW_DIR/$pkg/"}"
     target="$HOME/$rel"
     real="$(readlink -f "$target" 2>/dev/null || true)"
     [ "$real" = "$file" ] && return 0
-  done < <(find "$DOTFILES/$pkg" -type f -print0)
+  done < <(find "$STOW_DIR/$pkg" -type f -print0)
   return 1
 }
