@@ -398,6 +398,50 @@ done
 
 ---
 
+## Speakers bright and thin again
+
+The speaker EQ is a filter graph inside the speaker sink itself (`speaker-measure --apply`), which WirePlumber loads every time it creates that sink. If the speakers sound raw anyway:
+
+```sh
+ls ~/.config/wireplumber/wireplumber.conf.d/60-speaker-eq.conf   # written by --apply
+pw-dump | grep -c audioconvert.filter-graph.0                     # 1 while the speakers are the sink
+pw-metadata -n default | grep speaker-eq.bypassed                 # bypassed and never restored?
+journalctl --user -u pipewire -b -g filter-graph                  # rejected by PipeWire?
+```
+
+- **Left bypassed.** Measuring and the quick-settings toggle take the graph out and record `speaker-eq.bypassed`; measuring puts it back on exit, Ctrl+C included. A run killed outright leaves it out: turn Speaker EQ back on in quick settings, or restart wireplumber, which rebuilds the sink with it.
+- **Rejected.** `Can't load filter-graph` means PipeWire could not build the graph, yet the sink still carries it in its properties and quick settings still shows it on. The likely cause is a PipeWire upgrade changing the graph format: compare the rule with `man pipewire-props`, fix `eq_conf_body` in `speaker-measure`, and run `--refit <run> --apply`, which warns if it is still rejected.
+- **Renamed sink.** A count of 0 with nothing plugged in (quick settings says unavailable) means the rule no longer matches the speaker sink's name, which a kernel or alsa-ucm-conf update can change. `--refit <run> --apply` with nothing plugged in writes the new name.
+- **The config is gone.** `speaker-measure --refit <run from ~/.local/state/speaker-measure/applied.json> --apply` writes it again.
+- **Measured at another volume.** The amps' protection is level-dependent, so a preset only fits near the volume it was measured at (`sink_db` in the run's `meta.json`). At a much different listening volume, run `--verify` there, and measure again if the EQ scores worse than flat.
+- **Proving it runs.** `pw-cli enum-params <id> Props` is no proof either way: a suspended node reports no graph, and after a live change it can return a stale cache. While something plays, the speaker sink's BUSY in `pw-top` is several times higher with the EQ than without.
+
+## Every app goes silent after hiding a filter sink
+
+**Symptom:** `pw-play` works but `paplay` hangs, nothing appears in wiremix's
+playback tab, and Firefox, Spotify and Zotero are all silent with healthy-looking
+volumes everywhere. `journalctl --user -u pipewire-pulse` shows `timeout on stream`.
+
+**Cause:** a filter-chain sink (the speaker EQ, until 2026-09-13) was given a
+hidden `media.class` such as `Audio/Sink/Internal`. pipewire-pulse's
+`pw_manager_object_is_sink()` matches
+only `Audio/Sink` and `Audio/Duplex`, so the filter is invisible to it — but
+WirePlumber still links pulse playback streams to it, and `find_peer_for_link()`
+then finds no sink object, so the CREATE_PLAYBACK_STREAM reply is never sent and
+the client waits out a 35 s timeout. Native PipeWire clients are unaffected,
+which is exactly what makes it look like a pulse bug.
+
+**Fix:** a filter sink must be exactly `media.class = "Audio/Sink"`, and
+upstream has twice refused a way to hide one (closed MRs !2064 and !2066, the
+second proposing `node.hidden`). Hiding a *source* this way is fine. To add no
+node at all, run the filter inside the device's own sink instead:
+`audioconvert.filter-graph.N` in a `monitor.alsa.rules` `update-props` rule,
+which is how the speaker EQ runs now. A 2026-09-11 note here called that inert
+on an ALSA sink. It is not (measured on 1.6.8 with `pw-top`, through suspend
+and resume); a suspended node just does not report its graph.
+
+---
+
 ## dGPU wedges during a sleep cycle and silently burns ~18 W
 
 **Symptom:** nothing looks broken. The desktop is fine (the panel is on the
@@ -673,9 +717,17 @@ live, check the consuming unit:
 
 # Incident log
 
+## 2026-09-13 — Speaker EQ moved inside the speaker sink
+
+As a WirePlumber smart filter, the EQ put "Speaker EQ", "Monitor of Speaker EQ" and a "corrected output" playback stream in every mixer and picker, which was confusing. `speaker-measure` now writes it as `audioconvert.filter-graph.0` on the speaker ALSA node (`wireplumber.conf.d/60-speaker-eq.conf`), and the quick-settings toggle bypasses it with a live Props param instead of the `filters` metadata. The same preset (run `20260911T210058`) was carried over unchanged. `speaker-measure` was first committed with this change. The old `pipewire.conf.d/60-speaker-eq.conf` never was; restic snapshots before 09-13 22:10 have it.
+
 ## 2026-09-13 — Mic echo canceller removed
 
 The PipeWire echo canceller (`audio` package, `99-echo-cancel.conf`, added 09-11) put two permanent recording streams in every mixer and ran the microphone whenever anything woke the speaker path, level meters included. It was taken out along with waybar's privacy ignore entries for its streams. Expect echo back in speaker calls from apps without working cancellation of their own: on 09-11 Firefox's did nothing, and Claude's voice mode echoed on the raw mic until the canceller went in. If that returns, restore the file; it was never committed, and restic snapshot `e167eb98` (09-13 18:13) and earlier have it.
+
+## 2026-09-10 — Speaker EQ gone after resume; EasyEffects had aborted at 11:39
+
+Resumed 11:38:50; `audio-health` found both cards unmanaged and restarted pipewire at 11:39:10. EasyEffects aborted with a core dump and nothing restarted it, because `speaker-measure --apply` had installed an XDG autostart entry this Hyprland session never runs. Restarted by hand later, it applied the speaker correction to the earphones that were plugged in by then. Fixed with `easyeffects.service` tied to pipewire, and presets autoloaded per output (Speaker route gets the correction, everything else `flat`). Testing the unit turned up the second failure: the same restart rewrote WirePlumber's saved default sink to Headphones, bypassing the EQ with EasyEffects alive; the unit's `ExecStartPost` now sets it back. Verified by repeating the exact restart `audio-health` performs: EasyEffects back under a new pid, default still `easyeffects_sink`. Corrected the same afternoon: that `ExecStartPost` was backwards and is gone. EasyEffects moves streams into its sink itself and ignores its own sink as a default, so with `easyeffects_sink` as the default it would have stayed on the earphones' sink after an unplug; `--apply` now puts a hardware sink back instead.
 
 ## 2026-08-19 — Hibernate resumed into a cold boot; nvidia back in `MODULES` (April regression)
 

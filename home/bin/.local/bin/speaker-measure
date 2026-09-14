@@ -1,0 +1,1562 @@
+#!/usr/bin/env python
+"""
+speaker-measure -- measure the built-in speakers, write the EQ they are missing.
+
+Why this exists
+---------------
+The CS35L41 smart amps in this laptop load `spk-prot` firmware (check with
+`journalctl -k -g cs35l41`): excursion and thermal protection, not tone
+shaping. On Windows a vendor audio processing object sits in front of them and
+does the multiband EQ -- the firmware blob still carries the build path of the
+tuning it expects. On Linux nothing occupies that slot, so the signal plays raw
+into a protection limiter, and the result is thin and top-heavy. This measures
+how far off the speakers actually are and writes the missing correction into
+PipeWire, in front of the speakers only, and as an Equalizer APO file beside
+the run.
+
+Method
+------
+Exponential sine sweep deconvolved against its own inverse filter (Farina).
+The reason for a sweep rather than pink noise: on a driver this small the
+harmonic distortion is enormous, and an ESS pushes every distortion product
+into a separate impulse *ahead* of the linear one, so gating the impulse
+response around its peak throws the distortion away. Noise folds distortion
+back into the measurement and you end up equalizing your own distortion.
+
+Everything here is relative -- the response is normalized to its own in-band
+mean -- so no microphone calibration file is needed. An uncalibrated mic still
+finds the 10-15 dB resonances that make a laptop speaker sound wrong, and that
+is the scale of error worth correcting. It will not tell you anything true
+about the last half-decibel, and it is not trying to.
+
+The correction band is chosen from the measurement, not assumed: a laptop
+driver that plays from 340 Hz to 11 kHz will, if told to correct 200 Hz to
+16 kHz, have its whole cut budget spent dragging every good band down to
+meet two regions that were never coming back. --band overrides.
+
+Measuring with a phone
+----------------------
+The built-in mic array is bolted to the same chassis as the drivers, inches
+away, so it hears near field and case conduction rather than what arrives at
+your head -- and it cannot be moved, which is the only way to tell a driver
+resonance from an interference null at one listening position. --play plays
+the sweeps for a recorder this machine does not control and --from-recording
+fits from the file it produced. The sweeps go out as a single file, so their
+spacing in the recording is exact, which makes the recorder's own clock
+measurable and correctable -- worth doing, because an ESS reaches its top
+octave at the very end of the sweep, so a clock error accumulates precisely
+where it smears the resonances worth finding.
+
+Correction is cut-only by default. Boosting a frequency the driver cannot
+reproduce does not make it louder; it drives the protection DSP harder and
+trades a dip for distortion. --max-boost overrides if you want to experiment.
+
+The measurement is only valid near the volume it was taken at, because the
+protection DSP is level-dependent: measure at the level you actually listen at.
+The sink volume in force is recorded in meta.json for exactly this reason.
+"""
+import argparse
+import itertools
+import json
+import math
+import os
+import shutil
+import subprocess
+import sys
+import time
+import wave
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+
+FS = 48000
+STATE = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "speaker-measure"
+
+# The internal mic array runs beamforming and compression by default. Both are
+# right for calls and fatal for a measurement: the beamformer has a frequency
+# response of its own, and the compressor actively flattens the thing we are
+# trying to measure. Turned off for the duration, restored on the way out.
+CAPTURE_DSP = ("Capture DRC switch", "Capture TDFB beam switch")
+
+# Only a fallback for when the driver's usable span cannot be found; the
+# real band is measured per run by usable_band().
+DEFAULT_BAND = (200.0, 16000.0)
+
+
+# --- shell helpers --------------------------------------------------------
+def run(cmd, **kw):
+    return subprocess.run(cmd, capture_output=True, text=True,
+                          check=False, **kw)
+
+
+def die(msg, code=1):
+    print(f"speaker-measure: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def warn(msg):
+    print(f"speaker-measure: {msg}", file=sys.stderr)
+
+
+def pactl_json(kind):
+    r = run(["pactl", "-f", "json", "list", kind])
+    if r.returncode != 0:
+        die(f"pactl list {kind} failed: {r.stderr.strip()}")
+    return json.loads(r.stdout)
+
+
+# --- device selection -----------------------------------------------------
+def pick(objs, want, default_name, kind):
+    if want:
+        hits = [o for o in objs if want.lower() in o["name"].lower()]
+        if not hits:
+            die(f"no {kind} matching {want!r} (try --list)")
+        if len(hits) > 1:
+            die(f"{want!r} matches {len(hits)} {kind}s (try --list):\n  "
+                + "\n  ".join(o["name"] for o in hits))
+        return hits[0]
+    for o in objs:
+        if o["name"] == default_name:
+            return o
+    die(f"default {kind} {default_name!r} not in the {kind} list")
+
+
+def sink_level(sink):
+    """Volume in dB and mute state, for the record and for a sanity check."""
+    vols = sink.get("volume", {})
+    db = None
+    for v in vols.values():
+        try:
+            db = float(str(v.get("db", "")).rstrip(" dB"))
+        except (TypeError, ValueError):
+            pass
+        break
+    return db, bool(sink.get("mute"))
+
+
+def list_devices():
+    sinks, sources = pactl_json("sinks"), pactl_json("sources")
+    dsink = run(["pactl", "get-default-sink"]).stdout.strip()
+    dsrc = run(["pactl", "get-default-source"]).stdout.strip()
+    print("sinks (playback):")
+    for s in sinks:
+        print(f"  {'*' if s['name'] == dsink else ' '} {s['name']}")
+    print("sources (capture):")
+    for s in sources:
+        if s.get("properties", {}).get("device.class") == "monitor":
+            continue
+        print(f"  {'*' if s['name'] == dsrc else ' '} {s['name']}")
+    print("\n* = current default")
+
+
+class CaptureDSP:
+    """Disable the capture-side DSP for the measurement, then put it back."""
+
+    def __init__(self, card, enabled=True):
+        self.card = card
+        self.enabled = enabled and card is not None and shutil.which("amixer")
+        self.saved = {}
+
+    def _names(self):
+        r = run(["amixer", "-c", str(self.card), "scontrols"])
+        out = []
+        for line in r.stdout.splitlines():
+            if "'" not in line:
+                continue
+            name = line.split("'")[1]
+            if any(name.endswith(sfx) for sfx in CAPTURE_DSP):
+                out.append(name)
+        return out
+
+    def __enter__(self):
+        if not self.enabled:
+            return self
+        for name in self._names():
+            r = run(["amixer", "-c", str(self.card), "sget", name])
+            if "[on]" not in r.stdout:
+                continue  # already off, so leave it alone and do not restore it
+            self.saved[name] = "on"
+            run(["amixer", "-c", str(self.card), "sset", name, "off"])
+        if self.saved:
+            print(f"  capture DSP off for the measurement: {', '.join(self.saved)}")
+        return self
+
+    def __exit__(self, *exc):
+        for name in self.saved:
+            run(["amixer", "-c", str(self.card), "sset", name, "on"])
+        if self.saved:
+            print(f"  capture DSP restored: {', '.join(self.saved)}")
+        return False
+
+
+# --- PipeWire EQ ----------------------------------------------------------
+# The correction runs inside the speaker sink itself: a WirePlumber rule hands
+# the ALSA node a filter graph as it is created. Whatever plays to the speakers
+# goes through it, nothing new shows up in mixers or device pickers, and
+# headphones never do, because plugging them in swaps the speaker sink for a
+# sink of their own.
+_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+EQ_CONF = _CONFIG / "wireplumber" / "wireplumber.conf.d" / "60-speaker-eq.conf"
+EQ_PARAM = "audioconvert.filter-graph.0"
+# A suspended node does not report its graph, so taking it out is recorded
+# against the node's id in the `default` metadata, which PipeWire drops along
+# with the node. hypr-settings-menu's Speaker EQ toggle keeps the same record.
+EQ_BYPASS = "speaker-eq.bypassed"
+PW_BIQUAD = {"PK": "bq_peaking", "LSC": "bq_lowshelf", "HSC": "bq_highshelf"}
+APPLIED = STATE / "applied.json"
+SPEAKER = STATE / "speaker-output.json"
+
+
+def pw_nodes():
+    try:
+        objs = json.loads(run(["pw-dump"]).stdout or "[]")
+    except json.JSONDecodeError:
+        return []
+    return [o for o in objs if o.get("type") == "PipeWire:Interface:Node"]
+
+
+def wait_for(predicate, timeout=10.0):
+    for _ in range(int(timeout / 0.25)):
+        if predicate():
+            return True
+        time.sleep(0.25)
+    return predicate()
+
+
+def speaker_eq(sink):
+    """(node id, graph) when `sink` carries the EQ, else (None, None)."""
+    for n in pw_nodes():
+        props = n["info"]["props"]
+        if props.get("node.name") == sink and props.get(EQ_PARAM):
+            return n["id"], props[EQ_PARAM]
+    return None, None
+
+
+def eq_engaged(node):
+    meta = run(["pw-metadata", "-n", "default", str(node)]).stdout
+    return f"key:'{EQ_BYPASS}'" not in meta
+
+
+def engage_eq(node, graph, on):
+    """Load the graph back into the node, or take it out, and record which."""
+    # audioconvert reads each Props param into a 4096-byte buffer, so the graph
+    # goes back without the rule's indentation.
+    value = " ".join(graph.split()) if on else ""
+    run(["pw-cli", "set-param", str(node), "Props",
+         f'{{ params = [ "{EQ_PARAM}" {json.dumps(value)} ] }}'])
+    if on:
+        run(["pw-metadata", "-n", "default", "-d", str(node), EQ_BYPASS])
+    else:
+        run(["pw-metadata", "-n", "default", str(node), EQ_BYPASS, "true"])
+
+
+def speaker_output():
+    """The built-in speakers' sink and route, whether or not the sink exists now.
+
+    UCM gives the speakers and the headphone jack separate sinks on one card,
+    and plugging headphones in removes the speaker sink rather than rerouting
+    it, so it is remembered from the last time it was seen.
+    """
+    for s in pactl_json("sinks"):
+        port = next((p for p in s.get("ports", [])
+                     if p.get("name") == s.get("active_port")), None)
+        if s["name"].startswith("alsa_output") and port \
+                and "speaker" in port.get("name", "").lower():
+            info = {"device": s["name"], "description": s.get("description", ""),
+                    "route": port.get("description", "")}
+            SPEAKER.parent.mkdir(parents=True, exist_ok=True)
+            SPEAKER.write_text(json.dumps(info, indent=2) + "\n")
+            return info
+    if SPEAKER.exists():
+        return json.loads(SPEAKER.read_text())
+    # Not seen live yet, but a run that measured the speakers directly names it.
+    for meta in sorted(STATE.glob("*/meta.json"), reverse=True):
+        sink = json.loads(meta.read_text()).get("sink", "")
+        if sink.startswith("alsa_output") and "__Speaker__" in sink:
+            return {"device": sink, "description": "Speaker", "route": "Speaker"}
+    return None
+
+
+def eq_conf_body(filters, preamp, device, run_name):
+    """A WirePlumber rule that builds the correction into `device` only."""
+    # One mono graph of named builtins; PipeWire runs a copy per channel.
+    # Both channels get the same curve: the fit came from one mic, so there is
+    # no per-channel information in it to spend.
+    nodes = [(f'{{ type = builtin name = preamp label = mixer '
+              f'control = {{ "Gain 1" = {10 ** (preamp / 20):.6f} }} }}')]
+    names = ["preamp"]
+    for i, (kind, fc, g, q) in enumerate(filters, 1):
+        nodes.append(f'{{ type = builtin name = f{i} label = {PW_BIQUAD[kind]} '
+                     f'control = {{ "Freq" = {fc:.2f} "Q" = {q:.3f} '
+                     f'"Gain" = {g:.2f} }} }}')
+        names.append(f"f{i}")
+    links = [f'{{ output = "{a}:Out" input = "{b}:In" }}'
+             for a, b in itertools.pairwise(names)]
+    nl = "\n" + " " * 24
+    return f"""\
+# Written by speaker-measure --apply from run {run_name}. Safe to delete
+# (then restart wireplumber). The speakers' missing tone correction, run
+# inside the speaker sink itself.
+monitor.alsa.rules = [
+    {{
+        matches = [ {{ node.name = "{device}" }} ]
+        actions = {{
+            update-props = {{
+                {EQ_PARAM} = {{
+                    nodes = [
+                        {nl.join(nodes)}
+                    ]
+                    links = [
+                        {nl.join(links)}
+                    ]
+                    inputs = [ "preamp:In 1" ]
+                    outputs = [ "{names[-1]}:Out" ]
+                }}
+            }}
+        }}
+    }}
+]
+"""
+
+
+def eq_apply(filters, preamp, run_name):
+    """Put the correction into the speaker sink, and nothing else."""
+    if not filters:
+        warn("no filters were fitted, so there is nothing to apply")
+        return
+    speaker = speaker_output()
+    if not speaker:
+        warn("the speaker sink has never been seen, so the correction cannot be "
+             "tied to it -- run --apply again with nothing plugged in")
+        return
+
+    EQ_CONF.parent.mkdir(parents=True, exist_ok=True)
+    EQ_CONF.write_text(eq_conf_body(filters, preamp, speaker["device"], run_name))
+    print(f"  config   {EQ_CONF}")
+    live = any(n["info"]["props"].get("node.name") == speaker["device"]
+               for n in pw_nodes())
+    since = f"--since=@{int(time.time())}"
+    # The rule is read when WirePlumber starts, and the restart rebuilds the
+    # speaker sink with it.
+    r = run(["systemctl", "--user", "restart", "wireplumber.service"])
+    if r.returncode != 0:
+        warn(f"could not restart wireplumber ({r.stderr.strip()}); the EQ loads "
+             "at the next login")
+    elif not live:
+        print("  the speakers are not in use now; the EQ loads when they are")
+    elif not wait_for(lambda: speaker_eq(speaker["device"])[0] is not None):
+        warn("the speaker sink came back without the EQ -- "
+             "`journalctl --user -u wireplumber -n 30`")
+    # The sink keeps the graph in its properties even when PipeWire could not
+    # build it, so only PipeWire's log tells the two apart.
+    elif "Can't load filter-graph" in run(
+            ["journalctl", "--user", "-u", "pipewire.service", since,
+             "-o", "cat", "-q"]).stdout:
+        warn("PipeWire rejected the EQ graph -- "
+             "`journalctl --user -u pipewire -g filter-graph`")
+
+    APPLIED.write_text(json.dumps(
+        {"run": run_name, "config": str(EQ_CONF),
+         "when": datetime.now().astimezone().isoformat(timespec="seconds")},
+        indent=2) + "\n")
+    print(f"  the EQ runs inside {speaker['device']}; every other output is "
+          "untouched")
+
+
+class SpeakerEq:
+    """Engage or bypass the speaker EQ for the duration, then put back
+    whichever was in force, since quick settings may have it off.
+
+    A sweep measured through the EQ describes the *corrected* system, so
+    fitting it yields a second correction that silently assumes the first is
+    still there -- two EQs stacked, each cutting what the other already cut.
+    Any sink but the speakers carries no EQ and is left alone.
+    """
+
+    def __init__(self, sink, on):
+        self.sink, self.on, self.was = sink, on, on
+
+    def __enter__(self):
+        self.node, self.graph = speaker_eq(self.sink)
+        if self.node is not None:
+            self.was = eq_engaged(self.node)
+        if self.was != self.on:
+            engage_eq(self.node, self.graph, self.on)
+            print(f"  speaker EQ {'engaged' if self.on else 'bypassed'} "
+                  "while measuring")
+        return self
+
+    def __exit__(self, *exc):
+        if self.was != self.on:
+            engage_eq(self.node, self.graph, self.was)
+        return False
+
+
+class SmartFiltersOff:
+    """Take WirePlumber smart filters out of the path while measuring.
+
+    `media` is "Audio/Sink" or "Audio/Source". A filter on the mic, such as an
+    echo canceller, exists to subtract whatever the speakers play, which here
+    is the sweep itself.
+    """
+
+    def __init__(self, media, enabled=True):
+        self.media, self.enabled, self.ids = media, enabled, []
+
+    def __enter__(self):
+        if not self.enabled:
+            return self
+        for n in pw_nodes():
+            props = n["info"]["props"]
+            if str(props.get("filter.smart")).lower() == "true" \
+                    and props.get("media.class", "").startswith(self.media):
+                run(["pw-metadata", "-n", "filters", str(n["id"]),
+                     "filter.smart.disabled", "true"])
+                self.ids.append(n["id"])
+                print(f"  {props.get('node.name')} bypassed while measuring")
+        if self.ids:
+            time.sleep(0.5)  # WirePlumber relinks on the metadata change
+        return self
+
+    def __exit__(self, *exc):
+        for i in self.ids:
+            run(["pw-metadata", "-n", "filters", "-d", str(i),
+                 "filter.smart.disabled"])
+        if self.ids:
+            time.sleep(0.5)
+        return False
+
+
+# --- wav i/o --------------------------------------------------------------
+def write_wav(path, x, fs=FS, channels=2):
+    pcm = (np.clip(x, -1.0, 1.0) * 32767.0).astype("<i2")
+    if channels > 1:
+        pcm = np.repeat(pcm[:, None], channels, axis=1).ravel()
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(2)
+        w.setframerate(fs)
+        w.writeframes(pcm.tobytes())
+
+
+def read_wav(path):
+    with wave.open(str(path), "rb") as w:
+        ch, sw, fs, n = (w.getnchannels(), w.getsampwidth(),
+                         w.getframerate(), w.getnframes())
+        raw = w.readframes(n)
+    if sw == 2:
+        x = np.frombuffer(raw, dtype="<i2").astype(np.float64) / 32768.0
+    elif sw == 4:
+        x = np.frombuffer(raw, dtype="<i4").astype(np.float64) / 2147483648.0
+    else:
+        die(f"unsupported sample width {sw * 8}-bit in {path}")
+    if ch > 1:
+        x = x.reshape(-1, ch).mean(axis=1)
+    return x, fs
+
+
+# --- signal ---------------------------------------------------------------
+def make_sweep(f1, f2, dur, fs=FS, fade=0.03):
+    """Exponential sine sweep and its Farina inverse filter."""
+    n = int(dur * fs)
+    t = np.arange(n) / fs
+    k = math.log(f2 / f1)
+    s = np.sin(2 * math.pi * f1 * dur / k * (np.exp(t * k / dur) - 1.0))
+    # A sweep that starts or stops mid-cycle is a step, and that click smears
+    # across the entire spectrum -- so taper both ends.
+    nf = max(1, int(fade * fs))
+    w = np.hanning(2 * nf)
+    s[:nf] *= w[:nf]
+    s[-nf:] *= w[nf:]
+    # Time-reversed, with a 6 dB/oct decay undoing the sweep's pink energy
+    # distribution (a log sweep dwells longer at low frequencies). Convolving
+    # the two gives a delta.
+    inv = s[::-1] * np.exp(-t * k / dur)
+    return s, inv
+
+
+def deconvolve(rec, inv):
+    n = 1 << math.ceil(math.log2(len(rec) + len(inv)))
+    return np.fft.irfft(np.fft.rfft(rec, n) * np.fft.rfft(inv, n), n)
+
+
+def window_ir(ir, fs=FS, pre_ms=1.0, post_ms=25.0):
+    """Gate the impulse response around its peak.
+
+    Two jobs at once: everything earlier than the peak is harmonic distortion
+    (an ESS puts it there by construction) and everything much later is room
+    reflection, so an asymmetric gate discards both.
+
+    The gate is long on purpose. Its length is also the frequency resolution
+    (25 ms ~ 40 Hz), and a short gate that gates out reflections would leave
+    nothing to say about the low end. At laptop distances the desk reflection
+    arrives under a millisecond behind the direct sound anyway, so it cannot be
+    gated out at any length -- fractional-octave smoothing is what deals with
+    the resulting ripple, not the window.
+    """
+    peak = int(np.argmax(np.abs(ir)))
+    pre = int(pre_ms * fs / 1000)
+    post = int(post_ms * fs / 1000)
+    a, b = max(0, peak - pre), min(len(ir), peak + post)
+    seg = ir[a:b].astype(np.float64).copy()
+    k = peak - a
+    if k > 1:
+        seg[:k] *= np.hanning(2 * k)[:k]
+    tail = max(2, (len(seg) - k) // 2)
+    seg[-tail:] *= np.hanning(2 * tail)[tail:]
+    return seg
+
+
+def magnitude(seg, fs=FS, nfft=1 << 16):
+    H = np.fft.rfft(seg, nfft)
+    return np.fft.rfftfreq(nfft, 1 / fs), np.abs(H) ** 2
+
+
+def smooth(f, power, grid, frac):
+    """Fractional-octave power average onto a log-spaced grid."""
+    half = 2 ** (1.0 / (2.0 * frac))
+    out = np.empty(len(grid))
+    for i, fc in enumerate(grid):
+        lo = np.searchsorted(f, fc / half)
+        hi = max(np.searchsorted(f, fc * half), lo + 1)
+        out[i] = 10 * math.log10(max(float(power[lo:hi].mean()), 1e-30))
+    return out
+
+
+def biquad_db(f, kind, fc, gain, q, fs=FS, z1=None):
+    """Magnitude of an RBJ biquad -- what PipeWire's bq_* builtins build.
+
+    Evaluating the real biquad rather than an idealized bell matters: the fit
+    is only honest if it is fitting the thing that ends up in the signal path.
+    """
+    A = 10 ** (gain / 40.0)
+    w0 = 2 * math.pi * fc / fs
+    cw, alpha = math.cos(w0), math.sin(w0) / (2 * q)
+    if kind == "PK":
+        b = (1 + alpha * A, -2 * cw, 1 - alpha * A)
+        a = (1 + alpha / A, -2 * cw, 1 - alpha / A)
+    elif kind == "LSC":
+        s = 2 * math.sqrt(A) * alpha
+        b = (A * ((A + 1) - (A - 1) * cw + s),
+             2 * A * ((A - 1) - (A + 1) * cw),
+             A * ((A + 1) - (A - 1) * cw - s))
+        a = ((A + 1) + (A - 1) * cw + s,
+             -2 * ((A - 1) + (A + 1) * cw),
+             (A + 1) + (A - 1) * cw - s)
+    elif kind == "HSC":
+        s = 2 * math.sqrt(A) * alpha
+        b = (A * ((A + 1) + (A - 1) * cw + s),
+             -2 * A * ((A - 1) + (A + 1) * cw),
+             A * ((A + 1) + (A - 1) * cw - s))
+        a = ((A + 1) - (A - 1) * cw + s,
+             2 * ((A - 1) - (A + 1) * cw),
+             (A + 1) - (A - 1) * cw - s)
+    else:
+        raise ValueError(f"unknown filter kind {kind!r}")
+    if z1 is None:
+        z1 = np.exp(-1j * 2 * np.pi * f / fs)
+    z2 = z1 * z1
+    H = (b[0] + b[1] * z1 + b[2] * z2) / (a[0] + a[1] * z1 + a[2] * z2)
+    return 20 * np.log10(np.abs(H))
+
+
+def candidates(band):
+    """The filter shapes the fit may choose from.
+
+    Shelves are in here because the most common laptop-speaker defect is a
+    broadband tilt, and a tilt is not something peaking filters can express
+    without stacking half a dozen of them and still getting the ends wrong.
+    A bright speaker is fixed by one high-shelf cut, not by eight bells.
+    """
+    lo, hi = band
+    out = [("PK", float(fc), q)
+           for fc in np.geomspace(lo, hi, int(6 * math.log2(hi / lo)) + 1)
+           for q in (0.7, 1.4, 2.8, 5.6)]
+    out += [("LSC", fc, 0.7) for fc in (80.0, 120.0, 200.0, 300.0, 500.0)
+            if fc >= lo / 2]
+    out += [("HSC", fc, 0.7) for fc in (1000.0, 1500.0, 2500.0, 4000.0,
+                                        6000.0, 9000.0) if fc <= hi]
+    return out
+
+
+def merge_filters(filters, max_boost, max_cut):
+    """Fold together filters that landed on the same shape.
+
+    Matching pursuit will happily pick the same shelf twice when one hit the
+    per-filter cut ceiling. Summing them where the total still fits keeps the
+    preset readable; where it does not fit, two stacked shelves is genuinely
+    what the correction needs and both stay.
+    """
+    out = []
+    for f in filters:
+        for i, g in enumerate(out):
+            if f[0] == g[0] and f[1] == g[1] and f[3] == g[3]:
+                total = g[2] + f[2]
+                if -max_cut <= total <= max(max_boost, 0.0):
+                    out[i] = (g[0], g[1], total, g[3])
+                    break
+        else:
+            out.append(f)
+    return out
+
+
+def fit_filters(grid, err, band, n_max, max_boost, max_cut,
+                min_gain=0.5, min_gain_rms=0.05, reach=85.0):
+    """Matching pursuit: repeatedly take whichever filter flattens the most.
+
+    Each candidate's gain comes from projecting the residual onto its unit-gain
+    shape, then the *actual* response at that gain is subtracted, so large
+    gains (where a biquad's dB response stops scaling linearly) stay honest.
+    """
+    w = ((grid >= band[0]) & (grid <= band[1])).astype(float)
+    if not w.any():
+        return [], err.copy()
+    inband = w > 0
+
+    # You cannot fill a dip. Under cut-only the only route to the target is to
+    # bring everything else down to meet it and turn the volume back up, so
+    # slide the target down until `reach` percent of the band is reachable
+    # with the cuts we are allowed to make. Without this the objective is
+    # dominated by error it is forbidden to fix, every candidate looks equally
+    # useless against that floor, and the search stops after one or two
+    # filters believing there is nothing left to do.
+    slide = float(np.percentile(err[inband], reach)) - max_boost
+    if slide > 0:
+        err = err - slide
+
+    z1 = np.exp(-1j * 2 * np.pi * grid / FS)
+    cands = candidates(band)
+    shapes = {c: biquad_db(grid, c[0], c[1], 1.0, c[2], z1=z1) for c in cands}
+
+    resid = err.copy()
+    rms = math.sqrt(float(np.average(resid**2, weights=w)))
+    chosen = []
+    for _ in range(n_max):
+        best = None
+        for c in cands:
+            s = shapes[c]
+            denom = float(np.average(s * s, weights=w))
+            if denom < 1e-9:
+                continue
+            g0 = float(np.average(resid * s, weights=w)) / denom
+            for scale in (0.7, 0.85, 1.0, 1.15, 1.3):
+                g = float(np.clip(g0 * scale, -max_cut, max_boost))
+                if abs(g) < min_gain:
+                    continue
+                r = resid - biquad_db(grid, c[0], c[1], g, c[2], z1=z1)
+                e = math.sqrt(float(np.average(r**2, weights=w)))
+                if best is None or e < best[0]:
+                    best = (e, c, g, r)
+        if best is None or best[0] > rms - min_gain_rms:
+            break
+        rms, (kind, fc, q), gain, resid = best
+        chosen.append((kind, float(fc), gain, q))
+    return sorted(merge_filters(chosen, max_boost, max_cut),
+                  key=lambda t: t[1]), resid
+
+
+def total_db(grid, filters, z1=None):
+    if not filters:
+        return np.zeros_like(grid)
+    return sum(biquad_db(grid, k, fc, g, q, z1=z1) for k, fc, g, q in filters)
+
+
+USABLE_DROP = 10.0  # dB below its own midband where a driver stops counting
+
+
+def usable_band(grid, meas, floor_hz, drop=USABLE_DROP, ref=(400.0, 8000.0)):
+    """The span where the driver actually plays.
+
+    Correcting outside it is the fastest route to a bad preset: a cut-only fit
+    told to reach a region that is 20 dB down spends its whole budget dragging
+    every other band down to meet something that was never coming back. Found
+    as the contiguous run around 1 kHz that stays within `drop` of the driver's
+    own midband median, so it needs no absolute calibration.
+    """
+    sel = (grid >= ref[0]) & (grid <= ref[1])
+    mid = float(np.median(meas[sel] if sel.any() else meas))
+    ok = meas > mid - drop
+    i = int(np.argmin(np.abs(grid - 1000.0)))
+    lo = hi = i
+    while lo > 0 and ok[lo - 1]:
+        lo -= 1
+    while hi < len(grid) - 1 and ok[hi + 1]:
+        hi += 1
+    return max(float(grid[lo]), floor_hz), min(float(grid[hi]), 18000.0), mid
+
+
+# --- presentation ---------------------------------------------------------
+def plot(grid, curves, width=72, height=17):
+    """Log-frequency line plot. curves = [(label, ydata, mark), ...]"""
+    cols = np.linspace(0, len(grid) - 1, width).astype(int)
+    ys = [c[1][cols] for c in curves]
+    lo = math.floor(min(y.min() for y in ys) / 3) * 3
+    hi = math.ceil(max(y.max() for y in ys) / 3) * 3
+    lo, hi = min(lo, -3), max(hi, 3)
+    canvas = [[" "] * width for _ in range(height)]
+
+    def row(v):
+        return round((hi - v) / (hi - lo) * (height - 1))
+
+    zero = row(0.0)
+    if 0 <= zero < height:
+        canvas[zero] = ["·"] * width
+    for (_label, _data, mark), y in zip(curves, ys):
+        for x, v in enumerate(y):
+            r = row(float(v))
+            if not 0 <= r < height:
+                continue
+            # Where two curves share a cell, say so rather than letting the
+            # last one drawn erase the others -- "corrected sits on target"
+            # is the whole thing you are looking for.
+            here = canvas[r][x]
+            canvas[r][x] = "#" if here not in (" ", "\u00b7", mark) else mark
+    span = (hi - lo) / (height - 1)
+    for r, line in enumerate(canvas):
+        print(f"  {hi - r * span:+6.1f} |{''.join(line)}")
+    print("         +" + "-" * width)
+    ticks, lab = [20, 100, 500, 1000, 5000, 10000, 20000], [" "] * width
+    for t in ticks:
+        x = int(np.argmin(np.abs(grid[cols] - t)))
+        s = f"{t // 1000}k" if t >= 1000 else str(t)
+        x = min(max(x - len(s) // 2, 0), width - len(s))
+        if all(c == " " for c in lab[x:x + len(s) + 1]):
+            lab[x:x + len(s)] = list(s)
+    print("          " + "".join(lab) + "  Hz")
+    print("          " + "   ".join(f"{m} {l}" for l, _, m in curves)
+          + "   # overlap")
+
+
+def write_apo(path, filters, preamp, header):
+    lines = [f"# {h}" for h in header]
+    lines.append(f"Preamp: {preamp:.1f} dB")
+    for i, (kind, fc, g, q) in enumerate(filters, 1):
+        lines.append(f"Filter {i}: ON {kind} Fc {fc:.0f} Hz "
+                     f"Gain {g:.1f} dB Q {q:.2f}")
+    path.write_text("\n".join(lines) + "\n")
+
+
+# --- measurement ----------------------------------------------------------
+def capture_one(sweep_path, out_path, sink, source, dur, lead, tail, volume):
+    total = int((lead + dur + tail) * FS)
+    rec = subprocess.Popen(
+        ["pw-record", "--target", source, "--rate", str(FS), "--channels", "1",
+         "--format", "s32", "-n", str(total), str(out_path)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    time.sleep(lead)
+    play = run(["pw-play", "--target", sink, "--volume", f"{volume:.3f}",
+                str(sweep_path)])
+    if play.returncode != 0:
+        rec.kill()
+        die(f"pw-play failed: {play.stderr.strip()}")
+    try:
+        rec.wait(timeout=tail + 10)
+    except subprocess.TimeoutExpired:
+        rec.kill()
+        die("pw-record did not finish")
+    # pw-record exits 1 even on a clean stop at --sample-count, so its status
+    # carries no information. Judge it by what actually landed on disk.
+    err = rec.stderr.read().decode(errors="replace").strip() if rec.stderr else ""
+    if not Path(out_path).exists():
+        die(f"pw-record wrote nothing: {err}")
+    x, fs = read_wav(out_path)
+    if fs != FS or len(x) < 0.9 * total:
+        die(f"pw-record produced {len(x)} frames at {fs} Hz, expected about "
+            f"{total} at {FS} Hz: {err}")
+    return x
+
+
+def measure(args):
+    for tool in ("pw-play", "pw-record", "pactl"):
+        if not shutil.which(tool):
+            die(f"{tool} not found")
+
+    sinks, sources = pactl_json("sinks"), pactl_json("sources")
+    sink = pick(sinks, args.sink, run(["pactl", "get-default-sink"]).stdout.strip(),
+                "sink")
+    sources = [s for s in sources
+               if s.get("properties", {}).get("device.class") != "monitor"]
+    source = pick(sources, args.source,
+                  run(["pactl", "get-default-source"]).stdout.strip(), "source")
+
+    db, muted = sink_level(sink)
+    if muted:
+        die(f"{sink['name']} is muted -- unmute and set it to your normal "
+            "listening level, then run again")
+    if any(w in source["name"].lower() for w in ("echo", "cancel", "filter")):
+        warn(f"source {source['name']} looks like a processed/virtual node; "
+             "the measurement will describe that processing too")
+
+    card = source.get("properties", {}).get("alsa.card")
+    run_dir = STATE / datetime.now().astimezone().strftime("%Y%m%dT%H%M%S")
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"speaker-measure: {args.sweeps} x {args.duration:.0f}s sweep, "
+          f"{args.f1:g}-{args.f2:g} Hz")
+    print(f"  out  {sink['name']}"
+          + (f"  ({db:+.1f} dB)" if db is not None else ""))
+    print(f"  in   {source['name']}")
+    print(f"  dir  {run_dir}")
+    print("  put the mic where your head is, and keep the room quiet.\n")
+
+    sweep, inv = make_sweep(args.f1, args.f2, args.duration)
+    sweep_path = run_dir / "sweep.wav"
+    write_wav(sweep_path, sweep * args.amplitude)
+
+    grid = np.geomspace(20.0, 20000.0, 480)
+    ctx = {"sink": sink["name"], "source": source["name"], "card": card,
+           "run_dir": run_dir, "sweep": sweep_path, "inv": inv, "grid": grid}
+
+    if args.verify:
+        verify(args, ctx, db)
+        return
+
+    meas, levels = capture_response(args, ctx, bypass=not args.through_eq)
+    analyze(grid, meas, args, run_dir, {
+        "sink": sink["name"], "sink_db": db, "source": source["name"],
+        "sweeps": args.sweeps, "used": len(levels),
+        "levels_dbrms": [round(x, 1) for x in levels],
+        "duration_s": args.duration, "f1": args.f1, "f2": args.f2,
+    })
+
+
+def drop_outliers(runs, tol):
+    """Discard sweeps far off the median level.
+
+    A sweep spoiled by a cough or a keystroke drags the average and then
+    reappears as a resonance worth correcting.
+    """
+    if len(runs) <= 2:
+        return runs
+    med = float(np.median([lvl for lvl, _ in runs]))
+    kept = [r for r in runs if abs(r[0] - med) <= tol]
+    if len(kept) < len(runs):
+        warn(f"dropped {len(runs) - len(kept)} sweep(s) more than {tol:g} dB "
+             f"off the median level ({med:+.1f} dB rms)")
+    return kept
+
+
+def thermal_warning(levels):
+    """A steady fall across sweeps is the amps' thermal model turning the
+    volume down as the voice coils heat, not the room changing. It makes runs
+    taken at different levels incomparable, so it is worth saying out loud."""
+    if len(levels) >= 3 and levels[0] - levels[-1] > 4.0 and \
+            all(b <= a + 1.0 for a, b in itertools.pairwise(levels)):
+        warn(f"level fell {levels[0] - levels[-1]:.1f} dB steadily across the "
+             "sweeps -- the amps' thermal protection is turning itself down; "
+             "measure quieter (--amplitude) for a response that means anything")
+
+
+def power_average(runs):
+    """Combine sweep magnitudes in power, not amplitude: averaging complex
+    responses would let sub-sample timing differences cancel real energy."""
+    stack = np.array([r for _, r in runs])
+    return 10 * np.log10(np.mean(10 ** (stack / 10.0), axis=0))
+
+
+def capture_response(args, ctx, bypass, label=""):
+    """Sweep, deconvolve and average. Returns (response_db, sweep_levels)."""
+    runs = []
+    with CaptureDSP(ctx["card"], enabled=not args.no_mixer), \
+            SmartFiltersOff("Audio/Source"), \
+            SpeakerEq(ctx["sink"], on=not bypass):
+        for i in range(args.sweeps):
+            cap = ctx["run_dir"] / f"capture{label}{i + 1}.wav"
+            print(f"  {label}sweep {i + 1}/{args.sweeps} ...", end="", flush=True)
+            rec = capture_one(ctx["sweep"], cap, ctx["sink"], ctx["source"],
+                              args.duration, args.lead, args.tail, args.volume)
+            # Level is the rms of the sweep body, not the peak of the whole
+            # recording: starting a stream through a filter can click, and a
+            # click is a peak that says nothing about how loud the sweep was.
+            peak = float(np.max(np.abs(rec))) if rec.size else 0.0
+            body = rec[int(0.1 * len(rec)):int(0.9 * len(rec))]
+            lvl = 20 * math.log10(max(float(np.sqrt(np.mean(body**2))), 1e-12)) \
+                if body.size else -120.0
+            print(f" {lvl:+.1f} dB rms")
+            if peak > 0.98:
+                warn("recording is clipping -- lower the volume or move the "
+                     "mic back; this sweep is unusable")
+                continue
+            if lvl < -70:
+                warn("recording is nearly silent -- check the mic and the "
+                     "volume; this sweep is unusable")
+                continue
+            f, power = magnitude(window_ir(deconvolve(rec, ctx["inv"]),
+                                           post_ms=args.gate))
+            runs.append((lvl, smooth(f, power, ctx["grid"], args.smoothing)))
+            if not args.keep_raw:
+                cap.unlink(missing_ok=True)
+
+    if not runs:
+        die("no usable sweeps -- see the warnings above")
+
+    runs = drop_outliers(runs, args.outlier)
+    levels = [lvl for lvl, _ in runs]
+    thermal_warning(levels)
+    if len(runs) < args.sweeps:
+        warn(f"averaging {len(runs)} of {args.sweeps} sweeps")
+    return power_average(runs), levels
+
+
+# --- external recorder ----------------------------------------------------
+PENDING = "pending.json"
+
+
+def ffmpeg_decode(src, dst):
+    """Whatever the phone wrote -- m4a, opus, 44.1 kHz -- into mono 48 kHz PCM."""
+    if not shutil.which("ffmpeg"):
+        die("ffmpeg not found -- it is what reads the recording")
+    r = run(["ffmpeg", "-v", "error", "-y", "-i", str(src),
+             "-ac", "1", "-ar", str(FS), "-c:a", "pcm_s32le", str(dst)])
+    if r.returncode != 0 or not Path(dst).exists():
+        die(f"ffmpeg could not read {src}:\n  {r.stderr.strip()}")
+
+
+def locate_sweeps(dec, count, period, tol):
+    """Find each sweep's impulse in the deconvolved recording.
+
+    Anchored on the strongest impulse and predicted forward and back at the
+    known period rather than picked greedily: the sweeps were played as one
+    file, so their spacing is exact, and a recording that started late or
+    stopped early then shows up as a missing sweep instead of quietly
+    promoting a door slam to the third measurement.
+
+    Returns one sample index per sweep, or None where it is not in the file.
+    """
+    env = np.abs(dec)
+    anchor = int(np.argmax(env))
+    best = None
+    for j0 in range(count):
+        hits = []
+        for j in range(count):
+            c = anchor + (j - j0) * period
+            lo, hi = c - tol, c + tol + 1
+            if lo < 0 or hi > len(env):
+                hits.append(None)
+                continue
+            k = lo + int(np.argmax(env[lo:hi]))
+            hits.append((k, float(env[k])))
+        score = sum(h[1] for h in hits if h)
+        if best is None or score > best[0]:
+            best = (score, hits)
+    hits = best[1]
+    # A sweep that was never recorded still returns the loudest sample in its
+    # window. Anything 20 dB under the anchor is that, not a quiet sweep.
+    floor = max(h[1] for h in hits if h) / 10.0
+    return [h[0] if h and h[1] >= floor else None for h in hits]
+
+
+def gap_margin(rec, starts, n_sweep, gap_n):
+    """How far the quiet between sweeps sits below the sweeps themselves.
+
+    This is the one check that can see a recorder processing the signal.
+    Comparing one sweep against another cannot: the sweeps are identical, so
+    automatic gain and noise suppression treat them identically, and three
+    responses that are all wrong the same way agree with each other perfectly.
+    But such a recorder must lift the quiet toward the loud -- that is what it
+    is for -- so the margin between them collapses.
+
+    A quiet room and an honest recorder leave the sweep 30-50 dB clear. A low
+    margin means either the room was not quiet or the phone was helping, and
+    both wreck the measurement, so the two do not need telling apart.
+    """
+    margins = []
+    for s in starts:
+        sweep = rec[s:s + n_sweep]
+        # Skip the front of the gap: that part is the room decaying, which is
+        # the speaker's own sound and not a floor at all.
+        gap = rec[s + n_sweep:s + n_sweep + gap_n]
+        gap = gap[int(0.4 * len(gap)):]
+        if len(gap) < FS // 10 or len(sweep) < FS // 10:
+            continue
+        a = float(np.sqrt(np.mean(sweep**2)))
+        b = float(np.sqrt(np.mean(gap**2)))
+        if a > 1e-12 and b > 1e-12:
+            margins.append(20 * math.log10(a / b))
+    return float(np.median(margins)) if margins else 0.0
+
+
+def play_for_external(args):
+    """Play the sweep train for a recorder this machine does not control."""
+    for tool in ("pw-play", "pactl"):
+        if not shutil.which(tool):
+            die(f"{tool} not found")
+    sink = pick(pactl_json("sinks"), args.sink,
+                run(["pactl", "get-default-sink"]).stdout.strip(), "sink")
+    db, muted = sink_level(sink)
+    if muted:
+        die(f"{sink['name']} is muted -- unmute and set it to your normal "
+            "listening level, then run again")
+
+    run_dir = STATE / datetime.now().astimezone().strftime("%Y%m%dT%H%M%S")
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # One file, not one pw-play per sweep: only a single stream gives the
+    # sweeps a sample-exact spacing, and that spacing is what later reveals
+    # the recorder's clock rate.
+    sweep, _inv = make_sweep(args.f1, args.f2, args.duration)
+    silence = np.zeros(int(args.gap * FS))
+    train = np.concatenate([np.concatenate([sweep * args.amplitude, silence])
+                            for _ in range(args.sweeps)])
+    play_path = run_dir / "play.wav"
+    write_wav(play_path, train)
+    (run_dir / PENDING).write_text(json.dumps({
+        "when": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "sink": sink["name"], "sink_db": db, "sweeps": args.sweeps,
+        "duration_s": args.duration, "gap_s": args.gap,
+        "f1": args.f1, "f2": args.f2, "amplitude": args.amplitude,
+    }, indent=2) + "\n")
+
+    total = len(train) / FS
+    print(f"speaker-measure: {args.sweeps} x {args.duration:.0f}s sweep, "
+          f"{args.f1:g}-{args.f2:g} Hz, for an external recorder")
+    print(f"  out  {sink['name']}"
+          + (f"  ({db:+.1f} dB)" if db is not None else ""))
+    print(f"  dir  {run_dir}\n")
+    print("  1. stand the phone where your head is, mic facing the laptop")
+    print("  2. turn off noise suppression, voice enhancement and automatic")
+    print("     gain in the recorder app -- every one of them flattens the")
+    print("     thing being measured, which is the whole point of the sweep")
+    print("  3. start recording, and leave it running until it is over")
+    try:
+        input(f"\n  press Enter to play {total:.0f} seconds of sweeps: ")
+    except EOFError:
+        print()
+
+    with SpeakerEq(sink["name"], on=args.through_eq):
+        r = run(["pw-play", "--target", sink["name"],
+                 "--volume", f"{args.volume:.3f}", str(play_path)])
+    if r.returncode != 0:
+        die(f"pw-play failed: {r.stderr.strip()}")
+
+    print("\n  done -- stop the recording, copy the file over, then:")
+    print(f"    speaker-measure --from-recording FILE --run {run_dir.name} "
+          "--apply")
+
+
+def pending_run(args):
+    """The --play run a recording belongs to, and what that run played."""
+    if args.run:
+        d = Path(args.run) if Path(args.run).is_dir() else STATE / args.run
+        if not d.is_dir():
+            die(f"no such run: {args.run}")
+    else:
+        played = sorted((p.parent for p in STATE.glob(f"*/{PENDING}")),
+                        key=lambda p: p.name)
+        if not played:
+            return None, {}
+        d = played[-1]
+    spec = d / PENDING
+    return d, (json.loads(spec.read_text()) if spec.exists() else {})
+
+
+def from_recording(args):
+    """Fit from a recording made on a device this machine never sees."""
+    src = Path(args.from_recording).expanduser()
+    if not src.exists():
+        die(f"no such file: {src}")
+
+    run_dir, spec = pending_run(args)
+    if run_dir is None:
+        run_dir = STATE / datetime.now().astimezone().strftime("%Y%m%dT%H%M%S")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        warn("no --play run to match this against; assuming it holds the "
+             "sweeps the current --sweeps/--duration/--gap/--f1/--f2 describe")
+    dur = float(spec.get("duration_s", args.duration))
+    gap = float(spec.get("gap_s", args.gap))
+    want = int(spec.get("sweeps", args.sweeps))
+    f1, f2 = float(spec.get("f1", args.f1)), float(spec.get("f2", args.f2))
+
+    print(f"speaker-measure: fitting from {src.name}")
+    print(f"  dir  {run_dir}")
+    wav = run_dir / "external.wav"
+    ffmpeg_decode(src, wav)
+    rec, fs = read_wav(wav)
+    if fs != FS:
+        die(f"decoded at {fs} Hz, expected {FS}")
+    played = want * (dur + gap)
+    print(f"  in   {len(rec) / FS:.1f} s recording of a {played:.1f} s train")
+    if len(rec) < 0.5 * played * FS:
+        die(f"that is too short to hold {want} sweeps -- record the whole "
+            "train, from before the first sweep to after the last")
+    if float(np.max(np.abs(rec))) > 0.98:
+        warn("the recording clips -- move the phone back or turn the "
+             "recorder's gain down, and record it again")
+
+    grid = np.geomspace(20.0, 20000.0, 480)
+    period = round((dur + gap) * FS)
+    tol = int(0.05 * FS)
+
+    def against(rate):
+        """Deconvolve the whole recording against a sweep at `rate`."""
+        _s, inv = make_sweep(f1 / rate, f2 / rate, dur * rate)
+        return inv, deconvolve(rec, inv)
+
+    inv, dec = against(1.0)
+    at = locate_sweeps(dec, want, period, tol)
+
+    seen = [(j, k) for j, k in enumerate(at) if k is not None]
+    if not seen:
+        die("no sweep found in the recording -- check it holds the sweeps and "
+            "not, say, the wrong take")
+
+    # Deconvolution collects the whole sweep into one sample, so a real
+    # impulse towers over everything around it. Anything else -- the wrong
+    # take, a recording of the room, music -- deconvolves to noise with a
+    # merely luckiest sample in it, and would otherwise sail on to produce a
+    # confident preset for a speaker nobody measured.
+    floor = max(float(np.median(np.abs(dec))), 1e-12)
+    crest = float(np.median([20 * math.log10(max(abs(float(dec[k])), 1e-12)
+                                             / floor) for _j, k in seen]))
+    # Measured separation: real sweeps land at 64 dB even at 0 dB SNR, while
+    # noise, room tone, speech and music all come in under 30.
+    if crest < 45.0:
+        die(f"the sweeps are not in that recording (its impulses stand only "
+            f"{crest:.0f} dB above the noise, and real ones stand 60 and up) "
+            "-- wrong file, or the phone was not recording yet")
+    rate, ppm = 1.0, 0.0
+    if len(seen) > 1:
+        rate = (seen[-1][1] - seen[0][1]) / ((seen[-1][0] - seen[0][0]) * period)
+        ppm = (rate - 1.0) * 1e6
+        # An impulse that landed on the wrong sample would turn up here as a
+        # crystal that no crystal is. Do not follow it off a cliff.
+        if abs(ppm) > 5000.0:
+            warn(f"the sweeps came back spaced {ppm:+.0f} ppm off what was "
+                 "played, which is not a clock rate -- ignoring it")
+            rate, ppm = 1.0, 0.0
+    if abs(ppm) > 20.0:
+        # The recorder's crystal is not this machine's. Left alone the error
+        # disperses the impulse, and because an ESS spends its last moments in
+        # the top octave the dispersion lands hardest exactly where the
+        # resonances are. Matching the inverse filter to the rate actually
+        # recorded costs one more transform and no resampling.
+        inv, dec = against(rate)
+        at = locate_sweeps(dec, want, round(period * rate), tol)
+        print(f"  the recorder's clock ran {ppm:+.0f} ppm off the one that "
+              "played the sweeps, corrected")
+
+    pre, post = int(0.02 * FS), int((args.gate + 50.0) * FS / 1000.0)
+    runs = []
+    for j, k in enumerate(at):
+        if k is None:
+            warn(f"sweep {j + 1}/{want} is not in the recording -- skipped")
+            continue
+        start = max(0, k - len(inv) + 1)
+        body = rec[start + int(0.1 * len(inv)):
+                   min(len(rec), start + int(0.9 * len(inv)))]
+        lvl = 20 * math.log10(max(float(np.sqrt(np.mean(body**2))), 1e-12)) \
+            if body.size else -120.0
+        print(f"  sweep {j + 1}/{want} at {k / FS:5.1f} s  {lvl:+.1f} dB rms")
+        if lvl < -70:
+            warn("that sweep is nearly silent -- skipped")
+            continue
+        seg = window_ir(dec[max(0, k - pre):k + post], fs=FS * rate,
+                        post_ms=args.gate)
+        f, power = magnitude(seg, fs=FS * rate)
+        runs.append((lvl, smooth(f, power, grid, args.smoothing)))
+
+    if not runs:
+        die("no usable sweeps -- see the warnings above")
+    runs = drop_outliers(runs, args.outlier)
+    levels = [lvl for lvl, _ in runs]
+    thermal_warning(levels)
+
+    # The sweeps were identical, so their responses should be too. Disagreement
+    # means something changed between them: the phone was nudged, someone
+    # spoke, or the amps warmed up.
+    spread = 0.0
+    if len(runs) > 1:
+        ref = (grid >= 300.0) & (grid <= 8000.0)
+        stack = np.array([r for _, r in runs])
+        stack = stack - stack[:, ref].mean(axis=1, keepdims=True)
+        spread = float(np.max(stack[:, ref].std(axis=0)))
+        print(f"  sweeps agree to {spread:.1f} dB")
+        if spread > 3.0:
+            warn("identical sweeps should not disagree by that much -- "
+                 "something moved or made a noise between them; the average "
+                 "is worth less than it looks")
+
+    margin = gap_margin(rec, [k - len(inv) + 1 for k in at if k is not None],
+                        len(inv), int(gap * FS * rate))
+    print(f"  sweeps sit {margin:.0f} dB above the quiet between them")
+    if margin < 25.0:
+        warn("that margin is too small to trust: either the room was noisy or "
+             "the recorder is running automatic gain or noise suppression. "
+             "Processing is the likelier one and the worse one -- it flattens "
+             "the response being measured, and it does so identically to "
+             "every sweep, so nothing else here can see it. Turn off noise "
+             "suppression, voice enhancement and automatic gain in the "
+             "recorder app, and record it again")
+
+    if len(runs) < want:
+        warn(f"averaging {len(runs)} of {want} sweeps")
+    if not args.keep_raw:
+        wav.unlink(missing_ok=True)
+
+    analyze(grid, power_average(runs), args, run_dir, {
+        "sink": spec.get("sink", "?"), "sink_db": spec.get("sink_db"),
+        "source": f"external recording ({src.name})",
+        "sweeps": want, "used": len(runs),
+        "levels_dbrms": [round(x, 1) for x in levels],
+        "duration_s": dur, "gap_s": gap, "f1": f1, "f2": f2,
+        "recorder_ppm": round(ppm, 1), "sweep_spread_db": round(spread, 2),
+        "gap_margin_db": round(margin, 2), "impulse_crest_db": round(crest, 1),
+    })
+
+
+def verify(args, ctx, sink_db):
+    """Measure the same speaker with the EQ off, then on, back to back.
+
+    Comparing against a run from an hour ago cannot work: the amps' protection
+    is level- and temperature-dependent, so a baseline taken at a different
+    volume is a different speaker. The only honest check is an A/B in one
+    sitting with nothing else touched.
+    """
+    grid = ctx["grid"]
+    band = baseline_band() or DEFAULT_BAND
+    inband = (grid >= band[0]) & (grid <= band[1])
+
+    print("  A: EQ bypassed")
+    off, _ = capture_response(args, ctx, bypass=True, label="off")
+    print("\n  B: EQ engaged")
+    on, _ = capture_response(args, ctx, bypass=False, label="on")
+
+    off = off - off[inband].mean()
+    on = on - on[inband].mean()
+    target = -args.tilt * np.log2(grid / 1000.0)
+    target -= target[inband].mean()
+
+    print(f"\n  scored over {band[0]:.0f}-{band[1]:.0f} Hz, the band the "
+          "preset was fitted for\n")
+    plot(grid, [("EQ off", off, "o"), ("target", target, "."),
+                ("EQ on", on, "*")])
+
+    d_off = float(np.std((off - target)[inband]))
+    d_on = float(np.std((on - target)[inband]))
+    print(f"\n  deviation from target:  EQ off {d_off:.2f} dB rms   "
+          f"EQ on {d_on:.2f} dB rms")
+
+    # Is the correction actually in the signal path? The difference between
+    # the two measurements should look like the preset's own curve.
+    applied = []
+    if APPLIED.exists():
+        meta = STATE / str(json.loads(APPLIED.read_text()).get("run")) / "meta.json"
+        if meta.exists():
+            applied = [(f["type"], f["hz"], f["db"], f["q"])
+                       for f in json.loads(meta.read_text()).get("filters", [])]
+    if applied:
+        want = total_db(grid, applied)
+        want -= want[inband].mean()
+        got = on - off
+        got -= got[inband].mean()
+        r = float(np.corrcoef(want[inband], got[inband])[0, 1])
+        print(f"  the change the EQ made matches the preset's own curve "
+              f"r={r:+.2f} "
+              f"({float(np.std(got[inband])):.1f} dB rms measured vs "
+              f"{float(np.std(want[inband])):.1f} intended)")
+        if r < 0.5:
+            warn("that is a poor match -- the preset may not be in the audio "
+                 f"path; check that `pw-dump` shows {EQ_PARAM} on the speaker "
+                 "sink")
+
+    if d_on < d_off - 0.2:
+        print(f"\n  the EQ is helping: {d_off:.2f} -> {d_on:.2f} dB rms")
+    elif d_on > d_off + 0.2:
+        print(f"\n  the EQ is making it worse here ({d_off:.2f} -> {d_on:.2f} "
+              "dB rms). Re-measure the baseline and re-apply.")
+    else:
+        print(f"\n  no clear difference in overall flatness "
+              f"({d_off:.2f} vs {d_on:.2f} dB rms)")
+
+    # Overall rms hides the thing you actually hear, so name the worst peak.
+    ref = (grid >= 800) & (grid <= 1600)
+    i = int(np.argmax(np.where(inband, off - off[ref].mean(), -99)))
+    print(f"  the worst peak ({grid[i]:.0f} Hz) went from "
+          f"{off[i] - off[ref].mean():+.1f} dB to {on[i] - on[ref].mean():+.1f} dB "
+          "relative to 800-1600 Hz")
+
+
+def baseline_band():
+    """The band the applied preset was fitted over, if there is one."""
+    if not APPLIED.exists():
+        return None
+    name = json.loads(APPLIED.read_text()).get("run")
+    meta = STATE / str(name) / "meta.json"
+    if not meta.exists():
+        return None
+    b = json.loads(meta.read_text()).get("band")
+    return (float(b[0]), float(b[1])) if b else None
+
+
+def choose_band(grid, meas, args):
+    """The correction band: what was asked for, or what the driver can do."""
+    if args.band:
+        return (args.band[0], args.band[1]), "as given"
+    if getattr(args, "verify", False):
+        # Re-detecting the band here would measure the *corrected* speaker,
+        # whose top end the EQ just cut -- a narrower band, scored over a
+        # different span, cannot be compared with the baseline it is meant to
+        # be checked against.
+        base = baseline_band()
+        if base:
+            return base, "the baseline's band, so the two runs compare"
+    # A gate of G ms cannot resolve below about 1/G kHz and needs several bins
+    # to mean anything, so nothing under 4/G kHz is worth fitting either.
+    lo, hi, _mid = usable_band(grid, meas, 4000.0 / args.gate)
+    if hi / lo < 2.0:
+        warn(f"no usable band found (got {lo:.0f}-{hi:.0f} Hz); falling back "
+             f"to {DEFAULT_BAND[0]:g}-{DEFAULT_BAND[1]:g} Hz")
+        return DEFAULT_BAND, "fallback"
+    # Report the rule, not the midband level: that level is relative to
+    # whatever the run was normalized to, so printing it makes an
+    # idempotent refit look like it drifted.
+    return (lo, hi), f"where the driver holds within {USABLE_DROP:g} dB of its midband"
+
+
+def analyze(grid, meas, args, run_dir, context):
+    """Fit the correction, report it, write the preset. Shared with --refit."""
+    band, why = choose_band(grid, meas, args)
+    inband = (grid >= band[0]) & (grid <= band[1])
+    meas = meas - meas[inband].mean()
+
+    target = -args.tilt * np.log2(grid / 1000.0)
+    target -= target[inband].mean()
+
+    filters, _resid = fit_filters(grid, target - meas, band, args.bands,
+                                  args.max_boost, args.max_cut)
+    eq = total_db(grid, filters)
+    # The preamp has to guard the combined response, not the biggest single
+    # band: two overlapping boosts clip where neither would alone.
+    preamp = -max(0.0, float(eq.max())) - 0.5
+
+    applied = meas + eq
+    applied -= applied[inband].mean()
+
+    print(f"\n  correcting {band[0]:.0f}-{band[1]:.0f} Hz ({why})")
+    print(f"  response is {args.smoothing:g}-octave smoothed, normalized over "
+          f"that band\n")
+    plot(grid, [("measured", meas, "o"), ("target", target, "."),
+                ("corrected", applied, "*")])
+
+    # Deviation from the *target*, not from a flat line: a speaker that is
+    # correctly tilted is not thereby wrong, and measuring against its own
+    # mean would score it as if it were.
+    rough = float(np.std((meas - target)[inband]))
+    after = float(np.std((applied - target)[inband]))
+    print(f"\n  deviation from target: {rough:.1f} dB rms -> {after:.1f} dB rms "
+          f"with the correction applied")
+
+    if not filters:
+        print("\n  nothing worth correcting was found. If that surprises you, "
+              "check the mic placement.")
+    else:
+        print(f"\n  {len(filters)} filters:")
+        for kind, fc, g, q in filters:
+            clamp = "  (at the cut ceiling)" if abs(g) >= args.max_cut else ""
+            print(f"    {kind:3}  {fc:8.0f} Hz  {g:+5.1f} dB  Q {q:4.2f}{clamp}")
+        # Cut-only correction can only make things quieter. Say so, so the
+        # result is not mistaken for the EQ "not working".
+        loss = -float(np.average(eq, weights=inband.astype(float)))
+        if loss > 1.0:
+            print(f"\n  costs {loss:.1f} dB of level (cut-only); turn the "
+                  "volume up to compare fairly")
+
+    apo = run_dir / "eq.txt"
+    sink_db = context.get("sink_db")
+    write_apo(apo, filters, preamp, [
+        f"speaker-measure {datetime.now().astimezone():%Y-%m-%d %H:%M}",
+        f"sink {context.get('sink', '?')}"
+        + (f" at {sink_db:+.1f} dB" if sink_db is not None else ""),
+        f"mic  {context.get('source', '?')}",
+        (f"target tilt {args.tilt:g} dB/oct, "
+         f"band {band[0]:.0f}-{band[1]:.0f} Hz ({why}), "
+         f"boost <= {args.max_boost:g} dB, cut <= {args.max_cut:g} dB"),
+    ])
+    np.savetxt(run_dir / "response.csv",
+               np.column_stack([grid, meas, target, applied]),
+               delimiter=",", header="freq_hz,measured_db,target_db,corrected_db",
+               comments="", fmt="%.4f")
+    (run_dir / "meta.json").write_text(json.dumps({
+        "when": datetime.now().astimezone().isoformat(timespec="seconds"),
+        **context,
+        "tilt": args.tilt, "band": list(band), "band_choice": why,
+        "smoothing": args.smoothing, "max_boost": args.max_boost,
+        "max_cut": args.max_cut, "gate_ms": args.gate,
+        "filters": [{"type": k, "hz": fc, "db": g, "q": q}
+                    for k, fc, g, q in filters],
+        "preamp_db": preamp,
+        "deviation_db_rms": {"before": round(rough, 2), "after": round(after, 2)},
+    }, indent=2) + "\n")
+
+    print(f"\n  APO      {apo}")
+    if args.apply:
+        eq_apply(filters, preamp, run_dir.name)
+    else:
+        print(f"  apply it: speaker-measure --refit {run_dir.name} --apply")
+    print(f"  other settings, same sweep: speaker-measure --refit "
+          f"{run_dir.name} --tilt 1.2 --apply")
+
+    if not args.apply:
+        print("  then check it: speaker-measure --verify")
+
+
+def refit(args):
+    """Re-derive the preset from a saved sweep, without measuring again."""
+    d = Path(args.refit) if Path(args.refit).is_dir() else STATE / args.refit
+    csv = d / "response.csv"
+    if not csv.exists():
+        die(f"no response.csv in {d}")
+    data = np.loadtxt(csv, delimiter=",", skiprows=1)
+    context = {}
+    meta = d / "meta.json"
+    if meta.exists():
+        old = json.loads(meta.read_text())
+        context = {k: old[k] for k in
+                   ("sink", "sink_db", "source", "sweeps", "used", "peaks_dbfs",
+                    "duration_s", "f1", "f2") if k in old}
+    context["refit_of"] = d.name
+    print(f"speaker-measure: refitting {d.name} from its saved sweep "
+          "(rewrites its eq.txt, response.csv and meta.json)")
+    analyze(data[:, 0], data[:, 1], args, d, context)
+
+
+def compare(names):
+    """Overlay saved runs -- the point being to re-measure with the EQ loaded
+    and see whether it actually did what the fit predicted."""
+    runs = []
+    for n in names:
+        d = Path(n) if Path(n).is_dir() else STATE / n
+        csv = d / "response.csv"
+        if not csv.exists():
+            die(f"no response.csv in {d}")
+        band = DEFAULT_BAND
+        meta = d / "meta.json"
+        if meta.exists():
+            band = tuple(json.loads(meta.read_text()).get("band", band))
+        runs.append((d.name, np.loadtxt(csv, delimiter=",", skiprows=1), band))
+    grid = runs[0][1][:, 0]
+    if any(len(r[1]) != len(grid) for r in runs):
+        die("those runs are on different frequency grids and cannot be overlaid")
+    marks = "o*+x"
+    print(f"\ncomparing {' vs '.join(n for n, _, _ in runs)}\n")
+    plot(grid, [(n, d[:, 1], marks[i % len(marks)])
+                for i, (n, d, _) in enumerate(runs)])
+    print()
+    for n, d, band in runs:
+        inband = (grid >= band[0]) & (grid <= band[1])
+        off = (d[:, 1] - d[:, 2])[inband]
+        print(f"  {n}: {float(np.std(off)):.1f} dB rms from target "
+              f"over {band[0]:g}-{band[1]:g} Hz")
+
+
+def main():
+    p = argparse.ArgumentParser(
+        prog="speaker-measure",
+        description="Measure the speakers and write the EQ preset they need.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Runs are kept under ~/.local/state/speaker-measure/.")
+    p.add_argument("--list", action="store_true", help="show sinks and sources")
+    p.add_argument("--compare", nargs="+", metavar="RUN",
+                   help="overlay saved runs (directory name or path)")
+    p.add_argument("--refit", metavar="RUN",
+                   help="re-derive the preset from a saved run's sweep instead "
+                        "of measuring again -- use it to try tilts quickly")
+    p.add_argument("--play", action="store_true",
+                   help="play the sweeps for a phone or other recorder this "
+                        "machine does not control, then stop -- a mic at head "
+                        "height beats the built-in array on the same chassis")
+    p.add_argument("--from-recording", metavar="FILE",
+                   help="fit from a file recorded off --play (any format "
+                        "ffmpeg reads)")
+    p.add_argument("--run", metavar="RUN",
+                   help="which --play run --from-recording belongs to "
+                        "(default: the most recent one)")
+    p.add_argument("--sink", help="substring of the output to measure")
+    p.add_argument("--source", help="substring of the mic to measure with")
+    p.add_argument("--sweeps", type=int, default=3, help="sweeps to average (3)")
+    p.add_argument("--duration", type=float, default=6.0, help="sweep seconds (6)")
+    p.add_argument("--f1", type=float, default=20.0, help="sweep start Hz (20)")
+    p.add_argument("--f2", type=float, default=20000.0, help="sweep end Hz (20000)")
+    p.add_argument("--amplitude", type=float, default=0.5,
+                   help="sweep amplitude 0-1 (0.5); leaves the protection DSP "
+                        "some room to not be what you measure")
+    p.add_argument("--volume", type=float, default=1.0,
+                   help="pw-play stream volume (1.0)")
+    p.add_argument("--tilt", type=float, default=0.75,
+                   help="target downward tilt in dB/octave (0.75); raise it if "
+                        "the result is still too bright")
+    p.add_argument("--band", type=float, nargs=2, default=None,
+                   metavar=("LO", "HI"),
+                   help="correction band; default is auto-detected as the span "
+                        "where the driver stays within 10 dB of its own "
+                        "midband, which matters more than any other setting")
+    p.add_argument("--bands", type=int, default=8, help="max filters (8)")
+    p.add_argument("--max-boost", type=float, default=0.0,
+                   help="largest boost in dB (0 -- cut only, on purpose)")
+    p.add_argument("--max-cut", type=float, default=12.0,
+                   help="largest cut in dB (12)")
+    p.add_argument("--smoothing", type=float, default=6.0,
+                   help="fractional-octave smoothing denominator (6)")
+    p.add_argument("--gate", type=float, default=25.0,
+                   help="impulse-response gate in ms (25); also the frequency "
+                        "resolution, so shortening it blinds the low end")
+    p.add_argument("--lead", type=float, default=0.7, help="record lead-in s (0.7)")
+    p.add_argument("--tail", type=float, default=0.7, help="record tail s (0.7)")
+    p.add_argument("--gap", type=float, default=1.5,
+                   help="silence between sweeps in the --play train (1.5 s); "
+                        "it only has to outlast the room and stay clear of "
+                        "the next sweep's distortion products")
+    p.add_argument("--apply", action="store_true",
+                   help="install the correction into PipeWire, in front of "
+                        "the speakers only -- does the whole job")
+    p.add_argument("--verify", action="store_true",
+                   help="measure with the applied EQ engaged and compare it "
+                        "against the sweep the preset was fitted from")
+    p.add_argument("--through-eq", action="store_true",
+                   help="do not bypass the applied EQ while measuring "
+                        "(implied by --verify)")
+    p.add_argument("--outlier", type=float, default=6.0,
+                   help="drop sweeps this many dB off the median level (6)")
+    p.add_argument("--keep-raw", action="store_true", help="keep the captures")
+    p.add_argument("--no-mixer", action="store_true",
+                   help="do not touch the capture DSP mixer controls")
+    args = p.parse_args()
+
+    if args.list:
+        list_devices()
+        return
+    if args.compare:
+        compare(args.compare)
+        return
+    if args.band and args.band[0] >= args.band[1]:
+        die("--band LO must be below HI")
+    if args.verify:
+        # Verification has to hear what you hear, and must not overwrite the
+        # preset it is checking.
+        args.through_eq, args.apply = True, False
+    if args.refit:
+        refit(args)
+        return
+    if not 0 < args.amplitude <= 1:
+        die("--amplitude must be in (0, 1]")
+    if args.play and args.from_recording:
+        die("--play plays the sweeps and --from-recording reads what you "
+            "recorded of them -- run them one after the other")
+    if args.gap < 0.5:
+        die("--gap must be at least 0.5 s, or the next sweep's distortion "
+            "lands on the previous sweep's impulse")
+    if args.play:
+        play_for_external(args)
+        return
+    if args.from_recording:
+        from_recording(args)
+        return
+    measure(args)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)

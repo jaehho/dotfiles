@@ -10,6 +10,7 @@ pipewire
 pipewire-pulse
 power-profiles-daemon
 powertop
+python-numpy
 turbostat
 wiremix
 wireplumber
