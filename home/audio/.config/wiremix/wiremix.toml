@@ -1,0 +1,8 @@
+# Meter only what is on screen. Meters capture what they watch, so by default
+# wiremix kept the microphone running for as long as it was open.
+lazy_capture = true
+
+# Name devices by their port (Speaker, HDMI 1, Digital Microphone) instead of
+# the sound card, which is "sof-hda-dsp" for every one of them.
+[names]
+endpoint = [ "{node:node.nick}", "{node:node.description}" ]

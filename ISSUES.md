@@ -673,6 +673,10 @@ live, check the consuming unit:
 
 # Incident log
 
+## 2026-09-13 — Mic echo canceller removed
+
+The PipeWire echo canceller (`audio` package, `99-echo-cancel.conf`, added 09-11) put two permanent recording streams in every mixer and ran the microphone whenever anything woke the speaker path, level meters included. It was taken out along with waybar's privacy ignore entries for its streams. Expect echo back in speaker calls from apps without working cancellation of their own: on 09-11 Firefox's did nothing, and Claude's voice mode echoed on the raw mic until the canceller went in. If that returns, restore the file; it was never committed, and restic snapshot `e167eb98` (09-13 18:13) and earlier have it.
+
 ## 2026-08-19 — Hibernate resumed into a cold boot; nvidia back in `MODULES` (April regression)
 
 **Trigger:** user asked "check if hibernate worked, i think i shut down". Two
