@@ -127,62 +127,77 @@ process.stdin.on('end', () => {
     }
     const tu = transcriptUsage(data.transcript_path);
 
-    // Session share of a pool: modeled credits for every z.ai transcript in
-    // the window. The multipliers drift ~10% against z.ai's meter, but the
-    // error is uniform, so the session's fraction of the modeled total is
-    // accurate — apply it to the server-truth pool percent. Cached until any
-    // transcript in the window changes size.
+    // Session share of a pool: per-turn weights for every transcript in the
+    // window — z.ai credits, Claude token volume (ccusage's source data) —
+    // cached per file. The modeled absolutes drift ~10%, but the error is
+    // uniform, so the session's fraction of the window total is accurate;
+    // apply it to the server-truth pool percent.
+    function fileTurns(p) {
+      let size;
+      try { size = fs.statSync(p).size; } catch { return null; }
+      const cf = path.join(os.tmpdir(),
+          'claude-sl-f-' + p.replace(/[^a-zA-Z0-9]/g, '_').slice(-80) + '.json');
+      let c;
+      try { c = JSON.parse(fs.readFileSync(cf, 'utf8')); } catch {}
+      if (!c || c.size !== size) {
+        const turns = [];
+        let text;
+        try { text = fs.readFileSync(p, 'utf8'); } catch { return null; }
+        for (const line of text.split('\n')) {
+          if (!line.includes('"usage"')) continue;
+          let d;
+          try { d = JSON.parse(line); } catch { continue; }
+          const m = d.message || {};
+          const u = m.usage;
+          if (!u) continue;
+          const raw = m.model || '';
+          const ts = Date.parse(d.timestamp || '') || 0;
+          if (raw.startsWith('claude')) {
+            // transcripts carry no costUSD (the CLI prices live), so Claude
+            // turns are weighted by token volume in M — pool-share ratio only
+            turns.push([ts, 0, (u.input_tokens +
+                (u.cache_read_input_tokens || 0) +
+                (u.cache_creation_input_tokens || 0) +
+                u.output_tokens) / 1e6]);
+            continue;
+          }
+          const mult = raw.startsWith('z-ai/') ? null : glmMult(raw);
+          if (!mult) continue;
+          const cr = (u.input_tokens * mult[0] +
+              (u.cache_read_input_tokens || 0) * mult[1] +
+              (u.cache_creation_input_tokens || 0) * mult[0] +
+              u.output_tokens * mult[2]) / 10000;
+          const adj = isPeakSgt(ts) ? cr : cr / 2;
+          turns.push([ts, raw.includes('flash') && flashCampaignHalf(ts) ? adj / 2 : adj, 0]);
+        }
+        c = { size, turns };
+        try { fs.writeFileSync(cf, JSON.stringify(c)); } catch {}
+      }
+      return c.turns;
+    }
     function scanWindow(sinceMs, wantFile) {
       const root = path.join(os.homedir(), '.claude', 'projects');
       let dirs;
       try { dirs = fs.readdirSync(root, { withFileTypes: true }); } catch { return null; }
-      const files = [];
+      const out = { zs: 0, zt: 0, cs: 0, ct: 0 };
       try {
         for (const d of dirs) {
           if (!d.isDirectory()) continue;
           for (const f of fs.readdirSync(path.join(root, d.name)))
             if (f.endsWith('.jsonl')) {
               const p = path.join(root, d.name, f);
-              try { if (fs.statSync(p).mtimeMs > sinceMs) files.push(p); } catch {}
+              try { if (fs.statSync(p).mtimeMs <= sinceMs) continue; } catch { continue; }
+              const turns = fileTurns(p);
+              if (!turns) continue;
+              for (const [ts, z, cc] of turns) {
+                if (ts <= sinceMs) continue;
+                out.zt += z; out.ct += cc;
+                if (p === wantFile) { out.zs += z; out.cs += cc; }
+              }
             }
         }
-      } catch { return null; }
-      let key = sinceMs + '|' + files.map(p => {
-        try { return p + ':' + fs.statSync(p).size; } catch { return p; }
-      }).join(',');
-      const cf = path.join(os.tmpdir(), 'claude-sl-window.json');
-      let c = null;
-      try { c = JSON.parse(fs.readFileSync(cf, 'utf8')); } catch {}
-      if (!c || c.key !== key) {
-        const by = {};
-        for (const p of files) {
-          let sum = 0, text;
-          try { text = fs.readFileSync(p, 'utf8'); } catch { continue; }
-          for (const line of text.split('\n')) {
-            if (!line.includes('"usage"')) continue;
-            let d;
-            try { d = JSON.parse(line); } catch { continue; }
-            const m = d.message || {};
-            const u = m.usage;
-            if (!u) continue;
-            const raw = m.model || '';
-            const mult = raw.startsWith('z-ai/') ? null : glmMult(raw);
-            if (!mult) continue;
-            const ts = Date.parse(d.timestamp || '') || 0;
-            if (ts <= sinceMs) continue;
-            const cr = (u.input_tokens * mult[0] +
-                (u.cache_read_input_tokens || 0) * mult[1] +
-                (u.cache_creation_input_tokens || 0) * mult[0] +
-                u.output_tokens * mult[2]) / 10000;
-            const adj = isPeakSgt(ts) ? cr : cr / 2;
-            sum += raw.includes('flash') && flashCampaignHalf(ts) ? adj / 2 : adj;
-          }
-          if (sum > 0) by[p] = sum;
-        }
-        c = { key, by, total: Object.values(by).reduce((a, b) => a + b, 0) };
-        try { fs.writeFileSync(cf, JSON.stringify(c)); } catch {}
-      }
-      return { sess: wantFile ? (c.by[wantFile] || 0) : 0, total: c.total };
+      } catch { return out; }
+      return out;
     }
 
     // z.ai pool pressure: the CLI never sends rate_limits on a gateway, so
@@ -293,21 +308,35 @@ process.stdin.on('end', () => {
       }
       return `${color}${prefix}${used}%${time}\x1b[0m`;
     };
-    const r5 = limRow(rate5h, rate5hResets);
-    if (r5) parts.push(r5);
-    const r7 = limRow(rate7d, rate7dResets);
-    if (r7) parts.push(r7);
-    // z.ai session-share prefixes: fraction of modeled window credits,
+    // session-share prefixes: fraction of the window's modeled weight,
     // applied to the server pool percent (fraction ≤ 1 by construction)
-    let pre5 = '', pre7 = '';
-    if (data.transcript_path && zai5hResets && zaiResetsWeek) {
-      const s5 = scanWindow((zai5hResets - 5 * 3600) * 1000, data.transcript_path);
-      if (s5 && s5.total > 0 && zai5h != null)
-        pre5 = `${Math.round(zai5h * s5.sess / s5.total)}%/`;
-      const s7 = scanWindow((zaiResetsWeek - 7 * 86400) * 1000, data.transcript_path);
-      if (s7 && s7.total > 0 && zaiWeek != null)
-        pre7 = `${Math.round(zaiWeek * s7.sess / s7.total)}%/`;
+    let pre5 = '', pre7 = '', cpre5 = '', cpre7 = '';
+    if (data.transcript_path) {
+      if (zai5hResets) {
+        const s = scanWindow((zai5hResets - 5 * 3600) * 1000, data.transcript_path);
+        if (s && s.zt > 0 && zai5h != null)
+          pre5 = `${Math.round(zai5h * s.zs / s.zt)}%/`;
+      }
+      if (zaiResetsWeek) {
+        const s = scanWindow((zaiResetsWeek - 7 * 86400) * 1000, data.transcript_path);
+        if (s && s.zt > 0 && zaiWeek != null)
+          pre7 = `${Math.round(zaiWeek * s.zs / s.zt)}%/`;
+      }
+      if (rate5hResets) {
+        const s = scanWindow((rate5hResets - 5 * 3600) * 1000, data.transcript_path);
+        if (s && s.ct > 0)
+          cpre5 = `${Math.round(rate5h * s.cs / s.ct)}%/`;
+      }
+      if (rate7dResets) {
+        const s = scanWindow((rate7dResets - 7 * 86400) * 1000, data.transcript_path);
+        if (s && s.ct > 0)
+          cpre7 = `${Math.round(rate7d * s.cs / s.ct)}%/`;
+      }
     }
+    const r5 = limRow(rate5h, rate5hResets, cpre5);
+    if (r5) parts.push(r5);
+    const r7 = limRow(rate7d, rate7dResets, cpre7);
+    if (r7) parts.push(r7);
     const z5 = limRow(zai5h, zai5hResets, pre5);
     if (z5) parts.push(z5);
     const z7 = limRow(zaiWeek, zaiResetsWeek, pre7);
