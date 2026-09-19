@@ -1,0 +1,20 @@
+# Read CLAUDE.md in repos that have no AGENTS.md (dotfiles, ~/projects/*).
+project_doc_fallback_filenames = ["CLAUDE.md"]
+approvals_reviewer = "user"
+
+[mcp_servers.zotero]
+command = "uvx"
+args = ["--from", "zotero-mcp-server[all]", "zotero-mcp"]
+env_vars = ["ZOTERO_API_KEY", "ZOTERO_LIBRARY_ID"]
+
+[projects."/home/jaeho/dotfiles"]
+trust_level = "trusted"
+
+[projects."/home/jaeho/projects/wombat"]
+trust_level = "trusted"
+
+[tui]
+whimsy = false
+
+[tui.model_availability_nux]
+gpt-6-astra = 4
