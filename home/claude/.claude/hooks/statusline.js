@@ -127,11 +127,68 @@ process.stdin.on('end', () => {
     }
     const tu = transcriptUsage(data.transcript_path);
 
+    // Session share of a pool: modeled credits for every z.ai transcript in
+    // the window. The multipliers drift ~10% against z.ai's meter, but the
+    // error is uniform, so the session's fraction of the modeled total is
+    // accurate — apply it to the server-truth pool percent. Cached until any
+    // transcript in the window changes size.
+    function scanWindow(sinceMs, wantFile) {
+      const root = path.join(os.homedir(), '.claude', 'projects');
+      let dirs;
+      try { dirs = fs.readdirSync(root, { withFileTypes: true }); } catch { return null; }
+      const files = [];
+      try {
+        for (const d of dirs) {
+          if (!d.isDirectory()) continue;
+          for (const f of fs.readdirSync(path.join(root, d.name)))
+            if (f.endsWith('.jsonl')) {
+              const p = path.join(root, d.name, f);
+              try { if (fs.statSync(p).mtimeMs > sinceMs) files.push(p); } catch {}
+            }
+        }
+      } catch { return null; }
+      let key = sinceMs + '|' + files.map(p => {
+        try { return p + ':' + fs.statSync(p).size; } catch { return p; }
+      }).join(',');
+      const cf = path.join(os.tmpdir(), 'claude-sl-window.json');
+      let c = null;
+      try { c = JSON.parse(fs.readFileSync(cf, 'utf8')); } catch {}
+      if (!c || c.key !== key) {
+        const by = {};
+        for (const p of files) {
+          let sum = 0, text;
+          try { text = fs.readFileSync(p, 'utf8'); } catch { continue; }
+          for (const line of text.split('\n')) {
+            if (!line.includes('"usage"')) continue;
+            let d;
+            try { d = JSON.parse(line); } catch { continue; }
+            const m = d.message || {};
+            const u = m.usage;
+            if (!u) continue;
+            const raw = m.model || '';
+            const mult = raw.startsWith('z-ai/') ? null : glmMult(raw);
+            if (!mult) continue;
+            const ts = Date.parse(d.timestamp || '') || 0;
+            if (ts <= sinceMs) continue;
+            const cr = (u.input_tokens * mult[0] +
+                (u.cache_read_input_tokens || 0) * mult[1] +
+                (u.cache_creation_input_tokens || 0) * mult[0] +
+                u.output_tokens * mult[2]) / 10000;
+            const adj = isPeakSgt(ts) ? cr : cr / 2;
+            sum += raw.includes('flash') && flashCampaignHalf(ts) ? adj / 2 : adj;
+          }
+          if (sum > 0) by[p] = sum;
+        }
+        c = { key, by, total: Object.values(by).reduce((a, b) => a + b, 0) };
+        try { fs.writeFileSync(cf, JSON.stringify(c)); } catch {}
+      }
+      return { sess: wantFile ? (c.by[wantFile] || 0) : 0, total: c.total };
+    }
+
     // z.ai pool pressure: the CLI never sends rate_limits on a gateway, so
     // take the 5h/weekly percentages from the console endpoint — cached for
     // a minute, refreshed out-of-band so a slow endpoint never blocks a render
-    let zai5h = null, zai5hResets = null, zaiWeek = null, zaiResetsWeek = null,
-        zaiTotal5h = null;
+    let zai5h = null, zai5hResets = null, zaiWeek = null, zaiResetsWeek = null;
     const onZai = glm && !/^(z-ai\/|@preset)/.test(modelId);
     if (onZai) {
       const qf = path.join(os.tmpdir(), 'claude-sl-zai-quota.json');
@@ -165,7 +222,7 @@ process.stdin.on('end', () => {
         } catch {}
       }
       if (q) {
-        zai5h = q.pct5h; zai5hResets = q.resets5h; zaiTotal5h = q.total5h;
+        zai5h = q.pct5h; zai5hResets = q.resets5h;
         zaiWeek = q.pctWeek; zaiResetsWeek = q.resetsWeek;
       }
     }
@@ -240,14 +297,20 @@ process.stdin.on('end', () => {
     if (r5) parts.push(r5);
     const r7 = limRow(rate7d, rate7dResets);
     if (r7) parts.push(r7);
-    // session share of the 5h pool (multiplier-based estimate, ~10% hot vs
-    // z.ai's meter — capped at the pool reading so it can't exceed it)
-    let sessPrefix = '';
-    if (tu && tu.drawn != null && zaiTotal5h && zai5h != null)
-      sessPrefix = `${Math.min(Math.round(100 * tu.drawn / zaiTotal5h), Math.round(zai5h))}%/`;
-    const z5 = limRow(zai5h, zai5hResets, sessPrefix);
+    // z.ai session-share prefixes: fraction of modeled window credits,
+    // applied to the server pool percent (fraction ≤ 1 by construction)
+    let pre5 = '', pre7 = '';
+    if (data.transcript_path && zai5hResets && zaiResetsWeek) {
+      const s5 = scanWindow((zai5hResets - 5 * 3600) * 1000, data.transcript_path);
+      if (s5 && s5.total > 0 && zai5h != null)
+        pre5 = `${Math.round(zai5h * s5.sess / s5.total)}%/`;
+      const s7 = scanWindow((zaiResetsWeek - 7 * 86400) * 1000, data.transcript_path);
+      if (s7 && s7.total > 0 && zaiWeek != null)
+        pre7 = `${Math.round(zaiWeek * s7.sess / s7.total)}%/`;
+    }
+    const z5 = limRow(zai5h, zai5hResets, pre5);
     if (z5) parts.push(z5);
-    const z7 = limRow(zaiWeek, zaiResetsWeek);
+    const z7 = limRow(zaiWeek, zaiResetsWeek, pre7);
     if (z7) parts.push(z7);
 
     // idle-dash: archive server-truth rate limits; the dashboard reads this
