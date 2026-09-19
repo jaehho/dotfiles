@@ -23,7 +23,7 @@ case "$action" in
 esac
 
 case "$iface" in
-    lo|docker*|virbr*|vnet*|tailscale*|veth*) exit 0 ;;
+    lo|docker*|virbr*|vnet*|tailscale*|wg*|veth*) exit 0 ;;
 esac
 
 command -v tzupdate >/dev/null 2>&1 || exit 0
