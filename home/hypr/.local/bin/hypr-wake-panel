@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# hypridle's after_sleep_cmd. Some resumes leave eDP-1 dark while Hyprland
+# reports dpmsStatus true, so a plain `dpms on` is a no-op and no keypress
+# helps; a dpms off -> on cycle forces the modeset. Dispatches are silently
+# dropped while the session is inactive (VT 63 during s2h), so wait for it,
+# and judge by grim, never by hyprctl's "ok". See ISSUES.md "Black screen
+# after resume". Logs under tag hypr-wake-panel.
+
+mon=eDP-1
+session=${XDG_SESSION_ID:?}
+
+log() { logger -t hypr-wake-panel "$*"; }
+dpms() { hyprctl dispatch "hl.dsp.dpms({ action = \"$1\", monitor = \"$mon\" })" >/dev/null; }
+active() { [ "$(loginctl show-session "$session" -p Active --value 2>/dev/null)" = yes ]; }
+wait_active() {
+    for _ in $(seq 1200); do active && return 0; sleep 0.5; done
+    return 1
+}
+lit() { timeout 3 grim -o "$mon" - >/dev/null 2>&1; }
+
+# Docked with the panel disabled by monitors.lua: nothing to wake.
+hyprctl monitors -j | jq -e --arg m "$mon" 'any(.[]; .name == $m)' >/dev/null || exit 0
+
+dpms on
+for attempt in $(seq 10); do
+    wait_active || { log "session $session never became active; giving up"; exit 1; }
+    sleep 2
+    if lit; then
+        [ "$attempt" -gt 1 ] && log "$mon lit after $((attempt - 1)) off/on cycle(s)"
+        exit 0
+    fi
+    active || continue
+    log "$mon not presenting (attempt $attempt); cycling dpms"
+    dpms off
+    sleep 1
+    dpms on
+done
+log "$mon still dark after 10 cycles"
+exit 1
