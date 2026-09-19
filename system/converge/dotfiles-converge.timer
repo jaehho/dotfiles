@@ -1,0 +1,10 @@
+[Unit]
+Description=Converge on the dotfiles repo at boot and daily (system half)
+
+[Timer]
+OnBootSec=3min
+OnCalendar=daily
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

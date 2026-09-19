@@ -1,0 +1,13 @@
+# Rendered into /etc/systemd/system by `converge.sh system configs`
+# (@DOTFILES@ becomes the checkout's path).
+[Unit]
+Description=Converge this machine on the dotfiles repo (system half)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@DOTFILES@/scripts/converge.sh system
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=3h

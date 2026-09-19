@@ -1,0 +1,10 @@
+[Unit]
+Description=Converge this machine on the dotfiles repo (user half)
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:%h/.npm-global/bin:/usr/local/bin:/usr/bin
+ExecStart=%h/dotfiles/scripts/converge.sh user
+Nice=10
+TimeoutStartSec=1h
