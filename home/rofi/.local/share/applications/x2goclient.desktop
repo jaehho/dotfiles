@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=X2Go Client
+# Pin the Qt X11 backend. Under QT_QPA_PLATFORM=wayland;xcb the client runs as a
+# native Wayland app, cannot read the X display depth, and negotiates the session
+# as depth_32 — the proxy then never connects and the agent times out after 60 s.
+Exec=env QT_QPA_PLATFORM=xcb WAYLAND_DISPLAY= x2goclient
+Icon=x2goclient
+StartupWMClass=x2goclient
+Terminal=false
+Categories=Qt;KDE;Network;
+Keywords=Terminal,Client,Remote,Desktop,Published,Applications,Session,Profile;
+MimeType=application/x-x2go;

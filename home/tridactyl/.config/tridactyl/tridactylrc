@@ -1,3 +1,7 @@
+" Swap the default tab-switching direction (default: J = prev, K = next)
+bind J tabnext
+bind K tabprev
+
 bind <Space>d tabdetach
 
 blacklistadd cvat.jaehho.com

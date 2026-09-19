@@ -6,6 +6,7 @@ configuration {
   drun-display-format: "{name}";
   drun-match-fields:   "name,generic,exec,keywords";
   matching:            "fuzzy";
+  case-smart:          true;
   sort:                true;
   sorting-method:      "fzf";
   display-drun:        "";

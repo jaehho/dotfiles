@@ -11,6 +11,14 @@
 	editor = nvim
 	hooksPath = ~/.git-hooks
 	pager = diff-highlight | less
+[sendemail]
+	# Kernel patches: git send-email through Gmail. The password is a Gmail
+	# app password, prompted for at send time and never stored.
+	smtpServer = smtp.gmail.com
+	smtpServerPort = 587
+	smtpEncryption = tls
+	smtpUser = jaeho2025@gmail.com
+	confirm = always
 [pull]
 	rebase = false
 [push]

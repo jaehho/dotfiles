@@ -1,5 +1,7 @@
 # Solarized OKLCH
 # Cool-blue dark bg, evenly-tuned accents at L 0.68 C 0.10 (>=5.7:1 on base).
+# Yellow is the deliberate exception at L 0.73 so the "worth a glance" tier
+# outranks resting grey text (subtext0, L 0.72).
 # Overlay ramp solved for 4.3/5.2/6.2:1 so comments and dim text stay readable.
 base=141c1e
 mantle=101719
@@ -19,7 +21,7 @@ sapphire=3daab0
 sky=3ea8be
 teal=43ac9b
 green=70a971
-yellow=b0954a
+yellow=c0a55a
 peach=ca865e
 maroon=cf7e84
 red=cf7f79
