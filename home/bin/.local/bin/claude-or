@@ -1,19 +1,44 @@
 #!/bin/sh
-# Claude Code on open models via OpenRouter. Effort and provider routing live
-# in the OpenRouter presets (@preset/cc-*, openrouter.ai/settings/presets):
-# Claude Code always sends effort=high, and a preset's config overrides it.
+# Claude Code on open models. Prefers the z.ai GLM Coding Plan
+# (~/.config/zai.env: ZAI_API_KEY), falls back to OpenRouter
+# (~/.config/openrouter.env). On OpenRouter, effort and provider routing live
+# in the presets (@preset/cc-*, openrouter.ai/settings/presets): Claude Code
+# always sends effort=high, and a preset's config overrides it. z.ai has no
+# presets, so everything there runs at the effort Claude Code sends (high).
 # Override the model per session with --model.
 export PATH="$HOME/.local/bin:$PATH"   # claude's native install; bare units lack it
 command -v claude >/dev/null || { echo 'claude-or: claude not on PATH' >&2; exit 1; }
+zai_file="${ZAI_ENV:-$HOME/.config/zai.env}"
+zai_key=$(sed -n 's/^ZAI_API_KEY=//p' "$zai_file" 2>/dev/null | head -n1)
 env_file="${OPENROUTER_ENV:-$HOME/.config/openrouter.env}"
 key=$(sed -n 's/^OPENROUTER_API_KEY=//p' "$env_file" 2>/dev/null | head -n1)
-[ -n "$key" ] || { echo "claude-or: no OPENROUTER_API_KEY in $env_file" >&2; exit 1; }
-ANTHROPIC_BASE_URL=https://openrouter.ai/api \
-ANTHROPIC_AUTH_TOKEN="$key" \
+if [ -n "$zai_key" ]; then
+    # GLM Coding Plan (docs.z.ai/devpack/tool/claude): opus/fable ->
+    # glm-5.3, sonnet/haiku -> glm-5.3-flash, 1M context suffix.
+    base_url=https://api.z.ai/api/anthropic
+    fable='glm-5.3[1m]' opus='glm-5.3[1m]' sonnet='glm-5.3-flash[1m]' haiku='glm-5.3-flash[1m]'
+elif [ -n "$key" ]; then
+    echo "claude-or: no ZAI_API_KEY in $zai_file, using OpenRouter" >&2
+    base_url=https://openrouter.ai/api
+    fable='@preset/cc-astra-low[1m]' opus='@preset/cc-flash-high[1m]' sonnet='@preset/cc-flash-med[1m]' haiku='@preset/cc-glm-flash-low[1m]'
+else
+    echo "claude-or: no ZAI_API_KEY in $zai_file and no OPENROUTER_API_KEY in $env_file" >&2
+    exit 1
+fi
+# Full system-prompt replacement from claude-or-system-prompt.md next to this
+# script; __CC_MEMORY_DIR__ in it is filled with this project's memory dir.
+sp_dir=$(dirname "$(readlink -f "$0")")
+if [ -f "$sp_dir/claude-or-system-prompt.md" ]; then
+    mem="$HOME/.claude/projects/$(printf '%s' "$PWD" | sed 's|/|-|g')"
+    set -- --system-prompt "$(sed "s|__CC_MEMORY_DIR__|$mem|" "$sp_dir/claude-or-system-prompt.md")" "$@"
+fi
+ANTHROPIC_BASE_URL="$base_url" \
+ANTHROPIC_AUTH_TOKEN="${zai_key:-$key}" \
 ANTHROPIC_API_KEY= \
-ANTHROPIC_DEFAULT_FABLE_MODEL='@preset/cc-astra-low[1m]' \
-ANTHROPIC_DEFAULT_OPUS_MODEL='@preset/cc-flash-high[1m]' \
-ANTHROPIC_DEFAULT_SONNET_MODEL='@preset/cc-flash-med[1m]' \
-ANTHROPIC_DEFAULT_HAIKU_MODEL='@preset/cc-glm-flash-low[1m]' \
+API_TIMEOUT_MS=3000000 \
+ANTHROPIC_DEFAULT_FABLE_MODEL="$fable" \
+ANTHROPIC_DEFAULT_OPUS_MODEL="$opus" \
+ANTHROPIC_DEFAULT_SONNET_MODEL="$sonnet" \
+ANTHROPIC_DEFAULT_HAIKU_MODEL="$haiku" \
 ANTHROPIC_MODEL=opus \
 exec claude "$@"
