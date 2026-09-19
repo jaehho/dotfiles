@@ -7,17 +7,14 @@ abbr -a .... 'cd ../../..'
 
 # ── Files ────────────────────────────────────────────────────────────────────
 if command -q eza
-    abbr -a ls eza
     abbr -a la 'eza -a'
     abbr -a ll 'eza -la --git --icons'
     abbr -a lt 'eza --tree --level=2'
+    abbr -a lm 'eza -la --sort=modified'
 else
     abbr -a la 'ls -a --color=auto'
     abbr -a ll 'ls -la --color=auto'
-end
-
-if command -q bat
-    abbr -a cat bat
+    abbr -a lm 'ls -latr --color=auto'
 end
 
 # ── Git ──────────────────────────────────────────────────────────────────────
@@ -35,3 +32,4 @@ abbr -a print lp
 
 # ── Claude ───────────────────────────────────────────────────────────────────
 abbr -a c 'claude --dangerously-skip-permissions --model "opus[1M]" --effort high'
+abbr -a co 'claude-or --dangerously-skip-permissions'

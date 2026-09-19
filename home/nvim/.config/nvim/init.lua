@@ -413,6 +413,12 @@ end
 local rtp = vim.opt.rtp
 rtp:prepend(lazypath)
 
+-- asst (~/projects/asst) installs its Neovim plugin itself: `make install`
+-- there, or the asst-git package.
+local asst_nvim = vim.iter({ vim.fn.expand '~/.local/share/asst/nvim', '/usr/share/asst/nvim' }):find(
+  function(dir) return vim.fn.isdirectory(dir) == 1 end
+)
+
 -- [[ Configure and install plugins ]]
 --
 --  To check the current status of your plugins, run
@@ -1382,6 +1388,18 @@ require('lazy').setup({
       vim.g.mkdp_auto_close = 1
       vim.g.mkdp_theme = 'dark'
     end,
+  },
+
+  { -- asst: tasks linked to the note being edited
+    name = 'asst',
+    dir = asst_nvim or vim.fn.expand '~/.local/share/asst/nvim',
+    enabled = asst_nvim ~= nil,
+    cmd = { 'AsstTask', 'AsstAttach', 'AsstTasks' },
+    keys = {
+      { '<leader>mt', '<cmd>AsstTask<cr>', ft = 'markdown', desc = '[M]arkdown: new linked [T]ask' },
+      { '<leader>ma', '<cmd>AsstAttach<cr>', ft = 'markdown', desc = '[M]arkdown: [A]ttach to a task' },
+      { '<leader>ml', '<cmd>AsstTasks<cr>', ft = 'markdown', desc = '[M]arkdown: [L]inked tasks' },
+    },
   },
 
   -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
