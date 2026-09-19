@@ -48,6 +48,15 @@ process.stdin.on('end', () => {
         const h = sgt.getUTCHours(), day = sgt.getUTCDay();
         return h >= 14 && h < 18 && day >= 1 && day <= 5;
     };
+    // Flash campaign through Sep 20 2026: non-ZCode agents draw flash at
+    // half quota inside 23:00-09:00 SGT (ponytail: date gate is a display
+    // estimate; delete when the campaign ends)
+    const CAMPAIGN_END = Date.UTC(2026, 8, 20, 16, 0, 0);
+    const flashCampaignHalf = ts => {
+        if (Date.now() > CAMPAIGN_END) return false;
+        const h = new Date(ts + 8 * 3600e3).getUTCHours();
+        return h >= 23 || h < 9;
+    };
 
     // Transcripts are append-only, so parse each one once and keep running
     // totals in /tmp keyed by path; later renders only read the tail.
@@ -57,11 +66,12 @@ process.stdin.on('end', () => {
         try { size = fs.statSync(p).size; } catch { return null; }
         const cacheFile = path.join(os.tmpdir(),
             'claude-sl-' + p.replace(/[^a-zA-Z0-9]/g, '_').slice(-100) + '.json');
-        let c = { size: 0, credits: 0, orUsd: 0, anyGlm: false, lastUsage: null };
+        let c = { size: 0, credits: 0, drawn: 0, orUsd: 0, anyGlm: false, lastUsage: null };
         try { c = { ...c, ...JSON.parse(fs.readFileSync(cacheFile, 'utf8')) }; } catch {}
         if (size === c.size)
-            return { credits: c.anyGlm ? c.credits : null, orUsd: c.orUsd, lastUsage: c.lastUsage };
-        if (c.size > size) c = { size: 0, credits: 0, orUsd: 0, anyGlm: false, lastUsage: null };
+            return { credits: c.anyGlm ? c.credits : null,
+                drawn: c.anyGlm ? c.drawn : null, orUsd: c.orUsd, lastUsage: c.lastUsage };
+        if (c.size > size) c = { size: 0, credits: 0, drawn: 0, orUsd: 0, anyGlm: false, lastUsage: null };
         let text;
         try {
             const fd = fs.openSync(p, 'r');
@@ -106,18 +116,22 @@ process.stdin.on('end', () => {
                 (u.cache_read_input_tokens || 0) * mult[1] +
                 (u.cache_creation_input_tokens || 0) * mult[0] +
                 u.output_tokens * mult[2]) / 10000;
-            c.credits += isPeakSgt(ts) ? cr : cr / 2;
+            const adj = isPeakSgt(ts) ? cr : cr / 2;
+            c.credits += adj;
+            c.drawn += raw.includes('flash') && flashCampaignHalf(ts) ? adj / 2 : adj;
         }
         c.size = offset;
         try { fs.writeFileSync(cacheFile, JSON.stringify(c)); } catch {}
-        return { credits: c.anyGlm ? c.credits : null, orUsd: c.orUsd, lastUsage: c.lastUsage };
+        return { credits: c.anyGlm ? c.credits : null,
+            drawn: c.anyGlm ? c.drawn : null, orUsd: c.orUsd, lastUsage: c.lastUsage };
     }
     const tu = transcriptUsage(data.transcript_path);
 
     // z.ai pool pressure: the CLI never sends rate_limits on a gateway, so
     // take the 5h/weekly percentages from the console endpoint — cached for
     // a minute, refreshed out-of-band so a slow endpoint never blocks a render
-    let zai5h = null, zai5hResets = null, zaiWeek = null, zaiResetsWeek = null;
+    let zai5h = null, zai5hResets = null, zaiWeek = null, zaiResetsWeek = null,
+        zaiTotal5h = null;
     const onZai = glm && !/^(z-ai\/|@preset)/.test(modelId);
     if (onZai) {
       const qf = path.join(os.tmpdir(), 'claude-sl-zai-quota.json');
@@ -142,6 +156,7 @@ process.stdin.on('end', () => {
                     ts: Date.now(),
                     pct5h: by[5] ? by[5].percentage : null,
                     resets5h: by[5] ? Math.floor(by[5].nextResetTime / 1000) : null,
+                    total5h: by[5] ? by[5].usage : null,
                     pctWeek: by[1] ? by[1].percentage : null,
                     resetsWeek: by[1] ? Math.floor(by[1].nextResetTime / 1000) : null }));
                 } catch {} });
@@ -150,7 +165,7 @@ process.stdin.on('end', () => {
         } catch {}
       }
       if (q) {
-        zai5h = q.pct5h; zai5hResets = q.resets5h;
+        zai5h = q.pct5h; zai5hResets = q.resets5h; zaiTotal5h = q.total5h;
         zaiWeek = q.pctWeek; zaiResetsWeek = q.resetsWeek;
       }
     }
@@ -189,18 +204,6 @@ process.stdin.on('end', () => {
       parts.push(`${color}${bar} ${used}%${rst}`);
     }
 
-    // Token count
-    const totalIn = data.context_window?.total_input_tokens || 0;
-    const totalOut = data.context_window?.total_output_tokens || 0;
-    const total = totalIn + totalOut;
-    if (total > 0) {
-      let tokens;
-      if (total >= 1_000_000) tokens = `${(total / 1_000_000).toFixed(1)}M`;
-      else if (total >= 1_000) tokens = `${Math.round(total / 1_000)}K`;
-      else tokens = `${total}`;
-      parts.push(`${dim}${tokens}${rst}`);
-    }
-
     // Session cost, same slot both windows: Anthropic sessions show the
     // server-priced figure; glm sessions show the OpenRouter list-price
     // counterfactual (the CLI's own glm number is a Claude-table mispricing)
@@ -211,20 +214,15 @@ process.stdin.on('end', () => {
       parts.push(`${dim}$${tu.orUsd.toFixed(2)}${rst}`);
     }
 
-    // z.ai coding-plan credits drawn (list price)
-    if (tu && tu.credits != null && tu.credits > 0) {
-      parts.push(`${dim}${tu.credits >= 10 ? tu.credits.toFixed(0) : tu.credits.toFixed(1)} cr${rst}`);
-    }
-
-    // Rate-limit windows, identical shape on both backends:
-    //   ⚡<pct> <resets-in>   5-hour pool
-    //   ⚡7d <pct> <resets-in>  weekly pool
+    // Rate-limit windows, 5h then weekly (the reset span tells them apart):
+    //   <pct>% <resets-in>            pool
+    //   <session>%/<pool>% <resets>   z.ai 5h with this session's share
     const fmtDur = secs => {
       const d = Math.floor(secs / 86400), h = Math.floor((secs % 86400) / 3600),
           m = Math.floor((secs % 3600) / 60);
       return d > 0 ? `${d}d${h}h` : h > 0 ? `${h}h${m}m` : `${m}m`;
     };
-    const limRow = (pct, resets, tag) => {
+    const limRow = (pct, resets, prefix = '') => {
       if (pct == null) return null;
       const used = Math.round(pct);
       let color;
@@ -236,15 +234,20 @@ process.stdin.on('end', () => {
         const secs = Math.max(0, resets - Math.floor(Date.now() / 1000));
         time = ` ${fmtDur(secs)}`;
       }
-      return `${color}⚡${tag}${used}%${time}\x1b[0m`;
+      return `${color}${prefix}${used}%${time}\x1b[0m`;
     };
-    const r5 = limRow(rate5h, rate5hResets, '');
+    const r5 = limRow(rate5h, rate5hResets);
     if (r5) parts.push(r5);
-    const r7 = limRow(rate7d, data.rate_limits?.seven_day?.resets_at, '7d ');
+    const r7 = limRow(rate7d, rate7dResets);
     if (r7) parts.push(r7);
-    const z5 = limRow(zai5h, zai5hResets, '');
+    // session share of the 5h pool (multiplier-based estimate, ~10% hot vs
+    // z.ai's meter — capped at the pool reading so it can't exceed it)
+    let sessPrefix = '';
+    if (tu && tu.drawn != null && zaiTotal5h && zai5h != null)
+      sessPrefix = `${Math.min(Math.round(100 * tu.drawn / zaiTotal5h), Math.round(zai5h))}%/`;
+    const z5 = limRow(zai5h, zai5hResets, sessPrefix);
     if (z5) parts.push(z5);
-    const z7 = limRow(zaiWeek, zaiResetsWeek, '7d ');
+    const z7 = limRow(zaiWeek, zaiResetsWeek);
     if (z7) parts.push(z7);
 
     // idle-dash: archive server-truth rate limits; the dashboard reads this
