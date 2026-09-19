@@ -1,0 +1,19 @@
+#!/bin/sh
+# Claude Code on open models via OpenRouter. Effort and provider routing live
+# in the OpenRouter presets (@preset/cc-*, openrouter.ai/settings/presets):
+# Claude Code always sends effort=high, and a preset's config overrides it.
+# Override the model per session with --model.
+export PATH="$HOME/.local/bin:$PATH"   # claude's native install; bare units lack it
+command -v claude >/dev/null || { echo 'claude-or: claude not on PATH' >&2; exit 1; }
+env_file="${OPENROUTER_ENV:-$HOME/.config/openrouter.env}"
+key=$(sed -n 's/^OPENROUTER_API_KEY=//p' "$env_file" 2>/dev/null | head -n1)
+[ -n "$key" ] || { echo "claude-or: no OPENROUTER_API_KEY in $env_file" >&2; exit 1; }
+ANTHROPIC_BASE_URL=https://openrouter.ai/api \
+ANTHROPIC_AUTH_TOKEN="$key" \
+ANTHROPIC_API_KEY= \
+ANTHROPIC_DEFAULT_FABLE_MODEL='@preset/cc-astra-low[1m]' \
+ANTHROPIC_DEFAULT_OPUS_MODEL='@preset/cc-flash-high[1m]' \
+ANTHROPIC_DEFAULT_SONNET_MODEL='@preset/cc-flash-med[1m]' \
+ANTHROPIC_DEFAULT_HAIKU_MODEL='@preset/cc-glm-flash-low[1m]' \
+ANTHROPIC_MODEL=opus \
+exec claude "$@"
