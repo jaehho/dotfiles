@@ -1,0 +1,506 @@
+#!/usr/bin/env python3
+"""hypr-confetti — a small party on the focused monitor, then exit.
+
+Bound to the smiley key (F2). A click-through layer-shell overlay: it takes no
+keyboard and no pointer input, so it never gets in the way. Each press picks a
+show at random:
+
+  smiley   a smiley pops out of the cursor, winks, and bursts
+  cannons  party poppers fire from both bottom corners, streamers and all
+  shower   confetti and glitter drift down from the top edge
+  jackpot  (rare) all of the above, with a word to go with it
+
+`hypr-confetti <show>` forces one. `--quiet` skips the sound.
+"""
+
+import array
+import json
+import math
+import os
+import random
+import subprocess
+import sys
+import wave
+
+# Same preload dance as hypr-keybind-cheatsheet: gtk4-layer-shell has to be
+# loaded before libwayland-client, which PyGObject pulls in on import.
+PRELOAD = "/usr/lib/libgtk4-layer-shell.so"
+if os.path.exists(PRELOAD) and PRELOAD not in os.environ.get("LD_PRELOAD", ""):
+    existing = os.environ.get("LD_PRELOAD", "")
+    os.environ["LD_PRELOAD"] = f"{PRELOAD}:{existing}".rstrip(":")
+    os.execv(sys.executable, [sys.executable, *sys.argv])
+
+import cairo  # noqa: E402
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+gi.require_version("Gtk4LayerShell", "1.0")
+from gi.repository import Gdk, Gtk, Pango, PangoCairo  # noqa: E402
+from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
+
+CONFIG = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+CACHE = os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")) + "/hypr-confetti"
+PALETTE = f"{CONFIG}/theme/palette"
+ACCENTS = ["blue", "lavender", "sapphire", "teal", "green", "yellow", "peach", "maroon", "mauve", "pink", "rosewater"]
+FALLBACK = {"yellow": "b0954a", "base": "141c1e", "blue": "609fd2", "teal": "43ac9b", "peach": "ca865e", "pink": "b883bb"}
+WORDS = ["yay!", "woo!", "nice!", "hooray!", "you did it!", "party!", "wheee!"]
+
+GRAVITY = 900.0   # px/s²
+DRAG = 1.6        # per second
+TERMINAL = 240.0  # px/s, the speed falling paper settles at
+DURATION = 5.0    # s until the overlay fades out and exits
+RATE = 44100
+
+
+# ── setup ────────────────────────────────────────────────────────────────────
+
+def palette():
+    found = {}
+    try:
+        with open(PALETTE) as f:
+            for line in f:
+                key, _, value = line.strip().partition("=")
+                if len(value) == 6:
+                    found[key] = value
+    except OSError:
+        pass
+    found = found or FALLBACK
+
+    def rgb(h, lift=1.0):
+        return tuple(min(1.0, int(h[i:i + 2], 16) / 255 * lift) for i in (0, 2, 4))
+
+    # The palette is tuned for text contrast, so lift it a little for paper.
+    accents = [rgb(found[k], 1.18) for k in ACCENTS if k in found] or [rgb(v, 1.18) for v in FALLBACK.values()]
+    return accents, rgb(found.get("yellow", FALLBACK["yellow"]), 1.35), rgb(found.get("base", FALLBACK["base"]))
+
+
+def hypr(*args):
+    try:
+        out = subprocess.run(["hyprctl", *args, "-j"], capture_output=True, text=True, timeout=2).stdout
+        return json.loads(out)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+# ── sound ────────────────────────────────────────────────────────────────────
+# Synthesized once and cached, so there is no asset to ship: a popper's crack
+# and a three-note flourish.
+
+def write_wav(path, samples):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    data = array.array("h", (int(max(-1.0, min(1.0, s)) * 32000) for s in samples))
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(RATE)
+        w.writeframes(data.tobytes())
+
+
+def pop_samples(delay=0.0):
+    rnd = random.Random(7)
+    out = [0.0] * int(delay * RATE)
+    lp = 0.0
+    for i in range(int(0.18 * RATE)):
+        t = i / RATE
+        lp += (rnd.uniform(-1, 1) - lp) * 0.35   # one-pole low-pass: a thud, not hiss
+        out.append((lp * 1.6 + math.sin(t * 2 * math.pi * 140) * 0.5) * math.exp(-t * 38))
+    return out
+
+
+def tada_samples():
+    out = pop_samples()
+    notes = [(0.10, 784.0), (0.19, 988.0), (0.28, 1175.0)]
+    length = int(1.1 * RATE)
+    out += [0.0] * (length - len(out))
+    for start, freq in notes:
+        s0 = int(start * RATE)
+        for i in range(length - s0):
+            t = i / RATE
+            env = min(1.0, t * 200) * math.exp(-t * 5.5)
+            tone = math.sin(2 * math.pi * freq * t) + 0.3 * math.sin(4 * math.pi * freq * t)
+            out[s0 + i] += tone * env * 0.22
+    return out
+
+
+def play(name):
+    path = f"{CACHE}/{name}.wav"
+    if not os.path.exists(path):
+        write_wav(path, tada_samples() if name == "tada" else pop_samples())
+    try:
+        subprocess.Popen(["pw-play", "--volume", "0.6", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
+
+
+# ── things that fly ──────────────────────────────────────────────────────────
+
+class Piece:
+    """A scrap of paper, a round sequin, or a curling streamer."""
+
+    def __init__(self, x, y, speed, direction, spread, colors, delay=0.0, kind=None):
+        a = direction + random.uniform(-spread, spread)
+        v = speed * random.uniform(0.5, 1.0)
+        self.x, self.y = x, y
+        self.vx, self.vy = math.cos(a) * v, math.sin(a) * v
+        self.angle = random.uniform(0, math.tau)
+        self.spin = random.uniform(-10, 10)
+        self.flip = random.uniform(0, math.tau)
+        self.flip_speed = random.uniform(4, 13)
+        self.kind = kind or random.choices(("paper", "sequin", "streamer"), (7, 2, 1))[0]
+        self.w = random.uniform(7, 13) if self.kind != "streamer" else random.uniform(3, 4.5)
+        self.h = self.w * (0.5 if self.kind == "paper" else 1)
+        self.color = random.choice(colors)
+        self.delay = delay
+        self.trail = []
+
+    def step(self, dt):
+        if self.delay > 0:
+            self.delay -= dt
+            return
+        self.vy += GRAVITY * dt * (0.55 if self.kind == "streamer" else 1)
+        self.vx -= self.vx * DRAG * dt
+        if self.vy < 0:
+            self.vy -= self.vy * DRAG * dt
+        elif self.vy > TERMINAL:
+            self.vy = TERMINAL + (self.vy - TERMINAL) * math.exp(-6 * dt)
+            self.vx += math.sin(self.flip) * 140 * dt   # settled paper sways as it falls
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.angle += self.spin * dt
+        self.flip += self.flip_speed * dt
+        if self.kind == "streamer":
+            # The trail wobbles sideways, which reads as a ribbon curling.
+            wob = math.sin(self.flip * 0.9) * 12
+            self.trail.append((self.x + math.cos(self.angle) * wob, self.y + math.sin(self.angle) * wob))
+            # Cap the ribbon's length, or a fast launch draws a straight line.
+            length = 0.0
+            for i in range(len(self.trail) - 1, 0, -1):
+                (x1, y1), (x0, y0) = self.trail[i], self.trail[i - 1]
+                length += math.hypot(x1 - x0, y1 - y0)
+                if length > 110:
+                    del self.trail[:i - 1]
+                    break
+            del self.trail[:-40]
+
+    def draw(self, cr, alpha):
+        if self.delay > 0:
+            return
+        r, g, b = self.color
+        if self.kind == "streamer":
+            if len(self.trail) < 3:
+                return
+            cr.set_line_width(self.w)
+            cr.set_line_cap(cairo.LINE_CAP_ROUND)
+            cr.set_line_join(cairo.LINE_JOIN_ROUND)
+            cr.set_source_rgba(r, g, b, alpha)
+            cr.move_to(*self.trail[0])
+            for i in range(1, len(self.trail) - 1, 2):
+                cr.curve_to(*self.trail[i], *self.trail[i], *self.trail[i + 1])
+            cr.stroke()
+            return
+        cr.save()
+        cr.translate(self.x, self.y)
+        cr.rotate(self.angle)
+        # Squashing one axis by cos(flip) reads as the paper tumbling in 3D,
+        # and the shading sells which side faces the light.
+        face = abs(math.cos(self.flip))
+        cr.scale(1, max(0.08, face))
+        shade = 0.65 + 0.35 * face
+        cr.set_source_rgba(r * shade, g * shade, b * shade, alpha)
+        if self.kind == "sequin":
+            cr.arc(0, 0, self.w / 2, 0, math.tau)
+        else:
+            cr.rectangle(-self.w / 2, -self.h / 2, self.w, self.h)
+        cr.fill()
+        cr.restore()
+
+
+class Sparkle:
+    """A four-point glint that twinkles in place, then goes out."""
+
+    def __init__(self, x, y, delay, color):
+        self.x, self.y = x, y
+        self.delay = delay
+        self.life = random.uniform(0.5, 1.1)
+        self.age = 0.0
+        self.size = random.uniform(6, 16)
+        self.color = color
+        self.vy = random.uniform(10, 50)
+
+    def step(self, dt):
+        if self.delay > 0:
+            self.delay -= dt
+            return
+        self.age += dt
+        self.y += self.vy * dt
+
+    def draw(self, cr, alpha):
+        if self.delay > 0 or self.age > self.life:
+            return
+        k = math.sin(math.pi * self.age / self.life)
+        s = self.size * k
+        r, g, b = self.color
+        cr.set_source_rgba(min(1, r + 0.3), min(1, g + 0.3), min(1, b + 0.3), alpha * k)
+        x, y = self.x, self.y
+        cr.move_to(x, y - s)
+        for px, py in ((x + s, y), (x, y + s), (x - s, y), (x, y - s)):
+            cr.curve_to(x, y, x, y, px, py)   # pinched through the centre: a glint
+        cr.close_path()
+        cr.fill()
+
+    @property
+    def done(self):
+        return self.delay <= 0 and self.age > self.life
+
+
+class Smiley:
+    """Pops in with an elastic overshoot, winks, puffs up, and bursts."""
+
+    POP, BURST = 0.45, 1.25  # s: fully grown, then gone
+
+    def __init__(self, x, y, face, ink):
+        self.x, self.y, self.face, self.ink = x, y, face, ink
+        self.age = 0.0
+        self.burst = False
+
+    def step(self, dt):
+        self.age += dt
+
+    def scale(self):
+        t = self.age
+        if t < self.POP:
+            u = t / self.POP
+            return 1 - math.cos(u * math.pi * 2.5) * math.exp(-u * 5)   # elastic ease-out
+        if t < self.BURST:
+            return 1 + 0.25 * ((t - self.POP) / (self.BURST - self.POP)) ** 3  # inflate before the pop
+        return 0
+
+    def draw(self, cr, alpha):
+        s = self.scale()
+        if s <= 0:
+            return
+        R = 70 * s
+        cr.save()
+        cr.translate(self.x, self.y)
+        cr.rotate(math.sin(self.age * 14) * 0.08 * max(0, self.age - self.POP) * 2)
+        cr.set_source_rgba(*self.face, alpha)
+        cr.arc(0, 0, R, 0, math.tau)
+        cr.fill()
+        cr.set_source_rgba(*self.ink, alpha)
+        cr.set_line_width(R * 0.09)
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
+        wink = 0.55 < self.age < 0.85
+        # left eye
+        cr.arc(-R * 0.35, -R * 0.2, R * 0.1, 0, math.tau)
+        cr.fill()
+        # right eye, or a wink
+        if wink:
+            cr.move_to(R * 0.22, -R * 0.2)
+            cr.line_to(R * 0.48, -R * 0.2)
+            cr.stroke()
+        else:
+            cr.arc(R * 0.35, -R * 0.2, R * 0.1, 0, math.tau)
+            cr.fill()
+        cr.arc(0, R * 0.05, R * 0.5, math.pi * 0.15, math.pi * 0.85)
+        cr.stroke()
+        cr.restore()
+
+
+class Word:
+    """Big letters that bounce in one at a time."""
+
+    def __init__(self, text, x, y, colors, ink):
+        self.text, self.x, self.y, self.colors, self.ink = text, x, y, colors, ink
+        self.age = 0.0
+
+    def step(self, dt):
+        self.age += dt
+
+    def draw(self, cr, alpha):
+        layout = PangoCairo.create_layout(cr)
+        layout.set_font_description(Pango.FontDescription.from_string("Sans Heavy 96"))
+        widths = []
+        for ch in self.text:
+            layout.set_text(ch, -1)
+            widths.append(layout.get_pixel_size()[0])
+        x = self.x - sum(widths) / 2
+        for i, ch in enumerate(self.text):
+            t = self.age - 0.35 - i * 0.07
+            if t > 0:
+                u = min(1.0, t / 0.5)
+                bounce = (1 - math.cos(u * math.pi * 2.5) * math.exp(-u * 5))
+                y = self.y - 90 * (1 - bounce) - math.sin(self.age * 6 + i) * 6
+                layout.set_text(ch, -1)
+                cr.move_to(x + 4, y + 5)
+                cr.set_source_rgba(*self.ink, alpha * 0.6)
+                PangoCairo.show_layout(cr, layout)
+                cr.move_to(x, y)
+                cr.set_source_rgba(*self.colors[i % len(self.colors)], alpha)
+                PangoCairo.show_layout(cr, layout)
+            x += widths[i]
+
+
+# ── shows ────────────────────────────────────────────────────────────────────
+
+class Party:
+    def __init__(self, show, width, height, cursor, quiet):
+        self.width, self.height = width, height
+        self.colors, self.yellow, self.ink = palette()
+        self.things, self.pending = [], []   # pending: (at seconds, callable)
+        self.elapsed = 0.0
+        self.quiet = quiet
+        getattr(self, f"show_{show}")(cursor)
+
+    def at(self, t, fn):
+        self.pending.append((t, fn))
+
+    def sound(self, name, t=0.0):
+        if not self.quiet:
+            self.at(t, lambda: play(name))
+
+    def burst(self, x, y, n, speed):
+        for _ in range(n):
+            self.things.append(Piece(x, y, speed, random.uniform(0, math.tau), 0, self.colors, random.uniform(0, 0.04)))
+        for _ in range(n // 6):
+            ang, dist = random.uniform(0, math.tau), random.uniform(20, 220)
+            self.things.append(Sparkle(x + math.cos(ang) * dist, y + math.sin(ang) * dist,
+                                       random.uniform(0.05, 0.5), random.choice(self.colors)))
+
+    def show_smiley(self, cursor):
+        x = min(max(cursor[0], 120), self.width - 120)
+        y = min(max(cursor[1], 120), self.height - 120)
+        self.things.append(Smiley(x, y, self.yellow, self.ink))
+        self.at(Smiley.BURST, lambda: self.burst(x, y, 260, 1400))
+        self.sound("pop", Smiley.BURST - 0.02)
+
+    def show_cannons(self, cursor=None, t=0.0):
+        def fire(side):
+            x = 0 if side == 0 else self.width
+            direction = -math.pi / 2 + (0.45 if side == 0 else -0.45)
+            for _ in range(170):
+                self.things.append(Piece(x, self.height, self.height * 2.1, direction, 0.28, self.colors,
+                                         random.uniform(0, 0.12)))
+            for _ in range(14):
+                self.things.append(Piece(x, self.height, self.height * 2.3, direction, 0.2, self.colors,
+                                         random.uniform(0, 0.1), kind="streamer"))
+        self.at(t, lambda: fire(0))
+        self.at(t + 0.18, lambda: fire(1))
+        self.sound("pop", t)
+        self.sound("pop", t + 0.18)
+
+    def show_shower(self, cursor=None):
+        for _ in range(340):
+            p = Piece(random.uniform(0, self.width), random.uniform(-80, -10), 60, math.pi / 2, 0.6,
+                      self.colors, random.uniform(0, 2.0))
+            p.vy = random.uniform(120, TERMINAL)
+            self.things.append(p)
+        for _ in range(90):
+            self.things.append(Sparkle(random.uniform(0, self.width), random.uniform(0, self.height * 0.8),
+                                       random.uniform(0, 3.0), random.choice(self.colors)))
+        self.sound("tada")
+
+    def show_jackpot(self, cursor):
+        self.show_smiley(cursor)
+        self.show_cannons(t=0.9)
+        self.at(1.4, lambda: self.show_shower())
+        self.at(1.3, lambda: self.things.append(
+            Word(random.choice(WORDS), self.width / 2, self.height * 0.3, self.colors, self.ink)))
+
+    def step(self, dt):
+        self.elapsed += dt
+        due = [fn for t, fn in self.pending if t <= self.elapsed]
+        self.pending = [(t, fn) for t, fn in self.pending if t > self.elapsed]
+        for fn in due:
+            fn()
+        for thing in self.things:
+            thing.step(dt)
+        self.things = [
+            th for th in self.things
+            if not (isinstance(th, Piece) and th.y > self.height + 60 and th.delay <= 0)
+            and not (isinstance(th, Sparkle) and th.done)
+        ]
+
+    @property
+    def finished(self):
+        return self.elapsed > DURATION or (self.elapsed > 1.5 and not self.pending
+                                           and not any(isinstance(t, (Piece, Sparkle)) for t in self.things))
+
+    def draw(self, cr):
+        alpha = max(0.0, min(1.0, (DURATION - self.elapsed) / 0.8))
+        for thing in self.things:
+            thing.draw(cr, alpha)
+
+
+# ── window ───────────────────────────────────────────────────────────────────
+
+class Overlay(Gtk.Application):
+    def __init__(self, show, quiet):
+        super().__init__(application_id=None)
+        self.show, self.quiet = show, quiet
+        self.party, self.last = None, None
+
+    def do_activate(self):
+        window = Gtk.Window(application=self)
+        LayerShell.init_for_window(window)
+        LayerShell.set_namespace(window, "confetti")
+        LayerShell.set_layer(window, LayerShell.Layer.OVERLAY)
+        LayerShell.set_keyboard_mode(window, LayerShell.KeyboardMode.NONE)
+        LayerShell.set_exclusive_zone(window, -1)
+        for edge in (LayerShell.Edge.TOP, LayerShell.Edge.BOTTOM, LayerShell.Edge.LEFT, LayerShell.Edge.RIGHT):
+            LayerShell.set_anchor(window, edge, True)
+
+        focused = next((m for m in hypr("monitors") or [] if m.get("focused")), None)
+        geometry = None
+        if focused:
+            monitors = Gdk.Display.get_default().get_monitors()
+            for i in range(monitors.get_n_items()):
+                mon = monitors.get_item(i)
+                if mon.get_connector() == focused["name"]:
+                    LayerShell.set_monitor(window, mon)
+                    geometry = mon.get_geometry()
+        width, height = (geometry.width, geometry.height) if geometry else (1920, 1080)
+
+        cursor = (width / 2, height / 2)
+        pos = hypr("cursorpos")
+        if pos and focused:
+            # Both are in layout coordinates, the same space GTK draws in.
+            cursor = (pos["x"] - focused["x"], pos["y"] - focused["y"])
+
+        self.party = Party(self.show, width, height, cursor, self.quiet)
+
+        css = Gtk.CssProvider()
+        css.load_from_string("window { background: transparent; }")
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
+                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        area = Gtk.DrawingArea()
+        area.set_draw_func(lambda _a, cr, _w, _h: self.party.draw(cr))
+        area.add_tick_callback(self.tick)
+        window.set_child(area)
+        window.connect("realize", lambda w: w.get_surface().set_input_region(cairo.Region()))
+        window.present()
+
+    def tick(self, widget, clock):
+        now = clock.get_frame_time() / 1e6
+        dt = 0 if self.last is None else min(now - self.last, 1 / 20)
+        self.last = now
+        self.party.step(dt)
+        if self.party.finished:
+            self.quit()
+            return False
+        widget.queue_draw()
+        return True
+
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    quiet = "--quiet" in sys.argv
+    shows = ("smiley", "cannons", "shower")
+    show = args[0] if args else ("jackpot" if random.random() < 1 / 12 else random.choice(shows))
+    if show not in (*shows, "jackpot"):
+        sys.exit(f"usage: hypr-confetti [{'|'.join((*shows, 'jackpot'))}] [--quiet]")
+    Overlay(show, quiet).run([])
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Readline-style navigation inside the swaync control center.
+#
+# swaync's shortcuts are compiled in and cannot be configured: Up/Down,
+# Home/End, Return, Delete/BackSpace, Escape, Shift+C, Shift+D and 1-9. This
+# adds Ctrl+n / Ctrl+p on top by translating them into the keys swaync already
+# understands, through a Hyprland submap that is only active while the panel is
+# open -- binding Ctrl+n globally would break it in every other application.
+#
+# Two roles, one file:
+#   (no args)        watch swaync and enter/leave the submap
+#   send <keysym>    what the submap's binds call
+#
+# The 2026-07 attempt at this toggled the submap next to the open command and
+# desynced the moment the panel closed by another route -- Escape handled inside
+# swaync, a click outside, waybar's `swaync-client -t` -- latching the submap
+# with the keyboard captured. swaync publishes `visible` on its subscribe
+# stream, so follow that instead of trying to predict it.
+
+set -uo pipefail
+
+# Two traps live here.
+#
+# Under a Lua config `hyprctl dispatch` evaluates its argument as Lua, so the
+# hyprlang spelling `dispatch submap swaync` is a syntax error rather than a
+# no-op -- and it says so only on stderr, which is easy to miss.
+#
+# And the submap does not survive on its own: Hyprland resets it when the
+# control center's layer surface takes keyboard focus (which races with swaync
+# announcing `visible`), and again once a bind inside it fires -- which is why
+# a first keypress used to work and the second did nothing. So never dispatch
+# and hope; assert the state until it reads back.
+panel_visible() {
+    [ "$(busctl --user --auto-start=no --timeout=1 call \
+        org.erikreider.swaync.cc /org/erikreider/swaync/cc \
+        org.erikreider.swaync.cc GetVisibility 2>/dev/null)" = "b true" ]
+}
+
+set_submap() {
+    local want=$1 lua=$2 i
+    for i in 1 2 3 4 5 6; do
+        # Visibility may change while a translated key or retry is in flight.
+        if [ "$want" = swaync ] && ! panel_visible; then
+            leave
+            return 1
+        fi
+        hyprctl dispatch "$lua" >/dev/null 2>&1
+        [ "$(hyprctl submap 2>/dev/null)" = "$want" ] && return 0
+        sleep 0.15
+    done
+    return 1
+}
+
+enter() { set_submap swaync  'hl.dsp.submap("swaync")'; }
+leave() { set_submap default 'hl.dsp.submap("reset")'; }
+
+# Handled before the watcher's EXIT trap is installed -- `send` must not reset
+# the submap on its way out, it has to put it back.
+if [ "${1:-}" = send ]; then
+    case "${2:-}" in
+        Up|Down) ;;
+        *) echo "usage: hypr-swaync-keys send Up|Down" >&2; exit 2 ;;
+    esac
+    panel_visible || { leave; exit 0; }
+    wtype -k "$2"
+    enter
+    exit 0
+fi
+
+# Read the subscription in this shell so TERM interrupts read immediately.
+# A foreground pipeline makes bash defer its trap until the stream ends.
+subscriber=
+cleanup() {
+    trap - EXIT INT TERM
+    if [ -n "$subscriber" ]; then
+        kill "$subscriber" 2>/dev/null || true
+        wait "$subscriber" 2>/dev/null || true
+    fi
+    leave
+}
+trap cleanup EXIT
+trap 'exit 0' INT TERM
+
+while true; do
+    coproc SUBSCRIBE { exec swaync-client --skip-wait -s 2>/dev/null; }
+    subscriber=$SUBSCRIBE_PID
+    stream=${SUBSCRIBE[0]}
+    while IFS= read -r -u "$stream" state; do
+        case "$(jq -r '.visible' <<< "$state")" in
+            true)  enter ;;
+            false) leave ;;
+        esac
+    done
+    wait "$subscriber" 2>/dev/null || true
+    subscriber=
+    leave
+    sleep 2 &
+    wait $!
+done

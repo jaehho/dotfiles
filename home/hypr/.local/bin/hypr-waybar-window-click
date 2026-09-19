@@ -1,0 +1,21 @@
+#!/bin/bash
+# Click handler for waybar's workspace-taskbar window icons.
+# Usage: hypr-waybar-window-click <address>
+#
+# The rest of the workspace button is waybar's own handler; this only covers
+# clicks that land on an icon, which focus that window rather than the workspace.
+#
+# Special workspaces keep their toggle feel: clicking an icon on an overlay
+# that is already up hides it again. Everything else just focuses the window.
+
+addr="$1"
+[ -n "$addr" ] || exit 0
+
+ws=$(hyprctl clients -j | jq -r --arg a "$addr" '.[] | select(.address == $a) | .workspace.name')
+
+if [[ "$ws" == special:* ]] &&
+   hyprctl monitors -j | jq -e --arg w "$ws" 'any(.[]; .specialWorkspace.name == $w)' >/dev/null; then
+    hyprctl dispatch "hl.dsp.workspace.toggle_special(\"${ws#special:}\")"
+else
+    hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })"
+fi

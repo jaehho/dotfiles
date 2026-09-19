@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Toggle Spotify: hide it to the tray when focused, otherwise show it.
+# A tray-hidden Spotify has no window, and running the client again raises the
+# running instance (or starts one), so the launcher's update check is skipped.
+# The raised window does not take focus on its own, so wait for it and focus it.
+has_window() { hyprctl clients -j | jq -e '.[] | select(.class | test("^[Ss]potify$"))' >/dev/null; }
+focus() { hyprctl dispatch 'hl.dsp.focus({ window = "class:^([Ss]potify)$" })' >/dev/null; }
+
+class=$(hyprctl activewindow -j | jq -r '.class // empty')
+if [[ $class == [Ss]potify ]]; then
+    hyprctl dispatch 'hl.dsp.window.close()'   # ui.minimize_to_tray turns close into hide
+elif has_window; then
+    focus
+else
+    setsid -f ~/.local/share/spotify-launcher/install/usr/share/spotify/spotify \
+        --enable-features=UseOzonePlatform --ozone-platform=wayland >/dev/null 2>&1   # flags as in hyprland.lua
+    for _ in $(seq 100); do   # up to 10s, enough for a cold start
+        has_window && { focus; exit; }
+        sleep 0.1
+    done
+fi

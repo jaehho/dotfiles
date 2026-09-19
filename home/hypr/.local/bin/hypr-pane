@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Run a command in a new tmux pane next to the one you are looking at.
+#
+#   hypr-pane [--float CLASS] [--cwd DIR] -- CMD...
+#
+# If the focused window's process tree contains a tmux client, split the pane
+# that client is showing, in that pane's directory. Otherwise: with --float,
+# focus an existing CLASS window or launch a floating kitty of that class
+# (the calculator); without it, open a new kitty running tmux with CMD, in
+# DIR if given.
+set -euo pipefail
+
+float_class="" cwd=""
+while [ $# -gt 0 ]; do
+    case $1 in
+        --float) float_class=$2; shift 2 ;;
+        --cwd) cwd=$2; shift 2 ;;
+        *) break ;;
+    esac
+done
+[ "${1:-}" = "--" ] && shift
+[ $# -gt 0 ] || { echo "usage: hypr-pane [--float CLASS] [--cwd DIR] -- CMD..." >&2; exit 2; }
+cmd=("$@")
+
+fallback() {
+    if [ -n "$float_class" ]; then
+        local addr
+        addr=$(hyprctl clients -j 2>/dev/null \
+            | jq -r --arg c "$float_class" 'map(select(.class==$c)) | .[0].address // ""')
+        if [ -n "$addr" ]; then
+            exec hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })"
+        fi
+        exec kitty --class "$float_class" -e "${cmd[@]}"
+    fi
+    exec kitty ${cwd:+--directory "$cwd"} -e tmux new-session ${cwd:+-c "$cwd"} "${cmd[@]}"
+}
+
+active=$(hyprctl activewindow -j 2>/dev/null || echo '{}')
+pid=$(printf '%s' "$active" | jq -r '.pid // 0')
+
+[ "$pid" -gt 0 ] || fallback
+
+# Collect all descendants of the focused window.
+descendants() {
+    local p=$1 kids k
+    kids=$(pgrep -P "$p" 2>/dev/null || true)
+    for k in $kids; do
+        printf '%s\n' "$k"
+        descendants "$k"
+    done
+}
+
+# Find a tmux client (not server) anywhere in the focused window's subtree.
+# This works regardless of terminal class — if tmux is running there, we use it.
+tmux_tty=""
+while read -r p; do
+    [ -z "$p" ] && continue
+    comm=$(ps -p "$p" -o comm= 2>/dev/null || true)
+    case "$comm" in
+        tmux|tmux:*)
+            t=$(ps -p "$p" -o tty= 2>/dev/null | tr -d ' ')
+            if [ -n "$t" ] && [ "$t" != "?" ]; then
+                tmux_tty="/dev/$t"
+                break
+            fi
+            ;;
+    esac
+done < <(descendants "$pid")
+
+if [ -n "$tmux_tty" ]; then
+    # Query this specific client's view (-c tty) so we split the pane the user
+    # is actually focused on, not whatever tmux's session-level state thinks.
+    info=$(tmux display -c "$tmux_tty" -p -F '#{pane_id} #{pane_width} #{pane_height} #{pane_current_path}' 2>/dev/null || true)
+    if [ -n "$info" ]; then
+        read -r pane_id w h dir <<< "$info"
+        # Split the longer pixel dimension, biased toward stacking (-v).
+        # Character cells are ~2:1 tall:wide; multiplier above 2 favors -v.
+        if [ "${w:-0}" -gt $(( ${h:-0} * 3 )) ]; then
+            split_flag="-h"   # side by side (only on very wide panes)
+        else
+            split_flag="-v"   # stacked below
+        fi
+        exec tmux split-window "$split_flag" -t "$pane_id" -c "$dir" "${cmd[@]}"
+    fi
+fi
+
+fallback
