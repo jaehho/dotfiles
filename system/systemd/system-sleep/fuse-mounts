@@ -14,15 +14,7 @@ set -u
 
 TARGET_UID=1000
 TARGET_USER=jaeho
-# Auto-start mounts: always restart on resume.
-AUTO_MOUNTS=(sshfs-conway.service)
-# Opt-in mounts: capture pre-suspend state, restore only what was active.
-# (Otherwise resume would auto-start a service the user had deliberately
-# stopped — same policy as the NM dispatcher hook 50-restart-sshfs.)
-OPT_IN_MOUNTS=(sshfs-cdn.service sshfs-msi.service)
-# /run is root-owned tmpfs: persists across suspend, cleared on reboot
-# (which is what we want — pre-reboot state is meaningless on resume).
-STATE_FILE=/run/fuse-mounts-was-active
+MOUNTS=(sshfs-conway.service)
 
 USER_ENV=(runuser -u "$TARGET_USER" -- env
     "XDG_RUNTIME_DIR=/run/user/$TARGET_UID"
@@ -37,26 +29,14 @@ run_user_t() { local secs=$1; shift; timeout -k 2 "$secs" "${USER_ENV[@]}" "$@";
 
 case "$1" in
     pre)
-        : > "$STATE_FILE"
-        for svc in "${OPT_IN_MOUNTS[@]}"; do
-            if run_user systemctl --user is-active --quiet "$svc"; then
-                echo "$svc" >> "$STATE_FILE"
-            fi
-        done
-        for svc in "${AUTO_MOUNTS[@]}" "${OPT_IN_MOUNTS[@]}"; do
+        for svc in "${MOUNTS[@]}"; do
             run_user_t 10 systemctl --user stop "$svc" || true
         done
         ;;
     post)
-        for svc in "${AUTO_MOUNTS[@]}"; do
+        for svc in "${MOUNTS[@]}"; do
             run_user_t 15 systemctl --user start "$svc" || true
         done
-        if [[ -f "$STATE_FILE" ]]; then
-            while IFS= read -r svc; do
-                [[ -n "$svc" ]] && run_user_t 15 systemctl --user start "$svc" || true
-            done < "$STATE_FILE"
-            rm -f "$STATE_FILE"
-        fi
         ;;
 esac
 

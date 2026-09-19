@@ -1,7 +1,9 @@
 # GRUB boot loader configuration
 
 GRUB_DEFAULT=0
-GRUB_TIMEOUT=5
+# Only Arch is on this disk, so the menu is pure wait, paid on every boot and on
+# every hibernate resume. Hidden (below) for 1s: press Esc to get the menu.
+GRUB_TIMEOUT=1
 GRUB_DISTRIBUTOR="Arch"
 GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet nvidia-drm.modeset=1 resume=UUID=89dd1d02-665b-4012-ba34-a5deaddd1d2d"
 GRUB_CMDLINE_LINUX=""
@@ -14,7 +16,7 @@ GRUB_PRELOAD_MODULES="part_gpt part_msdos"
 
 # Set to 'countdown' or 'hidden' to change timeout behavior,
 # press ESC key to display menu.
-GRUB_TIMEOUT_STYLE=menu
+GRUB_TIMEOUT_STYLE=hidden
 
 # Uncomment to use basic console
 GRUB_TERMINAL_INPUT=console
