@@ -28,10 +28,11 @@ image/webp=imv.desktop
 image/bmp=imv.desktop
 image/tiff=imv.desktop
 image/svg+xml=imv.desktop
-x-scheme-handler/mailto=userapp-Thunderbird-BA77R3.desktop
-x-scheme-handler/mid=userapp-Thunderbird-BA77R3.desktop
-message/rfc822=userapp-Thunderbird-BA77R3.desktop
-x-scheme-handler/net.thunderbird=userapp-Thunderbird-69B8R3.desktop
+x-scheme-handler/mailto=userapp-Betterbird-W36QV3.desktop
+x-scheme-handler/mid=userapp-Betterbird-W36QV3.desktop
+message/rfc822=userapp-Betterbird-W36QV3.desktop
+x-scheme-handler/net.thunderbird=userapp-Betterbird-ILEPV3.desktop
+x-scheme-handler/discord=vesktop.desktop
 
 [Added Associations]
 x-scheme-handler/http=firefox-developer-edition.desktop;
@@ -46,7 +47,7 @@ application/x-extension-xhtml=firefox-developer-edition.desktop;
 application/x-extension-xht=firefox-developer-edition.desktop;
 application/pdf=okularApplication_pdf.desktop;
 image/png=okularApplication_kimgio.desktop;org.pwmt.zathura-pdf-mupdf.desktop;
-x-scheme-handler/mailto=userapp-Thunderbird-BA77R3.desktop;
-x-scheme-handler/mid=userapp-Thunderbird-BA77R3.desktop;
-message/rfc822=userapp-Thunderbird-BA77R3.desktop;
-x-scheme-handler/net.thunderbird=userapp-Thunderbird-69B8R3.desktop;
+x-scheme-handler/mailto=userapp-Betterbird-W36QV3.desktop;
+x-scheme-handler/mid=userapp-Betterbird-W36QV3.desktop;
+message/rfc822=userapp-Betterbird-W36QV3.desktop;
+x-scheme-handler/net.thunderbird=userapp-Betterbird-ILEPV3.desktop;

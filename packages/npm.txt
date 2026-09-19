@@ -1,4 +1,6 @@
 @mermaid-js/mermaid-cli
-@playwright/mcp
 mermaid-filter
+ccusage
 neovim
+typescript
+typescript-language-server

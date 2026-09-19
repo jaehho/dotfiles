@@ -1,5 +1,5 @@
+audacity
 espeak-ng
-ffmpeg
 ffmpegthumbnailer
 gst-libav
 gst-plugin-pipewire
@@ -14,5 +14,4 @@ losslesscut-bin
 mpv
 raw-thumbnailer
 speech-dispatcher
-spotify-player
 tumbler

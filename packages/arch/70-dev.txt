@@ -1,6 +1,7 @@
 cargo-update
 clang
 cmake
+devtools
 docker
 docker-buildx
 docker-compose
@@ -8,9 +9,14 @@ git-filter-repo
 github-cli
 google-cloud-cli
 jdk-openjdk
+lua-language-server
 meson
+openai-codex
+perl-authen-sasl
+perl-io-socket-ssl
 python-pygments
 python-pynvim
+rust-analyzer
 rustup
 tea
 tree-sitter-cli

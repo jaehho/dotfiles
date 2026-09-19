@@ -1,4 +1,6 @@
-meeting-copilot
+# meeting-copilot is deliberately absent: it is a local-build Arch package
+#   (~/projects/meeting-copilot, `make install`), not a uv tool. Its GTK window
+#   needs the system python-gobject, which a uv tool's isolated venv cannot see.
 pyright
 ruff
 typ2pptx

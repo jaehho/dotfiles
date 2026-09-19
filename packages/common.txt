@@ -4,6 +4,7 @@
 # the per-distro entry in arch.txt or ubuntu.txt instead.
 bat
 direnv
+ffmpeg
 fish
 fzf
 git
