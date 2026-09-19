@@ -1,11 +1,17 @@
-awww
 brightnessctl
 cliphist
 grim
-hypr-wallpaper-git
+# hypr-keybind-cheatsheet links against libgtk4-layer-shell.so by path and
+# asks for "Adwaita Sans" by name. Both are also pulled in as dependencies of
+# other packages, so they need to be listed to stay explicitly installed.
+adwaita-fonts
+gtk4-layer-shell
 hypridle
 hyprland
 hyprlock
+hyprpaper
+# idle-dash (~/projects/idle-dash) is a Quickshell QML app
+quickshell
 hyprscratch
 hyprsunset
 hyprwhenthen-bin
@@ -18,12 +24,19 @@ rofi
 sddm
 slurp
 socat
+# built from the jaehho fork (~/projects/swaync/packaging), not the repo —
+# pacman -Syu past 0.12.6 would replace it; rebuild instead
 swaync
+# Remote URIs load through GIO, which needs the gvfs http backend; without it
+# swaync's MPRIS album art falls back to a generic icon.
+gvfs
 swayosd
 udiskie
-waybar
+# -git until a release past 0.15.0: 0.15.0 clicks workspace buttons with the
+# legacy `dispatch workspace N`, which the Lua config silently rejects.
+waybar-git
+waypaper
 wl-clipboard
 wtype
 xdg-desktop-portal-gtk
 xdg-desktop-portal-hyprland
-xorg-server-xephyr

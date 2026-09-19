@@ -1,4 +1,0 @@
-#!/bin/bash
-# Super+0: toggle tray overlay.
-hyprctl dispatch 'hl.dsp.workspace.toggle_special("󰘸")'
-pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar
