@@ -1,5 +1,5 @@
 [Unit]
-Description=Restic backup to homelab Nextcloud
+Description=Restic backup to the homelab rest-server
 
 [Timer]
 # Four attempts a day, not one. The repo is only reachable from one of the two

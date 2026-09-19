@@ -1,5 +1,5 @@
 [Unit]
-Description=Restic backup to homelab Nextcloud
+Description=Restic backup to the homelab rest-server
 Wants=network-online.target
 After=network-online.target
 
@@ -13,10 +13,12 @@ SuccessExitStatus=3
 # failing ExecCondition leaves the unit inactive rather than failed, and
 # ExecStopPost still runs (SERVICE_RESULT=exec-condition), so the stale-backup
 # alarm below still counts it. The retries ride out DNS coming up after resume.
-ExecCondition=/usr/bin/curl -sf -o /dev/null --max-time 10 \
+# No -f: any HTTP answer (401 without credentials) over a valid cert is up.
+ExecCondition=/usr/bin/curl -s -o /dev/null --max-time 10 \
     --retry 3 --retry-delay 5 --retry-all-errors --retry-max-time 60 \
-    https://nextcloud.wonhomelab.net/status.php
-Environment=RESTIC_REPOSITORY=rclone:nextcloud:Backups/restic
+    https://restic.wonhomelab.net/
+# RESTIC_REPOSITORY and the rest-server login; written by scripts/bootstrap.sh.
+EnvironmentFile=%h/.config/restic/rest.env
 Environment=RESTIC_PASSWORD_FILE=%h/.config/restic/password
 ExecStart=/usr/bin/restic backup \
     --exclude-file %h/.config/restic/excludes \
