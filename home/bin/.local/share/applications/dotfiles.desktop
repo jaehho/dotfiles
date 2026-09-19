@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Dotfiles decisions
+Comment=Settle what converge could not decide on its own, with Claude
+Exec=dotfiles decide
+Icon=emblem-synchronizing-symbolic
+Terminal=false
+Categories=System;Settings;

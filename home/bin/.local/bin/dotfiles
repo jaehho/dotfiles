@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# dotfiles: the one command for this repo. The machine converges on its own,
+# so none of these is routine.
+#
+#   dotfiles            status: links, services, packages, open decisions
+#   dotfiles sync       converge now instead of waiting for the timer, and follow it
+#   dotfiles decide     open Claude on the open decisions (the notification's button)
+#   dotfiles notify     notify about new decisions (run by dotfiles-digest.path)
+#
+# converge.sh records what only the owner can settle in two decisions.json
+# files (system half, user half). dotfiles-digest.path runs `notify` whenever
+# either changes; a notification goes out only for ids not already notified.
+
+set -euo pipefail
+
+export PATH="$HOME/.local/bin:$PATH"   # claude and kitty, from a bare systemd unit
+
+DOTFILES="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../../.." && pwd)"
+# shellcheck source=../../../../scripts/lib.sh
+. "$DOTFILES/scripts/lib.sh"
+SOURCES=("$SYSTEM_STATE/decisions.json" "$DOTFILES_STATE/decisions.json")
+NOTIFIED="$DOTFILES_STATE/notified"
+
+merged() {
+  local f files=()
+  for f in "${SOURCES[@]}"; do [ -r "$f" ] && files+=("$f"); done
+  [ ${#files[@]} -gt 0 ] || { echo '[]'; return; }
+  jq -s '[.[] | .scope as $s | .decisions[] | . + {scope: $s}]' "${files[@]}"
+}
+
+list() {
+  local f label=system
+  for f in "${SOURCES[@]}"; do
+    [ -r "$f" ] || echo "$label: no run recorded"
+    label=user
+    [ -r "$f" ] || continue
+    jq -r '"\(.scope): last run \(.finished), \(.steps | map(select(.status != "ok")) | length) failed step(s)"' "$f"
+  done
+  merged | jq -r 'if length == 0 then "nothing needs you" else .[] |
+    "\n[\(.scope)/\(.step)] \(.title)\n  id: \(.id)" + (if .detail then "\n" + (.detail | split("\n") | map("  " + .) | join("\n")) else "" end) end'
+}
+
+brief() {
+  cat <<EOF
+This machine converges on ~/dotfiles by itself: scripts/converge.sh runs as root (system half) and as the owner (user half), at boot and daily, and never prompts. What only the owner can settle is recorded as decisions in $SYSTEM_STATE/decisions.json and $DOTFILES_STATE/decisions.json, with each step's log under logs/ next to them. The owner opened this session from a notification to settle them.
+
+Start by reading both decisions.json files and the logs they point to, then take the decisions one at a time: say what happened and recommend what to do. Usual resolutions:
+- package drift: file untracked packages under packages/ (arch: the fitting packages/arch/*.txt, or 99-inbox.txt) or tell the owner to uninstall; drop entries that should go.
+- a held upgrade (Arch news): summarize the news and whether anything must be done first; once it is safe, acknowledge with: touch $ACK_DIR/<decision id>
+- a failed step: diagnose from the log; check ISSUES.md for a known recipe first.
+- anything needing root: write a script to /tmp/<name>.sh for the owner to run with sudo. Never run sudo yourself.
+After changes, rerun both halves with: dotfiles sync (it follows the output). Do not edit decisions.json by hand; the next run rewrites it.
+EOF
+}
+
+case "${1:-status}" in
+  status)
+    bash "$DOTFILES/scripts/status.sh"
+    echo
+    list; exit 0 ;;
+  sync) exec bash "$DOTFILES/scripts/converge.sh" now ;;
+  --list) list; exit 0 ;;
+  decide)
+    cmd=(claude-or --model opus --add-dir "$SYSTEM_STATE" --add-dir "$DOTFILES_STATE"
+      --append-system-prompt "$(brief)" "Walk me through the pending dotfiles decisions.")
+    # A window in the most recently used tmux session, and focus the terminal
+    # showing it; with no attached client, a fresh terminal on a new session.
+    client=$(tmux list-clients -F '#{client_activity} #{client_pid}' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2)
+    [ -n "$client" ] || exec kitty tmux new-session -c "$DOTFILES" "${cmd[@]}"
+    tmux new-window -c "$DOTFILES" -n decisions "${cmd[@]}"
+    addr=$(hyprctl clients -j | jq -r --argjson pid "$(ps -o ppid= -p "$client")" '.[] | select(.pid == $pid) | .address')
+    [ -z "$addr" ] || hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null
+    ;;
+  notify) ;;
+  *) sed -n '5,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+esac
+
+decisions=$(merged)
+ids=$(jq -r '.[].id' <<<"$decisions" | sort -u)
+mkdir -p "$DOTFILES_STATE"
+touch "$NOTIFIED"
+
+if [ -z "$ids" ]; then
+  : > "$NOTIFIED"
+  systemctl --user stop dotfiles-digest-notify.service 2>/dev/null || true
+  exit 0
+fi
+new=$(comm -23 <(echo "$ids") <(sort -u "$NOTIFIED"))
+echo "$ids" > "$NOTIFIED"   # settled ids drop out, so a recurrence notifies again
+[ -n "$new" ] || exit 0
+
+count=$(grep -c . <<<"$ids")
+title=$(jq -r --arg first "$(head -1 <<<"$new")" '.[] | select(.id == $first) | .title' <<<"$decisions" | head -1)
+body=$(jq -r '[.[].title] | unique | .[:4] | map("• " + .) | join("\n")' <<<"$decisions")
+[ "$count" -gt 1 ] && title="$count dotfiles decisions: $title"
+
+systemctl --user stop dotfiles-digest-notify.service 2>/dev/null || true
+systemd-run --user --collect --quiet --unit=dotfiles-digest-notify -p RuntimeMaxSec=1d \
+  bash -c '[ "$(notify-send -a Dotfiles -i emblem-synchronizing-symbolic -A open=Decide --wait "$1" "$2")" = open ] &&
+           exec "$3" decide' _ "$title" "$body" "$HOME/.local/bin/dotfiles"

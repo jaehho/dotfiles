@@ -1,0 +1,9 @@
+[Unit]
+Description=Notify when a converge run records a new decision
+
+[Path]
+PathChanged=/var/lib/dotfiles/decisions.json
+PathChanged=%h/.local/state/dotfiles/decisions.json
+
+[Install]
+WantedBy=default.target
