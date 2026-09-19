@@ -117,6 +117,26 @@ process.stdin.on('end', () => {
       parts.push(`${color}${label}${rst}`);
     }
 
+    // idle-dash: archive server-truth rate limits; the dashboard reads this
+    const rl = data.rate_limits;
+    if (rl && (rl.five_hour || rl.seven_day)) {
+      try {
+        const { DatabaseSync } = require('node:sqlite');
+        const db = new DatabaseSync(
+          path.join(os.homedir(), '.local/state/idle-dash/state.db'));
+        db.exec(`CREATE TABLE IF NOT EXISTS claude_limits (
+          ts INTEGER PRIMARY KEY, used_5h REAL, resets_5h INTEGER,
+          used_7d REAL, resets_7d INTEGER)`);
+        db.prepare('INSERT OR REPLACE INTO claude_limits VALUES (?,?,?,?,?)').run(
+          Math.floor(Date.now() / 1000),
+          rl.five_hour?.used_percentage ?? null,
+          rl.five_hour?.resets_at ?? null,
+          rl.seven_day?.used_percentage ?? null,
+          rl.seven_day?.resets_at ?? null);
+        db.close();
+      } catch {}
+    }
+
     // Working directory
     parts.push(`${dim}${dir}${rst}`);
 

@@ -29,28 +29,13 @@
 ^/\.claude/paste-cache
 ^/\.claude/downloads
 ^/\.claude/plans
-^/\.claude/homunculus
 ^/\.claude/ide
 ^/\.claude/\.ide
-^/\.claude/mcp-health-cache\.json
 
-# Installed by plugin system or ECC — tracking these would fight updates
+# Installed by the plugin system or the reconcile
 ^/\.claude/plugins
-^/\.claude/rules
-^/\.claude/agents
 ^/\.claude/commands
 ^/\.claude/skills
-^/\.claude/ecc
-^/\.claude/mcp-configs
-^/\.claude/scripts
-^/\.claude/get-shit-done
-^/\.claude/gsd-file-manifest\.json
 
 # Reconcile manifests — read by scripts/claude-reconcile.sh, not by Claude Code
 ^/\.claude/reconcile
-
-# Sibling tool state (Codex, Cursor, opencode, etc.)
-^/\.claude/\.codex
-^/\.claude/\.cursor
-^/\.claude/\.agents
-^/\.claude/\.opencode

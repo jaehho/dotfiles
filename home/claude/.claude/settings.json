@@ -3,7 +3,56 @@
     "commit": "",
     "pr": ""
   },
-  "model": "opus[1m]",
+  "permissions": {
+    "allow": [
+      "Bash(gog *)"
+    ],
+    "deny": [
+      "Bash(gog *gmail send*)",
+      "Bash(gog *gmail reply*)",
+      "Bash(gog *gmail forward*)",
+      "Bash(gog *gmail fwd*)",
+      "Bash(gog *gmail autoreply*)",
+      "Bash(gog *gmail import*)",
+      "Bash(gog *gmail track*)",
+      "Bash(gog *gmail trash*)",
+      "Bash(gog *gmail drafts send*)",
+      "Bash(gog *gmail drafts post*)",
+      "Bash(gog *gmail batch delete*)",
+      "Bash(gog *gmail batch rm*)",
+      "Bash(gog *gmail batch del*)",
+      "Bash(gog *gmail batch remove*)",
+      "Bash(gog *gmail settings forwarding*)",
+      "Bash(gog *gmail settings autoforward*)",
+      "Bash(gog *gmail settings delegates*)",
+      "Bash(gog *gmail settings sendas*)",
+      "Bash(gog *config set gmail_no_send false*)",
+      "Bash(gog *config unset gmail_no_send*)"
+    ],
+    "ask": [
+      "Bash(gog *gmail settings*)",
+      "Bash(gog *gmail filters*)",
+      "Bash(gog *gmail drafts*)",
+      "Bash(gog *gmail labels delete*)",
+      "Bash(gog *gmail labels rm*)",
+      "Bash(gog *gmail labels del*)",
+      "Bash(gog *auth*)"
+    ]
+  },
+  "model": "sonnet",
+  "skillOverrides": {
+    "cetz": "user-invocable-only",
+    "impeccable": "user-invocable-only",
+    "orcaslicer-presets": "user-invocable-only",
+    "touying-author": "user-invocable-only",
+    "typst-author": "user-invocable-only",
+    "typst-packages": "user-invocable-only"
+  },
+  "deniedMcpServers": [
+    {
+      "serverUrl": "https://gmailmcp.googleapis.com/mcp/v1"
+    }
+  ],
   "hooks": {
     "Stop": [
       {
@@ -48,23 +97,30 @@
     "command": "node \"/home/jaeho/.claude/hooks/statusline.js\""
   },
   "enabledPlugins": {
-    "clangd-lsp@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
-    "code-simplifier@claude-plugins-official": true,
-    "github@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
-    "hookify@claude-plugins-official": true
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "lua-lsp@claude-plugins-official": true,
+    "ponytail@ponytail": true
+  },
+  "extraKnownMarketplaces": {
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
+    }
   },
   "effortLevel": "high",
-  "tui": "fullscreen",
-  "skipDangerousModePermissionPrompt": true,
-  "agentPushNotifEnabled": true,
   "modelSettings": {
     "claude-opus-5": {
       "effortLevel": "high"
     }
   },
-  "remoteControlAtStartup": false
+  "tui": "fullscreen",
+  "skipDangerousModePermissionPrompt": true,
+  "remoteControlAtStartup": false,
+  "agentPushNotifEnabled": true
 }
