@@ -1,0 +1,4 @@
+#!/bin/sh
+# Show full statusline labels for 30s; the statusline checks this stamp.
+# Usage: ! claude-hints   (from the Claude Code bash prompt)
+date +%s > /tmp/claude-statusline-hints
