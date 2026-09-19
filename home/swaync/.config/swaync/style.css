@@ -1,6 +1,18 @@
 /* swaync style — Solarized palette; theme-apply rewrites the hex values in
    place when the palette changes. */
 
+/* One radius scale. Upstream drives every corner from a single
+   `--border-radius`; hand-tweaking individual rules is how this file ended up
+   with 6/8/10/12/14px all visible at once, which reads as mismatched corners.
+   Cards and containers get --radius, controls nested inside a card get
+   --radius-sm, and anything that should read as fully round gets --radius-pill
+   rather than a large-but-finite value. */
+:root {
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-pill: 9999px;
+}
+
 * {
   font-family: "JetBrainsMono Nerd Font", monospace;
   font-size: 13px;
@@ -20,25 +32,33 @@
 .notification-row {
   background: transparent;
   padding: 0;
-  margin: 6px;
+  margin: 4px 6px;
+}
+
+/* Upstream insets every notification by 6px 12px inside its row. Zeroing it
+   aligns the notification cards' edges with the title/DND/player cards (rows
+   and widgets both get 6px side margins) and keeps the row margin as the only
+   gap between cards. */
+.notification-row .notification-background {
+  padding: 0;
 }
 
 .notification-row .notification-background .notification {
   background: #20282a;
   background-color: #20282a;
   color: #cfdadc;
-  border: 2px solid #3f7dae;
-  border-radius: 12px;
+  border: 2px solid #609fd2;
+  border-radius: var(--radius);
   padding: 12px;
   margin: 0;
 }
 
 .notification-row .notification-background .notification.low {
-  border-color: #4f8751;
+  border-color: #70a971;
 }
 
 .notification-row .notification-background .notification.critical {
-  border-color: #ab5e59;
+  border-color: #cf7f79;
 }
 
 /* Keyboard focus / selection — swaync (GTK4) uses Adwaita's `row:selected`
@@ -89,27 +109,68 @@
 .notification-row:selected .notification-background .notification {
   background: #2f3739;
   background-color: #2f3739;
-  border-color: #956298;
+  border-color: #b883bb;
+}
+
+/* Urgency outranks selection. Without this the selected row's border colour
+   above wins over `.notification.low` / `.notification.critical`, so a critical
+   notification stops looking critical at exactly the moment you select it --
+   the one moment you are most likely to act on it. Selection stays legible
+   through the lighter background. */
+.notification-group:selected .notification-background .notification.low,
+.notification-group:focus .notification-background .notification.low,
+.notification-row:focus .notification-background .notification.low,
+.notification-row:selected .notification-background .notification.low {
+  border-color: #70a971;
+}
+
+.notification-group:selected .notification-background .notification.critical,
+.notification-group:focus .notification-background .notification.critical,
+.notification-row:focus .notification-background .notification.critical,
+.notification-row:selected .notification-background .notification.critical {
+  border-color: #cf7f79;
 }
 
 .notification-default-action {
   padding: 0;
   margin: 0;
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: transparent;
 }
 
+/* Override the packaged theme's hover fill on the action containers. Only
+   the card and the actual button should paint a hover background. */
+.notification-row .notification-background .notification .notification-default-action:hover,
+.notification-row .notification-background .notification .notification-action:hover {
+  background: transparent;
+}
+
+/* Action row vs action buttons: `.notification-action` is the container, each
+   action is its own `> button`. The button paints nothing at rest — a filled
+   button keeps the un-hovered card color while the card around it lightens on
+   hover, leaving a hard rectangle that reads as a broken boundary. The
+   button's own hover goes one step brighter than the card's. */
 .notification-action {
-  background-color: #20282a;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.notification-row .notification-background .notification .notification-action > button,
+.notification-row .notification-background .notification .notification-action > button:focus {
+  background: transparent;
   color: #cfdadc;
   border: none;
-  border-radius: 8px;
+  box-shadow: none;
+  outline: none;
+  border-radius: var(--radius-sm);
   padding: 4px 10px;
   margin: 4px 4px 0 0;
 }
 
-.notification-action:hover {
-  background-color: #2f3739;
+.notification-row .notification-background .notification .notification-action > button:hover {
+  background-color: #41494c;
 }
 
 .summary {
@@ -135,22 +196,61 @@
 }
 
 .close-button:hover {
-  color: #ab5e59;
+  color: #cf7f79;
 }
 
 /* Inline image / icon */
 .notification image {
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
-/* ── Control center panel ────────────────────────────────────────────────── */
+/* ── Control center — floating cards ─────────────────────────────────────── */
 
+/* Floating panels, not a sidebar: the control center window itself is
+   transparent (upstream's .blank-window), so the ScrolledWindow below paints
+   nothing and every widget becomes its own card — the wallpaper shows through
+   the gaps between them. */
 .control-center {
-  background-color: #141c1e;
+  background: transparent;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
   color: #cfdadc;
-  border: 2px solid #3f7dae;
-  border-radius: 14px;
-  padding: 10px;
+}
+
+/* Cards: title, DND and the media player. Notification rows already paint
+   themselves as cards. */
+.widget-title,
+.widget-dnd,
+.widget-mpris {
+  background-color: #20282a;
+  border: 2px solid #609fd2;
+  border-radius: var(--radius);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+}
+
+.widget-title,
+.widget-dnd {
+  padding: 10px 14px;
+  margin: 4px 6px;
+}
+
+.widget-mpris {
+  padding: 4px;
+  margin: 4px 6px;
+}
+
+/* The notification widget inherits 8px margin + 8px padding from .widget;
+   Adwaita adds another 2px of row padding. Card margins belong to the inner
+   .notification-row, matching title/DND/MPRIS, so remove those outer insets. */
+.widget-notifications {
+  margin: 0;
+  padding: 0;
+}
+
+.control-center-list > row {
+  padding: 0;
 }
 
 .control-center-list {
@@ -168,15 +268,15 @@
 }
 
 .widget-title > button {
-  background-color: #20282a;
+  background-color: #2f3739;
   color: #cfdadc;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 4px 10px;
 }
 
 .widget-title > button:hover {
-  background-color: #2f3739;
+  background-color: #41494c;
 }
 
 .widget-dnd > label {
@@ -184,17 +284,17 @@
 }
 
 .widget-dnd > switch {
-  background-color: #20282a;
-  border-radius: 12px;
+  background-color: #2f3739;
+  border-radius: var(--radius-pill);
 }
 
 .widget-dnd > switch:checked {
-  background-color: #3f7dae;
+  background-color: #609fd2;
 }
 
 .widget-dnd > switch slider {
   background-color: #cfdadc;
-  border-radius: 10px;
+  border-radius: var(--radius-pill);
 }
 
 .widget-buttons-grid {
@@ -203,28 +303,38 @@
 }
 
 .widget-buttons-grid > flowbox > flowboxchild > button {
-  background-color: #20282a;
+  background-color: #2f3739;
   color: #cfdadc;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
   margin: 2px;
 }
 
 .widget-buttons-grid > flowbox > flowboxchild > button:hover {
-  background-color: #2f3739;
+  background-color: #41494c;
 }
 
 .widget-buttons-grid > flowbox > flowboxchild > button.active {
-  background-color: #3f7dae;
+  background-color: #609fd2;
   color: #0c1315;
 }
 
-.widget-mpris {
-  background-color: #101719;
-  border-radius: 10px;
-  padding: 8px;
-  margin: 4px 0;
+.widget-mpris .widget-mpris-player {
+  margin: 6px;
+}
+
+/* With an empty notification list the panel's initial focus lands on a media
+   player button and Adwaita paints a focus ring around it (a blue circle on
+   the shuffle button). Suppress this initial-focus outline; notification
+   navigation has its own card highlight. */
+.widget-mpris button:focus,
+.widget-mpris button:focus-visible,
+.widget-title > button:focus,
+.widget-title > button:focus-visible,
+.widget-dnd > switch:focus,
+.widget-dnd > switch:focus-visible {
+  outline: none;
 }
 
 .widget-mpris-title {
@@ -236,22 +346,19 @@
   color: #9da7a9;
 }
 
-/* Notifications inside the panel */
-.control-center .notification-row {
-  margin: 4px 0;
-}
-
+/* Notifications inside the panel: the global .notification-row rule above
+   already margins them like the widget cards. */
 .control-center .notification-background .notification {
-  border-radius: 10px;
+  border-radius: var(--radius);
 }
 
 /* Floating progress bar (volume / brightness OSD via notifications) */
 progressbar {
   background-color: #2f3739;
-  border-radius: 6px;
+  border-radius: var(--radius-pill);
 }
 
 progressbar progress {
-  background-color: #3f7dae;
-  border-radius: 6px;
+  background-color: #609fd2;
+  border-radius: var(--radius-pill);
 }
