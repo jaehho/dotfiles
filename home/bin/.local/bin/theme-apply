@@ -238,7 +238,7 @@ if [[ -f "$WAYBAR" ]]; then
 fi
 
 # ── Re-stow packages with new generated files ──────────────────────────────
-# --no-folding matches scripts/sync.sh; without it stow collapses a fully-owned
+# --no-folding matches scripts/converge.sh; without it stow collapses a fully-owned
 # directory into a single dir symlink, which then diverges from what sync makes.
 (stow -d "$DOTFILES/home" -t "$HOME" -R --no-folding hypr kitty rofi nvim theme swaync 2>/dev/null) || true
 
