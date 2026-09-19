@@ -11,12 +11,87 @@
     "lucifer1004": {
       "url": "https://github.com/lucifer1004/claude-skill-typst.git",
       "ref": "2afb9a3ac5dd45f682acd61bd57621fe23b4d627"
+    },
+    "pbakaus": {
+      "url": "https://github.com/pbakaus/impeccable.git",
+      "ref": "cb56ed6c19a07329a9fa0cd4e657bee040156593"
+    },
+    "ecc": {
+      "url": "https://github.com/affaan-m/ECC.git",
+      "ref": "c752aac18616e26bf146f034a86947d8f6fc207e"
     }
   },
   "skills": {
-    "touying-author": { "source": "apcamargo",   "path": "touying-author" },
-    "typst-author":   { "source": "apcamargo",   "path": "typst-author" },
-    "cetz":           { "source": "edoardob90",  "path": "cetz" },
-    "typst-packages": { "source": "lucifer1004", "path": "skills/typst" }
+    "touying-author": {
+      "source": "apcamargo",
+      "path": "touying-author"
+    },
+    "typst-author": {
+      "source": "apcamargo",
+      "path": "typst-author"
+    },
+    "cetz": {
+      "source": "edoardob90",
+      "path": "cetz"
+    },
+    "typst-packages": {
+      "source": "lucifer1004",
+      "path": "skills/typst"
+    },
+    "impeccable": {
+      "source": "pbakaus",
+      "path": "plugin/skills/impeccable"
+    },
+    "python-testing": {
+      "source": "ecc",
+      "path": "skills/python-testing"
+    },
+    "python-patterns": {
+      "source": "ecc",
+      "path": "skills/python-patterns"
+    },
+    "rust-patterns": {
+      "source": "ecc",
+      "path": "skills/rust-patterns"
+    },
+    "rust-testing": {
+      "source": "ecc",
+      "path": "skills/rust-testing"
+    },
+    "benchmark-optimization-loop": {
+      "source": "ecc",
+      "path": "skills/benchmark-optimization-loop"
+    },
+    "click-path-audit": {
+      "source": "ecc",
+      "path": "skills/click-path-audit"
+    },
+    "inherit-legacy-style": {
+      "source": "ecc",
+      "path": "skills/inherit-legacy-style"
+    },
+    "security-review": {
+      "source": "ecc",
+      "path": "skills/security-review"
+    },
+    "regex-vs-llm-structured-text": {
+      "source": "ecc",
+      "path": "skills/regex-vs-llm-structured-text"
+    }
+  },
+  "managed": ["synced"],
+  "listing": {
+    "default": "user-invocable-only",
+    "overrides": {
+      "python-testing": "on",
+      "python-patterns": "on",
+      "rust-patterns": "on",
+      "rust-testing": "on",
+      "benchmark-optimization-loop": "on",
+      "click-path-audit": "on",
+      "inherit-legacy-style": "on",
+      "security-review": "on",
+      "regex-vs-llm-structured-text": "on"
+    }
   }
 }

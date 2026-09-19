@@ -37,6 +37,9 @@ removals are confirmed once per category.
   - MCP servers:  home/claude/.claude/reconcile/mcp-servers.json
                   (\${VAR} from \$CLAUDE_MCP_SECRETS_FILE or ~/.config/claude-mcp-secrets.env)
   - Skills:       custom (home/claude/.claude/skills/) + third-party (skills-sources.json)
+  - Skill listing: settings.json -> skillOverrides, from skills-sources.json .listing
+  - ~/.claude.json: keys declared in home/claude/.claude/reconcile/claude-json.json
+  - Stale /mcp toggles in ~/.claude.json projects[].disabledMcpServers
 
 Flags:
   -n, --dry-run       show what would change without applying
@@ -315,11 +318,15 @@ while IFS=$'\t' read -r name source path; do
 done < <(jq -r '.skills | to_entries[] | [.key, .value.source, .value.path] | @tsv' "$RECONCILE_DIR/skills-sources.json")
 
 desired_skills=$(printf '%s\n' "${custom_skills[@]:-}" $third_party_skills | sed '/^$/d' | sort -u)
+# Entries Claude Code itself owns in ~/.claude/skills/ (skills-sources.json
+# "managed"), e.g. `synced` — its claude.ai skill-sync bucket. Never pruned,
+# and never a listing override: they are not single skills.
+managed_skills=$(jq -r '.managed // [] | .[]' "$RECONCILE_DIR/skills-sources.json")
 skills_to_remove=()
 for s in "$SKILLS_DIR"/*; do
   [ -e "$s" ] || [ -L "$s" ] || continue
   name=$(basename "$s")
-  printf '%s\n' "$desired_skills" | grep -qx "$name" || skills_to_remove+=("$name")
+  printf '%s\n' "$desired_skills" $managed_skills | grep -qx "$name" || skills_to_remove+=("$name")
 done
 if [ ${#skills_to_remove[@]} -gt 0 ]; then
   if confirm_remove "skill links" "${skills_to_remove[@]}"; then
@@ -327,6 +334,79 @@ if [ ${#skills_to_remove[@]} -gt 0 ]; then
       note "- remove: $n"
       run rm -rf "$SKILLS_DIR/$n"
     done
+  fi
+fi
+
+# --- 6. Skill listing overrides ------------------------------------------
+# Skills we install are hidden from the model's listing by default (still
+# typable as /name). settings.json -> skillOverrides is derived, so a newly
+# added skill is opted out without touching settings by hand. Plugin-provided
+# skills ignore skillOverrides entirely; gate those via enabledPlugins.
+
+step "Skill listing overrides"
+listing_default=$(jq -r '.listing.default // "user-invocable-only"' "$RECONCILE_DIR/skills-sources.json")
+desired_overrides=$(printf '%s\n' "$desired_skills" | jq -R . | jq -s \
+  --arg def "$listing_default" \
+  --argjson ov "$(jq -c '.listing.overrides // {}' "$RECONCILE_DIR/skills-sources.json")" \
+  'map({key: ., value: ($ov[.] // $def)}) | from_entries | with_entries(select(.value != "on"))')
+current_overrides=$(jq -cS '.skillOverrides // {}' "$SETTINGS_JSON")
+
+if [ "$current_overrides" = "$(printf '%s' "$desired_overrides" | jq -cS .)" ]; then
+  note "ok: skillOverrides in sync"
+else
+  note "~ update skillOverrides in $SETTINGS_JSON (default: $listing_default)"
+  printf '%s' "$desired_overrides" | jq -r 'to_entries[] | "      \(.key) = \(.value)"'
+  if [ "$DRY_RUN" -eq 0 ]; then
+    tmp=$(mktemp)
+    jq --argjson new "$desired_overrides" '.skillOverrides = $new' "$SETTINGS_JSON" > "$tmp"
+    cat "$tmp" > "$SETTINGS_JSON"   # write through the stow symlink
+    rm -f "$tmp"
+  fi
+fi
+
+# --- 7. ~/.claude.json preferences ---------------------------------------
+# Some toggles have no settings.json key and live only in ~/.claude.json.
+# Enforce just the keys declared in claude-json.json; the rest is runtime state.
+
+step "~/.claude.json preferences"
+desired_prefs=$(jq -cS . "$RECONCILE_DIR/claude-json.json")
+current_prefs=$(jq -cS --argjson d "$desired_prefs" 'with_entries(select(.key | IN($d | keys[])))' "$CLAUDE_JSON")
+if [ "$current_prefs" = "$desired_prefs" ]; then
+  note "ok: preferences in sync"
+else
+  note "~ set: $(printf '%s' "$desired_prefs" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(" ")')"
+  if [ "$DRY_RUN" -eq 0 ]; then
+    tmp=$(mktemp)
+    jq --argjson d "$desired_prefs" '. + $d' "$CLAUDE_JSON" > "$tmp"
+    mv "$tmp" "$CLAUDE_JSON"
+  fi
+fi
+
+# --- 8. Per-project disabled MCP lists -----------------------------------
+# /mcp toggles land in ~/.claude.json -> projects[].disabledMcpServers and
+# outlive the server. Drop names for plugins no longer enabled and standalone
+# servers no longer declared. claude.ai connectors can't be checked offline;
+# block one everywhere with settings.json -> deniedMcpServers instead.
+
+step "Disabled MCP lists"
+stale_disabled=$(jq -r \
+  --argjson plugins "$(jq -c '[.enabledPlugins // {} | keys[] | split("@")[0]]' "$SETTINGS_JSON")" \
+  --argjson servers "$(jq -c '[.mcpServers // {} | keys[]]' "$CLAUDE_JSON")" '
+  def stale: if startswith("plugin:") then (split(":")[1] | IN($plugins[]) | not)
+             elif startswith("claude.ai ") then false
+             else (IN($servers[]) | not) end;
+  [.projects // {} | .[] | .disabledMcpServers // [] | .[] | select(stale)] | unique[]' "$CLAUDE_JSON")
+
+if [ -z "$stale_disabled" ]; then
+  note "ok: no stale entries"
+else
+  printf '      - %s\n' $stale_disabled
+  if [ "$DRY_RUN" -eq 0 ]; then
+    tmp=$(mktemp)
+    jq --argjson stale "$(printf '%s\n' "$stale_disabled" | jq -R . | jq -s .)" '
+      .projects |= map_values(if .disabledMcpServers then
+        .disabledMcpServers |= map(select(IN($stale[]) | not)) else . end)' "$CLAUDE_JSON" > "$tmp"
+    mv "$tmp" "$CLAUDE_JSON"
   fi
 fi
 
