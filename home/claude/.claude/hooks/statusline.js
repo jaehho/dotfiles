@@ -113,6 +113,44 @@ process.stdin.on('end', () => {
     }
     const tu = transcriptUsage(data.transcript_path);
 
+    // z.ai pool pressure: the CLI never sends rate_limits on a gateway, so
+    // take the 5h/weekly percentages from the console endpoint — cached for
+    // a minute, refreshed out-of-band so a slow endpoint never blocks a render
+    let zai5h = null, zai5hResets = null, zaiWeek = null;
+    const onZai = glm && !/^(z-ai\/|@preset)/.test(modelId);
+    if (onZai) {
+      const qf = path.join(os.tmpdir(), 'claude-sl-zai-quota.json');
+      let q = null;
+      try { q = JSON.parse(fs.readFileSync(qf, 'utf8')); } catch {}
+      if (!q || Date.now() - q.ts > 60000) {
+        try {
+          const key = fs.readFileSync(
+            path.join(os.homedir(), '.config/zai.env'), 'utf8')
+            .match(/^ZAI_API_KEY=(.*)$/m)[1].trim();
+          const child = require('child_process').spawn(process.execPath, ['-e', `
+            const fs = require('fs'), https = require('https');
+            https.get({ hostname: 'api.z.ai',
+                path: '/api/monitor/usage/quota/limit',
+                headers: { Authorization: 'Bearer ' + process.env.ZK } },
+              r => { let d = '';
+                r.on('data', c => (d += c));
+                r.on('end', () => { try {
+                  const by = {};
+                  (JSON.parse(d).data.limits || []).forEach(l => (by[l.number] = l));
+                  fs.writeFileSync(${JSON.stringify(qf)}, JSON.stringify({
+                    ts: Date.now(),
+                    pct5h: by[5] ? by[5].percentage : null,
+                    resets5h: by[5] ? Math.floor(by[5].nextResetTime / 1000) : null,
+                    pctWeek: by[1] ? by[1].percentage : null,
+                    resetsWeek: by[1] ? Math.floor(by[1].nextResetTime / 1000) : null }));
+                } catch {} });
+              });`],
+            { env: { ...process.env, ZK: key }, detached: true, stdio: 'ignore' }).unref();
+        } catch {}
+      }
+      if (q) { zai5h = q.pct5h; zai5hResets = q.resets5h; zaiWeek = q.pctWeek; }
+    }
+
     const parts = [];
 
     parts.push(`${dim}${model}${rst}`);
@@ -202,6 +240,28 @@ process.stdin.on('end', () => {
       else color = '\x1b[31m';
       parts.push(`${color}⚡7d ${used}%\x1b[0m`);
     }
+
+    // z.ai coding-plan windows — same shape as the Claude ones above
+    const zaiRow = (pct, resets, weekly) => {
+      if (pct == null) return null;
+      const used = Math.round(pct);
+      let color;
+      if (used < 50) color = '\x1b[32m';
+      else if (used < 80) color = '\x1b[33m';
+      else color = '\x1b[31m';
+      let time = '';
+      if (resets != null) {
+        const secs = Math.max(0, resets - Math.floor(Date.now() / 1000));
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        time = h > 0 ? `${h}h${m}m` : `${m}m`;
+      }
+      return `${color}⚡${used}%${time ? ` ${time}` : ''}${weekly ? ' wk' : ''}\x1b[0m`;
+    };
+    const z5 = zaiRow(zai5h, zai5hResets, false);
+    if (z5) parts.push(z5);
+    const z7 = zaiRow(zaiWeek, null, true);
+    if (z7) parts.push(z7);
 
     // idle-dash: archive server-truth rate limits; the dashboard reads this
     const rl = data.rate_limits;
