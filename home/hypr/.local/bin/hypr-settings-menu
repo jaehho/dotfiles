@@ -1,20 +1,508 @@
-#!/usr/bin/env bash
-# Quick settings menu via rofi — central hub for system GUIs
+#!/usr/bin/env python3
+"""hypr-settings-menu — quick settings panel (Super + ;).
 
-choice=$(printf '%s\n' \
-    "󰤨  Wi-Fi" \
-    "󰂯  Bluetooth" \
-    "󰕾  Audio" \
-    "󰸉  Wallpaper" \
-    | rofi -dmenu -p "Settings" -theme-str 'listview { lines: 4; }')
+Every entry is one row in ITEMS; the panel and waybar's click handlers
+(`hypr-settings-menu <id>`) both run from that table, so a command lives in
+exactly one place. An entry whose tool is not installed is hidden, not broken.
+"""
 
-[[ -z "$choice" ]] && exit 0
+import json
+import os
+import shutil
+import subprocess
+import sys
+import threading
 
-tui() { kitty --class floating-tui -e "$@"; }
+HOME = os.path.expanduser("~")
+BIN = f"{HOME}/.local/bin"
+PALETTE = os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config") + "/theme/palette"
 
-case "$choice" in
-    *Wi-Fi*)       tui nmtui ;;
-    *Bluetooth*)   tui bluetui ;;
-    *Audio*)       tui wiremix ;;
-    *Wallpaper*)   paperboy gui & ;;
-esac
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+def spawn(cmd):
+    """Fire and forget: the child outlives the panel closing."""
+    subprocess.Popen(cmd, shell=True, start_new_session=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL)
+
+
+def output(cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=3).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def running(name):
+    return output(["pgrep", "-x", name]) != ""
+
+
+def tui(cmd, cls="floating-tui", hold=False):
+    return f"kitty --class {cls}{' --hold' if hold else ''} -e {cmd}"
+
+
+# ── state probes ─────────────────────────────────────────────────────────────
+
+EQ_PARAM = "audioconvert.filter-graph.0"
+EQ_BYPASS = "speaker-eq.bypassed"
+
+
+def speaker_eq_node():
+    """The speaker sink and the EQ graph built into it (see CLAUDE.md).
+
+    None while headphones are in: they replace the speaker sink.
+    """
+    try:
+        objects = json.loads(output(["pw-dump"]) or "[]")
+    except ValueError:
+        return None, None
+    for o in objects:
+        props = (o.get("info") or {}).get("props") or {}
+        if o.get("type") == "PipeWire:Interface:Node" and props.get(EQ_PARAM):
+            return o["id"], props[EQ_PARAM]
+    return None, None
+
+
+def speaker_eq_bypassed(node):
+    # A suspended node does not report its graph, so a bypass is recorded
+    # against its id, the same way speaker-measure does, and PipeWire drops
+    # the record along with the node.
+    meta = output(["pw-metadata", "-n", "default", str(node)])
+    return f"key:'{EQ_BYPASS}'" in meta
+
+
+def speaker_eq_on():
+    node, _ = speaker_eq_node()
+    return None if node is None else not speaker_eq_bypassed(node)
+
+
+def speaker_eq_toggle():
+    node, graph = speaker_eq_node()
+    if node is None:
+        return
+    on = not speaker_eq_bypassed(node)
+    # Props params are read into a 4096-byte buffer: drop the indentation.
+    value = "" if on else " ".join(graph.split())
+    subprocess.run(["pw-cli", "set-param", str(node), "Props",
+                    f'{{ params = [ "{EQ_PARAM}" {json.dumps(value)} ] }}'],
+                   capture_output=True)
+    args = [str(node), EQ_BYPASS, "true"] if on else ["-d", str(node), EQ_BYPASS]
+    subprocess.run(["pw-metadata", "-n", "default", *args], capture_output=True)
+    spawn(f"notify-send -u low 'Speaker EQ' '{'OFF — flat' if on else 'ON'}'")
+
+
+PROFILES = ["power-saver", "balanced", "performance"]
+
+
+def power_profile():
+    return output(["powerprofilesctl", "get"]) or None
+
+
+def power_profile_cycle():
+    current = power_profile()
+    available = [p for p in PROFILES if f"{p}:" in output(["powerprofilesctl", "list"])]
+    if not available:
+        return
+    nxt = available[(available.index(current) + 1) % len(available)] \
+        if current in available else available[0]
+    subprocess.run(["powerprofilesctl", "set", nxt], capture_output=True)
+    spawn(f"notify-send -u low 'Power profile' '{nxt}'")
+
+
+def gamemode_on():
+    raw = output(["hyprctl", "getoption", "animations:enabled", "-j"])
+    try:
+        return not json.loads(raw)["bool"]
+    except (ValueError, KeyError):
+        return None
+
+
+# ── the table ────────────────────────────────────────────────────────────────
+# kind: "toggle" (state -> bool), "cycle" (state -> str), "open", "session".
+# needs: executables that must exist for the entry to show.
+# confirm: session entries that take a second press.
+
+ITEMS = [
+    dict(id="nightlight", kind="toggle", icon="󰖔", label="Night light",
+         run=f"{BIN}/hypr-nightlight-toggle", needs=["hyprsunset"],
+         state=lambda: running("hyprsunset")),
+    dict(id="dnd", kind="toggle", icon="󰂛", label="Do not disturb",
+         run=f"{BIN}/hypr-dnd-toggle", needs=["swaync-client"],
+         state=lambda: output(["swaync-client", "-D"]) == "true"),
+    dict(id="awake", kind="toggle", icon="󰅶", label="Stay awake",
+         run=f"{BIN}/hypr-idle-toggle", needs=["hypridle", "systemd-inhibit"],
+         state=lambda: not running("hypridle")),
+    dict(id="gamemode", kind="toggle", icon="󰊗", label="Game mode",
+         run=f"{BIN}/hypr-gamemode", needs=["hyprctl", "jq"],
+         state=gamemode_on),
+    dict(id="speaker-eq", kind="toggle", icon="󰓃", label="Speaker EQ",
+         run=speaker_eq_toggle, needs=["pw-dump", "pw-cli", "pw-metadata"],
+         state=speaker_eq_on),
+    dict(id="power-profile", kind="cycle", icon="󰓅", label="Power profile",
+         run=power_profile_cycle, needs=["powerprofilesctl"],
+         state=power_profile),
+
+    dict(id="wifi", kind="open", icon="󰤨", label="Wi-Fi",
+         run=tui("nmtui"), needs=["kitty", "nmtui"]),
+    dict(id="bluetooth", kind="open", icon="󰂯", label="Bluetooth",
+         run=tui("bluetui"), needs=["kitty", "bluetui"]),
+    dict(id="audio", kind="open", icon="󰕾", label="Audio",
+         run=tui("wiremix"), needs=["kitty", "wiremix"]),
+    dict(id="speaker-eq-tune", kind="open", icon="󰙪", label="Tune speakers",
+         run="speaker-eq", needs=["speaker-eq"]),
+    dict(id="wallpaper", kind="open", icon="󰸉", label="Wallpaper",
+         run="wallhelper gui", needs=["wallhelper"]),
+    dict(id="monitor", kind="open", icon="󰍛", label="System monitor",
+         run=tui("btop", cls="floating-btop"), needs=["kitty", "btop"]),
+    dict(id="failed-units", kind="open", icon="󰒏", label="Failed units",
+         run=tui("sh -c 'systemctl --no-pager --failed; echo; systemctl --no-pager --user --failed'", hold=True),
+         needs=["kitty", "systemctl"]),
+    dict(id="battery", kind="open", icon="󰁹", label="Battery history",
+         run="battery-log", needs=["battery-log"]),
+
+    dict(id="lock", kind="session", icon="󰌾", label="Lock",
+         run="loginctl lock-session", needs=["loginctl"]),
+    dict(id="suspend", kind="session", icon="󰒲", label="Suspend",
+         run="systemctl suspend", needs=["systemctl"]),
+    dict(id="logout", kind="session", icon="󰍃", label="Log out", confirm=True,
+         run="hyprctl dispatch 'hl.dsp.exit()'", needs=["hyprctl"]),
+    dict(id="reboot", kind="session", icon="󰜉", label="Reboot", confirm=True,
+         run="systemctl reboot", needs=["systemctl"]),
+    dict(id="shutdown", kind="session", icon="󰐥", label="Shut down", confirm=True,
+         run="systemctl poweroff", needs=["systemctl"]),
+]
+
+
+def installed(needs):
+    return all(shutil.which(n) or os.access(n, os.X_OK) for n in needs)
+
+
+def available():
+    return [i for i in ITEMS if installed(i["needs"])]
+
+
+def run(item):
+    if callable(item["run"]):
+        item["run"]()
+    else:
+        spawn(item["run"])
+
+
+# ── waybar entry point ───────────────────────────────────────────────────────
+# Handled before GTK is imported, so a waybar click costs a Python start only.
+
+if len(sys.argv) > 1:
+    arg = sys.argv[1]
+    match = next((i for i in ITEMS if i["id"] == arg), None)
+    if match is None:
+        sys.exit(f"hypr-settings-menu: unknown entry '{arg}'")
+    if not installed(match["needs"]):
+        sys.exit(f"hypr-settings-menu: '{arg}' needs {', '.join(match['needs'])}")
+    run(match)
+    sys.exit(0)
+
+
+# ── GUI ──────────────────────────────────────────────────────────────────────
+
+# gtk4-layer-shell must load before libwayland-client; see hypr-keybind-cheatsheet.
+PRELOAD = "/usr/lib/libgtk4-layer-shell.so"
+if os.path.exists(PRELOAD) and PRELOAD not in os.environ.get("LD_PRELOAD", ""):
+    os.environ["LD_PRELOAD"] = f"{PRELOAD}:{os.environ.get('LD_PRELOAD', '')}".rstrip(":")
+    os.execv(sys.executable, [sys.executable, *sys.argv])
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+gi.require_version("Gtk4LayerShell", "1.0")
+from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
+
+FALLBACK = {
+    "crust": "0c1315", "base": "141c1e", "surface0": "20282a",
+    "surface1": "2f3739", "surface2": "41494c", "overlay0": "778184",
+    "text": "cfdadc", "subtext1": "b6c0c2", "sapphire": "3daab0",
+    "red": "e06c75",
+}
+
+
+def palette():
+    colors = dict(FALLBACK)
+    try:
+        with open(PALETTE) as fh:
+            for line in fh:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    colors[key.strip()] = val.strip()
+    except OSError:
+        pass
+    return {k: f"#{v}" for k, v in colors.items()}
+
+
+CSS = """
+window.settings {{ background: transparent; }}
+
+.sheet {{
+  background: alpha({crust}, 0.985);
+  border: 1px solid {surface1};
+  border-radius: 16px;
+  padding: 18px 20px 14px 20px;
+}}
+
+.heading {{
+  font-family: "Adwaita Sans", sans-serif;
+  font-size: 11px;
+  color: {overlay0};
+}}
+.heading {{ font-weight: 700; margin: 4px 2px 0 2px; }}
+
+button.tile, button.row, button.session {{
+  font-family: "Adwaita Sans", sans-serif;
+  color: {subtext1};
+  background: {base};
+  border: 1px solid {surface0};
+  border-radius: 12px;
+  box-shadow: none;
+  min-height: 0;
+  min-width: 0;
+}}
+button.tile {{ padding: 10px 12px; }}
+button.row {{ padding: 7px 12px; border-radius: 9px; }}
+button.session {{ padding: 8px 4px; }}
+
+button.tile:hover, button.row:hover, button.session:hover {{
+  background: {surface0};
+  border-color: {surface2};
+}}
+button.tile:focus-visible, button.row:focus-visible, button.session:focus-visible {{
+  border-color: {text};
+  outline: 2px solid {sapphire};
+  outline-offset: 1px;
+}}
+
+.icon {{
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 17px;
+  color: {text};
+}}
+.name {{ font-size: 13px; color: {text}; }}
+.state {{ font-size: 11px; color: {overlay0}; }}
+
+button.tile.on {{
+  background: alpha({sapphire}, 0.18);
+  border-color: alpha({sapphire}, 0.55);
+}}
+button.tile.on .icon, button.tile.on .state {{ color: {sapphire}; }}
+
+button.session.armed {{
+  background: alpha({red}, 0.2);
+  border-color: {red};
+}}
+button.session.armed .icon, button.session.armed .state {{ color: {red}; }}
+"""
+
+COLUMNS = 3
+ARM_MS = 3000
+RECHECK_MS = 1500  # toggle scripts notify before they act (hypr-dnd-toggle sleeps 1s)
+
+
+VIM = {Gdk.KEY_h: Gtk.DirectionType.LEFT, Gdk.KEY_j: Gtk.DirectionType.DOWN,
+       Gdk.KEY_k: Gtk.DirectionType.UP, Gdk.KEY_l: Gtk.DirectionType.RIGHT}
+
+
+class Panel(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="dev.jaeho.settings",
+                         flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.window = None
+        self.tiles = {}
+        self.armed = None
+
+    def do_activate(self):
+        # The bind reaches the running instance, so Super + ; also closes.
+        if self.window:
+            self.window.close()
+            return
+
+        provider = Gtk.CssProvider()
+        provider.load_from_string(CSS.format(**palette()))
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        self.window = Gtk.ApplicationWindow(application=self)
+        self.window.add_css_class("settings")
+        self.window.connect("close-request", self.on_close)
+        LayerShell.init_for_window(self.window)
+        LayerShell.set_namespace(self.window, "settings")
+        LayerShell.set_layer(self.window, LayerShell.Layer.OVERLAY)
+        LayerShell.set_keyboard_mode(self.window, LayerShell.KeyboardMode.EXCLUSIVE)
+
+        self.window.set_child(self.build())
+
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.on_key)
+        self.window.add_controller(keys)
+        # Clicking anywhere else hands focus away; a panel left open is clutter.
+        self.window.connect("notify::is-active", self.on_active)
+        self.window.present()
+
+        for item in self.tiles.values():
+            self.refresh(item)
+
+    def on_close(self, _window):
+        self.window = None
+        self.quit()
+        return False
+
+    def on_active(self, window, _pspec):
+        if not window.is_active() and window.get_mapped():
+            GLib.timeout_add(150, lambda: self.window and not self.window.is_active()
+                             and self.window.close())
+
+    def on_key(self, _controller, keyval, _code, state):
+        super_held = state & Gdk.ModifierType.SUPER_MASK
+        if keyval in (Gdk.KEY_Escape, Gdk.KEY_q) or (keyval == Gdk.KEY_semicolon and super_held):
+            self.window.close()
+            return True
+        if keyval in VIM and not state & Gdk.ModifierType.CONTROL_MASK:
+            self.window.child_focus(VIM[keyval])
+            return True
+        return False
+
+    # ── layout ──
+
+    def build(self):
+        sheet = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        sheet.add_css_class("sheet")
+        sheet.set_size_request(480, -1)
+        items = available()
+        first = None
+
+        sections = [
+            ("Toggles", [i for i in items if i["kind"] in ("toggle", "cycle")], self.tile, COLUMNS),
+            ("Open", [i for i in items if i["kind"] == "open"], self.row, 2),
+            ("Session", [i for i in items if i["kind"] == "session"], self.session, 5),
+        ]
+        for title, entries, make, columns in sections:
+            if not entries:
+                continue
+            heading = Gtk.Label(label=title.upper(), xalign=0)
+            heading.add_css_class("heading")
+            sheet.append(heading)
+            grid = Gtk.Grid(column_spacing=8, row_spacing=8, column_homogeneous=True)
+            for n, item in enumerate(entries):
+                button = make(item)
+                first = first or button
+                grid.attach(button, n % columns, n // columns, 1, 1)
+            sheet.append(grid)
+
+        if first:
+            # A callback that returns True is re-queued, and grab_focus does.
+            GLib.idle_add(lambda: first.grab_focus() and False)
+        return sheet
+
+    @staticmethod
+    def labelled(item, orientation, sub=None):
+        box = Gtk.Box(orientation=orientation, spacing=4 if sub is not None else 10)
+        icon = Gtk.Label(label=item["icon"], xalign=0)
+        icon.add_css_class("icon")
+        name = Gtk.Label(label=item["label"], xalign=0)
+        name.add_css_class("name")
+        box.append(icon)
+        box.append(name)
+        if sub is not None:
+            box.append(sub)
+        return box
+
+    def tile(self, item):
+        state = Gtk.Label(label="…", xalign=0)
+        state.add_css_class("state")
+        button = Gtk.Button(child=self.labelled(item, Gtk.Orientation.VERTICAL, state))
+        button.add_css_class("tile")
+        button.connect("clicked", self.on_toggle, item)
+        self.tiles[item["id"]] = dict(item, button=button, state_label=state)
+        return button
+
+    def row(self, item):
+        button = Gtk.Button(child=self.labelled(item, Gtk.Orientation.HORIZONTAL))
+        button.add_css_class("row")
+        button.connect("clicked", self.on_open, item)
+        return button
+
+    def session(self, item):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        icon = Gtk.Label(label=item["icon"])
+        icon.add_css_class("icon")
+        text = Gtk.Label(label=item["label"])
+        text.add_css_class("state")
+        box.append(icon)
+        box.append(text)
+        button = Gtk.Button(child=box)
+        button.add_css_class("session")
+        button.connect("clicked", self.on_session, item, text)
+        return button
+
+    # ── actions ──
+
+    def refresh(self, tile):
+        def probe():
+            value = tile["state"]()
+            GLib.idle_add(self.show_state, tile, value)
+        threading.Thread(target=probe, daemon=True).start()
+
+    def show_state(self, tile, value):
+        if not self.window:
+            return False
+        button, label = tile["button"], tile["state_label"]
+        if tile["kind"] == "toggle":
+            label.set_label("unavailable" if value is None else "On" if value else "Off")
+            (button.add_css_class if value else button.remove_css_class)("on")
+        else:
+            label.set_label((value or "unavailable").replace("-", " ").capitalize())
+        button.set_sensitive(value is not None)
+        return False
+
+    def on_toggle(self, _button, item):
+        tile = self.tiles[item["id"]]
+        if not callable(item["run"]):
+            run(item)
+            GLib.timeout_add(RECHECK_MS, lambda: self.window and self.refresh(tile))
+            return
+
+        # Re-read only once the change has landed: a fixed delay raced
+        # powerprofilesctl and showed the profile from before the switch.
+        def act():
+            run(item)
+            GLib.idle_add(lambda: self.window and self.refresh(tile) and False)
+        threading.Thread(target=act, daemon=True).start()
+
+    def on_open(self, _button, item):
+        self.window.close()
+        run(item)
+
+    def on_session(self, button, item, text):
+        if item.get("confirm") and not (self.armed and self.armed[0] is button):
+            self.disarm()
+            self.armed = (button, text, item)
+            button.add_css_class("armed")
+            text.set_label("Again?")
+            GLib.timeout_add(ARM_MS, lambda: self.armed and self.armed[0] is button
+                             and self.disarm())
+            return
+        self.window.close()
+        # Detached and delayed, so the overlay is unmapped before hyprlock
+        # screenshots the screen, and quitting the panel cannot cancel it.
+        spawn(f"sleep 0.2; {item['run']}")
+
+    def disarm(self):
+        if self.armed and self.window:
+            button, text, item = self.armed
+            button.remove_css_class("armed")
+            text.set_label(item["label"])
+        self.armed = None
+
+
+if __name__ == "__main__":
+    sys.exit(Panel().run([sys.argv[0]]))

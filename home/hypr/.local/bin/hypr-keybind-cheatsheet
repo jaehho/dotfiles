@@ -1,186 +1,1290 @@
-#!/bin/bash
-# Show keybind cheatsheet — auto-parsed from config files and running apps
+#!/usr/bin/env python3
+"""hypr-keybind-cheatsheet — a layer-shell overlay of the keys this machine binds.
 
-HYPR_CONFIG="$HOME/.config/hypr/hyprland.lua"
-KITTY_DEFAULTS="/usr/share/doc/kitty/kitty.conf"
-KITTY_CONFIG="$HOME/.config/kitty/kitty.conf"
-CUSTOM="$HOME/.config/hypr/cheatsheet.conf"
+Every section is parsed from the config that owns it, so the sheet cannot drift:
+hyprland.lua for the WM, `tmux list-keys -N` for tmux. Kitty cannot report its
+bindings, so its rows are the one hand-kept list here.
 
-{
-    echo "── Hyprland ──"
+The sheet is organised by the prefix you hold, not by the app, because that is
+how the hand works: Super, Super + Shift, tmux's C-a, kitty_mod.
 
-    # Parse hl.bind() calls out of the Lua config. Hyprland IPC is no help
-    # here: under a Lua config `hyprctl binds` reports every dispatcher as
-    # __lua with an opaque callback index for an argument, so the config file
-    # is the only place the actions are still readable.
-    awk '
-    # Parse hl.bind() calls out of hyprland.lua into a readable cheatsheet.
-    # Handles multi-line calls, [[long strings]], submaps, `for` loops and the
-    # `local name = "value"` indirections (terminal, menu, fileManager, ...).
+Labels come from, in order: the trailing `--` comment on the bind's own line,
+the comment block directly above it when that block covers only this one key,
+then the dispatcher itself. A bind that ends up with no label lands in
+"Unfiled" rather than being dropped, so it shows up and can be fixed.
+"""
 
-    function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+import os
+import re
+import subprocess
+import sys
 
-    # Replace whole-word occurrences of `word`. gsub in awk has no backreferences,
-    # so walk the string instead of trying to express the boundaries in the regex.
-    function subst_word(s, word, repl,   out, i, n, before, after) {
-        out = ""
-        while ((i = index(s, word)) > 0) {
-            before = (i == 1) ? "" : substr(s, i - 1, 1)
-            after  = substr(s, i + length(word), 1)
-            if (before !~ /[A-Za-z0-9_]/ && after !~ /[A-Za-z0-9_]/) {
-                out = out substr(s, 1, i - 1) repl
-            } else {
-                out = out substr(s, 1, i + length(word) - 1)
-            }
-            s = substr(s, i + length(word))
-        }
-        return out s
-    }
+# gtk4-layer-shell must be loaded before libwayland-client, and PyGObject pulls
+# libwayland in the moment Gdk is imported, so re-exec once with the library
+# preloaded. Not liblayer-shell-preload.so, which ships alongside it: that one
+# auto-inits every window under its own namespace, taking the blur layerrule
+# with it.
+PRELOAD = "/usr/lib/libgtk4-layer-shell.so"
+if os.path.exists(PRELOAD) and PRELOAD not in os.environ.get("LD_PRELOAD", ""):
+    existing = os.environ.get("LD_PRELOAD", "")
+    os.environ["LD_PRELOAD"] = f"{PRELOAD}:{existing}".rstrip(":")
+    os.execv(sys.executable, [sys.executable, *sys.argv])
 
-    /^local [A-Za-z_]+ *= *"/ { split($0, v, /"/); var[$2] = v[2]; next }
-    /^[ \t]*local [A-Za-z_]+ *= *[a-z]+ *% *10/ { alias = $2; next }
+import gi
 
-    /^[ \t]*hl\.define_submap\(/ {
-        match($0, /"[^"]*"/); submap = substr($0, RSTART + 1, RLENGTH - 2); next
-    }
-    /^end\)/ { submap = ""; next }
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+gi.require_version("Gtk4LayerShell", "1.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
+from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
 
-    /^for [a-z]+ = [0-9]+, [0-9]+ do/ {
-        split($0, f, /[ ,]+/); loopvar = f[2]; lo = f[4]; hi = f[5]
-        # `local key = i % 10` maps 10 -> 0, so the keys actually bound are 0-9.
-        if (hi == 10) { lo = 0; hi = 9 }
-        range = "<" lo "-" hi ">"; next
-    }
-    /^end$/ { loopvar = ""; alias = ""; range = ""; next }
+HOME = os.path.expanduser("~")
+HYPR_CONFIG = f"{HOME}/.config/hypr/hyprland.lua"
+PALETTE = os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config") + "/theme/palette"
+COLUMNS = 4
 
-    /hl\.bind\(/ { buf = $0 }
-    buf != "" {
-        if (buf != $0) buf = buf " " trim($0)
-        n = split(buf, ch, ""); depth = 0; instr = 0
-        for (i = 1; i <= n; i++) {
-            if (ch[i] == "\"") instr = !instr
-            if (instr) continue
-            if (ch[i] == "(") depth++
-            if (ch[i] == ")") depth--
-        }
-        if (depth > 0) next
-        emit(buf); buf = ""
-    }
 
-    function emit(s,   n, ch, i, d, instr, comma, key, act, nw, w, wi) {
-        sub(/^[ \t]*hl\.bind\(/, "", s)
-        sub(/\)[ \t]*(--.*)?$/, "", s)
+# ── palette ──────────────────────────────────────────────────────────────────
 
-        # Split key from action at the first comma outside strings and brackets.
-        n = split(s, ch, ""); d = 0; instr = 0; comma = 0
-        for (i = 1; i <= n; i++) {
-            if (ch[i] == "\"") instr = !instr
-            if (instr) continue
-            if (ch[i] == "(" || ch[i] == "{") d++
-            if (ch[i] == ")" || ch[i] == "}") d--
-            if (ch[i] == "," && d == 0) { comma = i; break }
-        }
-        if (!comma) return
-        key = trim(substr(s, 1, comma - 1))
-        act = trim(substr(s, comma + 1))
+# Read live rather than through a theme-apply include: the palette is already a
+# plain key=value file, so generating a CSS copy of it would only add a step
+# that can go stale.
+FALLBACK = {
+    "crust": "0c1315", "base": "141c1e", "surface0": "20282a",
+    "surface1": "2f3739", "surface2": "41494c", "overlay0": "778184",
+    "text": "cfdadc", "subtext1": "b6c0c2", "sapphire": "3daab0",
+}
 
-        # Key: mainMod .. " + SHIFT + Q"  ->  SUPER + SHIFT + Q
-        key = subst_word(key, "mainMod", "SUPER")
-        if (loopvar != "") {
-            key = subst_word(key, loopvar, range)
-            if (alias != "") key = subst_word(key, alias, range)
-        }
-        gsub(/ *\.\. */, " ", key); gsub(/"/, "", key)
-        gsub(/  +/, " ", key); gsub(/ +\+ +/, " + ", key)
-        key = trim(key)
-        if (key ~ /catchall/) return
 
-        # Action: drop the hl.dsp namespace, unwrap exec_cmd and [[long strings]].
-        sub(/^hl\.dsp\./, "", act)
-        # The action range need not match that of the key (the CTRL loop binds keys
-        # 0-9 but passes 1-10), so show a neutral placeholder there.
-        if (loopvar != "") {
-            act = subst_word(act, loopvar, "<n>")
-            if (alias != "") act = subst_word(act, alias, "<n>")
-        }
-        if (act ~ /^exec_cmd\(/) {
-            sub(/^exec_cmd\(/, "", act); sub(/\)$/, "", act)
-            act = trim(act); sub(/^\[\[/, "", act); sub(/\]\]$/, "", act)
-            gsub(/ *\.\. */, " ", act); gsub(/"/, "", act)
-            act = trim(act)
-            nw = split(act, w, " ")
-            for (wi = 1; wi <= nw; wi++) if (w[wi] in var) w[wi] = var[w[wi]]
-            act = w[1]; for (wi = 2; wi <= nw; wi++) act = act " " w[wi]
-            act = "exec " act
-        }
-        gsub(/  +/, " ", act); act = trim(act)
-        if (length(act) > 78) act = substr(act, 1, 75) "..."
-        printf "  %-32s  %s%s\n", key, (submap != "" ? "[" submap "] " : ""), act
-    }
-' "$HYPR_CONFIG" | sort
+def palette():
+    colors = dict(FALLBACK)
+    try:
+        with open(PALETTE) as fh:
+            for line in fh:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    colors[key.strip()] = val.strip()
+    except OSError:
+        pass
+    return {k: f"#{v}" for k, v in colors.items()}
 
-    # Tmux — live keybinds (defaults + custom)
-    if tmux info >/dev/null 2>&1; then
-        echo ""
-        echo "── Tmux ──"
-        tmux list-keys 2>/dev/null | awk '
-        {
-            table = $3
-            key = $4
-            if (key ~ /Mouse|Wheel/) next
 
-            cmd = ""
-            for (i = 5; i <= NF; i++) cmd = cmd (cmd ? " " : "") $i
+# ── key names ────────────────────────────────────────────────────────────────
 
-            if (table == "prefix")
-                printf "  %-35s  %s\n", "Prefix + " key, cmd
-            else if (table == "root")
-                printf "  %-35s  %s\n", key " (no prefix)", cmd
-            else if (table == "copy-mode-vi")
-                printf "  %-35s  %s\n", key " [vi-copy]", cmd
-        }
-        ' | sort -u
-    fi
+KEY_NAMES = {
+    "SUPER": "Super", "SHIFT": "Shift", "CTRL": "Ctrl", "ALT": "Alt",
+    "escape": "Esc", "BackSpace": "Backspace", "Tab": "Tab", "space": "Space",
+    "Print": "Print", "slash": "/", "semicolon": ";", "period": ".",
+    "comma": ",", "left": "←", "right": "→", "up": "↑", "down": "↓",
+    "mouse_down": "Wheel ↓", "mouse_up": "Wheel ↑",
+    "mouse:272": "Drag LMB", "mouse:273": "Drag RMB",
+    "XF86AudioRaiseVolume": "Vol +", "XF86AudioLowerVolume": "Vol −",
+    "XF86AudioMute": "Mute", "XF86AudioMicMute": "Mic mute",
+    "XF86MonBrightnessUp": "Bright +", "XF86MonBrightnessDown": "Bright −",
+    "XF86AudioNext": "Next", "XF86AudioPrev": "Prev",
+    "XF86AudioPlay": "Play", "XF86AudioPause": "Pause",
+    "XF86Calculator": "Calc",
+}
 
-    # Kitty — defaults from shipped config + user overrides
-    echo ""
-    echo "── Kitty (kitty_mod = Ctrl+Shift) ──"
-    {
-        # Defaults: commented-out map lines (skip macOS cmd+ binds)
-        if [ -f "$KITTY_DEFAULTS" ]; then
-            grep -E '^\s*#\s*map\s+' "$KITTY_DEFAULTS" | grep -v '#:' | \
-                sed 's/^\s*#\s*map\s*//' | grep -v '^cmd+\|^opt+\|^shift+cmd'
-        fi
-        # User overrides
-        if [ -f "$KITTY_CONFIG" ]; then
-            grep -E '^map\s' "$KITTY_CONFIG" | sed 's/^map\s*//'
-        fi
-    } | awk '
-    {
-        key = $1
-        sub(/^\S+\s*/, "")
-        action = $0
-        # Deduplicate by key (user overrides win since they come last)
-        keys[key] = action
-    }
-    END {
-        for (k in keys) {
-            printf "  %-35s  %s\n", k, keys[k]
-        }
-    }
-    ' | sort
+MODIFIERS = ("SUPER", "SHIFT", "CTRL", "ALT")
+SECONDARY = ("SHIFT", "CTRL", "ALT")
 
-    # Append custom cheatsheet if it exists
-    if [ -f "$CUSTOM" ]; then
-        echo ""
-        while IFS= read -r line; do
-            if [[ "$line" =~ ^#\ (.+) ]]; then
-                echo "── ${BASH_REMATCH[1]} ──"
-            elif [[ -n "$line" && ! "$line" =~ ^# ]]; then
-                echo "  $line"
-            fi
-        done < "$CUSTOM"
-    fi
 
-} | rofi -dmenu -i -p "Keybinds" \
-    -theme-str 'listview { lines: 25; } window { width: 900px; } element-text { font: "JetBrainsMono Nerd Font 11"; }'
+def key_name(token):
+    if token in KEY_NAMES:
+        return KEY_NAMES[token]
+    if re.fullmatch(r"<\d+-\d+>", token):
+        return token[1:-1].replace("-", "–")
+    return token.upper() if len(token) == 1 else token
+
+
+# ── lua scanning ─────────────────────────────────────────────────────────────
+
+def strip_trailing_comment(line):
+    """Split a Lua line into code and its `--` comment.
+
+    Not a simple find: several binds exec shell one-liners full of `--flags`,
+    and one wraps its command in a [[long string]].
+    """
+    in_string, quote, i = False, "", 0
+    while i < len(line):
+        ch = line[i]
+        if in_string:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                in_string = False
+        elif ch in "\"'":
+            in_string, quote = True, ch
+        elif line.startswith("[[", i):
+            end = line.find("]]", i)
+            i = len(line) if end < 0 else end + 2
+            continue
+        elif line.startswith("--", i):
+            return line[:i], line[i + 2:].strip()
+        i += 1
+    return line, ""
+
+
+def split_top_level(text, sep=","):
+    """Split on `sep` at bracket depth 0, ignoring quoted sections."""
+    parts, depth, in_string, quote, start, i = [], 0, False, "", 0, 0
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                in_string = False
+        elif ch in "\"'":
+            in_string, quote = True, ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == sep and depth == 0:
+            parts.append(text[start:i])
+            start = i + 1
+        i += 1
+    parts.append(text[start:])
+    return parts
+
+
+def resolve_string(expr, locals_):
+    """Fold a Lua concatenation of literals and known locals into one string."""
+    out = []
+    for piece in expr.split(".."):
+        piece = piece.strip()
+        literal = (re.fullmatch(r'"(.*)"', piece, re.S)
+                   or re.fullmatch(r"\[\[(.*)\]\]", piece, re.S))
+        if literal:
+            out.append(literal.group(1))
+        elif piece in locals_:
+            out.append(locals_[piece])
+        else:
+            out.append(piece)
+    return "".join(out)
+
+
+def humanize_action(action, locals_):
+    """Last resort: make the dispatcher itself readable."""
+    action = re.sub(r"^hl\.dsp\.", "", action.strip())
+
+    exec_call = re.match(r"exec_cmd\((.*)\)$", action, re.S)
+    if exec_call:
+        arg = exec_call.group(1).strip()
+        # `exec_cmd(terminal)` — the variable name is the better label of the
+        # two, since the value is just whichever program currently fills it.
+        if arg in locals_:
+            return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", arg).lower()
+        cmd = re.sub(r"^env \w+=\S+ ", "", resolve_string(arg, locals_))
+        cmd = cmd.replace("~/.local/bin/", "")
+        # A long shell one-liner has no useful short form; name the program.
+        if any(c in cmd for c in "|&;"):
+            return cmd.split()[0]
+        flag = re.search(r"--([\w-]+)", cmd)
+        if flag:
+            return flag.group(1).replace("-", " ")
+        return re.sub(r"^hypr-", "", cmd).replace("-", " ").strip()
+
+    call = re.match(r"([\w.]+)\((.*)\)$", action, re.S)
+    if not call:
+        return ""
+    name, args = call.group(1), call.group(2)
+    verb = name.split(".")[-1].replace("_", " ")
+    direction = re.search(r'direction\s*=\s*"(\w+)"', args)
+    workspace = re.search(r'workspace\s*=\s*"?([\w<>+-]+)', args)
+    if direction:
+        noun = direction.group(1)
+    elif workspace:
+        noun = "workspace " + workspace.group(1)
+    elif re.fullmatch(r'"[^"]*"', args.strip()):
+        noun = args.strip().strip('"')
+    else:
+        noun = "window" if name.startswith("window.") else ""
+    return f"{verb} {noun}".strip()
+
+
+def block_label(block):
+    """First line of a comment block, minus the how-to-press and see-also asides."""
+    if not block:
+        return ""
+    text = re.sub(r"\s+with\s+mainMod.*$", "", block[0], flags=re.I)
+    text = re.sub(r"\s*[—-]+\s*see\s.*$", "", text, flags=re.I)
+    text = re.sub(r"[:.].*$", "", text)
+    trimmed = re.sub(r"\s*\([^)]*\)\s*$", "", text)
+    if len(trimmed.split()) >= 2:
+        text = trimmed
+    return text.strip().rstrip(".:")
+
+
+def parse_hyprland():
+    """Yield one record per hl.bind() in the config, in source order."""
+    try:
+        with open(HYPR_CONFIG) as fh:
+            lines = fh.read().splitlines()
+    except OSError as exc:
+        print(f"cannot read {HYPR_CONFIG}: {exc}", file=sys.stderr)
+        return []
+
+    binds, locals_, block, blocks = [], {}, [], {}
+    block_id, submap, loop = 0, "", None
+    buf, buf_comment, depth = "", "", 0
+
+    def record(text, comment):
+        bind = emit_bind(text, comment, block_id, submap, loop, locals_)
+        if bind:
+            binds.append(bind)
+
+    for raw in lines:
+        code, comment = strip_trailing_comment(raw)
+        stripped = code.strip()
+
+        if buf:
+            buf += " " + stripped
+            buf_comment = buf_comment or comment
+            depth += stripped.count("(") - stripped.count(")")
+            if depth <= 0:
+                record(buf, buf_comment)
+                buf, buf_comment, depth = "", "", 0
+            continue
+
+        # A comment-only line has empty code, so it has to be tested first.
+        if not stripped:
+            if comment:
+                block.append(comment)
+                blocks[block_id] = list(block)
+            else:
+                block, block_id = [], block_id + 1
+            continue
+
+        assign = re.match(r'local (\w+)\s*=\s*"([^"]*)"\s*$', stripped)
+        if assign:
+            locals_[assign.group(1)] = assign.group(2)
+            continue
+
+        submap_def = re.match(r'hl\.define_submap\("([^"]+)"', stripped)
+        if submap_def:
+            submap, block, block_id = submap_def.group(1), [], block_id + 1
+            continue
+        if stripped.startswith("end)"):
+            submap, block, block_id = "", [], block_id + 1
+            continue
+
+        # `for i = 1, 9 do` binds the loop range; `local key = i % 10` remaps
+        # 10 onto 0, so the keys actually bound there are 0-9.
+        for_loop = re.match(r"for (\w+) = (\d+), (\d+) do", stripped)
+        if for_loop:
+            var, lo, hi = for_loop.group(1), for_loop.group(2), for_loop.group(3)
+            loop = {"var": var, "alias": None, "range": f"<{lo}-{hi}>"}
+            continue
+        alias = re.match(r"local (\w+) = (\w+) % 10", stripped)
+        if alias and loop and alias.group(2) == loop["var"]:
+            loop["alias"], loop["range"] = alias.group(1), "<0-9>"
+            continue
+        if stripped == "end":
+            loop, block, block_id = None, [], block_id + 1
+            continue
+
+        if stripped.startswith("hl.bind("):
+            depth = stripped.count("(") - stripped.count(")")
+            if depth > 0:
+                buf, buf_comment = stripped, comment
+            else:
+                record(stripped, comment)
+            continue
+
+    label_binds(binds, blocks)
+    return binds
+
+
+def label_binds(binds, blocks):
+    """A comment block only names a bind when it covers that one key alone."""
+    keys_per_block = {}
+    for bind in binds:
+        keys_per_block.setdefault(bind["block"], set()).add(bind["key"])
+
+    for bind in binds:
+        label = bind["comment"]
+        if not label and len(keys_per_block[bind["block"]]) == 1:
+            label = block_label(blocks.get(bind["block"], []))
+        bind["label"] = (label or bind["derived"]).strip()
+
+
+def emit_bind(text, comment, block_id, submap, loop, locals_):
+    body = re.sub(r"\)\s*$", "", re.sub(r"^hl\.bind\(", "", text.strip()))
+    parts = split_top_level(body)
+    if len(parts) < 2:
+        return None
+
+    key = resolve_string(parts[0].replace("mainMod", '"SUPER"'), locals_)
+    # Bind options (`{ repeating = true }`) trail the dispatcher; drop them.
+    action = split_top_level(",".join(parts[1:]).strip())[0].strip()
+
+    if loop:
+        for var in (loop["var"], loop["alias"]):
+            if var:
+                key = re.sub(rf"\b{re.escape(var)}\b", loop["range"], key)
+                action = re.sub(rf"\b{re.escape(var)}\b", "<n>", action)
+
+    key = re.sub(r"\s*\+\s*", " + ", key.strip())
+    if "catchall" in key:
+        return None
+    tokens = key.split(" + ")
+    return {"key": key, "comment": comment, "block": block_id, "submap": submap,
+            "mods": frozenset(KEY_NAMES[t] for t in tokens[:-1] if t in MODIFIERS),
+            "derived": humanize_action(action, locals_)}
+
+
+# ── grouping ─────────────────────────────────────────────────────────────────
+
+SUBMAP_GROUPS = {"resize": "Resize mode", "swaync": "Notification panel"}
+
+GROUP_ORDER = [
+    "Super", "Super + Shift", "Super + Ctrl", "No prefix",
+    "Resize mode", "Notification panel", "Tmux", "Kitty", "Unfiled",
+]
+
+
+def group_of(tokens, submap):
+    """Return (group, keys shown in the row). The group is the prefix you hold."""
+    if submap:
+        return SUBMAP_GROUPS.get(submap, submap.capitalize()), tokens
+    mods = [t for t in tokens[:-1] if t in MODIFIERS]
+    rest = tokens[len(mods):]
+    if "SUPER" not in mods:
+        return "No prefix", tokens
+    secondary = next((m for m in SECONDARY if m in mods), None)
+    if not secondary:
+        return "Super", rest
+    extra = [m for m in SECONDARY if m in mods and m != secondary]
+    return f"Super + {KEY_NAMES[secondary]}", extra + rest
+
+
+def collapse_directions(rows):
+    """Four rows bound to h/j/k/l under one verb read better as a single row."""
+    out, i = [], 0
+    while i < len(rows):
+        window = rows[i:i + 4]
+        keys = sorted(r["keys"][-1].lower() for r in window)
+        stems = {re.sub(r"\s+(left|right|up|down)$", "", r["label"], flags=re.I).strip()
+                 for r in window}
+        heads = {tuple(r["keys"][:-1]) for r in window}
+        if len(window) == 4 and keys == ["h", "j", "k", "l"] \
+                and len(stems) == 1 and len(heads) == 1:
+            out.append({"keys": list(heads.pop()) + ["H", "J", "K", "L"],
+                        "label": stems.pop(), "chord": window[0]["chord"]})
+            i += 4
+        else:
+            out.append(rows[i])
+            i += 1
+    return out
+
+
+def hyprland_groups():
+    groups = {}
+    for bind in parse_hyprland():
+        name, keys = group_of(bind["key"].split(" + "), bind["submap"])
+        if not bind["label"]:
+            name = "Unfiled"
+        groups.setdefault(name, []).append({
+            "keys": [key_name(t) for t in keys],
+            # The key column already shows the digits a loop label stands for.
+            "label": (bind["label"] or bind["key"]).replace(" <n>", "").capitalize(),
+            "chord": bind["mods"],
+        })
+
+    # A chord with only a row or two of its own is noise as a column heading;
+    # fold it back into Super and let the row carry the extra modifier.
+    for name in [n for n in groups if n.startswith("Super + ") and len(groups[n]) < 3]:
+        held = name.split(" + ")[1]
+        for row in groups.pop(name):
+            row["keys"] = [held] + row["keys"]
+            groups["Super"].append(row)
+
+    for name, rows in groups.items():
+        # Two dispatchers on one key (float, then raise) is one bind to a
+        # reader; keep the first, which is the one the comment describes.
+        # Two bare keys with one label (Play, Pause) share a row the same way.
+        seen, deduped = set(), []
+        for row in collapse_directions(rows):
+            if tuple(row["keys"]) in seen:
+                continue
+            seen.add(tuple(row["keys"]))
+            twin = next((r for r in deduped if r["label"] == row["label"]
+                         and r["chord"] == row["chord"] and len(row["keys"]) == 1
+                         and not set(r["keys"]) & set(CHORD_ORDER)),
+                        None)
+            if twin:
+                twin["keys"].append(row["keys"][0])
+            else:
+                deduped.append(row)
+        groups[name] = deduped
+    return groups
+
+
+# ── tmux ─────────────────────────────────────────────────────────────────────
+
+# tmux ships a note on every binding it considers worth documenting — the set
+# `prefix ?` shows. These are the ones that are still noise on a sheet you scan.
+TMUX_SKIP = re.compile(
+    r"client|paste buffer|marked pane|Show messages|Customize options|"
+    r"window information|Describe key binding|List key bindings|Show a clock|"
+    r"visible part of the window|pane numbers|by 1$|mirrored layout|"
+    r"Prompt for window index|window with an alert|in reverse|"
+    r"^Resize the pane (up|down|left|right)( by 5)?$|menu$|floating pane|"
+    r"^Move the current window$|^Break pane|^Swap the active pane|"
+    r"^Spread panes|^Rotate through|and scroll up$")
+
+TMUX_COLLAPSE = [
+    (re.compile(r"^Select window \d$"), ["0–9"], "Select window by number"),
+    (re.compile(r"^(Set|Select) the \S+ layout$"), ["Alt", "1–5"], "Set a layout"),
+    (re.compile(r"^Resize pane (up|down|left|right)$"), ["H", "J", "K", "L"], "Resize pane"),
+    (re.compile(r"^Select the pane (above|below|to the left of|to the right of) "
+                r"the active pane$"), ["←", "↓", "↑", "→"], "Select pane"),
+]
+
+# C-a is a prefix you press and release, not a chord you keep down: nothing is
+# still held by the time you type the second key, so no chord reaches these and
+# holding Ctrl must not summon the whole tmux table. Empty, not None -- they are
+# reachable, just not by holding something.
+TMUX_PREFIX = frozenset()
+
+TMUX_KEY_NAMES = {"PPage": ["PgUp"], "NPage": ["PgDn"],
+                  "C-o": ["Ctrl", "O"], "C-y": ["Ctrl", "Y"]}
+
+
+def tmux_keys():
+    """(key, note) for every noted binding under the C-a prefix."""
+    try:
+        out = subprocess.run(["tmux", "list-keys", "-N"], capture_output=True,
+                             text=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if out.returncode != 0:
+        return []
+    keys = []
+    for line in out.stdout.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0] == "C-a":
+            keys.append((parts[1], parts[2].strip()))
+    return keys
+
+
+def tmux_rows(keys):
+    rows, collapsed = [], set()
+    for key, note in keys:
+        if TMUX_SKIP.search(note):
+            continue
+        for pattern, keys, label in TMUX_COLLAPSE:
+            if pattern.match(note):
+                if label not in collapsed:
+                    collapsed.add(label)
+                    rows.append({"keys": list(keys), "label": label,
+                                 "chord": TMUX_PREFIX})
+                break
+        else:
+            rows.append({"keys": TMUX_KEY_NAMES.get(key, [key]), "label": note,
+                         "chord": TMUX_PREFIX})
+    return rows
+
+
+# ── kitty ────────────────────────────────────────────────────────────────────
+
+# The one hand-kept list on the sheet. kitty has no way to report its bindings,
+# and its shipped config lists 94 defaults, which is documentation, not a sheet.
+# kitty_mod, unlike tmux's prefix, is a genuine chord: Ctrl and Shift stay down
+# while you press the key.
+KITTY_MOD = frozenset({"Ctrl", "Shift"})
+
+KITTY_ROWS = [
+    (["Enter"], "New split"), (["W"], "Close split"),
+    (["]"], "Next split"), (["["], "Previous split"),
+    (["T"], "New tab"), (["Q"], "Close tab"),
+    (["→"], "Next tab"), (["←"], "Previous tab"),
+    (["↑"], "Scroll one line up"), (["↓"], "Scroll one line down"),
+    (["H"], "Open the scrollback in a pager"),
+    (["F5"], "Reload kitty.conf"),
+]
+
+
+# ── sheet ────────────────────────────────────────────────────────────────────
+
+def build_sheet(tmux_bindings):
+    groups = hyprland_groups()
+    tmux = tmux_rows(tmux_bindings)
+    if tmux:
+        groups["Tmux"] = tmux
+    groups["Kitty"] = [{"keys": list(k), "label": v, "chord": KITTY_MOD}
+                       for k, v in KITTY_ROWS]
+
+    ordered = [(n, groups[n]) for n in GROUP_ORDER if groups.get(n)]
+    ordered += [(n, r) for n, r in sorted(groups.items()) if n not in GROUP_ORDER and r]
+    return ordered
+
+
+# Every heading answers the same question: what do you hold to get here.
+GROUP_HEAD = {
+    "Super": (["Super"], None),
+    "Super + Shift": (["Super", "Shift"], None),
+    "Super + Ctrl": (["Super", "Ctrl"], None),
+    "Super + Alt": (["Super", "Alt"], None),
+    "Resize mode": (["Super", "A"], "resize mode, Esc to leave"),
+    "Notification panel": (["Super", "."], "while the panel is open"),
+    "Tmux": (["Ctrl", "A"], "tmux"),
+    "Kitty": (["Ctrl", "Shift"], "kitty"),
+    "No prefix": (None, "no prefix"),
+    "Unfiled": (None, "no label — add a trailing -- comment in hyprland.lua"),
+}
+
+
+CHORD_ORDER = ("Super", "Ctrl", "Alt", "Shift")
+
+
+# Tracked as key presses and releases rather than through a modifier bitmask.
+# Under Hyprland neither GdkDevice's modifier-state nor the key controller's
+# "modifiers" signal moves when a modifier is held on its own -- the first never
+# updates for Super at all, the second only fires alongside some other key --
+# but the bare Super_L press itself is delivered.
+MOD_KEYS = {
+    Gdk.KEY_Super_L: "Super", Gdk.KEY_Super_R: "Super",
+    Gdk.KEY_Control_L: "Ctrl", Gdk.KEY_Control_R: "Ctrl",
+    Gdk.KEY_Alt_L: "Alt", Gdk.KEY_Alt_R: "Alt",
+    Gdk.KEY_Meta_L: "Alt", Gdk.KEY_Meta_R: "Alt",
+    Gdk.KEY_Shift_L: "Shift", Gdk.KEY_Shift_R: "Shift",
+}
+
+
+def pack(groups, columns=COLUMNS):
+    """Balance the columns, then put each one back into reading order.
+
+    Placing the groups in reading order leaves whichever big group comes last
+    stacked onto an already-tall column, which is what makes one column run to
+    the bottom of the screen while its neighbour ends halfway. Longest-first
+    fixes that; the sheet's height is then just its largest single group.
+    """
+    order = {name: i for i, (name, _) in enumerate(groups)}
+    cols = [[] for _ in range(columns)]
+    heights = [0] * columns
+    for name, rows in sorted(groups, key=lambda g: -len(g[1])):
+        i = heights.index(min(heights))
+        cols[i].append((name, rows))
+        heights[i] += len(rows) + 3
+    cols = [sorted(c, key=lambda g: order[g[0]]) for c in cols if c]
+    return sorted(cols, key=lambda c: order[c[0][0]])
+
+
+# ── keyboard ─────────────────────────────────────────────────────────────────
+
+# The same binds, filed by the physical key instead of by row: a layer is the
+# mode you are in (a submap, tmux's prefix, or none) plus the modifiers held,
+# and every key is named by the legend on its unshifted cap.
+
+CAP_ALIASES = {
+    "escape": "esc", "bspace": "backspace", "return": "enter", "kp_enter": "enter",
+    "iso_left_tab": "tab", "slash": "/", "semicolon": ";", "period": ".",
+    "comma": ",", "minus": "-", "equal": "=", "grave": "`", "apostrophe": "'",
+    "bracketleft": "[", "bracketright": "]", "backslash": "\\",
+    "←": "left", "→": "right", "↑": "up", "↓": "down",
+    "ppage": "pgup", "prior": "pgup", "npage": "pgdn", "next": "pgdn", "dc": "delete",
+}
+
+CAP_LEGENDS = {
+    "esc": "Esc", "print": "Prt", "backspace": "⌫", "tab": "Tab", "caps": "Caps",
+    "enter": "Enter", "shift": "Shift", "ctrl": "Ctrl", "super": "Super",
+    "alt": "Alt", "space": "", "left": "←", "right": "→", "up": "↑", "down": "↓",
+    "pgup": "PgUp", "pgdn": "PgDn", "delete": "Del",
+}
+
+MOD_CAPS = {"super": "Super", "ctrl": "Ctrl", "alt": "Alt", "shift": "Shift"}
+
+# (top edge, [(cap, width)]) in key units; a None cap is a gap. "updown" is the
+# half-height ↑ over ↓ pair of a laptop arrow cluster.
+BOARD_ROWS = [
+    (0.0, [("esc", 1), (None, 0.5)] + [(f"f{i}", 1) for i in range(1, 13)]
+     + [(None, 0.5), ("print", 1)]),
+    (1.25, [(c, 1) for c in "`1234567890-="] + [("backspace", 2)]),
+    (2.25, [("tab", 1.5)] + [(c, 1) for c in "qwertyuiop[]"] + [("\\", 1.5)]),
+    (3.25, [("caps", 1.75)] + [(c, 1) for c in "asdfghjkl;'"] + [("enter", 2.25)]),
+    (4.25, [("shift", 2.25)] + [(c, 1) for c in "zxcvbnm,./"] + [("shift", 2.75)]),
+    (5.25, [("ctrl", 1.25), ("super", 1.25), ("alt", 1.25), ("space", 5.75),
+            ("alt", 1.25), ("ctrl", 1.25), ("left", 1), ("updown", 1), ("right", 1)]),
+]
+BOARD_PITCH = 50
+BOARD_GAP = 5
+
+SHIFTED = dict(zip('~!@#$%^&*()_+{}|:"<>?', "`1234567890-=[]\\;',./"))
+TMUX_MODS = {"C": "Ctrl", "M": "Alt", "S": "Shift"}
+PREFIX_GROUP = {**SUBMAP_GROUPS, "tmux": "Tmux"}
+
+
+def cap_id(token):
+    token = token.lower()
+    return CAP_ALIASES.get(token, token)
+
+
+def cap_legend(cap, fallback=None):
+    if cap in CAP_LEGENDS:
+        return CAP_LEGENDS[cap]
+    return cap.upper() if len(cap) <= 3 else (fallback or cap)
+
+
+def board_binds(tmux_bindings):
+    """{(mode, held modifiers, cap): [bind]} plus a legend for every cap seen."""
+    board, legends = {}, {}
+
+    def add(mode, mods, token, combo, label, note=""):
+        cap = cap_id(token)
+        legends.setdefault(cap, cap_legend(cap, key_name(token)))
+        binds = board.setdefault((mode, frozenset(mods), cap), [])
+        if all(b["combo"] != combo for b in binds):
+            binds.append({"combo": combo, "label": label, "note": note})
+
+    for bind in parse_hyprland():
+        tokens = bind["key"].split(" + ")
+        head = [m for m in CHORD_ORDER if m in bind["mods"]]
+        label = (bind["label"] or "no label").capitalize()
+        span = re.fullmatch(r"<(\d+)-(\d+)>", tokens[-1])
+        if not span:
+            add(bind["submap"], bind["mods"], tokens[-1],
+                head + [key_name(tokens[-1])], label)
+            continue
+        lo, hi = int(span.group(1)), int(span.group(2))
+        for digit in range(lo, hi + 1):
+            # `i % 10` puts workspace 10 on the 0 key.
+            n = 10 if lo == 0 and digit == 0 else digit
+            named = (label.replace("<n>", str(n)) if "<n>" in label
+                     else f"{label} {n}" if label.endswith("workspace") else label)
+            add(bind["submap"], bind["mods"], str(digit), head + [str(digit)], named)
+
+    for key, note in tmux_bindings:
+        mods, token = set(), key
+        while (m := re.fullmatch(r"([CMS])-(.+)", token)):
+            mods.add(TMUX_MODS[m.group(1)])
+            token = m.group(2)
+        shown = [m for m in CHORD_ORDER if m in mods]
+        legend = TMUX_KEY_NAMES.get(token, [token])[-1]
+        if token in SHIFTED:
+            # `%` is typed as Shift + 5, but reads better as itself.
+            mods.add("Shift")
+            base = SHIFTED[token]
+        elif len(token) == 1 and token.isupper():
+            mods.add("Shift")
+            shown.append("Shift")
+            base = token
+        else:
+            base = token
+        add("tmux", mods, base, ["Ctrl", "A"] + shown + [key_name(legend)], note)
+
+    for keys, label in KITTY_ROWS:
+        add("", KITTY_MOD, keys[-1], ["Ctrl", "Shift", *keys], label, "kitty")
+
+    return board, legends
+
+
+# ── ui ───────────────────────────────────────────────────────────────────────
+
+CSS = """
+window.keybinds {{ background: transparent; }}
+
+.sheet {{
+  background: alpha({crust}, 0.985);
+  border: 1px solid {surface1};
+  border-radius: 16px;
+  padding: 20px 26px 16px 26px;
+}}
+
+.filter {{
+  font-family: "Adwaita Sans", sans-serif;
+  font-size: 14px;
+  color: {text};
+  background: {surface0};
+  border: 1px solid {surface1};
+  border-radius: 9px;
+  padding: 6px 12px;
+  min-height: 0;
+  caret-color: {sapphire};
+}}
+.filter:focus-within {{
+  border-color: {sapphire};
+  outline: 1px solid alpha({sapphire}, 0.35);
+  outline-offset: 0;
+}}
+.filter placeholder {{ color: {overlay0}; }}
+.filter selection {{ color: {text}; background: alpha({sapphire}, 0.4); }}
+
+.tally, .foot, .group-note, .empty {{
+  font-family: "Adwaita Sans", sans-serif;
+  font-size: 11px;
+  color: {overlay0};
+}}
+
+.label {{
+  font-family: "Adwaita Sans", sans-serif;
+  font-size: 13px;
+  color: {subtext1};
+}}
+
+.empty {{ font-size: 13px; }}
+
+.cap {{
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: {text};
+  background: linear-gradient(to bottom, {surface2}, {surface1});
+  border: 1px solid {surface2};
+  border-bottom: 2px solid {crust};
+  border-radius: 5px;
+  padding: 1px 5px;
+  min-width: 10px;
+}}
+.cap.prefix {{
+  font-size: 12px;
+  color: {crust};
+  background: linear-gradient(to bottom, {sapphire}, shade({sapphire}, 0.82));
+  border-color: {sapphire};
+  border-bottom-color: shade({sapphire}, 0.55);
+  padding: 2px 8px;
+}}
+
+button.key {{
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: {overlay0};
+  background: {base};
+  border: 1px solid {surface0};
+  border-bottom: 3px solid {crust};
+  border-radius: 6px;
+  padding: 3px 6px;
+  min-height: 0;
+  min-width: 0;
+  box-shadow: none;
+}}
+button.key:hover {{ border-color: {overlay0}; border-bottom-color: {crust}; }}
+button.key.faint {{ color: {subtext1}; background: {surface0}; }}
+button.key.held {{ color: {text}; background: {surface2}; border-color: {overlay0}; }}
+button.key.bound {{
+  color: {crust};
+  background: linear-gradient(to bottom, {sapphire}, shade({sapphire}, 0.82));
+  border-color: {sapphire};
+  border-bottom-color: shade({sapphire}, 0.55);
+}}
+button.key.bound:hover {{ border-color: {text}; }}
+button.key.selected {{ outline: 2px solid {text}; outline-offset: 1px; }}
+
+button.chip {{
+  font-family: "Adwaita Sans", sans-serif;
+  font-size: 12px;
+  color: {subtext1};
+  background: {surface0};
+  border: 1px solid {surface1};
+  border-radius: 9px;
+  padding: 4px 10px;
+  min-height: 0;
+  box-shadow: none;
+}}
+button.chip:hover {{ border-color: {overlay0}; }}
+button.chip:checked {{ color: {text}; border-color: {sapphire}; background: {surface1}; }}
+"""
+
+STATE = (os.environ.get("XDG_STATE_HOME", f"{HOME}/.local/state")
+         + "/hypr-keybind-cheatsheet/view")
+
+
+def cap(text, prefix=False):
+    label = Gtk.Label(label=text, valign=Gtk.Align.CENTER)
+    label.add_css_class("cap")
+    if prefix:
+        label.add_css_class("prefix")
+    return label
+
+
+def caps(keys, prefix=False, align=Gtk.Align.START):
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=3, halign=align)
+    for key in keys:
+        box.append(cap(key, prefix))
+    return box
+
+
+def set_class(widget, name, on):
+    if on:
+        widget.add_css_class(name)
+    else:
+        widget.remove_css_class(name)
+
+
+class Sheet(Gtk.Application):
+    def __init__(self, view=None):
+        super().__init__(application_id="dev.jaeho.keybinds",
+                         flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.window = None
+        self.rows = []
+        self.groups = []
+        self.held = frozenset()
+        # Keyboard view: modifiers clicked on (Super + click is Hyprland's window
+        # drag, so holding Super cannot be combined with clicking), the mode
+        # chip, and the key whose binds the detail panel shows.
+        self.latched = frozenset()
+        self.mode = ""
+        self.selected = None
+        self.hover = None
+        self.focused = False
+        self.view = view or self.saved_view()
+
+    @staticmethod
+    def saved_view():
+        try:
+            with open(STATE) as fh:
+                return "keyboard" if fh.read().strip() == "keyboard" else "list"
+        except OSError:
+            return "list"
+
+    def do_activate(self):
+        # A second press of the bind reaches the running instance rather than
+        # starting a new one, so the same key that opens the sheet closes it.
+        if self.window:
+            self.window.close()
+            return
+
+        provider = Gtk.CssProvider()
+        provider.load_from_string(CSS.format(**palette()))
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        self.window = Gtk.ApplicationWindow(application=self)
+        self.window.add_css_class("keybinds")
+        self.window.connect("close-request", self.on_close)
+
+        LayerShell.init_for_window(self.window)
+        LayerShell.set_namespace(self.window, "keybinds")
+        LayerShell.set_layer(self.window, LayerShell.Layer.OVERLAY)
+        LayerShell.set_keyboard_mode(self.window, LayerShell.KeyboardMode.EXCLUSIVE)
+
+        self.window.set_child(self.build())
+
+        keys = Gtk.EventControllerKey()
+        # Capture, not bubble: the filter entry has focus and swallows every
+        # printable key, so a controller on the window would otherwise only ever
+        # hear Escape -- and never the bare modifier presses.
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self.on_key)
+        keys.connect("key-released", self.on_key_release)
+        self.window.add_controller(keys)
+
+        # If the sheet loses the keyboard while a modifier is down -- a bind
+        # that fires and hands focus to what it launched -- the release lands
+        # somewhere else and the chord would stay stuck on.
+        # `is-active`, not a focus controller: the controller's "enter" never
+        # fires for the focus the surface is mapped with.
+        self.window.connect("notify::is-active", self.on_focus)
+        self.window.present()
+
+    def on_focus(self, window, _pspec):
+        self.focused = window.is_active()
+        if not self.focused:
+            self.set_held(frozenset())
+        self.sync_capture()
+
+    # Hyprland acts on its binds before the sheet hears the key, so the keyboard
+    # view asks for them to be suspended (keyboard-shortcuts-inhibit): Super + Q
+    # then names Q instead of closing a window. The compositor ties the
+    # inhibitor to this surface and its focus, so nothing is left captured if
+    # the sheet loses the keyboard or dies. Every bind is suspended, the
+    # sheet's own Super + / included, which on_key closes on instead.
+    def sync_capture(self):
+        surface = self.window.get_surface() if self.window else None
+        if surface is None:
+            return
+        if self.focused and self.view == "keyboard":
+            surface.inhibit_system_shortcuts(None)
+        else:
+            surface.restore_system_shortcuts()
+
+    def set_held(self, held):
+        if held == self.held:
+            return
+        self.held = held
+        self.refresh()
+
+    def refresh(self):
+        chord = self.layer_mods() if self.view == "keyboard" else self.held
+        for child in list(self.chord):
+            self.chord.remove(child)
+        for name in CHORD_ORDER:
+            if name in chord:
+                self.chord.append(cap(name, prefix=True))
+        if self.view == "keyboard":
+            self.refresh_board()
+        else:
+            self.apply()
+
+    def layer_mods(self):
+        return self.held | self.latched
+
+    def set_view(self, view):
+        self.view = view
+        keyboard = view == "keyboard"
+        self.list_view.set_visible(not keyboard)
+        self.board_view.set_visible(keyboard)
+        self.entry.set_visible(not keyboard)
+        self.chip_row.set_visible(keyboard)
+        self.foot.set_label(
+            "Esc closes  ·  Tab switches to the list  ·  hold or click a modifier, "
+            "then hover or click a key" if keyboard else
+            "Esc closes  ·  Super + / toggles  ·  Tab switches to the keyboard  ·  "
+            "hold a modifier to narrow")
+        if not keyboard:
+            self.entry.grab_focus()
+        self.sync_capture()
+        self.refresh()
+        try:
+            os.makedirs(os.path.dirname(STATE), exist_ok=True)
+            with open(STATE, "w") as fh:
+                fh.write(view + "\n")
+        except OSError:
+            pass
+
+    def on_close(self, _window):
+        self.window = None
+        self.quit()
+        return False
+
+    def on_key(self, _controller, keyval, code, _state):
+        # Bare Esc and Tab drive the sheet; with a modifier held they are a
+        # chord to look up (Super + Esc locks the screen).
+        bare = not self.held or self.view == "list"
+        close = keyval == Gdk.KEY_slash and self.held == {"Super"}
+        if (keyval == Gdk.KEY_Escape and bare) or close:
+            self.window.close()
+            return True
+        if keyval in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab) and bare:
+            self.set_view("list" if self.view == "keyboard" else "keyboard")
+            return True
+        if keyval in MOD_KEYS:
+            self.set_held(self.held | {MOD_KEYS[keyval]})
+            return False
+        if self.view == "keyboard":
+            # Named by the unshifted keyval, so Shift + / still finds the / cap.
+            found, base, *_ = Gdk.Display.get_default().translate_key(
+                code, Gdk.ModifierType.NO_MODIFIER_MASK, 0)
+            if found:
+                cap_ = cap_id(Gdk.keyval_name(base) or "")
+                if cap_ in self.keycaps:
+                    self.selected, self.hover = cap_, None
+                    self.refresh_board()
+                    return True
+        return False
+
+    def on_key_release(self, _controller, keyval, _code, _state):
+        if keyval in MOD_KEYS:
+            self.set_held(self.held - {MOD_KEYS[keyval]})
+
+    def build(self):
+        sheet = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        sheet.add_css_class("sheet")
+
+        self.entry = Gtk.Entry(placeholder_text="Filter", width_chars=26,
+                               max_width_chars=26, hexpand=False)
+        self.entry.add_css_class("filter")
+        self.entry.connect("changed", self.on_filter)
+
+        self.tally = Gtk.Label(xalign=1.0)
+        self.tally.add_css_class("tally")
+
+        self.chord = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=3,
+                             halign=Gtk.Align.END, hexpand=True)
+
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        self.header = header
+        header.append(self.entry)
+        header.append(self.chord)
+        header.append(self.tally)
+        sheet.append(header)
+
+        tmux_bindings = tmux_keys()
+        body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=40,
+                       valign=Gtk.Align.START)
+        for column in pack(build_sheet(tmux_bindings)):
+            body.append(self.build_column(column))
+
+        scroller = Gtk.ScrolledWindow(hexpand=True)
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_propagate_natural_height(True)
+        scroller.set_propagate_natural_width(True)
+        scroller.set_max_content_height(self.content_cap())
+        scroller.set_child(body)
+
+        self.empty = Gtk.Label(xalign=0.0, visible=False)
+        self.empty.add_css_class("empty")
+
+        self.list_view = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        self.list_view.append(scroller)
+        self.list_view.append(self.empty)
+        sheet.append(self.list_view)
+
+        self.board_view = self.build_board(tmux_bindings)
+        sheet.append(self.board_view)
+
+        self.foot = Gtk.Label(xalign=0.0)
+        self.foot.add_css_class("foot")
+        sheet.append(self.foot)
+
+        self.retally()
+        self.set_view(self.view)
+        return sheet
+
+    def build_board(self, tmux_bindings):
+        self.board, self.legends = board_binds(tmux_bindings)
+        self.keycaps = {}
+        view = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14,
+                       halign=Gtk.Align.CENTER)
+
+        # The mode chips stand where the filter does in the list view.
+        self.chips = {}
+        self.chip_row = row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.header.insert_child_after(row, self.entry)
+        modes = [m for m in PREFIX_GROUP if any(k[0] == m for k in self.board)]
+        if modes:
+            for mode in modes:
+                group = PREFIX_GROUP[mode]
+                keys, _ = GROUP_HEAD.get(group, (None, None))
+                inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                if keys:
+                    inner.append(caps(keys))
+                inner.append(Gtk.Label(label=group))
+                chip = Gtk.ToggleButton(child=inner, focusable=False)
+                chip.add_css_class("chip")
+                chip.connect("toggled", self.on_chip, mode)
+                row.append(chip)
+                self.chips[mode] = chip
+
+        pitch, gap = BOARD_PITCH, BOARD_GAP
+        fixed = Gtk.Fixed()
+        for top, keys in BOARD_ROWS:
+            left = 0.0
+            for cap_, width in keys:
+                if cap_ == "updown":
+                    self.place_key(fixed, "up", left * pitch, top * pitch,
+                                   width * pitch - gap, pitch / 2 - gap / 2)
+                    self.place_key(fixed, "down", left * pitch, (top + 0.5) * pitch,
+                                   width * pitch - gap, pitch / 2 - gap / 2)
+                elif cap_:
+                    self.place_key(fixed, cap_, left * pitch, top * pitch,
+                                   width * pitch - gap, pitch - gap)
+                left += width
+
+        # Keys this layout has no cap for (media keys, the mouse, PgUp) sit in
+        # rows under it, ten 1.5-unit caps to a row so they span the same width.
+        bottom = max(top for top, _ in BOARD_ROWS) + 1.25
+        extras = dict.fromkeys(c for (_, _, c) in self.board if c not in self.keycaps)
+        for i, cap_ in enumerate(extras):
+            row_, col = divmod(i, 10)
+            self.place_key(fixed, cap_, col * 1.5 * pitch, (bottom + row_) * pitch,
+                           1.5 * pitch - gap, pitch - gap)
+        view.append(fixed)
+
+        self.detail = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        self.detail.set_size_request(-1, 6 * 24)
+        view.append(self.detail)
+        return view
+
+    def place_key(self, fixed, cap_, x, y, width, height):
+        label = Gtk.Label(label=self.legends.get(cap_, cap_legend(cap_)),
+                          xalign=0.0, yalign=0.0)
+        label.set_ellipsize(Pango.EllipsizeMode.END)
+        button = Gtk.Button(child=label, focusable=False)
+        button.add_css_class("key")
+        button.set_size_request(int(width), int(height))
+        button.connect("clicked", self.on_keycap, cap_)
+        motion = Gtk.EventControllerMotion()
+        motion.connect("enter", lambda *_: self.set_hover(cap_))
+        motion.connect("leave", lambda *_: self.set_hover(None, cap_))
+        button.add_controller(motion)
+        fixed.put(button, x, y)
+        self.keycaps.setdefault(cap_, []).append(button)
+
+    def on_chip(self, chip, mode):
+        if chip.get_active():
+            self.mode = mode
+            for other, button in self.chips.items():
+                if other != mode and button.get_active():
+                    button.set_active(False)
+        elif self.mode == mode:
+            self.mode = ""
+        self.refresh_board()
+
+    def on_keycap(self, _button, cap_):
+        if cap_ in MOD_CAPS:
+            self.latched ^= {MOD_CAPS[cap_]}
+            self.refresh()
+            return
+        self.selected = None if self.selected == cap_ else cap_
+        self.refresh_board()
+
+    def set_hover(self, cap_, leaving=None):
+        if leaving and self.hover != leaving:
+            return
+        self.hover = cap_
+        self.refresh_detail()
+
+    def refresh_board(self):
+        mods = self.layer_mods()
+        here = {c for (m, held, c) in self.board if m == self.mode and held == mods}
+        near = {c for (m, _, c) in self.board if m == self.mode}
+        for cap_, buttons in self.keycaps.items():
+            for button in buttons:
+                set_class(button, "bound", cap_ in here)
+                set_class(button, "faint", cap_ in near and cap_ not in here)
+                set_class(button, "held", MOD_CAPS.get(cap_) in mods)
+                set_class(button, "selected", cap_ == self.selected)
+        count = sum(len(v) for (m, held, _), v in self.board.items()
+                    if m == self.mode and held == mods)
+        self.tally.set_label(f"{count} binds on {len(here)} keys")
+        self.refresh_detail()
+        if self.window:
+            self.window.set_default_size(-1, -1)
+
+    def refresh_detail(self):
+        for child in list(self.detail):
+            self.detail.remove(child)
+        cap_ = self.hover or self.selected
+
+        def note(text):
+            label = Gtk.Label(label=text, xalign=0.0)
+            label.add_css_class("group-note")
+            self.detail.append(label)
+
+        if not cap_:
+            note("Lit keys do something with what is held now; dim ones need "
+                 "a different modifier.")
+            return
+        if cap_ in MOD_CAPS:
+            note(f"Click to {'release' if MOD_CAPS[cap_] in self.latched else 'latch'} "
+                 f"{MOD_CAPS[cap_]}.")
+            return
+
+        mods = self.layer_mods()
+        binds = sorted(((held != mods, len(held), b)
+                        for (m, held, c), bs in self.board.items()
+                        if m == self.mode and c == cap_ for b in bs),
+                       key=lambda t: t[:2])
+        if not binds:
+            note(f"Nothing is bound to {self.legends.get(cap_, cap_legend(cap_)) or 'Space'}"
+                 + (f" in {PREFIX_GROUP[self.mode].lower()}." if self.mode else "."))
+            return
+        grid = Gtk.Grid(column_spacing=11, row_spacing=4)
+        for i, (elsewhere, _, bind) in enumerate(binds):
+            grid.attach(caps(bind["combo"], align=Gtk.Align.END), 0, i, 1, 1)
+            label = Gtk.Label(label=bind["label"], xalign=0.0)
+            label.add_css_class("group-note" if elsewhere else "label")
+            grid.attach(label, 1, i, 1, 1)
+            if bind["note"]:
+                tag = Gtk.Label(label=bind["note"], xalign=0.0)
+                tag.add_css_class("group-note")
+                grid.attach(tag, 2, i, 1, 1)
+        self.detail.append(grid)
+
+    @staticmethod
+    def content_cap():
+        """Tallest the columns may grow before they start scrolling.
+
+        Sized off the shortest monitor rather than fixed: the sheet is meant to
+        sit clear of the screen edges, and this machine is docked to displays
+        shorter than its own panel.
+        """
+        monitors = Gdk.Display.get_default().get_monitors()
+        heights = [monitors.get_item(i).get_geometry().height
+                   for i in range(monitors.get_n_items())]
+        return int(min(heights or [1080]) * 0.86) - 120
+
+    def build_column(self, column):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=26,
+                      valign=Gtk.Align.START)
+        for name, rows in column:
+            box.append(self.build_group(name, rows))
+        return box
+
+    def build_group(self, name, rows):
+        """One group is a two-column grid: keys against the gutter, labels
+        against the spine. The heading rides the same two columns, so the
+        prefix keycap sits at the head of the key column it belongs to."""
+        prefix, note = GROUP_HEAD.get(name, (None, name.lower()))
+        grid = Gtk.Grid(column_spacing=11, row_spacing=4)
+
+        if prefix:
+            head = caps(prefix, prefix=True, align=Gtk.Align.END)
+            head.set_margin_bottom(9)
+            grid.attach(head, 0, 0, 1, 1)
+        if note:
+            text = Gtk.Label(label=note, xalign=0.0, valign=Gtk.Align.CENTER)
+            text.add_css_class("group-note")
+            text.set_margin_bottom(9)
+            grid.attach(text, 1, 0, 1, 1)
+
+        for i, row in enumerate(rows, start=1):
+            key_box = caps(row["keys"], align=Gtk.Align.END)
+            label = Gtk.Label(label=row["label"], xalign=0.0, hexpand=True)
+            label.add_css_class("label")
+            label.set_ellipsize(Pango.EllipsizeMode.END)
+            label.set_max_width_chars(34)
+            grid.attach(key_box, 0, i, 1, 1)
+            grid.attach(label, 1, i, 1, 1)
+            self.rows.append((key_box, label, row["chord"],
+                              f"{name} {' '.join(row['keys'])} {row['label']}".lower()))
+
+        self.groups.append((grid, name, len(self.rows) - len(rows), len(self.rows)))
+        return grid
+
+    def on_filter(self, _entry):
+        self.apply()
+
+    def apply(self):
+        """Text and held modifiers narrow the sheet; text wins when both apply.
+
+        Typing needs Shift for capitals, and reading that as "show me the
+        Super + Shift chord" would fight the search box, so a query in the
+        filter suspends the modifier reaction until it is cleared.
+        """
+        words = self.entry.get_text().strip().lower().split()
+        chord = frozenset() if words else self.held
+
+        for key_box, label, row_chord, haystack in self.rows:
+            visible = (all(word in haystack for word in words)
+                       and (not chord or row_chord == chord))
+            key_box.set_visible(visible)
+            label.set_visible(visible)
+        for grid, _, start, end in self.groups:
+            grid.set_visible(any(self.rows[i][0].get_visible()
+                                 for i in range(start, end)))
+        self.retally()
+
+    def describe_empty(self):
+        words = self.entry.get_text().strip()
+        if words:
+            return f"No bind matches \u201c{words}\u201d."
+        chord = " + ".join(n for n in CHORD_ORDER if n in self.held)
+        return f"Nothing is bound to {chord}." if chord else ""
+
+    def retally(self):
+        total = len(self.rows)
+        shown = sum(1 for grid, _, start, end in self.groups if grid.get_visible()
+                    for i in range(start, end) if self.rows[i][0].get_visible())
+        self.tally.set_label(f"{total} binds" if shown == total
+                             else f"{shown} of {total}")
+        self.empty.set_label(self.describe_empty())
+        self.empty.set_visible(shown == 0 and self.view == "list")
+        if self.window:
+            self.window.set_default_size(-1, -1)
+
+
+if __name__ == "__main__":
+    # --keyboard / --list pick the view; otherwise the last one used opens.
+    VIEWS = {"--keyboard": "keyboard", "--list": "list"}
+    view = next((VIEWS[a] for a in sys.argv[1:] if a in VIEWS), None)
+    sys.exit(Sheet(view).run([a for a in sys.argv if a not in VIEWS]))
