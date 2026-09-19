@@ -1,7 +1,5 @@
 # Global preferences
 
-I am **Jaeho Cho**, `jaeho2025@gmail.com`, not Jaewon Cho / jaewon0907@gmail.com.
-
 ## Communication and choices
 
 - Be terse; match length to the task. Plain American English, light on em dashes. Don't narrate deliberation or repeat the diff.
@@ -18,6 +16,7 @@ I am **Jaeho Cho**, `jaeho2025@gmail.com`, not Jaewon Cho / jaewon0907@gmail.com
 
 ## Verification
 
+- Unfamiliar or possibly-new names are lookup prompts, not inference prompts; assume anything may postdate training data. Check docs or source before asserting, and say what remains unverified.
 - Reproduce the reported state. For layout bugs, measure rendered bounds through the ancestor chain and inspect the installed theme's cascade, including generic classes and toolkit defaults. Check rest, hover, and focus separately.
 - Treat causes as hypotheses until a controlled change fixes the measured symptom. Parsing, reload success, and a clean exit do not establish correct behavior. Say exactly what was tested.
 - If I report a fix failed, reopen the diagnosis and correct stale memory. Failed workarounds do not establish that a fix is impossible.

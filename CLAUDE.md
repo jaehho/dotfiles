@@ -1,6 +1,6 @@
 # Dotfiles
 
-GNU Stow dotfiles for Arch + Hyprland and Ubuntu/Debian. `home/` mirrors `$HOME`; `system/` holds system configs; `packages/` holds manifests. Gate distro-specific work through `scripts/lib.sh`. There is no Makefile; see `TODO.md` for current work.
+GNU Stow dotfiles for Arch + Hyprland and Ubuntu/Debian. `home/` mirrors `$HOME`; `system/` holds system configs; `packages/` holds manifests. Gate distro-specific work through `scripts/lib.sh`. See `TODO.md` for current work.
 
 ## Operating model
 
