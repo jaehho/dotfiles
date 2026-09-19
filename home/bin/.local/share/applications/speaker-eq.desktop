@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Speaker EQ
+Comment=Tune the laptop speakers' EQ by ear, on the live speakers
+Exec=speaker-eq
+Icon=multimedia-equalizer-symbolic
+Terminal=false
+Categories=AudioVideo;Audio;Mixer;
+StartupWMClass=dev.jaeho.speakereq

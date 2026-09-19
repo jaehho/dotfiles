@@ -1,0 +1,1217 @@
+#!/usr/bin/env python3
+"""speaker-eq -- tune the speaker EQ by ear, on the live speaker sink.
+
+speaker-measure measures the speakers and fits a correction, but a fit is only
+as right as the mic behind it, and two honest mics can disagree by as much as
+the defects being corrected. This window settles it by ear: it plots the EQ
+over the saved measurements and moves its bands on the live speaker sink while
+music plays. It compares against the saved EQ or against no EQ at matched
+loudness, because a cut-only EQ always plays quieter and quieter always sounds
+worse. Save keeps the result as a run of its own and applies it the way
+`speaker-measure --apply` does.
+
+How the EQ is built into the sink and applied lives in speaker-measure, which
+this loads as a module; nothing here writes PipeWire config of its own.
+"""
+
+import contextlib
+import importlib.machinery
+import importlib.util
+import io
+import json
+import math
+import os
+import signal
+import sys
+import threading
+import time
+from datetime import datetime
+from pathlib import Path
+
+import cairo
+import gi
+import numpy as np
+
+gi.require_version("Gdk", "4.0")
+gi.require_version("Gtk", "4.0")
+gi.require_version("Pango", "1.0")
+gi.require_version("PangoCairo", "1.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango, PangoCairo
+
+
+def load_speaker_measure():
+    """speaker-measure is a script rather than a package, so load it by path."""
+    path = Path(__file__).resolve().parent / "speaker-measure"
+    loader = importlib.machinery.SourceFileLoader("speaker_measure", str(path))
+    module = importlib.util.module_from_spec(
+        importlib.util.spec_from_loader(loader.name, loader))
+    loader.exec_module(module)
+    return module
+
+
+sm = load_speaker_measure()
+
+APP_ID = "dev.jaeho.speakereq"
+MAX_BANDS = 12  # keeps the graph well inside the 4096-byte live param
+FREQ, GAIN, Q = (20.0, 20000.0), (-24.0, 12.0), (0.1, 10.0)
+KINDS = ("PK", "LSC", "HSC")
+KIND_LABEL = {"PK": "Bell", "LSC": "Low shelf", "HSC": "High shelf"}
+GRID = np.geomspace(*FREQ, 480)
+Z1 = np.exp(-1j * 2 * np.pi * GRID / sm.FS)
+PALETTE = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "theme/palette"
+
+
+# --- the EQ ---------------------------------------------------------------
+def band_db(band, grid=GRID, z1=Z1):
+    kind, fc, gain, q = band
+    return sm.biquad_db(grid, kind, fc, gain, q, z1=z1)
+
+
+def natural_preamp(filters):
+    """The preamp an EQ is saved with. No EQ plays untouched."""
+    return sm.eq_preamp(GRID, filters) if filters else 0.0
+
+
+def level(filters, band):
+    """An EQ's average power gain over `band` in dB, its preamp included."""
+    if not filters:
+        return 0.0
+    sel = (GRID >= band[0]) & (GRID <= band[1])
+    db = sm.total_db(GRID, filters, z1=Z1)[sel] + natural_preamp(filters)
+    return 10 * math.log10(float(np.mean(10 ** (db / 10))))
+
+
+def sink_db_now(device):
+    """The sink's volume in dB, or None. Unlike speaker-measure's pactl_json,
+    it never exits the process."""
+    try:
+        sinks = json.loads(sm.run(["pactl", "-f", "json", "list", "sinks"]).stdout)
+    except ValueError:
+        return None
+    sink = next((s for s in sinks if s.get("name") == device), None)
+    return sm.sink_level(sink)[0] if sink else None
+
+
+class Run:
+    """A saved run: a fit from a measurement, or a tuning saved from here."""
+
+    def __init__(self, path):
+        self.name = path.name
+        self.meta = json.loads((path / "meta.json").read_text())
+        self.measured = (path / "response.csv").exists()
+        self.filters = [(f["type"], float(f["hz"]), float(f["db"]), float(f["q"]))
+                        for f in self.meta.get("filters", [])]
+        band = self.meta.get("band")
+        self.band = (float(band[0]), float(band[1])) if band else None
+
+    def label(self):
+        try:
+            when = time.strftime("%b %-d, %H:%M", time.strptime(self.name[:15], "%Y%m%dT%H%M%S"))
+        except ValueError:
+            when = self.name
+        source = str(self.meta.get("source", ""))
+        how = ("tuned by ear" if "tuned_from" in self.meta
+               else "phone recording" if source.startswith("external recording")
+               else "built-in mic" if "__Mic1__" in source else "measured")
+        n = len(self.filters)
+        return f"{when} · {how} · {n} band{'s' * (n != 1)}"
+
+    def response(self):
+        data = np.loadtxt(sm.STATE / self.name / "response.csv", delimiter=",", skiprows=1)
+        return data[:, 0], data[:, 1], data[:, 2]
+
+
+def saved_runs():
+    """Every run with readable metadata, newest first."""
+    runs = []
+    for meta in sorted(sm.STATE.glob("*/meta.json"), reverse=True):
+        with contextlib.suppress(OSError, ValueError, KeyError, TypeError):
+            runs.append(Run(meta.parent))
+    return runs
+
+
+def applied_run(runs):
+    with contextlib.suppress(OSError, ValueError):
+        name = json.loads(sm.APPLIED.read_text()).get("run")
+        return next((r for r in runs if r.name == name), None)
+    return None
+
+
+def measured_origin(run, runs):
+    """The measured run a tuning descends from, following tuned_from."""
+    by_name, seen = {r.name: r for r in runs}, set()
+    while run is not None and not run.measured and run.name not in seen:
+        seen.add(run.name)
+        run = by_name.get(run.meta.get("tuned_from"))
+    return run
+
+
+def save_tuned(filters, band, source, run_name=None):
+    """Keep a tuning as a run of its own and make it the applied EQ.
+
+    Saving again from the same window rewrites that run rather than piling up
+    another. Returns (run name, speaker-measure's report, its warnings).
+    """
+    filters = sorted(filters, key=lambda f: f[1])
+    preamp = natural_preamp(filters)
+    now = datetime.now().astimezone()
+    run_dir = sm.STATE / (run_name or now.strftime("%Y%m%dT%H%M%S"))
+    if source == run_dir.name:  # reloaded this very run, so keep where it came from
+        with contextlib.suppress(OSError, ValueError):
+            source = json.loads((run_dir / "meta.json").read_text()).get("tuned_from")
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        speaker = sm.speaker_output()
+        device = speaker["device"] if speaker else None
+        db = sink_db_now(device) if device else None
+        run_dir.mkdir(parents=True, exist_ok=True)
+        sm.write_apo(run_dir / "eq.txt", filters, preamp, [
+            f"speaker-eq {now:%Y-%m-%d %H:%M}",
+            f"sink {device}" + (f" at {db:+.1f} dB" if db is not None else ""),
+            f"tuned by ear from {source or 'flat'}",
+        ])
+        # Shaped like a measured run's, so speaker-measure --verify and the
+        # Load menu here both read it.
+        (run_dir / "meta.json").write_text(json.dumps({
+            "when": now.isoformat(timespec="seconds"),
+            "sink": device, "sink_db": db, "tuned_from": source,
+            "band": list(band) if band else None,
+            "filters": [{"type": k, "hz": fc, "db": g, "q": q} for k, fc, g, q in filters],
+            "preamp_db": preamp,
+        }, indent=2) + "\n")
+        sm.eq_apply(filters, preamp, run_dir.name)
+    return run_dir.name, out.getvalue(), err.getvalue()
+
+
+# --- PipeWire, off the GTK thread ------------------------------------------
+class Link:
+    """Everything that talks to PipeWire, on a thread of its own.
+
+    A pw-cli call takes about 10 ms and a pw-dump about 20, a visible stutter
+    at every step of a drag if the window waited on them. The window only says
+    what should be playing; this sends the latest of it, and follows the
+    speaker sink when it goes away or is rebuilt.
+
+    Moving a band changes only control values, which PipeWire applies on its
+    next cycle. Adding, removing or retyping one changes the graph's nodes, so
+    the whole graph is loaded again, with the current values in it. Controls
+    sent while the sink is suspended are kept and applied when it next starts,
+    so only a rebuilt sink needs anything sent again.
+    """
+
+    POLL = 1.0
+
+    def __init__(self, device, on_status):
+        self.device, self.on_status = device, on_status
+        self.lock, self.wake = threading.Lock(), threading.Event()
+        self.want = self.sent = self.kinds = None
+        self.node = self.state = None
+        self.jobs, self.stopping, self.closed = [], False, False
+        self.thread = threading.Thread(target=self.loop, daemon=True)
+        self.thread.start()
+
+    def play(self, filters, preamp):
+        with self.lock:
+            self.want = (list(filters), preamp)
+        self.wake.set()
+
+    def call(self, job, done):
+        """job() here, in turn with what is sent to PipeWire; done(result) on
+        the GTK thread, with the exception as the result if it raised."""
+        with self.lock:
+            self.jobs.append((job, done))
+        self.wake.set()
+
+    def loop(self):
+        polled = 0.0
+        while not self.stopping:
+            self.wake.wait(self.POLL)
+            self.wake.clear()
+            if time.monotonic() - polled >= self.POLL:
+                self.poll()
+                polled = time.monotonic()
+            self.send()
+            while True:
+                with self.lock:
+                    if not self.jobs:
+                        break
+                    job, done = self.jobs.pop(0)
+                try:
+                    result = job()
+                # Any failure is the job's result, so the thread outlives it;
+                # speaker-measure's die() raises SystemExit.
+                except (Exception, SystemExit) as e:  # noqa: BLE001
+                    result = e
+                GLib.idle_add(done, result)
+                polled = 0.0  # a save restarts wireplumber, which rebuilds the sink
+
+    def find(self):
+        for n in sm.pw_nodes():
+            if n["info"]["props"].get("node.name") == self.device:
+                return n["id"], n["info"].get("state")
+        return None, None
+
+    def poll(self):
+        node, self.state = self.find()
+        if node != self.node:
+            # New, gone, or rebuilt from the rule: whatever graph it has is not ours.
+            self.kinds = self.sent = None
+        self.node = node
+        volume = sink_db_now(self.device) if node is not None else None
+        GLib.idle_add(self.on_status, node is not None, self.state, volume)
+
+    def send(self):
+        with self.lock:
+            want = self.want
+        if want is None or self.node is None or want == self.sent:
+            return
+        filters, preamp = want
+        kinds = [f[0] for f in filters]
+        if kinds != self.kinds:
+            # A node id is reused once its node is gone, and a whole graph
+            # must not land on whatever took the id over.
+            if self.find()[0] != self.node:
+                self.node = self.kinds = self.sent = None
+                return
+            sm.engage_eq(self.node, sm.eq_graph(filters, preamp), True)
+            self.kinds = kinds
+        else:
+            sm.run(["pw-cli", "set-param", str(self.node), "Props",
+                    sm.eq_controls(filters, preamp)])
+        self.sent = want
+
+    def close(self, engaged, saved):
+        """Stop, then leave the sink as its rule built it: `saved` is what that
+        plays, and `engaged` whether quick settings had the EQ on."""
+        self.stopping = True
+        self.wake.set()
+        self.thread.join(timeout=20)
+        self.closed = True
+        if engaged and self.kinds is not None and self.sent == saved:
+            return
+        node, graph = sm.speaker_eq(self.device)
+        if node is not None:
+            sm.engage_eq(node, graph, engaged)
+        elif self.node is not None and self.kinds is not None:
+            # No rule behind the sink: take out the graph loaded from here.
+            sm.run(["pw-cli", "set-param", str(self.node), "Props",
+                    f'{{ params = [ "{sm.EQ_PARAM}" "" ] }}'])
+
+
+# --- drawing ----------------------------------------------------------------
+FALLBACK = {
+    "base": "141c1e", "mantle": "101719", "crust": "0c1315", "text": "cfdadc",
+    "subtext0": "9da7a9", "subtext1": "b6c0c2", "surface0": "20282a",
+    "surface1": "2f3739", "surface2": "41494c", "overlay0": "778184",
+    "overlay1": "858f92", "blue": "609fd2", "sapphire": "3daab0",
+    "green": "70a971", "peach": "ca865e", "yellow": "b0954a", "red": "cf7f79",
+}
+
+
+def palette():
+    """The desktop theme's colors, as theme-apply writes them."""
+    colors = dict(FALLBACK)
+    with contextlib.suppress(OSError):
+        for line in PALETTE.read_text().splitlines():
+            key, sep, val = line.strip().partition("=")
+            if sep and not key.startswith("#"):
+                colors[key.strip()] = val.strip()
+    return colors
+
+
+def rgb(hex_color):
+    return tuple(int(hex_color[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+CSS = """
+window.speakereq, window.speakereq > scrolledwindow {{ background: #{base}; color: #{text}; }}
+window.speakereq headerbar {{
+  background: #{mantle}; color: #{text}; box-shadow: none;
+  border-bottom: 1px solid #{surface0};
+}}
+.title {{ font-weight: 700; }}
+.subtitle {{ font-size: 11px; color: #{subtext0}; }}
+.subtitle.playing {{ color: #{green}; }}
+.subtitle.absent {{ color: #{yellow}; }}
+.panel {{
+  background: #{mantle}; border: 1px solid #{surface0};
+  border-radius: 12px; padding: 12px;
+}}
+.heading {{ font-size: 11px; font-weight: 700; color: #{overlay0}; }}
+.dim {{ color: #{overlay1}; font-size: 12px; }}
+.listen button:checked {{ background: alpha(#{blue}, 0.32); color: #{text}; }}
+button.suggested-action {{ background: #{sapphire}; color: #{crust}; }}
+button.suggested-action:disabled {{ background: #{surface1}; color: #{overlay0}; }}
+list.bands {{ background: transparent; }}
+list.bands > row {{ border-radius: 8px; padding: 3px 6px; }}
+list.bands > row.selected {{ background: alpha(#{blue}, 0.16); }}
+.notice {{ border-radius: 10px; padding: 6px 6px 6px 12px; border: 1px solid; }}
+.notice.info {{ background: alpha(#{sapphire}, 0.12); border-color: alpha(#{sapphire}, 0.45); }}
+.notice.warn {{ background: alpha(#{yellow}, 0.12); border-color: alpha(#{yellow}, 0.5); }}
+.notice.error {{ background: alpha(#{red}, 0.12); border-color: alpha(#{red}, 0.5); }}
+"""
+
+FONT = Pango.FontDescription.from_string("Adwaita Sans 8.5")
+FONT_BOLD = Pango.FontDescription.from_string("Adwaita Sans Bold 9")
+
+
+class Frame:
+    """A plot's mapping between pixels and (frequency, dB)."""
+
+    L, R, T, B = 40, 12, 10, 22
+
+    def __init__(self, width, height, span):
+        self.lo, self.hi = span
+        self.pw, self.ph = max(width - self.L - self.R, 1), max(height - self.T - self.B, 1)
+        self.span = math.log(FREQ[1] / FREQ[0])
+
+    def x(self, f):
+        return self.L + np.log(np.asarray(f) / FREQ[0]) / self.span * self.pw
+
+    def y(self, db):
+        return self.T + (self.hi - np.asarray(db)) / (self.hi - self.lo) * self.ph
+
+    def f(self, x):
+        return FREQ[0] * math.exp((x - self.L) / self.pw * self.span)
+
+    def db(self, y):
+        return self.hi - (y - self.T) / self.ph * (self.hi - self.lo)
+
+    def inside(self, x, y):
+        return self.L <= x <= self.L + self.pw and self.T <= y <= self.T + self.ph
+
+
+def text(cr, value, x, y, color, font=FONT, align=0.0, valign=0.0, ink=False):
+    """Draw `value` with (align, valign) of its box at (x, y). `ink` centers on
+    the glyphs themselves, which a digit in a small circle needs."""
+    layout = PangoCairo.create_layout(cr)
+    layout.set_font_description(font)
+    layout.set_text(value, -1)
+    box, logical = layout.get_pixel_extents()
+    if not ink:
+        box = logical
+    cr.set_source_rgb(*color)
+    cr.move_to(x - box.x - box.width * align, y - box.y - box.height * valign)
+    PangoCairo.show_layout(cr, layout)
+
+
+def stroke(cr, xs, ys, color, width, alpha=1.0, dash=()):
+    ys = np.clip(ys, -1e4, 1e4)
+    cr.set_source_rgba(*color, alpha)
+    cr.set_line_width(width)
+    cr.set_dash(list(dash))
+    cr.move_to(xs[0], ys[0])
+    for x, y in zip(xs[1:], ys[1:]):
+        cr.line_to(x, y)
+    cr.stroke()
+    cr.set_dash([])
+
+
+def draw_axes(cr, fr, c, band):
+    cr.set_source_rgb(*c["base"])
+    cr.rectangle(fr.L, fr.T, fr.pw, fr.ph)
+    cr.fill()
+    if band:  # outside what the speakers play
+        cr.set_source_rgba(*c["crust"], 0.75)
+        cr.rectangle(fr.L, fr.T, float(fr.x(band[0])) - fr.L, fr.ph)
+        cr.rectangle(float(fr.x(band[1])), fr.T, fr.L + fr.pw - float(fr.x(band[1])), fr.ph)
+        cr.fill()
+    cr.set_line_width(1)
+    cr.set_source_rgb(*c["surface0"])
+    for decade in (10, 100, 1000, 10000):
+        for m in range(1, 10):
+            if FREQ[0] <= m * decade <= FREQ[1]:
+                x = round(float(fr.x(m * decade))) + 0.5
+                cr.move_to(x, fr.T)
+                cr.line_to(x, fr.T + fr.ph)
+    for db in range(math.ceil(fr.lo / 3) * 3, int(fr.hi) + 1, 3):
+        y = round(float(fr.y(db))) + 0.5
+        cr.move_to(fr.L, y)
+        cr.line_to(fr.L + fr.pw, y)
+    cr.stroke()
+    cr.set_source_rgb(*c["surface2"])
+    y0 = round(float(fr.y(0))) + 0.5
+    cr.move_to(fr.L, y0)
+    cr.line_to(fr.L + fr.pw, y0)
+    cr.stroke()
+    for f in (20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000):
+        x = min(max(float(fr.x(f)), fr.L + 8), fr.L + fr.pw - 8)
+        text(cr, f"{f // 1000}k" if f >= 1000 else str(f), x, fr.T + fr.ph + 5, c["overlay1"], align=0.5)
+    for db in range(math.ceil(fr.lo / 6) * 6, int(fr.hi) + 1, 6):
+        text(cr, f"{db:+d}" if db else "0", fr.L - 6, float(fr.y(db)), c["overlay1"], align=1.0, valign=0.5)
+
+
+class EqPlot(Gtk.DrawingArea):
+    """The EQ, with a point per band to drag."""
+
+    SPAN = GAIN
+
+    def __init__(self, win):
+        super().__init__(hexpand=True, focusable=True)
+        self.win, self.frame, self.pointer, self.dragging = win, None, None, None
+        self.set_content_height(300)
+        self.set_draw_func(self.draw)
+        drag = Gtk.GestureDrag()
+        drag.connect("drag-begin", self.on_drag_begin)
+        drag.connect("drag-update", self.on_drag_update)
+        drag.connect("drag-end", lambda *_a: setattr(self, "dragging", None))
+        self.add_controller(drag)
+        click = Gtk.GestureClick()
+        click.connect("pressed", self.on_pressed)
+        self.add_controller(click)
+        motion = Gtk.EventControllerMotion()
+        motion.connect("motion", self.on_motion)
+        motion.connect("leave", self.on_leave)
+        self.add_controller(motion)
+        scroll = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.VERTICAL)
+        scroll.connect("scroll", self.on_scroll)
+        self.add_controller(scroll)
+
+    def hit(self, x, y):
+        if self.frame is None:
+            return None
+        best, dist = None, 14.0
+        for i, (_kind, fc, gain, _q) in enumerate(self.win.bands):
+            d = math.hypot(float(self.frame.x(fc)) - x, float(self.frame.y(gain)) - y)
+            if d < dist:
+                best, dist = i, d
+        return best
+
+    def on_drag_begin(self, gesture, x, y):
+        self.grab_focus()
+        i = self.hit(x, y)
+        if i is None:
+            gesture.set_state(Gtk.EventSequenceState.DENIED)
+            return
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        _kind, fc, gain, _q = self.win.bands[i]
+        # Move the point, not the pointer: grabbing it off-center must not make it jump.
+        self.dragging = (i, float(self.frame.x(fc)), float(self.frame.y(gain)))
+        self.win.select(i)
+
+    def on_drag_update(self, _gesture, dx, dy):
+        if self.dragging is None:
+            return
+        i, x0, y0 = self.dragging
+        self.win.edit(i, ("drag", i),
+                      fc=round(min(max(self.frame.f(x0 + dx), FREQ[0]), FREQ[1])),
+                      gain=round(min(max(self.frame.db(y0 + dy), GAIN[0]), GAIN[1]), 1))
+
+    def on_pressed(self, _gesture, n_press, x, y):
+        self.grab_focus()
+        if n_press == 2 and self.frame and self.frame.inside(x, y) and self.hit(x, y) is None:
+            self.win.add_band(round(self.frame.f(x)), round(min(max(self.frame.db(y), GAIN[0]), GAIN[1]), 1))
+
+    def on_motion(self, _controller, x, y):
+        self.pointer = (x, y)
+        self.set_cursor_from_name("grab" if self.hit(x, y) is not None else "crosshair")
+        self.queue_draw()
+
+    def on_leave(self, _controller):
+        self.pointer = None
+        self.queue_draw()
+
+    def on_scroll(self, _controller, _dx, dy):
+        # Only over a point, so the page still scrolls everywhere else.
+        i = self.hit(*self.pointer) if self.pointer else None
+        if i is None:
+            return False
+        self.win.select(i)
+        q = self.win.bands[i][3] * 2 ** (-dy / 8)
+        self.win.edit(i, ("scroll", i), q=min(max(q, Q[0]), Q[1]))
+        return True
+
+    def draw(self, _area, cr, width, height):
+        win, c = self.win, self.win.colors
+        fr = self.frame = Frame(width, height, self.SPAN)
+        draw_axes(cr, fr, c, win.band)
+        xs = fr.x(GRID)
+        curves = [band_db(b) for b in win.bands]
+        cr.save()
+        cr.rectangle(fr.L, fr.T, fr.pw, fr.ph)
+        cr.clip()
+        cr.set_line_join(cairo.LINE_JOIN_ROUND)
+        for i, db in enumerate(curves):
+            if i != win.sel:
+                stroke(cr, xs, fr.y(db), c["blue"], 1.2, alpha=0.35)
+        if 0 <= win.sel < len(curves):
+            ys = np.clip(fr.y(curves[win.sel]), -1e4, 1e4)
+            cr.move_to(xs[0], float(fr.y(0)))
+            for x, y in zip(xs, ys):
+                cr.line_to(x, y)
+            cr.line_to(xs[-1], float(fr.y(0)))
+            cr.set_source_rgba(*c["peach"], 0.22)
+            cr.fill()
+        total = sum(curves) if curves else np.zeros_like(GRID)
+        stroke(cr, xs, fr.y(total), c["blue"], 2.5, dash=(7, 5) if win.listen != "edited" else ())
+        cr.restore()
+        for i, (_kind, fc, gain, _q) in enumerate(win.bands):
+            x, y = float(fr.x(fc)), float(fr.y(gain))
+            cr.arc(x, y, 11 if i == win.sel else 9.5, 0, 2 * math.pi)
+            cr.set_source_rgb(*(c["peach"] if i == win.sel else c["blue"]))
+            cr.fill_preserve()
+            cr.set_line_width(2)
+            cr.set_source_rgb(*c["mantle"])
+            cr.stroke()
+            text(cr, str(i + 1), x, y, c["crust"], FONT_BOLD, align=0.5, valign=0.5, ink=True)
+        if win.listen != "edited":
+            text(cr, f"Listening to {'the saved EQ' if win.listen == 'saved' else 'no EQ'}",
+                 fr.L + 8, fr.T + 6, c["peach"])
+        if self.pointer and self.dragging is None and fr.inside(*self.pointer):
+            f, db = fr.f(self.pointer[0]), fr.db(self.pointer[1])
+            hz = f"{f / 1000:.2f} kHz" if f >= 1000 else f"{f:.0f} Hz"
+            text(cr, f"{hz}  {db:+.1f} dB", fr.L + fr.pw - 8, fr.T + 6, c["overlay1"], align=1.0)
+
+
+class MeasuredPlot(Gtk.DrawingArea):
+    """A saved measurement, as measured and as the edited EQ would leave it."""
+
+    SPAN = GAIN
+
+    def __init__(self, win):
+        super().__init__(hexpand=True)
+        self.win, self.run, self.data = win, None, None
+        self.set_content_height(220)
+        self.set_draw_func(self.draw)
+
+    def show(self, run):
+        self.run, self.data = run, None
+        if run is not None:
+            with contextlib.suppress(OSError, ValueError):
+                self.data = run.response()
+        self.queue_draw()
+
+    def draw(self, _area, cr, width, height):
+        c = self.win.colors
+        fr = Frame(width, height, self.SPAN)
+        band = self.run.band if self.run else None
+        draw_axes(cr, fr, c, band)
+        if self.data is None:
+            text(cr, "Pick a measurement to see what this EQ does to it",
+                 fr.L + fr.pw / 2, fr.T + fr.ph / 2, c["overlay1"], align=0.5, valign=0.5)
+            return
+        freq, measured, target = self.data
+        inband = (freq >= band[0]) & (freq <= band[1]) if band else np.ones_like(freq, bool)
+
+        def centered(y):
+            return y - y[inband].mean()
+
+        eq = sm.total_db(freq, [tuple(b) for b in self.win.bands])
+        xs = fr.x(freq)
+        cr.save()
+        cr.rectangle(fr.L, fr.T, fr.pw, fr.ph)
+        cr.clip()
+        cr.set_line_join(cairo.LINE_JOIN_ROUND)
+        stroke(cr, xs, fr.y(centered(target)), c["overlay1"], 1, alpha=0.8, dash=(5, 4))
+        stroke(cr, xs, fr.y(centered(measured)), c["overlay1"], 1.5)
+        stroke(cr, xs, fr.y(centered(measured + eq)), c["green"], 2.5)
+        cr.restore()
+
+
+# --- the window ---------------------------------------------------------------
+class Window(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Speaker EQ")
+        self.add_css_class("speakereq")
+        self.set_default_size(1060, 900)
+        self.hex = palette()
+        self.colors = {k: rgb(v) for k, v in self.hex.items()}
+
+        speaker = sm.speaker_output()
+        self.device = speaker["device"] if speaker else None
+        self.runs = saved_runs()
+        applied = applied_run(self.runs)
+        self.saved = list(applied.filters) if applied else []
+        self.saved_name = self.source = applied.name if applied else None
+        self.band = (applied.band if applied and applied.band else None) or next(
+            (r.band for r in self.runs if r.measured and r.band), sm.DEFAULT_BAND)
+        self.bands = [list(f) for f in self.saved]
+        self.sel, self.listen, self.reference = 0, "edited", "off"
+        self.session_run = None  # the run saved from this window, rewritten by later saves
+        self.saving = self.closing = self.syncing = False
+        self.undo, self.redo, self.edit_key, self.edit_at = [], [], None, 0.0
+        self.rows = []
+
+        node, _graph = sm.speaker_eq(self.device) if self.device else (None, None)
+        self.engaged = sm.eq_engaged(node) if node is not None else True
+
+        self.set_titlebar(self.build_header())
+        self.set_child(self.build_body())
+        keys = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self.on_key)
+        self.add_controller(keys)
+        self.connect("close-request", self.on_close_request)
+        load = Gio.SimpleAction.new("load", GLib.VariantType.new("s"))
+        load.connect("activate", self.on_load)
+        self.add_action(load)
+
+        self.link = Link(self.device, self.on_status) if self.device else None
+        self.load_button.set_menu_model(self.load_menu())
+        self.set_focus(self.plot)  # so Space and the arrow keys work from the start
+        self.rebuild_rows()
+        self.pick_measurement(measured_origin(applied, self.runs)
+                              or next((r for r in self.runs if r.measured), None))
+        self.changed()
+        if self.device is None:
+            self.notice("The speakers have never been seen as an output, so there is "
+                        "nothing to tune. Unplug headphones and open this again.", "warn")
+        elif not self.engaged:
+            self.notice("Speaker EQ is off in quick settings. It is on while this window "
+                        "is open, and goes back off when it closes.")
+
+    # --- layout ---
+    def build_header(self):
+        header = Gtk.HeaderBar()
+        titles = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
+        title = Gtk.Label(label="Speaker EQ")
+        title.add_css_class("title")
+        self.subtitle = Gtk.Label(label="looking for the speakers…")
+        self.subtitle.add_css_class("subtitle")
+        titles.append(title)
+        titles.append(self.subtitle)
+        header.set_title_widget(titles)
+
+        self.load_button = Gtk.MenuButton(label="Load", focus_on_click=False,
+                                          tooltip_text="Start from the saved EQ, another run, or flat")
+        header.pack_start(self.load_button)
+        self.save_button = Gtk.Button(label="Save", focus_on_click=False,
+                                      tooltip_text="Keep this as a run and apply it (Ctrl+S). "
+                                                   "Sound drops out for a moment.")
+        self.save_button.add_css_class("suggested-action")
+        self.save_button.connect("clicked", lambda _b: self.save())
+        header.pack_end(self.save_button)
+        self.revert_button = Gtk.Button(label="Revert", focus_on_click=False,
+                                        tooltip_text="Back to the saved EQ")
+        self.revert_button.connect("clicked", lambda _b: self.revert())
+        header.pack_end(self.revert_button)
+        return header
+
+    def build_body(self):
+        self.scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
+        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
+                       margin_top=14, margin_bottom=16, margin_start=16, margin_end=16)
+        self.scroller.set_child(body)
+
+        self.notice_revealer = Gtk.Revealer()
+        box = Gtk.Box(spacing=8)
+        box.add_css_class("notice")
+        self.notice_label = Gtk.Label(xalign=0, wrap=True, hexpand=True)
+        close = Gtk.Button.new_from_icon_name("window-close-symbolic")
+        close.add_css_class("flat")
+        close.connect("clicked", lambda _b: self.notice_revealer.set_reveal_child(False))
+        box.append(self.notice_label)
+        box.append(close)
+        self.notice_box = box
+        self.notice_revealer.set_child(box)
+        body.append(self.notice_revealer)
+
+        eq_panel = self.panel("EQ", "drag a point · scroll over it to widen or narrow · "
+                                    "double-click to add a band · shading is outside what the speakers play")
+        self.plot = EqPlot(self)
+        eq_panel.append(self.plot)
+        body.append(eq_panel)
+
+        row = Gtk.Box(spacing=10)
+        row.append(Gtk.Label(label="Listen to", css_classes=["dim"]))
+        listen = Gtk.Box(css_classes=["linked", "listen"])
+        self.listen_buttons = {}
+        first = None
+        for mode, label, tip in (("edited", "Edited", "What you are editing"),
+                                 ("saved", "Saved", "The EQ the speakers have when this window is closed"),
+                                 ("off", "No EQ", "The speakers with no EQ at all")):
+            button = Gtk.ToggleButton(label=label, focus_on_click=False,
+                                      tooltip_text=f"{tip}. Space switches between Edited and "
+                                                   "the last other one picked.")
+            if first is None:
+                first = button
+                button.set_active(True)
+            else:
+                button.set_group(first)
+            button.connect("toggled", self.on_listen, mode)
+            listen.append(button)
+            self.listen_buttons[mode] = button
+        row.append(listen)
+        self.match = Gtk.CheckButton(label="Match loudness", active=True, focus_on_click=False,
+                                     tooltip_text="Play all three at the level of the quietest EQ, "
+                                                  "so switching compares tone rather than volume. "
+                                                  "A cut-only EQ always plays quieter, and quieter "
+                                                  "always sounds worse.")
+        self.match.connect("toggled", lambda _b: self.changed())
+        row.append(self.match)
+        self.level_label = Gtk.Label(css_classes=["dim"], xalign=0, hexpand=True,
+                                     ellipsize=Pango.EllipsizeMode.END)
+        row.append(self.level_label)
+        self.add_button = Gtk.Button(label="Add band", focus_on_click=False)
+        self.add_button.connect("clicked", lambda _b: self.add_band())
+        row.append(self.add_button)
+        body.append(row)
+
+        bands_panel = self.panel(None, None)
+        header = Gtk.Box(spacing=10, margin_start=6, margin_end=6)
+        for label, width in (("", 22), ("Type", 130), ("Frequency (Hz)", 150),
+                             ("Gain (dB)", 150), ("Q", 150)):
+            header.append(Gtk.Label(label=label, xalign=0, width_request=width, css_classes=["dim"]))
+        bands_panel.append(header)
+        self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, css_classes=["bands"])
+        bands_panel.append(self.list)
+        body.append(bands_panel)
+
+        meas_panel = self.panel("Measured", None)
+        head = meas_panel.get_first_child()
+        self.meas_runs = [r for r in self.runs if r.measured]
+        self.meas_choice = Gtk.DropDown.new_from_strings(["None"] + [r.label() for r in self.meas_runs])
+        self.meas_choice.connect("notify::selected", self.on_measurement)
+        head.append(self.meas_choice)
+        legend = Gtk.Label(use_markup=True, css_classes=["dim"])
+        legend.set_markup(f'<span foreground="#{self.hex["overlay1"]}">━━</span> as measured    '
+                          f'<span foreground="#{self.hex["green"]}">━━</span> with this EQ    '
+                          f'<span foreground="#{self.hex["overlay1"]}">╍╍</span> target')
+        head.append(legend)
+        self.meas_plot = MeasuredPlot(self)
+        meas_panel.append(self.meas_plot)
+        meas_panel.append(Gtk.Label(
+            label="What one mic heard, normalized over the band that run found the speakers play. "
+                  "Two mics can disagree here by as much as the defects themselves, so let your "
+                  "ears overrule these lines.", xalign=0, wrap=True, css_classes=["dim"]))
+        body.append(meas_panel)
+
+        body.append(Gtk.Label(
+            label="Space: Edited or the other · ←/→ frequency · ↑/↓ gain (Shift for bigger steps) · "
+                  "[ ] narrower/wider · Delete remove band · Ctrl+Z undo · Ctrl+Shift+Z redo · Ctrl+S save",
+            xalign=0, wrap=True, css_classes=["dim"]))
+        return self.scroller
+
+    def panel(self, title, hint):
+        panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, css_classes=["panel"])
+        if title or hint:
+            head = Gtk.Box(spacing=12)
+            if title:
+                head.append(Gtk.Label(label=title.upper(), css_classes=["heading"]))
+            if hint:
+                head.append(Gtk.Label(label=hint, css_classes=["dim"], xalign=0,
+                                      ellipsize=Pango.EllipsizeMode.END, hexpand=True))
+            panel.append(head)
+        return panel
+
+    def spin(self, bounds, step, digits, width=150):
+        spin = Gtk.SpinButton.new_with_range(bounds[0], bounds[1], step)
+        spin.set_digits(digits)
+        spin.set_numeric(True)
+        spin.set_size_request(width, -1)
+        # A spin button takes the wheel whenever the pointer is over it, so
+        # scrolling down the page would quietly retune whatever passed under
+        # the pointer. Unless it is being edited, the page scrolls instead.
+        wheel = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.VERTICAL)
+        wheel.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        wheel.connect("scroll", self.on_spin_scroll, spin)
+        spin.add_controller(wheel)
+        return spin
+
+    def on_spin_scroll(self, controller, _dx, dy, spin):
+        focus = self.get_focus()
+        if focus is not None and focus.is_ancestor(spin):
+            return False
+        adjustment = self.scroller.get_vadjustment()
+        if controller.get_unit() == Gdk.ScrollUnit.WHEEL:
+            dy *= adjustment.get_page_size() ** (2 / 3)  # what GtkScrolledWindow steps by
+        adjustment.set_value(adjustment.get_value() + dy)
+        return True
+
+    def rebuild_rows(self):
+        while (child := self.list.get_first_child()) is not None:
+            self.list.remove(child)
+        self.rows = []
+        for i in range(len(self.bands)):
+            box = Gtk.Box(spacing=10)
+            number = Gtk.Label(label=str(i + 1), width_request=22, xalign=0, css_classes=["dim"])
+            kind = Gtk.DropDown.new_from_strings([KIND_LABEL[k] for k in KINDS])
+            kind.set_size_request(130, -1)
+            fc, gain, q = self.spin(FREQ, 10, 0), self.spin(GAIN, 0.5, 1), self.spin(Q, 0.05, 2)
+            remove = Gtk.Button.new_from_icon_name("list-remove-symbolic")
+            remove.set_tooltip_text("Remove band")
+            remove.add_css_class("flat")
+            for widget in (number, kind, fc, gain, q, remove):
+                box.append(widget)
+            kind.connect("notify::selected", self.on_kind, i)
+            for field, spin in ((1, fc), (2, gain), (3, q)):
+                spin.connect("value-changed", self.on_spin, i, field)
+            remove.connect("clicked", lambda _b, i=i: self.remove_band(i))
+            focus = Gtk.EventControllerFocus()
+            focus.connect("enter", lambda _c, i=i: self.select(i))
+            box.add_controller(focus)
+            row = Gtk.ListBoxRow(activatable=False, selectable=False, child=box)
+            click = Gtk.GestureClick()
+            click.connect("pressed", lambda *_a, i=i: self.select(i))
+            row.add_controller(click)
+            self.list.append(row)
+            self.rows.append((row, kind, fc, gain, q))
+        if not self.bands:
+            self.list.append(Gtk.Label(label="No bands: double-click the plot or use Add band.",
+                                       xalign=0, margin_top=6, margin_bottom=6, css_classes=["dim"]))
+        self.sync_rows()
+
+    def sync_rows(self):
+        self.syncing = True
+        focus = self.get_focus()
+        for i, (row, kind, fc, gain, q) in enumerate(self.rows):
+            band = self.bands[i]
+            (row.add_css_class if i == self.sel else row.remove_css_class)("selected")
+            kind.set_selected(KINDS.index(band[0]))
+            for spin, value in ((fc, band[1]), (gain, band[2]), (q, band[3])):
+                if focus is None or not focus.is_ancestor(spin):  # not while typing in it
+                    spin.set_value(value)
+        self.syncing = False
+
+    # --- state ---
+    def filters(self):
+        return [tuple(b) for b in self.bands]
+
+    def output(self):
+        """What should play now: the listened-to EQ, level-matched if asked."""
+        edited, saved = self.filters(), self.saved
+        if self.listen == "saved":
+            filters, preamp = saved, natural_preamp(saved)
+        elif self.listen == "off":
+            # Bands at 0 dB pass the signal untouched, and keeping them keeps
+            # the graph's shape, so switching needs no reload.
+            filters, preamp = [(k, fc, 0.0, q) for k, fc, _g, q in edited], 0.0
+        else:
+            filters, preamp = edited, natural_preamp(edited)
+        if self.match.get_active():
+            # Down to the quietest of the three, never up: no EQ is the
+            # loudest, and raising an EQ past its preamp could clip.
+            own = 0.0 if self.listen == "off" else level(filters, self.band)
+            preamp += min(level(edited, self.band), level(saved, self.band)) - own
+        return filters, preamp
+
+    def changed(self):
+        self.dirty = self.filters() != self.saved
+        if self.link:
+            self.link.play(*self.output())
+        edited, saved = level(self.filters(), self.band), level(self.saved, self.band)
+        if self.match.get_active():
+            self.level_label.set_text(f"all at {min(edited, saved):+.1f} dB "
+                                      f"(Edited {edited:+.1f}, Saved {saved:+.1f}, No EQ 0)")
+        else:
+            self.level_label.set_text(f"Edited {edited:+.1f} dB, Saved {saved:+.1f} dB, No EQ 0 dB")
+        can_save = self.dirty and bool(self.bands) and not self.saving and self.link is not None
+        self.save_button.set_sensitive(can_save)
+        self.revert_button.set_sensitive(self.dirty and not self.saving)
+        self.add_button.set_sensitive(len(self.bands) < MAX_BANDS)
+        self.set_title(f"Speaker EQ{' •' if self.dirty else ''}")
+        self.plot.queue_draw()
+        self.meas_plot.queue_draw()
+
+    def checkpoint(self, key=None):
+        """Remember the bands before an edit. The steps of one drag, scroll or
+        spin on one band share a checkpoint, so undo takes back the gesture."""
+        now = time.monotonic()
+        if key is None or key != self.edit_key or now - self.edit_at > 1.0:
+            self.undo.append(self.snapshot())
+            del self.undo[:-200]
+            self.redo.clear()
+        self.edit_key, self.edit_at = key, now
+
+    def edit(self, i, key, fc=None, gain=None, q=None):
+        band = self.bands[i]
+        new = [band[0], band[1] if fc is None else fc, band[2] if gain is None else gain,
+               band[3] if q is None else q]
+        if new == band:
+            return
+        self.checkpoint(key)
+        self.bands[i] = new
+        self.listen_to("edited")  # hearing the change is the point
+        self.sync_rows()
+        self.changed()
+
+    def replace(self, bands, source=None):
+        self.checkpoint()
+        self.bands = [list(b) for b in bands]
+        self.source = source
+        self.sel = min(self.sel, max(len(self.bands) - 1, 0))
+        self.rebuild_rows()
+        self.changed()
+
+    def select(self, i):
+        if i != self.sel and 0 <= i < len(self.bands):
+            self.sel = i
+            self.sync_rows()
+            self.plot.queue_draw()
+
+    def add_band(self, fc=1000, gain=0.0):
+        if len(self.bands) >= MAX_BANDS:
+            return
+        self.checkpoint()
+        self.bands.append(["PK", float(fc), float(gain), 1.0])
+        self.sel = len(self.bands) - 1
+        self.listen_to("edited")
+        self.rebuild_rows()
+        self.changed()
+
+    def remove_band(self, i):
+        if not 0 <= i < len(self.bands):
+            return
+        self.checkpoint()
+        del self.bands[i]
+        self.sel = min(self.sel, max(len(self.bands) - 1, 0))
+        self.listen_to("edited")
+        self.rebuild_rows()
+        self.changed()
+
+    def snapshot(self):
+        # The run the bands came from travels with them, so a save after an
+        # undo still records the right tuned_from.
+        return [list(b) for b in self.bands], self.source
+
+    def step(self, back=True):
+        stack, other = (self.undo, self.redo) if back else (self.redo, self.undo)
+        if not stack:
+            return
+        other.append(self.snapshot())
+        (self.bands, self.source), self.edit_key = stack.pop(), None
+        self.sel = min(self.sel, max(len(self.bands) - 1, 0))
+        self.rebuild_rows()
+        self.changed()
+
+    def revert(self):
+        if self.dirty:
+            self.replace(self.saved, self.saved_name)
+
+    def listen_to(self, mode):
+        self.listen_buttons[mode].set_active(True)
+
+    def notice(self, message, kind="info", seconds=0):
+        for k in ("info", "warn", "error"):
+            (self.notice_box.add_css_class if k == kind else self.notice_box.remove_css_class)(k)
+        self.notice_label.set_text(message)
+        self.notice_revealer.set_reveal_child(True)
+        if seconds:
+            GLib.timeout_add_seconds(seconds, lambda: self.notice_label.get_text() == message
+                                     and self.notice_revealer.set_reveal_child(False))
+
+    def pick_measurement(self, run):
+        names = [r.name for r in self.meas_runs]
+        index = names.index(run.name) + 1 if run is not None and run.name in names else 0
+        self.meas_choice.set_selected(index)
+        self.meas_plot.show(self.meas_runs[index - 1] if index else None)
+
+    def load_menu(self):
+        menu = Gio.Menu()
+        top = Gio.Menu()
+        top.append(f"Saved EQ{'' if self.saved_name else ' (none yet)'}", "win.load::@saved")
+        top.append("Flat, no bands", "win.load::@flat")
+        menu.append_section(None, top)
+        runs = saved_runs()
+        for title, group in (("Tuned by ear", [r for r in runs if not r.measured]),
+                             ("Fitted from a measurement", [r for r in runs if r.measured])):
+            section = Gio.Menu()
+            for run in group[:15]:
+                mark = " · saved" if run.name == self.saved_name else ""
+                section.append(run.label() + mark, f"win.load::{run.name}")
+            if group:
+                menu.append_section(title, section)
+        return menu
+
+    # --- actions ---
+    def on_load(self, _action, param):
+        name = param.get_string()
+        if name == "@saved":
+            self.replace(self.saved, self.saved_name)
+        elif name == "@flat":
+            self.replace([], None)
+        else:
+            run = next((r for r in saved_runs() if r.name == name), None)
+            if run is not None:
+                self.replace(run.filters, run.name)
+
+    def on_listen(self, button, mode):
+        if not button.get_active():
+            return
+        self.listen = mode
+        if mode != "edited":
+            self.reference = mode
+        self.changed()
+
+    def on_kind(self, dropdown, _pspec, i):
+        if self.syncing or i >= len(self.bands):
+            return
+        kind = KINDS[dropdown.get_selected()]
+        if kind == self.bands[i][0]:
+            return
+        self.checkpoint()
+        self.bands[i][0] = kind
+        if kind != "PK" and self.bands[i][3] > 1.0:
+            self.bands[i][3] = 0.7  # a shelf's Q is its slope, and above ~1 it overshoots
+        self.select(i)
+        self.listen_to("edited")
+        self.sync_rows()
+        self.changed()
+
+    def on_spin(self, spin, i, field):
+        if self.syncing or i >= len(self.bands):
+            return
+        value = spin.get_value()
+        # The box shows fewer digits than a fitted value has; reading back
+        # what it shows is not an edit.
+        if abs(value - self.bands[i][field]) < 0.5 * 10 ** -spin.get_digits():
+            return
+        self.select(i)
+        self.edit(i, ("spin", i, field), **{("fc", "gain", "q")[field - 1]: value})
+
+    def on_measurement(self, dropdown, _pspec):
+        i = dropdown.get_selected()
+        self.meas_plot.show(self.meas_runs[i - 1] if 0 < i <= len(self.meas_runs) else None)
+
+    def on_status(self, present, state, volume):
+        for cls in ("playing", "absent"):
+            self.subtitle.remove_css_class(cls)
+        if not present:
+            self.subtitle.set_text("speakers are not the output: headphones plugged in?")
+            self.subtitle.add_css_class("absent")
+        elif state == "running":
+            self.subtitle.set_text("playing" + (f" · volume {volume:.1f} dB" if volume is not None else ""))
+            self.subtitle.add_css_class("playing")
+        else:
+            self.subtitle.set_text("not playing: start some music to hear changes"
+                                   + (f" · volume {volume:.1f} dB" if volume is not None else ""))
+        return False
+
+    def on_key(self, _controller, keyval, _code, state):
+        ctrl = state & Gdk.ModifierType.CONTROL_MASK
+        shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
+        if ctrl and keyval in (Gdk.KEY_s, Gdk.KEY_S):
+            self.save()
+            return True
+        if ctrl and keyval in (Gdk.KEY_z, Gdk.KEY_Z, Gdk.KEY_y, Gdk.KEY_Y):
+            self.step(back=keyval in (Gdk.KEY_z, Gdk.KEY_Z) and not shift)
+            return True
+        focus = self.get_focus()
+        if isinstance(focus, Gtk.Text) or ctrl:
+            return False  # typing in a box
+        pressable = focus is not None and (isinstance(focus, (Gtk.Button, Gtk.CheckButton))
+                                           or focus.get_ancestor(Gtk.DropDown) is not None)
+        if keyval == Gdk.KEY_space and not pressable:
+            self.listen_to(self.reference if self.listen == "edited" else "edited")
+            return True
+        if not self.bands or focus is not self.plot:
+            return False
+        i, (_kind, fc, gain, q) = self.sel, self.bands[self.sel]
+        if keyval in (Gdk.KEY_Left, Gdk.KEY_Right):
+            octaves = (1 if keyval == Gdk.KEY_Right else -1) / (3 if shift else 24)
+            self.edit(i, ("key-f", i), fc=round(min(max(fc * 2 ** octaves, FREQ[0]), FREQ[1])))
+        elif keyval in (Gdk.KEY_Up, Gdk.KEY_Down):
+            db = (1 if keyval == Gdk.KEY_Up else -1) * (3 if shift else 0.5)
+            self.edit(i, ("key-g", i), gain=round(min(max(gain + db, GAIN[0]), GAIN[1]), 1))
+        elif keyval in (Gdk.KEY_bracketleft, Gdk.KEY_bracketright):
+            factor = 2 ** ((1 if keyval == Gdk.KEY_bracketleft else -1) / 8)
+            self.edit(i, ("key-q", i), q=min(max(q * factor, Q[0]), Q[1]))
+        elif keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
+            self.remove_band(i)
+        else:
+            return False
+        return True
+
+    def save(self, then_close=False):
+        if self.saving or not self.dirty or not self.bands or self.link is None:
+            return
+        self.saving = True
+        self.changed()
+        self.notice("Saving. Sound drops out for a moment while WirePlumber rebuilds the speaker sink.")
+        filters, source, run_name = self.filters(), self.source, self.session_run
+
+        def done(result):
+            self.saving = False
+            if isinstance(result, BaseException):
+                self.notice(f"Saving failed: {result}", "error")
+                self.changed()
+                return False
+            name, _report, warnings = result
+            self.session_run = self.saved_name = self.source = name
+            unchanged = self.filters() == filters  # nothing was edited while it saved
+            self.saved = sorted(filters, key=lambda f: f[1])
+            if unchanged:  # take the saved order, keeping the same band selected
+                chosen = self.bands[self.sel] if self.bands else None
+                self.bands = [list(f) for f in self.saved]
+                self.sel = next((j for j, b in enumerate(self.bands) if b == chosen), 0)
+            self.engaged = True  # the rebuilt sink has the EQ on
+            self.load_button.set_menu_model(self.load_menu())
+            self.rebuild_rows()
+            self.changed()
+            if warnings.strip():
+                self.notice(f"Saved as run {name}, with a warning: "
+                            + " ".join(warnings.replace("speaker-measure: ", "").split()), "warn")
+            else:
+                self.notice(f"Saved as run {name} and applied.", seconds=6)
+            if then_close:
+                self.closing = True
+                self.close()
+            return False
+
+        self.link.call(lambda: save_tuned(filters, self.band, source, run_name), done)
+
+    def on_close_request(self, _window):
+        if self.saving:
+            self.notice("Wait for the save to finish.", "warn")
+            return True
+        if self.closing or not self.dirty:
+            return False
+        dialog = Gtk.AlertDialog(message="Save the changes to the speaker EQ?",
+                                 detail="Closing without saving puts the speakers back on the saved EQ.",
+                                 buttons=["Cancel", "Close without saving", "Save"],
+                                 cancel_button=0, default_button=2, modal=True)
+
+        def chosen(dialog, result):
+            with contextlib.suppress(GLib.Error):
+                choice = dialog.choose_finish(result)
+                if choice == 1:
+                    self.closing = True
+                    self.close()
+                elif choice == 2:
+                    self.save(then_close=True)
+
+        dialog.choose(self, None, chosen)
+        return True
+
+    def shutdown(self):
+        if self.link is not None and not self.link.closed:
+            self.link.close(self.engaged, (list(self.saved), natural_preamp(self.saved)))
+
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.window = None
+
+    def do_startup(self):
+        Gtk.Application.do_startup(self)
+        colors = palette()
+        provider = Gtk.CssProvider()
+        provider.load_from_string(CSS.format(**colors))
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        # Stock widgets follow the theme's lightness, or they clash with it.
+        r, g, b = rgb(colors["base"])
+        Gtk.Settings.get_default().props.gtk_application_prefer_dark_theme = (
+            0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5)
+
+    def do_activate(self):
+        # A second launch reaches this instance and just raises the window.
+        if self.window is None:
+            self.window = Window(self)
+        self.window.present()
+
+    def do_shutdown(self):
+        if self.window is not None:
+            self.window.shutdown()
+        Gtk.Application.do_shutdown(self)
+
+
+def main():
+    app = App()
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signum, lambda: app.quit() or GLib.SOURCE_REMOVE)
+    return app.run(sys.argv[:1])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

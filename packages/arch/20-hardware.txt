@@ -10,6 +10,8 @@ pipewire
 pipewire-pulse
 power-profiles-daemon
 powertop
+python-cairo
+python-gobject
 python-numpy
 turbostat
 wiremix

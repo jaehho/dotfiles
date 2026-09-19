@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+# audio-health: detect (and optionally repair) a WirePlumber session that has
+# lost an ALSA card.
+#
+# The failure it catches, seen on omnibook 2026-09-04: WirePlumber's device
+# object for the SOF card disappears while the card's *nodes* survive inside
+# the pipewire daemon. Those orphan nodes keep the PCM open, so the desktop
+# still shows a "Speaker" sink, streams still link to it, and wpctl still
+# reports a healthy volume -- but nothing is managing the card, so the sink's
+# volume is pure software and never reaches the hardware mixer. Audio goes to
+# a node wired to nothing. Every UI lies; the speaker is silent.
+#
+# Two things make it worth automating rather than fixing by hand:
+#   - It is self-perpetuating. The orphan nodes hold the PCM busy, so a fresh
+#     WirePlumber cannot re-create the device either. `systemctl --user restart
+#     wireplumber` looks like it works and changes nothing. Only restarting
+#     *pipewire itself* destroys the orphans, so that is what --heal does.
+#   - It is invisible. There is no error, and the leak accumulates silently
+#     (24 duplicate HDMI sinks and 6 duplicate mic sources by the time it was
+#     noticed, over ~32h of uptime).
+#
+# Health is one invariant: every card in /proc/asound/cards has a PipeWire
+# device object. Duplicate node *names* are reported as the corroborating
+# symptom -- PipeWire suffixes genuinely distinct nodes (.2, .3), so two nodes
+# sharing a name verbatim only happens when a device leaked them.
+#
+# See ISSUES.md.
+
+set -uo pipefail
+
+QUIET=0
+MODE=check
+SETTLE=0
+
+usage() {
+    cat <<'USAGE'
+usage: audio-health [--check | --heal | --restart] [--settle SECONDS] [--quiet]
+
+  --check            report health, exit 1 if unhealthy (default)
+  --heal             restart the audio stack only if unhealthy
+  --restart          restart unconditionally
+  --settle SECONDS   re-poll for up to SECONDS before calling it unhealthy;
+                     use after resume, where the card legitimately takes a
+                     moment to come back and a hasty restart would thrash
+  --quiet            only speak up when something is wrong or is being fixed
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --check)   MODE=check ;;
+        --heal)    MODE=heal ;;
+        --restart) MODE=restart ;;
+        --settle)  SETTLE="${2:-}"; shift ;;
+        --quiet|-q) QUIET=1 ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "audio-health: unknown argument: $1" >&2; usage >&2; exit 2 ;;
+    esac
+    shift
+done
+
+case "$SETTLE" in
+    ''|*[!0-9]*) echo "audio-health: --settle needs whole seconds" >&2; exit 2 ;;
+esac
+
+say()  { [ "$QUIET" = 1 ] || printf '%s\n' "$*"; }
+warn() { printf '%s\n' "$*" >&2; }
+
+for cmd in pw-dump jq; do
+    command -v "$cmd" >/dev/null || { warn "audio-health: $cmd not found"; exit 2; }
+done
+
+# --- probe ----------------------------------------------------------------
+# One dump per probe, shared by both checks: two dumps could straddle a device
+# being created and disagree with each other.
+DUMP=""
+MISSING=""
+DUPS=""
+
+# Card indices the kernel knows about, e.g. "0 [NVidia ]: ..." -> 0.
+kernel_cards() { awk '/^ *[0-9]+ \[/{print $1}' /proc/asound/cards; }
+# " 1 [sofhdadsp      ]: sof-hda-dsp - ..." -> sofhdadsp
+card_name()    { sed -n "s/^ *$1 \\[\\([^ ]*\\) *\\].*/\\1/p" /proc/asound/cards; }
+
+# Sets DUMP/MISSING/DUPS. Returns 0 if healthy, 1 if unhealthy, 2 if the
+# daemon could not be reached at all -- which is a different problem from this
+# one (pipewire not running is not something to fix by restarting pipewire in
+# a loop), so callers must not treat it as unhealthy.
+probe() {
+    DUMP="$(pw-dump 2>/dev/null)" || return 2
+    jq -e 'type == "array"' >/dev/null 2>&1 <<<"$DUMP" || return 2
+
+    local pw card
+    pw="$(jq -r '.[] | select(.type == "PipeWire:Interface:Device")
+                     | .info.props["alsa.card"] // empty' <<<"$DUMP")"
+
+    MISSING=""
+    for card in $(kernel_cards); do
+        grep -qx "$card" <<<"$pw" || MISSING="$MISSING $card"
+    done
+    MISSING="${MISSING# }"
+
+    DUPS="$(jq -r '.[] | select(.type == "PipeWire:Interface:Node")
+                       | .info.props["node.name"] // empty' <<<"$DUMP" |
+            sort | uniq -d)"
+
+    [ -z "$MISSING" ] && [ -z "$DUPS" ]
+}
+
+# probe, but give a transient state up to $SETTLE seconds to resolve itself.
+probe_settled() {
+    local deadline=$((SECONDS + SETTLE)) rc
+    while :; do
+        probe; rc=$?
+        [ "$rc" = 0 ] && return 0
+        [ "$SECONDS" -ge "$deadline" ] && return "$rc"
+        sleep 1
+    done
+}
+
+complain() {
+    local card
+    for card in $MISSING; do
+        warn "audio-health: card $card ($(card_name "$card")) has no PipeWire device — unmanaged"
+    done
+    if [ -n "$DUPS" ]; then
+        warn "audio-health: duplicate (leaked) nodes:"
+        printf '  %s\n' $DUPS >&2
+    fi
+}
+
+restart_stack() {
+    say "audio-health: restarting pipewire + wireplumber"
+    # Sockets first: they are what clients reconnect through, and leaving a
+    # stale socket behind is how a "successful" restart still ends up with
+    # half the desktop talking to a daemon that no longer exists.
+    systemctl --user restart pipewire.socket pipewire-pulse.socket 2>/dev/null
+    systemctl --user restart pipewire pipewire-pulse wireplumber
+}
+
+# --- act ------------------------------------------------------------------
+case "$MODE" in
+    restart)
+        restart_stack
+        ;;
+    check)
+        probe_settled; rc=$?
+        case "$rc" in
+            0) say "audio-health: ok — $(kernel_cards | wc -l) card(s) managed, no leaked nodes" ;;
+            2) warn "audio-health: pipewire is not reachable"; exit 2 ;;
+            *) complain; exit 1 ;;
+        esac
+        ;;
+    heal)
+        probe_settled; rc=$?
+        case "$rc" in
+            0) say "audio-health: ok"; exit 0 ;;
+            2) warn "audio-health: pipewire is not reachable — not restarting"; exit 2 ;;
+        esac
+        complain
+        restart_stack
+        # The stack needs a moment to re-enumerate before the verdict means
+        # anything; reuse the settle window rather than guessing.
+        SETTLE=$(( SETTLE > 10 ? SETTLE : 10 ))
+        if probe_settled; then
+            say "audio-health: repaired"
+        else
+            complain
+            warn "audio-health: still unhealthy after restart"
+            exit 1
+        fi
+        ;;
+esac

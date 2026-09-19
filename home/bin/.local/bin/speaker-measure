@@ -54,6 +54,14 @@ trades a dip for distortion. --max-boost overrides if you want to experiment.
 The measurement is only valid near the volume it was taken at, because the
 protection DSP is level-dependent: measure at the level you actually listen at.
 The sink volume in force is recorded in meta.json for exactly this reason.
+
+Tuning by ear
+-------------
+A fit is only as right as the mic behind it, and two honest mics can disagree
+by as much as the defects being corrected. speaker-eq settles it by ear: a
+window that plots the EQ over the saved measurements and moves its bands on
+the live speaker sink while music plays. It loads this script for everything
+below about building the EQ into the sink.
 """
 import argparse
 import itertools
@@ -278,8 +286,8 @@ def speaker_output():
     return None
 
 
-def eq_conf_body(filters, preamp, device, run_name):
-    """A WirePlumber rule that builds the correction into `device` only."""
+def eq_graph_parts(filters, preamp):
+    """The correction's graph nodes and links, and the name of its last node."""
     # One mono graph of named builtins; PipeWire runs a copy per channel.
     # Both channels get the same curve: the fit came from one mic, so there is
     # no per-channel information in it to spend.
@@ -293,6 +301,33 @@ def eq_conf_body(filters, preamp, device, run_name):
         names.append(f"f{i}")
     links = [f'{{ output = "{a}:Out" input = "{b}:In" }}'
              for a, b in itertools.pairwise(names)]
+    return nodes, links, names[-1]
+
+
+def eq_graph(filters, preamp):
+    """The graph on one line, the form a live node is handed it in."""
+    nodes, links, last = eq_graph_parts(filters, preamp)
+    return (f'{{ nodes = [ {" ".join(nodes)} ] links = [ {" ".join(links)} ] '
+            f'inputs = [ "preamp:In 1" ] outputs = [ "{last}:Out" ] }}')
+
+
+def eq_controls(filters, preamp):
+    """Every control of that graph, as the params of a live Props change."""
+    params = [f'"preamp:Gain 1" {10 ** (preamp / 20):.6f}']
+    for i, (_kind, fc, g, q) in enumerate(filters, 1):
+        params.append(f'"f{i}:Freq" {fc:.2f} "f{i}:Q" {q:.3f} "f{i}:Gain" {g:.2f}')
+    return f"{{ params = [ {' '.join(params)} ] }}"
+
+
+def eq_preamp(grid, filters):
+    """Headroom for the combined response, not the biggest single band: two
+    overlapping boosts clip where neither would alone."""
+    return -max(0.0, float(total_db(grid, filters).max())) - 0.5
+
+
+def eq_conf_body(filters, preamp, device, run_name):
+    """A WirePlumber rule that builds the correction into `device` only."""
+    nodes, links, last = eq_graph_parts(filters, preamp)
     nl = "\n" + " " * 24
     return f"""\
 # Written by speaker-measure --apply from run {run_name}. Safe to delete
@@ -311,7 +346,7 @@ monitor.alsa.rules = [
                         {nl.join(links)}
                     ]
                     inputs = [ "preamp:In 1" ]
-                    outputs = [ "{names[-1]}:Out" ]
+                    outputs = [ "{last}:Out" ]
                 }}
             }}
         }}
@@ -1326,9 +1361,7 @@ def analyze(grid, meas, args, run_dir, context):
     filters, _resid = fit_filters(grid, target - meas, band, args.bands,
                                   args.max_boost, args.max_cut)
     eq = total_db(grid, filters)
-    # The preamp has to guard the combined response, not the biggest single
-    # band: two overlapping boosts clip where neither would alone.
-    preamp = -max(0.0, float(eq.max())) - 0.5
+    preamp = eq_preamp(grid, filters)
 
     applied = meas + eq
     applied -= applied[inband].mean()
