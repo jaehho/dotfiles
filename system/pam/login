@@ -1,0 +1,14 @@
+#%PAM-1.0
+# util-linux's /etc/pam.d/login plus pam_gnome_keyring, so a tty1 login unlocks
+# the keyring with the login password instead of the first app to want a secret
+# popping "Authentication required". Only the keyring *named* `login`
+# (~/.local/share/keyrings/login.keyring) is unlocked, and only if its password
+# is the login password. hyprlock includes this file too, which is harmless.
+
+auth       requisite    pam_nologin.so
+auth       include      system-local-login
+auth       optional     pam_gnome_keyring.so
+account    include      system-local-login
+session    include      system-local-login
+session    optional     pam_gnome_keyring.so auto_start
+password   include      system-local-login
