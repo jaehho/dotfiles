@@ -7,7 +7,6 @@ mermaid-filter.err
 
 # Claude Code local project state (this repo's own .claude/, not the stow package)
 .claude/settings.local.json
-.claude/skills/
 
 # impeccable skill working data
 .impeccable/

@@ -1,19 +1,27 @@
 # Dotfiles
 
-GNU Stow-based dotfiles. Primary target Arch + Hyprland; also supports Ubuntu/Debian — when editing configs, consider both. Package manifests live in `packages/` — `common.txt` (same name on both distros), `arch/*.txt` (by category), `ubuntu.txt`, plus `cargo`/`npm`/`uv`. Gate Arch-only pieces behind the distro checks in `scripts/`. `home/` holds the stow packages, each mirroring `$HOME`; `system/` holds what the `system` phase installs as root; `packages/`, `scripts/` and `hosts/` are helpers.
+GNU Stow dotfiles for Arch + Hyprland and Ubuntu/Debian. `home/` mirrors `$HOME`; `system/` holds system configs; `packages/` holds manifests. Gate distro-specific work through `scripts/lib.sh`. There is no Makefile; see `TODO.md` for current work.
 
-`make sync` is the only setup command — idempotent, safe to re-run.
+## Operating model
 
-## Non-obvious gotchas
+- `dotfiles` reports status; `dotfiles sync` converges now; `dotfiles decide` opens the recorded decisions. The dispatcher stays thin; implementation belongs in `scripts/`.
+- `scripts/converge.sh` runs unattended as system and user timer jobs. List steps with `./scripts/converge.sh --list`; run a user step with `./scripts/converge.sh user <step>`. Bootstrap is the interactive new-machine entry point.
+- Read `decisions.json` and the referenced logs under `/var/lib/dotfiles/` and `~/.local/state/dotfiles/`. Resolve causes; the next run updates decisions. Never edit the decision files or package manifests automatically to hide drift.
+- Host choices belong in `hosts/<hostname>.sh`; shared lists and install destinations belong in `scripts/lib.sh`. Put Arch packages in their category manifest or `99-inbox.txt`.
+- Arch upgrade gates live in `scripts/packages.sh`; Debian/Ubuntu upgrades belong to unattended-upgrades. Read the decision before bypassing a hold.
 
-- **Boot-critical configs** (`grub`, `mkinitcpio`, `modprobe`) are **copied** by the `system` sync phase, not symlinked — they survive a broken `/home` mount.
-- **Stow uses `--no-folding`** (individual symlinks, not directory symlinks).
-- **Per-machine choices** live in `hosts/<hostname>.sh` (committed, sourced by `scripts/lib.sh`). Sync prompts on first run for any new host.
-- **The Makefile is a dispatcher only** — logic lives in `scripts/`. Shared lists are in `scripts/lib.sh`; run one phase with `./scripts/sync.sh --list` / `./scripts/sync.sh <phase>`.
-- **Only `packages/arch/99-inbox.txt` is machine-sorted.** Drift-detected packages land there; the other `arch/*.txt` keep their comments and grouping. File inbox entries by hand.
-- **Package upgrades are gated to once per 24h** (read from `pacman.log`), so re-syncing after a config edit is cheap. `FORCE_UPGRADE=1` overrides.
-- **Claude Code config** is declarative — see `home/claude/.claude/reconcile/README.md` for reconcile and MCP secrets.
-- **`hypr-tools`** lives outside this repo (Rust, two AUR packages). AUR binaries run by default; `HOST_DEV_TOOLS=1` builds from `HOST_DEV_TOOLS_SRC` (default `~/projects/hypr-tools`) and shadows them. A missing checkout is not an error.
-- **Speaker tone is a host-side gap, not a driver bug.** The CS35L41 amps load `spk-prot` (protection) firmware and never the vendor tuning, so output is raw and bright until a host EQ supplies the correction. `speaker-measure --apply` sweeps the speakers through a mic, fits the correction, and writes a `wireplumber.conf.d` rule (read at startup) that builds it into the speaker sink itself as `audioconvert.filter-graph.0`: no extra node in mixers or pickers, and headphones, which swap in a sink of their own, never go through it. The sink's properties carry the graph even when PipeWire rejected it, a suspended node reports no graph, and `pw-cli enum-params` can show a stale cache, so prove it runs with `pw-top` busy time or `--verify`, which re-measures with the EQ off then on. A mixer's level meters capture what they show and so wake it: a lit meter in wiremix is not something playing. `--play` then `--from-recording` fit from a phone instead, which beats the built-in array bolted to the same chassis as the drivers. Runs are kept in `~/.local/state/speaker-measure/`.
-- **Text-to-speech is Kokoro behind speech-dispatcher**: the `audio` package's `kokoro-tts-server` (socket-activated, exits idle) is the default module, because Gecko apps (Zotero's Local voices) list only the default module's voices. speech-dispatcher's `SymbolsPreproc` deletes `%`, `°`, quotes and brackets before a module sees them, so `speechd.conf` omits it. `sd_generic` cuts text at any delimiter followed by a space, which splits "Fig. 3b" unless `GenericDelimiters` is overridden; an empty value does not override it. `uv run` forks the script, so `LISTEN_PID` never matches it.
-- **When `make sync` or the machine breaks, read `ISSUES.md` first** — recurring traps with copy-paste fixes up top, dated incident history below. Add to it rather than special-casing `scripts/`.
+## Change boundaries
+
+- Stow uses `--no-folding`. Boot-critical and sandbox-consumed configs must be real files, not symlinks into `/home`; follow `SYSTEM_LINKS`, `SYSTEM_INSTALLS`, and `SYSTEM_COPIES` in `scripts/lib.sh`. The boot step rebuilds and rolls back failed changes.
+- DNS belongs to systemd-resolved, including its stub link and NetworkManager integration. Preserve Tailscale split DNS.
+- Claude configuration is declarative: see `home/claude/.claude/reconcile/README.md` and `scripts/claude-reconcile.sh`. Do not put secrets in manifests.
+- Monitor rules are computed directly by `home/hypr/.config/hypr/monitors.lua`. Do not add a layout daemon or generated config.
+- The keybind sheet parses `hyprland.lua` comments and tmux `-N` notes. Label new binds. Quick-settings IDs in `hypr-settings-menu` are also called by waybar; preserve those callers when renaming.
+- Apps under `~/projects/` own their implementation and install flow. This repo owns their integration; inspect `hyprland.lua`, the converge enable list, and Neovim's lazy specs before moving functionality here.
+- swaync is the jaehho fork in `~/projects/swaync`, packaged by `packaging/PKGBUILD`. Native arrows/action digits pass through; `hypr-swaync-keys` handles Ctrl+n/p and visibility. Exclusive submaps need media/screenshot bindings too.
+
+## Troubleshooting and documentation
+
+Read [ISSUES.md](ISSUES.md) before changing a broken converge step or system behavior. It holds symptom checks, recovery, and links to historical evidence. Add recurring fixes there instead of adding speculative layers to `scripts/`.
+
+Keep this file to ownership rules and non-obvious constraints. Put detailed recipes in ISSUES.md and dated investigation history in `docs/history/`; correct disproved conclusions in memory as well as documentation.
