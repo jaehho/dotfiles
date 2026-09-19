@@ -1,0 +1,12 @@
+[Unit]
+Description=Deliver the day's keybinding tip
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=oneshot
+# `tip --notify` blocks on the notification's Got it / Not yet buttons so the
+# tip can be graded without opening a terminal. Give it most of a day to be
+# answered; an unanswered tip is simply left ungraded and comes back in two.
+ExecStart=%h/.local/bin/tip --notify
+TimeoutStartSec=8h

@@ -1,0 +1,16 @@
+[Unit]
+Description=Record desktop notifications to a searchable SQLite log
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/notification-log
+# on-failure, not always: the script exits 0 on a machine without a session
+# bus or python-gobject (the `bin` stow package is cross-distro), and `always`
+# would turn that clean no-op into a restart loop.
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

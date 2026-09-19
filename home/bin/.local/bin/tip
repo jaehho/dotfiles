@@ -1,0 +1,293 @@
+#!/usr/bin/env python3
+"""One keybinding a day, with spaced repetition.
+
+Tips live in ~/.local/share/tips/<topic>.md, one per `## Heading`. A systemd
+timer fires `tip --notify` daily; the notification carries "Got it" / "Not yet"
+buttons so grading never requires a terminal. Graded tips come back on a
+Leitner schedule -- 1, 3, 7, 21, then 60 days -- and retire once you still
+know one after the 60-day gap. An ungraded tip comes back in two days.
+
+  tip              today's tip (sticky -- same tip all day)
+  tip next         skip ahead to a new one now
+  tip got-it       mark today's tip learned (pushes it out one box)
+  tip again        reset today's tip to the start of the schedule
+  tip list [topic] every tip and its state
+  tip search TERM  grep the corpus
+  tip stats        progress per topic
+  tip reset [id]   forget grading for one tip, or all of them
+"""
+
+import html
+import json
+import os
+import re
+import subprocess
+import sys
+from datetime import date, timedelta
+from pathlib import Path
+
+# Days until a tip returns after each successful recall. Running off the end of
+# this list retires the tip.
+INTERVALS = [1, 3, 7, 21, 60]
+# A tip that was shown but never graded is not learned -- bring it back soon.
+UNGRADED_DELAY = 2
+
+TIP_DIR = Path(os.environ.get("TIP_DIR") or Path.home() / ".local/share/tips")
+STATE = Path(
+    os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state"
+) / "tip/state.json"
+
+if sys.stdout.isatty():
+    BOLD, DIM, CYAN, GREEN, YELLOW, RESET = (
+        "\033[1m", "\033[2m", "\033[36m", "\033[32m", "\033[33m", "\033[0m")
+else:
+    BOLD = DIM = CYAN = GREEN = YELLOW = RESET = ""
+
+
+# --- corpus ---------------------------------------------------------------
+
+def slug(text):
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def make_tip(topic, title, body):
+    return {
+        "id": f"{topic}:{slug(title)}",
+        "topic": topic,
+        "title": title,
+        "body": "\n".join(body).strip(),
+    }
+
+
+def load_tips():
+    """Every `## Heading` block in every corpus file, in file order."""
+    tips = []
+    for path in sorted(TIP_DIR.glob("*.md")):
+        topic = path.stem
+        title, body = None, []
+        for line in path.read_text().splitlines():
+            if line.startswith("## "):
+                if title:
+                    tips.append(make_tip(topic, title, body))
+                title, body = line[3:].strip(), []
+            elif title is not None:
+                body.append(line)
+        if title:
+            tips.append(make_tip(topic, title, body))
+    return tips
+
+
+# --- state ----------------------------------------------------------------
+
+def load_state():
+    if STATE.exists():
+        return json.loads(STATE.read_text())
+    return {"current": None, "seen": {}}
+
+
+def save_state(state):
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STATE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=2, sort_keys=True))
+    tmp.replace(STATE)
+
+
+def today():
+    return date.today().isoformat()
+
+
+def plus(days):
+    return (date.today() + timedelta(days=days)).isoformat()
+
+
+# --- selection ------------------------------------------------------------
+
+def pick(tips, state):
+    """Due review first, then unseen material, then the stalest thing left."""
+    seen = state["seen"]
+    live = [t for t in tips if not seen.get(t["id"], {}).get("retired")]
+
+    due = [t for t in live if t["id"] in seen and seen[t["id"]]["due"] <= today()]
+    if due:
+        return min(due, key=lambda t: (seen[t["id"]]["due"], seen[t["id"]]["box"]))
+
+    unseen = [t for t in live if t["id"] not in seen]
+    if unseen:
+        # Alternate topics so one corpus doesn't monopolise a month of tips.
+        last = state.get("last_topic")
+        other = [t for t in unseen if t["topic"] != last]
+        return (other or unseen)[0]
+
+    if live:
+        return min(live, key=lambda t: seen[t["id"]]["last"])
+    return None
+
+
+def current(tips, state, force=False):
+    """Today's tip. Sticky within a day unless forced."""
+    by_id = {t["id"]: t for t in tips}
+    cur = state.get("current")
+    if not force and cur and cur["date"] == today() and cur["id"] in by_id:
+        return by_id[cur["id"]]
+
+    tip = pick(tips, state)
+    if not tip:
+        return None
+
+    entry = state["seen"].setdefault(tip["id"], {"box": 0, "shown": 0})
+    entry["shown"] += 1
+    entry["last"] = today()
+    entry["due"] = plus(UNGRADED_DELAY)
+    state["current"] = {"id": tip["id"], "date": today()}
+    state["last_topic"] = tip["topic"]
+    save_state(state)
+    return tip
+
+
+# --- rendering ------------------------------------------------------------
+
+def render_term(tip, state):
+    entry = state["seen"].get(tip["id"], {})
+    box = entry.get("box", 0)
+    meter = "*" * box + "." * (len(INTERVALS) - box)
+    body = re.sub(r"`([^`]+)`", CYAN + r"\1" + RESET, tip["body"])
+    return (
+        f"\n{DIM}{tip['topic']}{RESET}  {BOLD}{tip['title']}{RESET}  {DIM}{meter}{RESET}\n\n"
+        f"{body}\n\n"
+        f"{DIM}tip got-it | tip again | tip next{RESET}\n"
+    )
+
+
+def render_body_markup(text):
+    """Notification bodies take a small subset of HTML, so escape then style."""
+    text = html.escape(text)
+    text = re.sub(r"`([^`]+)`", r"<b>\1</b>", text)
+    return re.sub(r"\n{2,}", "\n", text).strip()
+
+
+def notify(tip, state):
+    """Show the tip in the notification daemon and block on its buttons."""
+    cmd = [
+        "notify-send", "-a", "tip", "-u", "low", "-t", "0",
+        "-A", "got=Got it", "-A", "again=Not yet",
+        f"{tip['topic']}: {tip['title']}",
+        render_body_markup(tip["body"]),
+    ]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True).stdout.strip()
+    except FileNotFoundError:
+        print("notify-send not found", file=sys.stderr)
+        return 1
+    if out == "got":
+        grade(tip, state, True)
+    elif out == "again":
+        grade(tip, state, False)
+    return 0
+
+
+# --- grading --------------------------------------------------------------
+
+def grade(tip, state, learned):
+    entry = state["seen"].setdefault(tip["id"], {"box": 0, "shown": 1, "last": today()})
+    if learned:
+        entry["box"] += 1
+        if entry["box"] > len(INTERVALS):
+            entry["retired"] = True
+            entry["due"] = "9999-12-31"
+        else:
+            entry["due"] = plus(INTERVALS[entry["box"] - 1])
+    else:
+        entry["box"] = 0
+        entry.pop("retired", None)
+        entry["due"] = plus(1)
+    save_state(state)
+    return entry
+
+
+# --- commands -------------------------------------------------------------
+
+def main(argv):
+    tips = load_tips()
+    if not tips:
+        print(f"no tips found in {TIP_DIR}", file=sys.stderr)
+        return 1
+    state = load_state()
+    cmd = argv[0] if argv else "show"
+
+    if cmd in ("-h", "--help", "help"):
+        print(__doc__)
+        return 0
+
+    if cmd in ("--notify", "notify"):
+        tip = current(tips, state)
+        return notify(tip, state) if tip else 0
+
+    if cmd in ("show", "next"):
+        tip = current(tips, state, force=(cmd == "next"))
+        if not tip:
+            print("every tip retired -- `tip reset` to start over")
+            return 0
+        print(render_term(tip, state), end="")
+        return 0
+
+    if cmd in ("got-it", "ok", "again"):
+        cur = state.get("current")
+        tip = next((t for t in tips if cur and t["id"] == cur["id"]), None)
+        if not tip:
+            print("no current tip -- run `tip` first", file=sys.stderr)
+            return 1
+        entry = grade(tip, state, cmd != "again")
+        if entry.get("retired"):
+            print(f"{GREEN}retired{RESET} {tip['title']}")
+        else:
+            print(f"{tip['title']} -> next on {entry['due']} (box {entry['box']})")
+        return 0
+
+    if cmd == "list":
+        topic = argv[1] if len(argv) > 1 else None
+        for t in tips:
+            if topic and t["topic"] != topic:
+                continue
+            e = state["seen"].get(t["id"])
+            if not e:
+                mark, note = f"{DIM}.{RESET}", "new"
+            elif e.get("retired"):
+                mark, note = f"{GREEN}+{RESET}", "learned"
+            else:
+                mark, note = f"{YELLOW}o{RESET}", f"box {e['box']}, due {e['due']}"
+            print(f"{mark} {t['topic']:<10} {t['title']:<46} {DIM}{note}{RESET}")
+        return 0
+
+    if cmd == "search":
+        if len(argv) < 2:
+            print("usage: tip search TERM", file=sys.stderr)
+            return 1
+        needle = " ".join(argv[1:]).lower()
+        for t in tips:
+            if needle in t["title"].lower() or needle in t["body"].lower():
+                print(render_term(t, state), end="")
+        return 0
+
+    if cmd == "stats":
+        for topic in sorted({t["topic"] for t in tips}):
+            group = [t for t in tips if t["topic"] == topic]
+            done = sum(1 for t in group if state["seen"].get(t["id"], {}).get("retired"))
+            active = sum(1 for t in group if t["id"] in state["seen"]) - done
+            print(f"{topic:<12} {done}/{len(group)} learned, {active} in rotation")
+        return 0
+
+    if cmd == "reset":
+        if len(argv) > 1:
+            state["seen"].pop(argv[1], None)
+            save_state(state)
+        else:
+            save_state({"current": None, "seen": {}})
+        print("reset")
+        return 0
+
+    print(f"unknown command: {cmd}\n{__doc__}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

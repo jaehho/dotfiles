@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily keybinding tip
+
+[Timer]
+OnCalendar=*-*-* 10:00:00
+# Catch up after a suspend or a day powered off, so a missed day still lands a
+# tip instead of silently skipping.
+Persistent=true
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,193 @@
+#!/usr/bin/env python
+"""Record every desktop notification to a SQLite log, for later search.
+
+No notification daemon can do this. swaync's history is in-memory and dies
+with the process; mako's `makoctl history` and dunst's `dunstctl history-pop`
+are in-memory LIFO stacks with no search. So this sits one layer down, at
+D-Bus, and is deliberately daemon-agnostic: swapping swaync for mako or dunst
+does not touch it.
+
+It works by becoming a D-Bus monitor on the `Notify` method call, which is the
+message every notifier sends and every daemon receives -- so the log is a
+record of what was *sent*, independent of what the daemon chose to display.
+Note that `eavesdrop=true` in a match rule is rejected by modern dbus-daemon;
+`org.freedesktop.DBus.Monitoring.BecomeMonitor` is the supported replacement.
+
+There is no UI: query it with sqlite3.
+
+    sqlite3 ~/.local/state/notifications.db \
+      "SELECT datetime(ts,'unixepoch','localtime'), app, summary, body
+       FROM notifications ORDER BY ts DESC LIMIT 20"
+"""
+
+import os
+import re
+import sqlite3
+import sys
+import threading
+import time
+
+# Notifications that are UI feedback rather than messages. These would drown
+# the log: a volume key held down emits one Notify per repeat.
+IGNORE_APPS = (
+    r"^(swayosd|swaync|hyprland)$",
+    r"volume|brightness",
+)
+IGNORE_RE = re.compile("|".join(IGNORE_APPS), re.IGNORECASE)
+
+# Same app+summary inside this window is treated as an update of the previous
+# one, not a new entry. Progress notifications (downloads, copies) resend
+# constantly with a `replaces_id`, but a monitor sees only the outgoing call
+# and never the daemon's reply, so it cannot resolve that id -- collapsing on
+# (app, summary) is the reliable equivalent.
+COALESCE_SECONDS = 10
+
+RETENTION_DAYS = 90
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS notifications (
+    id      INTEGER PRIMARY KEY,
+    ts      REAL    NOT NULL,
+    app     TEXT    NOT NULL,
+    summary TEXT    NOT NULL,
+    body    TEXT    NOT NULL,
+    icon    TEXT    NOT NULL DEFAULT '',
+    urgency INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS notifications_ts ON notifications (ts DESC);
+"""
+
+
+def db_path():
+    state = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+    os.makedirs(state, exist_ok=True)
+    return os.path.join(state, "notifications.db")
+
+
+# GDBus dispatches the message filter on its own worker thread while the
+# retention timer fires on the main loop, so the connection is shared across
+# threads and every use of it is serialised here.
+DB_LOCK = threading.Lock()
+
+
+def connect():
+    db = sqlite3.connect(db_path(), check_same_thread=False)
+    # The browser reads this file while the daemon holds it open; WAL lets
+    # those overlap instead of one blocking the other.
+    db.execute("PRAGMA journal_mode=WAL")
+    db.executescript(SCHEMA)
+    return db
+
+
+def prune(db):
+    with DB_LOCK:
+        db.execute(
+            "DELETE FROM notifications WHERE ts < ?",
+            (time.time() - RETENTION_DAYS * 86400,),
+        )
+        db.commit()
+
+
+def record(db, app, summary, body, icon, urgency):
+    now = time.time()
+    with DB_LOCK:
+        row = db.execute(
+            "SELECT id FROM notifications WHERE app = ? AND summary = ? AND ts > ?"
+            " ORDER BY ts DESC LIMIT 1",
+            (app, summary, now - COALESCE_SECONDS),
+        ).fetchone()
+        if row:
+            db.execute(
+                "UPDATE notifications SET ts = ?, body = ?, urgency = ? WHERE id = ?",
+                (now, body, urgency, row[0]),
+            )
+        else:
+            db.execute(
+                "INSERT INTO notifications (ts, app, summary, body, icon, urgency)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (now, app, summary, body, icon, urgency),
+            )
+        db.commit()
+
+
+def main():
+    if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+        print("no session bus; nothing to log", file=sys.stderr)
+        return 0
+    try:
+        import gi
+
+        gi.require_version("Gio", "2.0")
+        from gi.repository import Gio, GLib
+    except (ImportError, ValueError) as e:
+        # Exit clean, not failed: the `bin` stow package is cross-distro and
+        # python-gobject is only pulled in with the Arch desktop stack. A
+        # non-zero exit here would have systemd restart-loop on a headless box.
+        print("python-gobject unavailable (%s); not logging" % e, file=sys.stderr)
+        return 0
+
+    db = connect()
+    prune(db)
+    GLib.timeout_add_seconds(86400, lambda: (prune(db), True)[1])
+
+    bus = Gio.DBusConnection.new_for_address_sync(
+        os.environ["DBUS_SESSION_BUS_ADDRESS"],
+        Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT
+        | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
+        None,
+        None,
+    )
+    # A monitor connection is closed by the bus if anything goes wrong; without
+    # this the main loop would spin forever on a dead connection.
+    bus.set_exit_on_close(True)
+
+    def on_message(conn, msg, incoming):
+        if not incoming or msg.get_member() != "Notify":
+            return msg
+        if msg.get_message_type() != Gio.DBusMessageType.METHOD_CALL:
+            return msg
+        try:
+            app, _replaces, icon, summary, body, _actions, hints, _timeout = (
+                msg.get_body().unpack()
+            )
+        except (TypeError, ValueError):
+            return None
+        if IGNORE_RE.search(app):
+            return None
+        # Transient and "synchronous" notifications are by definition not meant
+        # to be reviewed later -- that is what the hints mean.
+        if hints.get("transient"):
+            return None
+        if any(k.endswith("synchronous") for k in hints):
+            return None
+        record(db, app, summary, body, icon or "", int(hints.get("urgency", 1)))
+        return None
+
+    bus.add_filter(on_message)
+    bus.call_sync(
+        "org.freedesktop.DBus",
+        "/org/freedesktop/DBus",
+        "org.freedesktop.DBus.Monitoring",
+        "BecomeMonitor",
+        GLib.Variant(
+            "(asu)",
+            (
+                [
+                    "type='method_call',interface='org.freedesktop.Notifications',"
+                    "member='Notify'"
+                ],
+                0,
+            ),
+        ),
+        None,
+        Gio.DBusCallFlags.NONE,
+        -1,
+        None,
+    )
+
+    GLib.MainLoop().run()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
