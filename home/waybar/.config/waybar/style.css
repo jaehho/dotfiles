@@ -1,7 +1,16 @@
 /* ── Solarized · minimal floating islands ────────────────────────────────────
    Layout : transparent bar; modules-left / -center / -right float as 3 islands.
-   Colour : monochrome (subtext grey) + ONE accent (blue) on the active
-            workspace. Other hues survive only as semantic state (warn/alert).
+   Colour : grey means fine; a hue means a state, and each hue has one job.
+            The accents share one OKLCH lightness, so hue alone carries meaning
+            and spending one hue on two jobs makes both unreadable.
+              text / subtext0 / overlay0  primary / resting / off
+              blue    you are here: active workspace, hover pills
+              pink    special workspace
+              amber   on, worth a glance: stay awake, mic, low battery,
+                      notifications, busy load
+              red     act now: screenshare, failures, critical battery,
+                      urgent workspace, pegged CPU/RAM, DND
+              green   charging, and nothing else
    Theme  : every colour is a palette hex/decimal so `theme-apply`'s sed reskins
             it. Do not introduce off-palette colours except the blink flash. */
 
@@ -20,7 +29,7 @@ window#waybar {
 .modules-center,
 .modules-right {
     background-color: rgba(20, 28, 30, 0.88);
-    border: 1px solid rgba(63, 125, 174, 0.18);
+    border: 1px solid rgba(96, 159, 210, 0.18);
     border-radius: 14px;
     margin: 4px 0;
     padding: 0 6px;
@@ -46,12 +55,10 @@ window#waybar {
 
 /* ── Modules sit flat on the island: monochrome; hover lifts a faint pill ── */
 #workspaces,
-#custom-scratchpad,
-#custom-tray,
+#custom-window,
 #mpris,
 #clock,
-#cpu,
-#memory,
+#custom-load,
 #pulseaudio,
 #backlight,
 #battery,
@@ -73,8 +80,6 @@ window#waybar {
 }
 
 /* Hover: glyph brightens and a faint accent pill lifts under it */
-#custom-scratchpad:hover,
-#custom-tray:hover,
 #mpris:hover,
 #clock:hover,
 #pulseaudio:hover,
@@ -89,13 +94,19 @@ window#waybar {
 #systemd-failed-units:hover,
 #custom-power:hover {
     color: #cfdadc;
-    background-color: rgba(63, 125, 174, 0.14);
+    background-color: rgba(96, 159, 210, 0.14);
 }
 
-/* CPU/RAM keep their hue on hover but still get the pill */
-#cpu:hover,
-#memory:hover {
-    background-color: rgba(63, 125, 174, 0.14);
+/* The load glyphs color themselves (load.py); hover only adds the pill */
+#custom-load:hover {
+    background-color: rgba(96, 159, 210, 0.14);
+}
+
+/* Power: resting grey like its neighbours, red only under the pointer, which
+   marks a destructive action without spending red on a steady state */
+#custom-power:hover {
+    color: #cf7f79;
+    background-color: rgba(207, 127, 121, 0.14);
 }
 
 /* ── Workspaces — the single accent lives here ── */
@@ -104,7 +115,7 @@ window#waybar {
 }
 
 #workspaces button {
-    color: #565f62;
+    color: #778184;
     background: transparent;
     border: none;
     border-radius: 9px;
@@ -115,17 +126,86 @@ window#waybar {
 
 #workspaces button:hover {
     color: #cfdadc;
-    background-color: rgba(63, 125, 174, 0.14);
+    background-color: rgba(96, 159, 210, 0.14);
 }
 
 #workspaces button.active {
     color: #141c1e;
-    background-color: #3f7dae;
+    background-color: #609fd2;
 }
 
 #workspaces button.urgent {
     color: #141c1e;
-    background-color: #ab5e59;
+    background-color: #cf7f79;
+}
+
+/* Window icons inside each workspace button (workspace-taskbar mode). These are
+   real themed app icons, not glyphs, so they carry their own colour — the only
+   full-colour thing on the bar. They rest well dimmed so the bar stays quiet;
+   the focused window is clearer, and hover brings one to full strength. */
+#workspaces .taskbar-window {
+    opacity: 0.45;
+    margin: 0 2px;
+    transition: opacity 0.2s ease;
+}
+
+/* On the active workspace's accent pill the icons need a little more presence */
+#workspaces button.active .taskbar-window {
+    opacity: 0.68;
+}
+
+/* The focused window */
+#workspaces .taskbar-window.active,
+#workspaces button.active .taskbar-window.active {
+    opacity: 0.88;
+}
+
+#workspaces .taskbar-window:hover,
+#workspaces button.active .taskbar-window:hover {
+    opacity: 1;
+}
+
+/* Workspace number — and the scratchpad glyph, which is just a special
+   workspace button now — keep a little air from the icons that follow */
+#workspaces .workspace-label {
+    margin-right: 3px;
+}
+
+/* Special workspaces (scratchpad 󰏫) sit after the numbered ones.
+   They get their own accent — pink, not the bar's blue — so a raised overlay
+   never reads as "this is the workspace you are on". Must beat button.active,
+   hence the doubled class. */
+#workspaces button.special {
+    color: #858f92;
+}
+
+#workspaces button.special:hover {
+    color: #cfdadc;
+    background-color: rgba(184, 131, 187, 0.14);
+}
+
+#workspaces button.special.active {
+    color: #141c1e;
+    background-color: #b883bb;
+}
+
+/* ── Active window title — context, not a control: quiet and italic so it never
+   competes with the workspace pills it sits beside. Collapses to nothing on an
+   empty workspace (padding included, or it leaves a gap in the island). */
+#custom-window {
+    font-style: italic;
+    margin-left: 2px;
+}
+
+#custom-window.empty {
+    padding: 0;
+    margin: 0;
+}
+
+/* Focus is in a special workspace — same pink the special pills carry, so a
+   raised scratchpad never reads as the normal workspace you left. */
+#custom-window.special {
+    color: #b883bb;
 }
 
 /* ── Clock — primary info: brighter, bold, never coloured ── */
@@ -139,61 +219,65 @@ window#waybar {
     color: #cfdadc;
 }
 
-/* ── Special-workspace toggles, lit when populated ── */
-#custom-scratchpad.active,
-#custom-tray.active {
-    color: #3f7dae;
-}
-
-/* ── Semantic state — the ONLY non-accent colours on the bar ── */
+/* ── Semantic state (roles in the header) ── */
 
 /* Stay-awake engaged */
 #custom-idle-inhibitor.on {
-    color: #8e7426;
+    color: #b0954a;
 }
 
-/* Pending notifications = accent; DND = alert */
+/* Pending notifications = amber (worth a glance). DND = red: it silences
+   everything, so it must be impossible to forget it is on. */
 #custom-swaync.notification,
 #custom-swaync.inhibited-notification {
-    color: #3f7dae;
+    color: #b0954a;
 }
 #custom-swaync.dnd-none,
 #custom-swaync.dnd-notification,
 #custom-swaync.dnd-inhibited-none,
 #custom-swaync.dnd-inhibited-notification {
-    color: #ab5e59;
+    color: #cf7f79;
 }
 
 /* Muted / off recede further */
 #pulseaudio.muted,
 #bluetooth.off {
-    color: #565f62;
+    color: #778184;
 }
 
-/* CPU = mauve, RAM = teal: two cool hues, so the metrics stay distinct
-   without a warm tone that reads as "unhealthy". Hue marks which metric;
-   the ramp glyph (▁▂▃▄▅▆▇█) carries the load. Both flash red when pegged. */
-#cpu {
-    color: #7c6bac;
+/* Load glyphs are colored by level, not by metric: grey when calm, amber
+   when busy, red when pegged. Which bar is which is learned by position
+   (CPU, RAM, GPU), and the hover panel labels them in these identity hues.
+   scripts/load.py reads these, since a label's spans cannot be styled from
+   CSS. The GPU never goes red: a long job pegs the dGPU on purpose. */
+@define-color load-calm #9da7a9;
+@define-color load-warn #b0954a;
+@define-color load-alert #cf7f79;
+@define-color load-cpu #9d8ccf;
+@define-color load-ram #43ac9b;
+@define-color load-gpu #609fd2;
+@define-color load-track #41494c;
+@define-color load-dim #778184;
+
+/* Pulses opacity, not color: the spans' own colors would win over blink */
+#custom-load.critical {
+    animation: pulse 0.5s linear infinite alternate;
 }
-#memory {
-    color: #118a7a;
-}
-#cpu.critical,
-#memory.critical {
-    color: #ab5e59;
-    animation: blink 0.5s linear infinite alternate;
+@keyframes pulse {
+    to {
+        opacity: 0.35;
+    }
 }
 
-/* Battery — green when healthy, amber low, red critical */
-#battery {
-    color: #4f8751;
+/* Battery — grey at rest, green only while charging, amber low, red critical */
+#battery.charging {
+    color: #70a971;
 }
 #battery.warning:not(.charging) {
-    color: #8e7426;
+    color: #b0954a;
 }
 #battery.critical:not(.charging) {
-    color: #ab5e59;
+    color: #cf7f79;
     animation: blink 0.5s linear infinite alternate;
 }
 @keyframes blink {
@@ -210,7 +294,7 @@ window#waybar {
 
 /* Network down */
 #network.disconnected {
-    color: #ab5e59;
+    color: #cf7f79;
 }
 
 /* Something is recording the mic or sharing the screen. Amber for the mic,
@@ -230,13 +314,12 @@ window#waybar {
 
 /* Kernel-upgrade reboot pending (module only renders when class=pending) */
 #custom-reboot-needed.pending {
-    color: #ab5e59;
+    color: #cf7f79;
     font-weight: bold;
 }
 
 /* ── Power glyph ── */
 #custom-power {
-    color: #ab5e59;
     font-size: 15px;
 }
 
@@ -272,9 +355,9 @@ window#waybar {
     opacity: 0.55;
 }
 
-/* The one case that may shout */
+/* An app asking for a look (new mail and the like): worth a glance, not alarm */
 #tray > .needs-attention {
-    color: #cf7f79;
+    color: #b0954a;
 }
 
 /* ── Popup menus: tray items' right-click menus and the native module menus
@@ -295,9 +378,10 @@ menuitem:hover {
 }
 
 /* ── Tooltips ── */
+/* Border matches the menus: blue at full strength is reserved for focus */
 tooltip {
     background-color: #141c1e;
-    border: 1px solid #3f7dae;
+    border: 1px solid rgba(96, 159, 210, 0.28);
     border-radius: 8px;
 }
 tooltip label {

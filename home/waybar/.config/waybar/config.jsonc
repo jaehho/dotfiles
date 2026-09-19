@@ -13,8 +13,7 @@
 
     "modules-left": [
         "hyprland/workspaces",
-        "custom/scratchpad",
-        "custom/tray"
+        "custom/window"
     ],
     "modules-center": [
         "mpris",
@@ -80,15 +79,16 @@
     // Hidden while nothing has failed. Counts system and user units alike.
     "systemd-failed-units": {
         "format": "󰀨 {nr_failed}",
-        "on-click": "kitty --class floating-tui --hold -e sh -c 'systemctl --failed; echo; systemctl --user --failed'"
+        "on-click": "~/.local/bin/hypr-settings-menu failed-units"
     },
+    // Glyphs only; numbers and details drop down in the tooltip on hover
     "group/load": {
         "orientation": "horizontal",
-        "modules": ["cpu", "memory"]
+        "modules": ["custom/load"]
     },
     "group/output": {
         "orientation": "horizontal",
-        "modules": ["pulseaudio", "backlight"]
+        "modules": ["backlight", "pulseaudio"]
     },
     // Battery and the radios: what keeps the machine up and connected
     "group/link": {
@@ -111,44 +111,45 @@
     },
 
     "hyprland/workspaces": {
+        // {windows} is required even in taskbar mode: waybar only reads the
+        // workspace-taskbar block when the format string contains it.
         "format": "{name} {windows}",
-        "format-window-separator": " ",
-        "on-click": "activate",
+        // Special workspaces (the scratchpad) render here too, so they get the
+        // same real icons as everything else. They appear only while populated.
+        "show-special": true,
+        // "default" sorts normal workspaces by id then specials last. "number"
+        // would throw on the specials' glyph names and fall back to string order.
+        "sort-by": "default",
+        // No "on-click": the workspace button's own handler switches, and needs
+        // waybar-git (0.15.0 sends legacy dispatch strings the Lua config
+        // rejects, so only the window icons would respond).
         "on-scroll-up": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"e-1\" })'",
         "on-scroll-down": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"e+1\" })'",
         "smooth-scrolling-threshold": 6,
-        "sort-by-number": true,
-        "window-rewrite-default": "󰏗",
-        "window-rewrite": {
-            "kitty": "󰄛",
-            "foot": "󰄛",
-            "Alacritty": "󰄛",
-            "firefox.*": "󰈹",
-            "[Gg]oogle-chrome": "󰊯",
-            "brave-browser": "󰊯",
-            "thunar": "󰉋",
-            "nautilus": "󰉋",
-            "spotify": "󰓇",
-            "discord": "󰙯",
-            "vesktop": "󰙯",
-            "code.*": "󰨞",
-            "neovide": "",
-            "obsidian": "󰎞",
-            "steam.*": "󰓓",
-            "mpv": "󰐌",
-            "vlc": "󰐌",
-            "org.telegram.*": "󰔁",
-            "Slack": "󰒱",
-            "zoom": "󰍫",
-            "org.gnome.Calculator": "󰃬",
-            "org.pwmt.zathura": "󰈙",
-            "Zotero": "󱉟",
-            "microsoft-edge.*": "󰇩",
-            "libreoffice.*": "󰈙",
-            "x2goclient": "󰢹",
-            "thunderbird": "󰺻",
-            "wiremix": "󰕾"
+        // Real app icons resolved from the window class -> .desktop file -> icon
+        // theme, so every app gets its own icon with nothing hardcoded here.
+        // Papirus-Dark is tried first (widest app coverage), Adwaita as fallback.
+        "workspace-taskbar": {
+            "enable": true,
+            "icon-size": 14,
+            "icon-theme": ["Papirus-Dark", "Adwaita"],
+            "update-active-window": true,
+            "ignore-list": ["chrome-sharing-indicator"],
+            "on-click-window": "~/.local/bin/hypr-waybar-window-click {address}"
         }
+    },
+
+    // NOT hyprland/window: that module resolves the title through
+    // `activeworkspace`, which Hyprland reports as the workspace *underneath* a
+    // raised special workspace -- so the scratchpad would show the window behind
+    // it. The script asks `activewindow` instead. See its header.
+    "custom/window": {
+        "exec": "~/.local/bin/hypr-active-window",
+        "return-type": "json",
+        // Bounded so a long title cannot push the centre island off-centre;
+        // the full title stays in the tooltip.
+        "max-length": 60,
+        "escape": true
     },
 
     "clock": {
@@ -180,26 +181,12 @@
         "on-click-middle": "playerctl previous"
     },
 
-    "cpu": {
-        "interval": 5,
-        "states": {
-            "critical": 90
-        },
-        "format": "{icon} {usage}%",
-        "format-icons": ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
-        "tooltip-format": "CPU {usage}%  ·  {avg_frequency} GHz",
-        "on-click": "kitty -e btop"
-    },
-
-    "memory": {
-        "interval": 10,
-        "states": {
-            "critical": 90
-        },
-        "format": "{icon} {percentage}%",
-        "format-icons": ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
-        "tooltip-format": "RAM {percentage}%  ({used:0.1f} / {total:0.1f} GiB)\nSwap {swapUsed:0.1f} GiB",
-        "on-click": "kitty -e btop"
+    // CPU, RAM and GPU ramps in one label; hover for the panel
+    "custom/load": {
+        "exec": "~/.config/waybar/scripts/load.py",
+        "return-type": "json",
+        "restart-interval": 10,
+        "on-click": "~/.local/bin/hypr-settings-menu monitor"
     },
 
     "bluetooth": {
@@ -208,7 +195,7 @@
         "format-connected-battery": "󰂱",
         "format-off": "󰂲",
         "format-alt": "󰂯 {num_connections}",
-        "on-click-right": "kitty --class floating-tui -e bluetui",
+        "on-click-right": "~/.local/bin/hypr-settings-menu bluetooth",
         "tooltip-format": "{controller_alias}\t{controller_address}",
         "tooltip-format-connected": "{controller_alias}\t{controller_address}\n\n{device_enumerate}",
         "tooltip-format-enumerate-connected": "{device_alias}\t{device_address}\t{device_battery_percentage}%"
@@ -219,12 +206,16 @@
             "warning": 30,
             "critical": 15
         },
-        "format": "{icon} {capacity}%",
-        "format-charging": "󰂄 {capacity}%",
-        "format-plugged": "󰚥 {capacity}%",
+        // The number only shows when it matters; otherwise it is in the tooltip
+        "format": "{icon}",
+        "format-warning": "{icon} {capacity}%",
+        "format-critical": "{icon} {capacity}%",
+        "format-charging": "󰂄",
+        "format-plugged": "󰚥",
         "format-alt": "{icon} {time}",
         "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
-        "tooltip-format": "{capacity}%  ·  {timeTo}\n{power:.1f} W  ·  Health {health}%"
+        "tooltip-format": "{capacity}%  ·  {timeTo}\n{power:.1f} W  ·  Health {health}%",
+        "on-click-right": "~/.local/bin/hypr-settings-menu battery"
     },
 
     "power-profiles-daemon": {
@@ -248,29 +239,29 @@
         "tooltip-format-ethernet": "{ifname} via {gwaddr}\n{ipaddr}/{cidr}\n↑ {bandwidthUpBits} ↓ {bandwidthDownBits}",
         "tooltip-format-disconnected": "Disconnected",
         "tooltip-format": "{ifname} via {gwaddr}\n{ipaddr}/{cidr}",
-        "on-click-right": "kitty --class floating-tui -e nmtui"
+        "on-click-right": "~/.local/bin/hypr-settings-menu wifi"
     },
 
     "pulseaudio": {
-        "format": "{icon} {volume}%",
-        "format-bluetooth": "󰂰 {volume}%",
+        "format": "{icon}",
+        "format-bluetooth": "󰂰",
         "format-muted": "󰝟",
         "format-icons": {
             "default": ["󰕿", "󰖀", "󰕾"]
         },
         "tooltip-format": "{desc}  ·  {volume}%",
         "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
-        "on-click-right": "kitty --class floating-tui -e wiremix",
-        "on-scroll-up": "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+",
-        "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
+        "on-click-right": "~/.local/bin/hypr-settings-menu audio",
+        "on-scroll-up": "hypr-level volume up",
+        "on-scroll-down": "hypr-level volume down"
     },
 
     "backlight": {
-        "format": "{icon} {percent}%",
+        "format": "{icon}",
         "format-icons": ["󰃞", "󰃟", "󰃠"],
         "tooltip-format": "Brightness {percent}%",
-        "on-scroll-up": "brightnessctl -e4 -n2 set 5%+",
-        "on-scroll-down": "brightnessctl -e4 -n2 set 5%-"
+        "on-scroll-up": "hypr-level brightness up",
+        "on-scroll-down": "hypr-level brightness down"
     },
 
     "custom/idle-inhibitor": {
@@ -278,12 +269,14 @@
         "return-type": "json",
         "interval": 2,
         "signal": 11,
-        "on-click": "~/.local/bin/hypr-idle-toggle"
+        "on-click": "~/.local/bin/hypr-settings-menu awake"
     },
 
     "custom/swaync": {
         "tooltip": true,
-        "format": "{icon} {text}",
+        // {icon}{text}: jq adds the space only when there is a count to show.
+        // Under DND the count is hidden (the tooltip still has it).
+        "format": "{icon}{text}",
         "format-icons": {
             "notification": "󰂚",
             "none": "󰂚",
@@ -296,9 +289,9 @@
         },
         "return-type": "json",
         "exec-if": "command -v swaync-client",
-        "exec": "swaync-client -swb | jq --unbuffered -c '.text = (if .text == \"0\" then \"\" else .text end)'",
+        "exec": "swaync-client -swb | jq --unbuffered -c '.text = (if .text == \"0\" or (.alt | startswith(\"dnd\")) then \"\" else \" \" + .text end)'",
         "on-click": "swaync-client -t -sw",
-        "on-click-right": "~/.local/bin/hypr-dnd-toggle",
+        "on-click-right": "~/.local/bin/hypr-settings-menu dnd",
         "escape": true
     },
 
@@ -310,7 +303,7 @@
         "menu": "on-click",
         "menu-file": "~/.config/waybar/reboot_menu.xml",
         "menu-actions": {
-            "reboot": "systemctl reboot"
+            "reboot": "~/.local/bin/hypr-settings-menu reboot"
         }
     },
 
@@ -323,34 +316,11 @@
     // Passive items (udiskie with no removable media) are hidden by default.
     "tray": {
         "icon-size": 16,
-        // Per-app icon swap, keyed by the item's Id. waybar applies it once, so
-        // it only holds for apps that never change their own icon -- fine for
-        // EasyEffects, pointless for Nextcloud or Tailscale, which redraw on
-        // every sync or state change.
-        "icons": {
-            "easyeffects": "com.github.wwmm.easyeffects"
-        },
         // Adds to the 4px each item carries in the stylesheet: 14px between
         // icons. Tray icons fill their whole 16px square (glyphs have side
         // bearings, these do not), so they need more box gap than the text
         // modules to look as far apart.
         "spacing": 6
-    },
-
-    "custom/scratchpad": {
-        "exec": "hypr-special-waybar 'special:󰏫' '󰏫'",
-        "return-type": "json",
-        "interval": 5,
-        "signal": 9,
-        "on-click": "hyprctl dispatch 'hl.dsp.workspace.toggle_special(\"󰏫\")'; pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar"
-    },
-
-    "custom/tray": {
-        "exec": "hypr-special-waybar 'special:󰘸' '󰘸'",
-        "return-type": "json",
-        "interval": 5,
-        "signal": 10,
-        "on-click": "hyprctl dispatch 'hl.dsp.workspace.toggle_special(\"󰘸\")'; pkill -RTMIN+9 waybar; pkill -RTMIN+10 waybar"
     },
 
     "custom/power": {
@@ -359,11 +329,11 @@
         "menu": "on-click",
         "menu-file": "~/.config/waybar/power_menu.xml",
         "menu-actions": {
-            "lock": "loginctl lock-session",
-            "logout": "hyprctl dispatch 'hl.dsp.exit()'",
-            "suspend": "systemctl suspend",
-            "reboot": "systemctl reboot",
-            "shutdown": "systemctl poweroff"
+            "lock": "~/.local/bin/hypr-settings-menu lock",
+            "logout": "~/.local/bin/hypr-settings-menu logout",
+            "suspend": "~/.local/bin/hypr-settings-menu suspend",
+            "reboot": "~/.local/bin/hypr-settings-menu reboot",
+            "shutdown": "~/.local/bin/hypr-settings-menu shutdown"
         }
     }
 }
