@@ -1,55 +1,38 @@
 #!/usr/bin/env bash
-# packages.sh: declarative package management across pacman/AUR (paru),
-# apt, cargo, npm, and uv. Interactive — every untracked install and every
-# stale list entry is confirmed before files are modified.
+# packages.sh: declarative packages across pacman/AUR (paru), apt, cargo, npm
+# and uv. Run by converge.sh; never prompts.
 #
 # Source of truth: packages/<backend>.txt (one package per line, # comments),
 # except arch, which is a directory of category files: packages/arch/*.txt.
-# packages/common.txt is read in addition to both arch and ubuntu — put
+# packages/common.txt is read in addition to both arch and ubuntu -- put
 # packages with identical names across distros there.
 #
-# To add an arch package, drop it in whichever packages/arch/ category fits.
-# Packages this script discovers on its own land in packages/arch/99-inbox.txt;
-# file them by hand when convenient. Only the inbox is machine-sorted, so
-# comments and grouping in the category files are preserved.
+#   packages.sh system    as root: upgrade (gated), install missing, report drift
+#   packages.sh user      as the owner: the same for cargo, npm and uv
+#   packages.sh --status  read-only drift report, for status.sh
 #
-# Usage:
-#   packages.sh             # upgrade, prompt on drift, install missing
-#   packages.sh --status    # read-only drift report
-#
-# Env:
-#   SKIP_UPGRADE=1  skip the upgrade pass, still reconcile drift and install
-#                   what's missing. sync.sh sets this when a full upgrade ran
-#                   recently, so re-syncing after a config edit stays cheap.
+# Nothing here edits the manifests. Installed-but-untracked and
+# tracked-but-uninstallable packages are decisions: filing a package, or
+# dropping it, is the owner's call. New arch packages go in
+# packages/arch/99-inbox.txt until filed.
 
 set -euo pipefail
 export LC_ALL=C  # `comm` requires byte-order sort.
 
-DOTFILES="${DOTFILES:-$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)}"
-PKGDIR="$DOTFILES/packages"
+# shellcheck source=lib.sh
+. "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/lib.sh"
 
-# Distro family detection mirrors the Makefile.
-if command -v pacman >/dev/null 2>&1; then
-  DISTRO=arch
-elif command -v apt-get >/dev/null 2>&1; then
-  DISTRO=debian
-else
-  DISTRO=unknown
-fi
-
-case "$DISTRO" in
-  arch)   BACKENDS=(arch cargo npm uv) ;;
-  debian) BACKENDS=(ubuntu cargo npm uv) ;;
-  *)      BACKENDS=(cargo npm uv) ;;
+MODE="${1:---status}"
+case "$MODE" in
+  system)   case "$DISTRO_FAMILY" in arch) BACKENDS=(arch) ;; debian) BACKENDS=(ubuntu) ;; *) BACKENDS=() ;; esac ;;
+  user)     BACKENDS=(cargo npm uv) ;;
+  --status) case "$DISTRO_FAMILY" in arch) BACKENDS=(arch cargo npm uv) ;; debian) BACKENDS=(ubuntu cargo npm uv) ;; *) BACKENDS=(cargo npm uv) ;; esac ;;
+  *) echo "usage: packages.sh system|user|--status" >&2; exit 2 ;;
 esac
 
 # mermaid-cli and mermaid-filter pull in puppeteer, which otherwise downloads a
-# private ~150MB Chrome on every version bump — and hard-fails the whole npm
-# sync if a prior download was interrupted (it leaves an empty cache dir and
-# refuses to re-fetch, erroring instead). Point puppeteer at the system
-# Chromium-based browser and skip the bundled download. First match wins; arch
-# uses chrome, debian/ubuntu chromium. Guarded so hosts with neither fall back
-# to puppeteer's default behavior.
+# private ~150MB Chrome on every version bump -- and hard-fails the whole npm
+# install if a prior download was interrupted. Point it at the system browser.
 for _chrome in /usr/bin/google-chrome-stable /usr/bin/chromium /usr/bin/chromium-browser; do
   if [ -x "$_chrome" ]; then
     export PUPPETEER_SKIP_DOWNLOAD=1
@@ -59,43 +42,43 @@ for _chrome in /usr/bin/google-chrome-stable /usr/bin/chromium /usr/bin/chromium
 done
 unset _chrome
 
-MODE=sync
-[ "${1:-}" = "--status" ] && MODE=status
-
-# --- unattended operation -------------------------------------------------
-# A long AUR build outlives sudo's timestamp: nvidia's 440 MB download plus a
-# Rust rebuild ran ~20 minutes here, and paru then died at the install step
-# with "sudo: timed out reading password", losing the whole run. --sudoloop is
-# the load-bearing flag — it refreshes the timestamp in the background.
-# --noconfirm alone still stalls on a password prompt nobody is watching.
+# --- running paru from root -----------------------------------------------
+# paru refuses to run as root, and it installs through `sudo pacman`. So the
+# system half runs it as the owner, under a pacman-only NOPASSWD rule that
+# exists for this process's lifetime and no longer. It opens nothing new: the
+# owner can already reach root (docker group, and this repo is applied as root).
 #
-# --skipreview applies AUR PKGBUILD diffs without showing them. That is a real
-# trade: an upstream AUR maintainer's change lands unread. Set PKG_INTERACTIVE=1
-# to restore both the review step and the confirmation prompts.
-if [ "${PKG_INTERACTIVE:-0}" = 1 ]; then
-  PARU_FLAGS=(--sudoloop --review)
-else
-  PARU_FLAGS=(--sudoloop --noconfirm --skipreview)
-fi
+# --skipreview applies AUR PKGBUILD diffs unread. That is the trade of an
+# unattended upgrade; `paru -Sua --review` by hand restores it.
+PARU_FLAGS=(--noconfirm --skipreview --batchinstall)
+SUDOERS=/etc/sudoers.d/90-dotfiles-converge
+
+as_owner() {
+  if [ "$(id -u)" = 0 ]; then
+    runuser -u "$OWNER" -- env -i HOME="$OWNER_HOME" USER="$OWNER" LOGNAME="$OWNER" \
+      LANG=C.UTF-8 PATH="$OWNER_HOME/.local/bin:/usr/local/bin:/usr/bin" "$@"
+  else
+    "$@"
+  fi
+}
+
+grant_pacman() {
+  local tmp; tmp=$(mktemp)
+  printf '%s ALL=(root) NOPASSWD: /usr/bin/pacman\n' "$OWNER" > "$tmp"
+  chmod 0440 "$tmp"
+  visudo -cqf "$tmp"
+  install -m 0440 -o root -g root "$tmp" "$SUDOERS"
+  rm -f "$tmp"
+  trap revoke_pacman EXIT
+}
+revoke_pacman() { rm -f "$SUDOERS"; }
 
 # --- backend abstraction --------------------------------------------------
-
-# Where newly-detected packages get appended. For arch this is an inbox rather
-# than a category file: drift can't know that `libgsf` is a media dependency,
-# so it lands in 99-inbox.txt for you to file by hand later.
-backend_file() {
-  case "$1" in
-    arch) echo "$PKGDIR/arch/99-inbox.txt" ;;
-    *)    echo "$PKGDIR/$1.txt" ;;
-  esac
-}
 
 # Every file contributing tracked packages for a backend, one path per line.
 #
 # arch is split into packages/arch/<NN>-<category>.txt so the manifest is
-# readable by category instead of one 200-line alphabetical wall. Only the
-# inbox is ever machine-sorted (see handle_drift), so section comments and
-# hand-curated ordering inside the category files survive `make sync`.
+# readable by category instead of one 200-line alphabetical wall.
 backend_files() {
   local f
   case "$1" in
@@ -128,8 +111,15 @@ backend_list_installed() {
       { pacman -Qqen; pacman -Qqem | grep -vE -- '-debug$'; } | sort -u
       ;;
     ubuntu)
-      # apt's "manually installed" set
-      apt-mark showmanual 2>/dev/null | sort -u
+      # apt's "manually installed" set, minus the release's base system, which
+      # apt counts as manual too: what the installer put down, the base
+      # priorities, and shared libraries (images mark those manual). A tracked
+      # package stays, whatever its priority.
+      comm -23 <(apt-mark showmanual 2>/dev/null | sort -u) <(comm -23 <({
+        dpkg-query -W -f='${Package} ${Priority} ${Section}\n' |
+          awk '$2 ~ /^(required|important|standard)$/ || $3 ~ /(^|\/)libs$/ { print $1 }'
+        gzip -dc /var/log/installer/initial-status.gz 2>/dev/null | sed -n 's/^Package: //p'
+      } | sort -u) <(backend_list_tracked ubuntu))
       ;;
     cargo)
       # Report a crate as installed only if the binaries cargo recorded for it
@@ -214,257 +204,244 @@ backend_list_tracked() {
 backend_filter_for_install() {
   case "$1" in
     arch)
-      grep -vE -- '-debug$' \
-        | if [ "${HOST_DEV_TOOLS:-0}" = 1 ]; then
-            grep -vE '^(hypr-wallpaper-git|hypr-monitor-git)$'
-          else
-            cat
-          fi
+      grep -vE -- '-debug$'
       ;;
     *) cat ;;
   esac
 }
 
-# Installs the tracked-but-missing packages for a backend.
-backend_install_missing() {
-  local backend="$1"
-  local pkgs; pkgs=$(backend_list_tracked "$backend")
-  [ -z "$pkgs" ] && return 0
+# Tracked, wanted on this host, and not installed — one name per line.
+#
+# Every install path goes through this rather than handing the package manager
+# the whole tracked list and letting --needed sort it out. That shortcut cost
+# 10-30s on every single run: paru re-resolves all ~190 names against the AUR
+# RPC (a network round trip that has failed mid-sync), re-clones every -git
+# package to evaluate pkgver(), and prints a screen of "is up to date --
+# skipping". Computing the set locally takes well under a second, so the
+# common case — nothing missing — becomes a no-op instead.
+#
+# Both sides are already sorted (LC_ALL=C at the top of this file), which is
+# what comm needs.
+backend_missing() {
+  local backend="$1" tracked installed
+  tracked=$(backend_list_tracked "$backend" | backend_filter_for_install "$backend")
+  [ -z "$tracked" ] && return 0
+  installed=$(backend_list_installed "$backend")
+  comm -23 <(echo "$tracked") <(echo "$installed") || true
+}
 
+# --- installing ------------------------------------------------------------
+
+install_missing() {
+  local backend="$1" pkgs promote
+  pkgs=$(backend_missing "$backend")
+  [ -n "$pkgs" ] || return 0
+  echo "==> [$backend] installing: $(echo $pkgs)"
+  # shellcheck disable=SC2086
   case "$backend" in
     arch)
-      # Pass as args (not piped) so stdin stays on the TTY and pacman's
-      # confirmation prompts work. Piping closes stdin once the package list
-      # is consumed, which makes pacman bail at "Proceed with installation?".
-      local filtered
-      filtered=$(echo "$pkgs" | backend_filter_for_install arch)
-      [ -z "$filtered" ] && return 0
-      # shellcheck disable=SC2086
-      paru -S --needed --batchinstall "${PARU_FLAGS[@]}" $filtered
+      as_owner paru -S --needed "${PARU_FLAGS[@]}" $pkgs
+      # --needed leaves the install reason alone, so a tracked package that
+      # something else depends on stays a "dependency", invisible to
+      # `pacman -Qqe`, and drift would call it missing forever. Being in the
+      # manifest is the explicit request. See ISSUES.md.
+      promote=$(comm -12 <(echo "$pkgs" | sort -u) <(pacman -Qqd | sort -u) || true)
+      [ -z "$promote" ] || pacman -D -q --asexplicit -- $promote
       ;;
-    ubuntu)
-      # shellcheck disable=SC2086
-      sudo apt-get install -y $pkgs
-      ;;
-    cargo)
-      local installed; installed=$(backend_list_installed cargo)
-      while IFS= read -r pkg; do
-        grep -qx "$pkg" <<<"$installed" || cargo install "$pkg"
-      done <<< "$pkgs"
-      ;;
-    npm)
-      # `npm install -g` is idempotent (updates if newer). No sudo —
-      # this respects ~/.npmrc's user prefix (~/.npm-global), so
-      # puppeteer's Chrome cache lands in $HOME/.cache. Sudo'd installs
-      # would scatter packages into /usr/lib/node_modules and cache into
-      # /root/.cache, mismatched with what `npm ls -g` reads.
-      # shellcheck disable=SC2086
-      npm install -g $pkgs
-      ;;
-    uv)
-      # `uv tool install` is idempotent.
-      while IFS= read -r pkg; do uv tool install "$pkg"; done <<< "$pkgs"
-      ;;
+    ubuntu) DEBIAN_FRONTEND=noninteractive apt-get install -y $pkgs ;;
+    cargo)  while IFS= read -r p; do cargo install "$p"; done <<< "$pkgs" ;;
+    # No sudo: ~/.npmrc's user prefix keeps globals where `npm ls -g` reads.
+    npm)    npm install -g $pkgs ;;
+    uv)     while IFS= read -r p; do uv tool install "$p"; done <<< "$pkgs" ;;
   esac
 }
 
-# Per-backend upgrade. Skip backends without a clean upgrade-all path
-# rather than mandate an extra dependency (e.g., cargo-update).
-backend_upgrade() {
-  case "$1" in
-    arch)   paru -Syu --batchinstall "${PARU_FLAGS[@]}" ;;
-    ubuntu) sudo apt-get update -qq && sudo apt-get upgrade -y ;;
-    uv)     uv tool upgrade --all 2>&1 || true ;;
-    npm)    npm update -g 2>&1 || true ;;
-    # cargo has no built-in upgrade-all; cargo-update (tracked in arch.txt)
-    # supplies one. Guard on the binary rather than the package so a fresh host
-    # — where cargo-update is still queued for install later in this same run —
-    # skips the step instead of failing it.
-    cargo)
-      # Arch's rustup package updates the installer, not the toolchain: `stable`
-      # stays pinned at whatever version it was installed at while crates raise
-      # their MSRV, and the upgrade eventually fails with "requires rustc X or
-      # newer". Update the toolchain first. See ISSUES.md.
-      command -v rustup >/dev/null 2>&1 && { rustup update 2>&1 || true; }
-      if command -v cargo-install-update >/dev/null 2>&1; then
-        cargo install-update --all 2>&1 || true
-      else
-        echo "  cargo-update not installed yet — skipping (installs later this run)"
-      fi
-      ;;
-  esac
-}
-
-# --- prompt helpers -------------------------------------------------------
-
-# Yes/no/interactive prompt. Echoes 'y', 'n', or 'i'. Defaults to 'y'.
-# Without a TTY, defaults to 'n' (no changes) so scripted runs don't mutate.
-ask_yni() {
-  local label="$1"
-  if [ ! -t 0 ]; then echo n; return; fi
-  printf '  %s [Y/n/i for per-item] ' "$label" >&2
-  local ans; read -r ans </dev/tty
-  case "$ans" in n|N) echo n ;; i|I) echo i ;; *) echo y ;; esac
-}
-
-# Per-item prompt. Defaults to 'n'.
-ask_yn() {
-  local label="$1"
-  if [ ! -t 0 ]; then return 1; fi
-  printf '    %s [y/N] ' "$label" >&2
-  local ans; read -r ans </dev/tty
-  case "$ans" in y|Y) return 0 ;; *) return 1 ;; esac
-}
-
-# --- core flows -----------------------------------------------------------
-
-handle_drift() {
-  local backend="$1"
-  local file new stale tracked installed
-  file=$(backend_file "$backend")
-  mkdir -p "$(dirname "$file")"
-  [ -f "$file" ] || : > "$file"
-
+# Installed but untracked, and tracked but still not installed after the
+# install above: both are the owner's call. The id carries the lists, so the
+# decision re-notifies only when they change.
+report_drift() {
+  local backend="$1" installed tracked new stale body=""
   installed=$(backend_list_installed "$backend")
   tracked=$(backend_list_tracked "$backend")
-  new=$(comm -23 <(echo "$installed")  <(echo "$tracked")  || true)
-  stale=$(comm -23 <(echo "$tracked")   <(echo "$installed") || true)
+  new=$(comm -23 <(echo "$installed") <(echo "$tracked") || true)
+  stale=$(comm -23 <(echo "$tracked" | backend_filter_for_install "$backend") <(echo "$installed") || true)
+  [ -n "$new$stale" ] || return 0
+  [ -z "$new" ]   || body+="Installed, not in packages/ (file under packages/$backend* or uninstall):"$'\n'"$(sed 's/^/  + /' <<<"$new")"$'\n'
+  [ -z "$stale" ] || body+="In packages/ but not installed (fix the install or drop the entry):"$'\n'"$(sed 's/^/  - /' <<<"$stale")"
+  printf '%s\n' "$body"
+  decide "drift-$backend-$(digest_of <<<"$body")" \
+    "$backend: $(grep -c . <<<"$new" || true) untracked, $(grep -c . <<<"$stale" || true) not installed" "$body"
+}
 
-  [ -z "$new$stale" ] && return 0
+# --- upgrading --------------------------------------------------------------
 
-  echo "==> [$backend] drift"
-
-  if [ -n "$new" ]; then
-    echo "  Installed but not tracked in $file:"
-    echo "$new" | sed 's/^/    + /'
-    case "$(ask_yni "Add these to the list?")" in
-      y) echo "$new" >> "$file" ;;
-      i) while IFS= read -r pkg; do
-           ask_yn "add  $pkg?" && echo "$pkg" >> "$file"
-         done <<< "$new" ;;
-      n) ;;
+# AC unless a battery exists and no supply (Mains or USB-C) is online.
+on_battery() {
+  local p battery=
+  for p in /sys/class/power_supply/*; do
+    case "$(cat "$p/type" 2>/dev/null)" in
+      Battery) battery=1 ;;
+      Mains|USB) [ "$(cat "$p/online" 2>/dev/null)" = 1 ] && return 1 ;;
     esac
-    # Only the append target is machine-sorted. For arch that's the inbox, so
-    # the category files keep their comments and hand-curated grouping.
-    LC_ALL=C sort -u -o "$file" "$file"
+  done
+  [ -n "$battery" ]
+}
+
+# Arch news newer than epoch $1, as "epoch<TAB>title<TAB>link", newest first.
+# Manual interventions are announced here; an upgrade past one unread is the
+# classic way to break an Arch install.
+arch_news_since() {
+  curl -fsS --max-time 20 https://archlinux.org/feeds/news/ | python3 -c '
+import sys, email.utils, xml.etree.ElementTree as ET
+since = int(sys.argv[1])
+for item in ET.parse(sys.stdin).getroot().iter("item"):
+    t = int(email.utils.parsedate_to_datetime(item.findtext("pubDate")).timestamp())
+    if t > since:
+        print(t, item.findtext("title"), item.findtext("link"), sep="\t")
+' "$1"
+}
+
+# nvidia beta bumps deadlock paru (ISSUES.md "nvidia beta upgrade deadlocks
+# paru"). Everything else upgrades; the beta set waits for the manual recipe.
+nvidia_beta_hold() {
+  local pending held
+  pending=$(as_owner paru -Qua 2>/dev/null | awk '$1 ~ /nvidia.*-beta/ {print $1 " " $2 " -> " $4}' || true)
+  [ -n "$pending" ] || return 0
+  held=$(pacman -Qq | grep -E '^(lib32-)?(nvidia|opencl-nvidia).*-beta' | paste -sd, || true)
+  decide "nvidia-beta-$(digest_of <<<"$pending")" \
+    "nvidia beta update held back: it needs the manual build in ISSUES.md" \
+    "$pending"$'\n'"Held: $held. Recipe: ISSUES.md \"make sync: nvidia beta upgrade deadlocks paru\", then reboot."
+  echo "--ignore=$held"
+}
+
+UPGRADE_MAX_AGE=$(( 20 * 3600 ))   # daily timer, randomized: 24h would skip days
+
+upgrade_arch() {
+  local age last news id ignore before n
+  age=$(upgrade_age)
+  if [ -n "$age" ] && [ "$age" -lt "$UPGRADE_MAX_AGE" ]; then
+    echo "==> [arch] upgraded $(fmt_age "$age") ago, not yet"
+    return 0
+  fi
+  if on_battery; then
+    echo "==> [arch] on battery, upgrade waits for AC"
+    [ -n "$age" ] && [ "$age" -gt $(( 7 * 86400 )) ] &&
+      decide "upgrade-battery-$(date +%G-%V)" "No upgrade for $(fmt_age "$age"): the machine is never on AC when converge runs" \
+        "Plug in and run: dotfiles sync"
+    return 0
   fi
 
-  if [ -n "$stale" ]; then
-    echo "  Tracked but not installed:"
-    echo "$stale" | sed 's/^/    - /'
-    # A stale entry may live in any of the backend's files (for arch, any
-    # category file or common.txt); sed -i is a no-op where there's no match,
-    # so passing all of them is safe.
-    local sed_targets=()
-    mapfile -t sed_targets < <(backend_files "$backend")
-    case "$(ask_yni "Remove these from the list?")" in
-      y) while IFS= read -r pkg; do
-           sed -i "/^${pkg}\$/d" "${sed_targets[@]}"
-         done <<< "$stale" ;;
-      i) while IFS= read -r pkg; do
-           ask_yn "rm   $pkg?" && sed -i "/^${pkg}\$/d" "${sed_targets[@]}"
-         done <<< "$stale" ;;
-      n) ;;
-    esac
+  last=$(( $(date +%s) - ${age:-0} ))
+  news=$(arch_news_since "$last")
+  if [ -n "$news" ]; then
+    id="arch-news-$(head -1 <<<"$news" | cut -f1)"
+    if ! acked "$id"; then
+      echo "==> [arch] upgrade held: Arch news since the last upgrade"
+      decide "$id" "Upgrade held: read the Arch news posted since the last upgrade" \
+        "$(cut -f2,3 <<<"$news" | tr '\t' ' ')"$'\n'"When nothing in it needs doing first: touch $ACK_DIR/$id"
+      return 0
+    fi
+  fi
+
+  ignore=$(nvidia_beta_hold | tail -1)
+  echo "==> [arch] upgrade"
+  before=$(pacman -Q)
+  # shellcheck disable=SC2086
+  as_owner paru -Syu "${PARU_FLAGS[@]}" $ignore
+  n=$(comm -13 <(echo "$before") <(pacman -Q) | wc -l)
+  echo "==> [arch] $n packages upgraded"
+}
+
+# cargo has no upgrade-all of its own (cargo-update supplies one), and Arch's
+# rustup package never updates the toolchain, so crates outgrow it (ISSUES.md).
+upgrade_tools() {
+  local stamp="$DOTFILES_STATE/tools-upgraded"
+  if [ -f "$stamp" ] && [ $(( $(date +%s) - $(stat -c %Y "$stamp") )) -lt "$UPGRADE_MAX_AGE" ]; then
+    return 0
+  fi
+  echo "==> [tools] upgrade"
+  have uv  && uv tool upgrade --all
+  have npm && npm update -g
+  have rustup && rustup update
+  have cargo-install-update && cargo install-update --all
+  mkdir -p "$DOTFILES_STATE" && touch "$stamp"
+}
+
+# --- modes ------------------------------------------------------------------
+
+cmd_system() {
+  [ "$(id -u)" = 0 ] || { echo "packages.sh system runs as root" >&2; exit 1; }
+  [ ${#BACKENDS[@]} -gt 0 ] || return 0
+  if ! online; then
+    echo "==> offline: no upgrade or installs this run"
+    report_drift "${BACKENDS[0]}"
+    return 0
+  fi
+  case "$DISTRO_FAMILY" in
+    arch)
+      grant_pacman
+      upgrade_arch
+      install_missing arch
+      ;;
+    # unattended-upgrades (packages/ubuntu.txt) owns upgrades on Ubuntu.
+    debian)
+      apt-get update -qq
+      install_missing ubuntu
+      ;;
+  esac
+  report_drift "${BACKENDS[0]}"
+}
+
+# uv and Claude Code ship self-updating installers into ~/.local/bin on both
+# distros; rustup comes from the distro but starts with no toolchain.
+install_toolchains() {
+  if ! have uv; then
+    echo "==> [uv] installing"
+    curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh
+  fi
+  if ! have claude; then
+    echo "==> [claude] installing"
+    curl -fsSL https://claude.ai/install.sh | bash
+  fi
+  if have rustup && ! rustup default >/dev/null 2>&1; then
+    rustup default stable
+  fi
+  # Globals go to ~/.npm-global (on PATH in fish and the converge unit), not
+  # the root-owned system prefix.
+  if have npm && [ "$(npm config get prefix)" != "$HOME/.npm-global" ]; then
+    npm config set prefix "$HOME/.npm-global"
   fi
 }
 
-# Move packages that appear in both arch.txt and ubuntu.txt into common.txt.
-# Only untagged lines (NF==1, no @/! host tag) are eligible — tagged entries
-# might mean different things on the two distros.
-auto_dedup() {
-  local common="$PKGDIR/common.txt"
-  local ubuntu_f="$PKGDIR/ubuntu.txt"
-  # arch is a directory of category files; exclude common.txt from that side or
-  # every shared package would trivially "match" itself.
-  local arch_files=()
-  mapfile -t arch_files < <(backend_files arch | grep -v "/common\.txt$")
-  [ ${#arch_files[@]} -gt 0 ] && [ -f "$ubuntu_f" ] || return 0
-
-  local dupes already new
-  dupes=$(comm -12 \
-    <(awk '!/^(#|$)/ && NF==1 { print $1 }' "${arch_files[@]}" | sort -u) \
-    <(awk '!/^(#|$)/ && NF==1 { print $1 }' "$ubuntu_f"        | sort -u))
-  already=$(awk '!/^(#|$)/ && NF==1 { print $1 }' "$common" 2>/dev/null | sort -u || true)
-  new=$(comm -23 <(echo "$dupes") <(echo "$already") || true)
-  [ -z "$new" ] && return 0
-
-  echo "==> dedup: moving $(echo "$new" | wc -l) shared packages into common.txt"
-  echo "$new" | sed 's/^/    /'
-  echo "$new" >> "$common"
-  sort -u -o "$common" "$common"
-  while IFS= read -r pkg; do
-    sed -i "/^${pkg}\$/d" "${arch_files[@]}" "$ubuntu_f"
-  done <<< "$new"
-}
-
-cmd_sync() {
-  auto_dedup
-  local failed=() install_failed=()
-
-  # 1. Upgrade
-  if [ "${SKIP_UPGRADE:-0}" = 1 ]; then
-    echo "==> upgrade skipped"
-  else
+cmd_user() {
+  local backend failed=0
+  if online; then
+    install_toolchains || failed=1
+    upgrade_tools || failed=1
     for backend in "${BACKENDS[@]}"; do
       backend_available "$backend" || continue
-      echo "==> [$backend] upgrade"
-      backend_upgrade "$backend" || failed+=("$backend/upgrade")
+      install_missing "$backend" || { echo "!! [$backend] install failed"; failed=1; }
     done
+  else
+    echo "==> offline: no upgrades or installs this run"
   fi
-
-  # 2. Install whatever's listed but missing.
-  #
-  # This MUST come before drift handling. Drift reports anything tracked but
-  # not installed as "stale" and offers to delete it from the list — so a
-  # package you just added by hand (or one a previous failed run never got to)
-  # gets offered for removal before anything ever tried to install it. Running
-  # the install first means the only entries drift can still call stale are the
-  # ones that genuinely could not be installed.
   for backend in "${BACKENDS[@]}"; do
-    backend_available "$backend" || continue
-    echo "==> [$backend] install missing"
-    backend_install_missing "$backend" || {
-      failed+=("$backend/install")
-      install_failed+=("$backend")
-      echo "  !! [$backend] install failed — continuing with other backends"
-    }
-  done
-
-  # 3. Drift handling (interactive) — left interactive on purpose. These
-  # prompts are curation decisions about what belongs in the manifest, not
-  # package-manager noise, and auto-answering them silently rewrites the lists.
-  #
-  # Skipped entirely for any backend whose install just failed: the failure
-  # leaves tracked-but-not-installed entries that drift would then offer to
-  # delete from the manifest. That is exactly how cargo-update got dropped —
-  # one unrelated AUR package broke the transaction, and the next prompt
-  # proposed removing the package that never got its chance to install.
-  for backend in "${BACKENDS[@]}"; do
-    backend_available "$backend" || continue
-    if [[ " ${install_failed[*]:-} " == *" $backend "* ]]; then
-      echo "==> [$backend] drift check skipped (install failed this run)"
-      continue
+    if backend_available "$backend"; then
+      report_drift "$backend"
+    elif [ -n "$(backend_list_tracked "$backend")" ]; then
+      decide "no-tool-$backend" "$backend is not installed, so packages/$backend.txt is not applied"
     fi
-    handle_drift "$backend"
   done
-
-  if [ ${#failed[@]} -gt 0 ]; then
-    echo
-    echo "!! package steps that failed: ${failed[*]}"
-    return 1
-  fi
+  return "$failed"
 }
 
 cmd_status() {
+  local backend installed tracked new stale
   for backend in "${BACKENDS[@]}"; do
     if ! backend_available "$backend"; then
       echo "[$backend] (tool not installed — skipped)"
       continue
     fi
-    local file installed tracked new stale
-    file=$(backend_file "$backend")
-    [ -f "$file" ] || : > "$file"
     installed=$(backend_list_installed "$backend")
     tracked=$(backend_list_tracked "$backend")
     new=$(comm -23   <(echo "$installed") <(echo "$tracked")  || true)
@@ -481,6 +458,7 @@ cmd_status() {
 }
 
 case "$MODE" in
-  sync)   cmd_sync ;;
-  status) cmd_status ;;
+  system)   cmd_system ;;
+  user)     cmd_user ;;
+  --status) cmd_status ;;
 esac
