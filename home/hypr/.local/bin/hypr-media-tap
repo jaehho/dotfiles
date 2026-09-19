@@ -1,0 +1,17 @@
+#!/bin/bash
+# Play/pause key: one tap toggles playback at once, a double tap skips to the
+# next track and puts playback back the way it was before the first tap.
+
+window_ms=300
+state="${XDG_RUNTIME_DIR:-/tmp}/hypr-media-tap"
+now=$(($(date +%s%N) / 1000000))
+
+if read -r last before 2>/dev/null < "$state" && ((now - last < window_ms)); then
+    rm -f "$state"
+    playerctl next
+    [[ "$before" == Playing ]] && exec playerctl play
+    exec playerctl pause
+fi
+
+echo "$now $(playerctl status 2>/dev/null)" > "$state"
+exec playerctl play-pause

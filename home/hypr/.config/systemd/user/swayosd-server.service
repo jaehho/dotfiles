@@ -1,0 +1,36 @@
+[Unit]
+Description=SwayOSD server (volume and brightness OSD)
+
+# SwayOSD opens one PulseAudio connection at startup and never reconnects.
+# When pipewire-pulse restarts -- via `audio-health --heal`, or
+# by hand -- the server keeps owning its bus name and keeps answering
+# HandleAction with `true`, while every volume action silently does nothing.
+# swayosd-client exits 0 either way, so hyprland.lua's `|| wpctl` fallback never
+# fires and the volume keys simply go dead. Tie its lifetime to the Pulse server
+# instead of hoping it survives one. See ISSUES.md.
+#
+# Both directions are needed, and neither alone is enough:
+#   PartOf   propagates a stop/restart of pipewire-pulse to us
+#   WantedBy (below) brings us back up when pipewire-pulse starts -- a
+#            `restart pipewire` reaches pipewire-pulse as a separate stop and
+#            start, which PartOf alone would not restart us from
+PartOf=pipewire-pulse.service
+After=pipewire-pulse.service
+
+# pipewire-pulse also runs on machines with no compositor, and there the unit
+# would fail and retry forever. Skip cleanly instead of spinning.
+ConditionEnvironment=WAYLAND_DISPLAY
+
+# pipewire-pulse is up long before Hyprland imports WAYLAND_DISPLAY into the
+# user manager, so at login the first few starts exit 1 with no compositor to
+# talk to. Retry until one sticks, and do not let those attempts burn the start
+# limit -- that would also reject hyprland.lua's own explicit start.
+StartLimitIntervalSec=0
+
+[Service]
+ExecStart=/usr/bin/swayosd-server
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=pipewire-pulse.service

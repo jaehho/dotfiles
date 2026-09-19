@@ -1,0 +1,67 @@
+#!/bin/bash
+# Step volume or brightness, finer the lower it is, and show it on SwayOSD.
+#   hypr-level volume|brightness up|down
+#
+# Both move on a perceptual scale: wpctl's volume is already cubic, and
+# brightness is mapped as raw = max * p^EXP (brightnessctl's -e). The step is a
+# fraction of the current level (DIV), between MIN and MAX percent, so low
+# levels creep and high ones keep the old 5%.
+#
+# The change is made here, not by swayosd-client, so the keys still work when
+# the server refuses calls (ISSUES.md); SwayOSD only draws the bar, and it
+# can't draw a sub-percent step through its own volume/brightness actions.
+
+MIN=0.5 MAX=5
+VOL_DIV=10 BRI_DIV=12 BRI_EXP=4 BRI_MIN_RAW=1
+
+what=$1 dir=$2
+[[ $dir == up || $dir == down ]] || { echo "usage: hypr-level volume|brightness up|down" >&2; exit 2; }
+
+# step CURRENT DIV -> new level in percent, clamped to 0..100
+step() {
+    awk -v c="$1" -v div="$2" -v dir="$dir" -v lo="$MIN" -v hi="$MAX" 'BEGIN {
+        s = c / div; if (s < lo) s = lo; if (s > hi) s = hi
+        n = dir == "up" ? c + s : c - s
+        if (n < lo / 2) n = 0; if (n > 100) n = 100
+        printf "%.2f", n
+    }'
+}
+
+label() { awk -v p="$1" 'BEGIN { printf (p < 10 && p != int(p)) ? "%.1f%%" : "%d%%", p }'; }
+
+osd() {  # icon percent
+    swayosd-client --custom-icon "$1" --custom-progress "$(awk -v p="$2" 'BEGIN { print p / 100 }')" \
+        --custom-progress-text "$(label "$2")" >/dev/null 2>&1
+}
+
+case $what in
+volume)
+    # wpctl get-volume rounds to 0.01, which swallows a sub-percent step; pactl's
+    # raw value is on the same cubic scale (65536 = 100%) at full precision.
+    cur=$(pactl get-sink-volume @DEFAULT_SINK@ | awk 'NR == 1 { print $3 / 655.36; exit }')
+    new=$(step "$cur" "$VOL_DIV")
+    wpctl set-volume @DEFAULT_AUDIO_SINK@ "$(awk -v p="$new" 'BEGIN { print p / 100 }')"
+    [[ $dir == up ]] && wpctl set-mute @DEFAULT_AUDIO_SINK@ 0
+    icon=$(awk -v p="$new" 'BEGIN { print p == 0 ? "muted" : p < 34 ? "low" : p < 67 ? "medium" : "high" }')
+    osd "audio-volume-$icon-symbolic" "$new"
+    ;;
+brightness)
+    IFS=, read -r _ _ raw _ max < <(brightnessctl -m)
+    cur=$(awk -v r="$raw" -v m="$max" -v e="$BRI_EXP" 'BEGIN { print 100 * (r / m) ^ (1 / e) }')
+    new=$(step "$cur" "$BRI_DIV")
+    # Round away from the current raw value so a step never rounds to no change.
+    raw_new=$(awk -v p="$new" -v m="$max" -v e="$BRI_EXP" -v r="$raw" -v dir="$dir" -v lo="$BRI_MIN_RAW" 'BEGIN {
+        n = m * (p / 100) ^ e
+        n = dir == "up" ? int(n + 0.5) : int(n)
+        if (dir == "up" && n <= r) n = r + 1
+        if (dir == "down" && n >= r) n = r - 1
+        if (n < lo) n = lo; if (n > m) n = m
+        print n
+    }')
+    brightnessctl -q set "$raw_new"
+    shown=$(awk -v r="$raw_new" -v m="$max" -v e="$BRI_EXP" 'BEGIN { printf "%.2f", 100 * (r / m) ^ (1 / e) }')
+    osd display-brightness-symbolic "$shown"
+    ;;
+*)
+    echo "usage: hypr-level volume|brightness up|down" >&2; exit 2 ;;
+esac
