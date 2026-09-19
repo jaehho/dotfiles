@@ -29,6 +29,7 @@ process.stdin.on('end', () => {
     const rate5h = data.rate_limits?.five_hour?.used_percentage;
     const rate5hResets = data.rate_limits?.five_hour?.resets_at;
     const rate7d = data.rate_limits?.seven_day?.used_percentage;
+    const rate7dResets = data.rate_limits?.seven_day?.resets_at;
 
     // z.ai credit multipliers per 10k credits [input, cache-read, output],
     // docs.z.ai pricing: flash 2.3/0.56/8, glm-5.3 6.9/1.7/24; off-peak
@@ -116,7 +117,7 @@ process.stdin.on('end', () => {
     // z.ai pool pressure: the CLI never sends rate_limits on a gateway, so
     // take the 5h/weekly percentages from the console endpoint — cached for
     // a minute, refreshed out-of-band so a slow endpoint never blocks a render
-    let zai5h = null, zai5hResets = null, zaiWeek = null;
+    let zai5h = null, zai5hResets = null, zaiWeek = null, zaiResetsWeek = null;
     const onZai = glm && !/^(z-ai\/|@preset)/.test(modelId);
     if (onZai) {
       const qf = path.join(os.tmpdir(), 'claude-sl-zai-quota.json');
@@ -148,7 +149,10 @@ process.stdin.on('end', () => {
             { env: { ...process.env, ZK: key }, detached: true, stdio: 'ignore' }).unref();
         } catch {}
       }
-      if (q) { zai5h = q.pct5h; zai5hResets = q.resets5h; zaiWeek = q.pctWeek; }
+      if (q) {
+        zai5h = q.pct5h; zai5hResets = q.resets5h;
+        zaiWeek = q.pctWeek; zaiResetsWeek = q.resetsWeek;
+      }
     }
 
     const parts = [];
@@ -197,52 +201,30 @@ process.stdin.on('end', () => {
       parts.push(`${dim}${tokens}${rst}`);
     }
 
-    // Session cost — Anthropic sessions only: for glm the CLI falls back to
-    // Claude-table pricing (~12x z.ai list), so credits replace it
+    // Session cost, same slot both windows: Anthropic sessions show the
+    // server-priced figure; glm sessions show the OpenRouter list-price
+    // counterfactual (the CLI's own glm number is a Claude-table mispricing)
     if (cost != null && cost > 0 && !(tu && tu.credits != null)) {
       parts.push(`${dim}$${cost.toFixed(2)}${rst}`);
     }
-
-    // z.ai coding-plan credits + the OpenRouter counterfactual
-    if (tu && ((tu.credits != null && tu.credits > 0) || tu.orUsd > 0)) {
-      const hasCr = tu.credits != null && tu.credits > 0;
-      const label = (hasCr ? `${tu.credits >= 10 ? tu.credits.toFixed(0) : tu.credits.toFixed(1)} cr` : '') +
-        (tu.orUsd > 0 ? `${hasCr ? ' · ' : ''}$${tu.orUsd.toFixed(2)} or` : '');
-      parts.push(`${dim}${label}${rst}`);
+    if (tu && tu.orUsd > 0) {
+      parts.push(`${dim}$${tu.orUsd.toFixed(2)}${rst}`);
     }
 
-    // 5h subscription window
-    if (rate5h != null) {
-      const used = Math.round(rate5h);
-
-      let color;
-      if (used < 50) color = '\x1b[32m';
-      else if (used < 80) color = '\x1b[33m';
-      else color = '\x1b[31m';
-
-      let time = '';
-      if (rate5hResets != null) {
-        const secs = Math.max(0, rate5hResets - Math.floor(Date.now() / 1000));
-        const h = Math.floor(secs / 3600);
-        const m = Math.floor((secs % 3600) / 60);
-        time = h > 0 ? `${h}h${m}m` : `${m}m`;
-      }
-
-      parts.push(`${color}⚡${used}%${time ? ` ${time}` : ''}\x1b[0m`);
+    // z.ai coding-plan credits drawn (list price)
+    if (tu && tu.credits != null && tu.credits > 0) {
+      parts.push(`${dim}${tu.credits >= 10 ? tu.credits.toFixed(0) : tu.credits.toFixed(1)} cr${rst}`);
     }
 
-    // 7-day subscription window (same server data, slower pool)
-    if (rate7d != null) {
-      const used = Math.round(rate7d);
-      let color;
-      if (used < 50) color = '\x1b[32m';
-      else if (used < 80) color = '\x1b[33m';
-      else color = '\x1b[31m';
-      parts.push(`${color}⚡7d ${used}%\x1b[0m`);
-    }
-
-    // z.ai coding-plan windows — same shape as the Claude ones above
-    const zaiRow = (pct, resets, weekly) => {
+    // Rate-limit windows, identical shape on both backends:
+    //   ⚡<pct> <resets-in>   5-hour pool
+    //   ⚡7d <pct> <resets-in>  weekly pool
+    const fmtDur = secs => {
+      const d = Math.floor(secs / 86400), h = Math.floor((secs % 86400) / 3600),
+          m = Math.floor((secs % 3600) / 60);
+      return d > 0 ? `${d}d${h}h` : h > 0 ? `${h}h${m}m` : `${m}m`;
+    };
+    const limRow = (pct, resets, tag) => {
       if (pct == null) return null;
       const used = Math.round(pct);
       let color;
@@ -252,15 +234,17 @@ process.stdin.on('end', () => {
       let time = '';
       if (resets != null) {
         const secs = Math.max(0, resets - Math.floor(Date.now() / 1000));
-        const h = Math.floor(secs / 3600);
-        const m = Math.floor((secs % 3600) / 60);
-        time = h > 0 ? `${h}h${m}m` : `${m}m`;
+        time = ` ${fmtDur(secs)}`;
       }
-      return `${color}⚡${used}%${time ? ` ${time}` : ''}${weekly ? ' wk' : ''}\x1b[0m`;
+      return `${color}⚡${tag}${used}%${time}\x1b[0m`;
     };
-    const z5 = zaiRow(zai5h, zai5hResets, false);
+    const r5 = limRow(rate5h, rate5hResets, '');
+    if (r5) parts.push(r5);
+    const r7 = limRow(rate7d, data.rate_limits?.seven_day?.resets_at, '7d ');
+    if (r7) parts.push(r7);
+    const z5 = limRow(zai5h, zai5hResets, '');
     if (z5) parts.push(z5);
-    const z7 = zaiRow(zaiWeek, null, true);
+    const z7 = limRow(zaiWeek, zaiResetsWeek, '7d ');
     if (z7) parts.push(z7);
 
     // idle-dash: archive server-truth rate limits; the dashboard reads this
