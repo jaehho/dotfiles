@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+# Failover proxy between Claude Code and the z.ai GLM Coding Plan.
+# Forwards Anthropic Messages traffic to z.ai; on quota/auth failure
+# (429 quota-family error codes, 401/403, connection errors) retries the
+# same request against OpenRouter with the model mapped to a @preset slug.
+# Transient 429s (rate limit 1302, overload 1305) and 5xx pass through;
+# Claude Code retries those itself.
+#
+# claude-or starts this on 127.0.0.1:8927 when both keys exist; it serves
+# until killed or reboot (no idle self-exit: one dead-port window bricks
+# every already-running session pointing at it). Failover events append to
+# ~/.local/state/claude-or/fallback.log. Check the wiring with
+# `claude-or-fallback selftest`.
+
+import http.client
+import http.server
+import io
+import json
+import os
+import re
+import sys
+import time
+from urllib.parse import urlsplit
+
+PORT = int(os.environ.get("CLAUDE_OR_PROXY_PORT", "8927"))
+PRIMARY = os.environ.get("CLAUDE_OR_PRIMARY_URL", "https://api.z.ai/api/anthropic")
+FALLBACK = os.environ.get("CLAUDE_OR_FALLBACK_URL", "https://openrouter.ai/api")
+PRIMARY_KEY = os.environ.get("CLAUDE_OR_PRIMARY_KEY")
+FALLBACK_KEY = os.environ.get("CLAUDE_OR_FALLBACK_KEY")
+# Claude Code strips the [1m] suffix client-side, so live traffic carries
+# bare names; both forms are mapped. Presets are sent bare (the suffix only
+# works in the claude-or env path, not raw API bodies).
+MODEL_MAP = {
+    "glm-5.3": "@preset/cc-flash-high",
+    "glm-5.3[1m]": "@preset/cc-flash-high",
+    "glm-5.3-flash": "@preset/cc-flash-med",
+    "glm-5.3-flash[1m]": "@preset/cc-flash-med",
+}
+# 1308-1310 quota/expiry hard stops, 1316-1321 extra-usage family (see
+# docs.z.ai/api-reference/api-code.md).
+QUOTA = re.compile(r"13(?:08|09|10|1[6-9]|2[01])")
+HOP_HEADERS = {"host", "authorization", "content-length", "connection",
+               "accept-encoding", "transfer-encoding"}
+# Models routed to the local Ollama daemon instead of z.ai, so /model
+# <local> works mid-session. Unknown names still go to the primary.
+LOCAL = os.environ.get("CLAUDE_OR_LOCAL_URL", "http://127.0.0.1:11434")
+LOCAL_PREFIXES = ("qwen", "ornith", "granite", "gemma", "gpt-oss",
+                  "llama", "deepseek", "mistral")
+STATE_DIR = os.path.expanduser("~/.local/state/claude-or")
+
+
+def log(msg):
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(os.path.join(STATE_DIR, "fallback.log"), "a") as f:
+            f.write("%s %s\n" % (time.strftime("%Y-%m-%dT%H:%M:%S"), msg))
+    except OSError:
+        pass
+
+
+def read_key(path, name):
+    try:
+        with open(os.path.expanduser(path)) as f:
+            for line in f:
+                if line.startswith(name + "="):
+                    return line.strip().split("=", 1)[1]
+    except OSError:
+        pass
+    return None
+
+
+def load_keys():
+    global PRIMARY_KEY, FALLBACK_KEY
+    PRIMARY_KEY = PRIMARY_KEY or read_key("~/.config/zai.env", "ZAI_API_KEY")
+    FALLBACK_KEY = FALLBACK_KEY or read_key("~/.config/openrouter.env",
+                                            "OPENROUTER_API_KEY")
+
+
+def open_upstream(base, key, path_qs, headers, body):
+    """Send one request; return (conn, status, ctype, reader, fail_reason).
+
+    reader is a file-like of the response body; fail_reason is None when the
+    response should be passed through (including non-failover errors).
+    """
+    u = urlsplit(base)
+    cls = (http.client.HTTPSConnection if u.scheme == "https"
+           else http.client.HTTPConnection)
+    conn = cls(u.hostname, u.port, timeout=300)
+    fwd = {k: v for k, v in headers.items() if k.lower() not in HOP_HEADERS}
+    fwd["Authorization"] = "Bearer " + key
+    fwd["Content-Length"] = str(len(body))
+    fwd["Accept-Encoding"] = "identity"
+    upstream_path = u.path.rstrip("/") + path_qs
+    try:
+        conn.request("POST", upstream_path, body=body, headers=fwd)
+        resp = conn.getresponse()
+    except OSError as e:
+        try:
+            conn.close()
+        except OSError:
+            pass
+        return None, 0, None, None, "connect: %s" % e
+    if resp.status in (401, 403):
+        err = resp.read()
+        conn.close()
+        return None, resp.status, None, io.BytesIO(err), "auth %d" % resp.status
+    if resp.status == 429:
+        # Errors arrive complete and small; read to inspect the code.
+        err = resp.read()
+        conn.close()
+        if QUOTA.search(err.decode("utf-8", "replace")):
+            return None, resp.status, None, io.BytesIO(err), "quota 429"
+        return None, resp.status, resp.getheader("Content-Type"), io.BytesIO(err), None
+    return conn, resp.status, resp.getheader("Content-Type"), resp, None
+
+
+def map_model(body):
+    """Return (body, old, new) with the fallback model swapped in."""
+    try:
+        obj = json.loads(body)
+    except ValueError:
+        return body, None, None
+    old = obj.get("model")
+    new = MODEL_MAP.get(old, old)
+    if new != old:
+        obj["model"] = new
+        return json.dumps(obj).encode(), old, new
+    return body, old, new
+
+
+class Proxy(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        if self.path == "/healthz":
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+        else:
+            self.send_error(404)
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(n)
+        headers = dict(self.headers.items())
+
+        # Local slot: /model <local-model> inside a z.ai session.
+        try:
+            model = json.loads(body).get("model", "")
+        except ValueError:
+            model = ""
+        if model.startswith(LOCAL_PREFIXES):
+            conn, status, ctype, reader, fail = open_upstream(
+                LOCAL, "ollama", self.path, headers, body)
+            if fail is not None:  # ollama down: surface it, don't fail over
+                payload = json.dumps({"type": "error", "error": {
+                    "type": "api_error",
+                    "message": "claude-or-fallback: local ollama (%s) failed: "
+                               "%s" % (LOCAL, fail)}}).encode()
+                self.send_response(502)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(payload)
+                self.close_connection = True
+                return
+            self.stream_out(conn, status, ctype, reader)
+            return
+
+        conn, status, ctype, reader, fail = open_upstream(
+            PRIMARY, PRIMARY_KEY, self.path, headers, body)
+        if fail is not None and FALLBACK_KEY:
+            body2, old, new = map_model(body)
+            log("failover reason=%s model=%s -> %s" % (fail, old, new))
+            conn2, status, ctype, reader, fail2 = open_upstream(
+                FALLBACK, FALLBACK_KEY, self.path, headers, body2)
+            if fail2 is not None:
+                log("fallback failed reason=%s" % fail2)
+                payload = json.dumps({"type": "error", "error": {
+                    "type": "api_error",
+                    "message": "claude-or-fallback: both upstreams failed "
+                               "(%s, then %s)" % (fail, fail2)}}).encode()
+                self.send_response(502)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(payload)
+                self.close_connection = True
+                return
+            conn = conn2
+        self.stream_out(conn, status, ctype, reader)
+
+    def stream_out(self, conn, status, ctype, reader):
+        try:
+            # Close-delimited response: safe for SSE streaming without
+            # implementing chunked encoding ourselves.
+            self.send_response(status)
+            if ctype:
+                self.send_header("Content-Type", ctype)
+            self.send_header("Connection", "close")
+            self.end_headers()
+            while True:
+                chunk = reader.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # client hung up mid-stream
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except OSError:
+                    pass
+            self.close_connection = True
+
+
+def serve():
+    load_keys()
+    if not PRIMARY_KEY or not FALLBACK_KEY:
+        print("claude-or-fallback: need ZAI_API_KEY and OPENROUTER_API_KEY",
+              file=sys.stderr)
+        sys.exit(1)
+    try:
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Proxy)
+    except OSError:
+        sys.exit(0)  # port taken: another instance is already serving
+    log("listening on 127.0.0.1:%d" % PORT)
+    srv.serve_forever()
+
+
+def selftest():
+    """Fake upstreams: quota 429 must fail over with the model mapped,
+    healthy primary must pass through, rate-limit 429 must NOT fail over."""
+    import threading
+
+    class Fake(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length", 0))
+            req = json.loads(self.rfile.read(n))
+            srv = self.server
+            srv.requests.append(req)
+            code, payload = srv.respond(req)
+            out = json.dumps(payload).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+    def fake(mode):
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fake)
+        srv.requests = []
+        srv.mode = mode
+        if mode == "quota":
+            srv.respond = lambda req: (429, {"error": {
+                "message": "[1308][Usage limit reached for 5 hour]"}})
+        elif mode == "ratelimit":
+            srv.respond = lambda req: (429, {"error": {
+                "message": "[1302][Rate limit reached for requests]"}})
+        else:
+            srv.respond = lambda req: (200, {"ok": "primary",
+                                             "model": req["model"]})
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        return srv
+
+    primary = fake("quota")
+    fallback = fake("ok")
+    globals()["PRIMARY"] = "http://127.0.0.1:%d" % primary.server_address[1]
+    globals()["FALLBACK"] = "http://127.0.0.1:%d" % fallback.server_address[1]
+    globals()["PRIMARY_KEY"] = globals()["FALLBACK_KEY"] = "test"
+    globals()["STATE_DIR"] = os.environ.get("TMPDIR", "/tmp")  # keep the real log clean
+
+    proxy = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Proxy)
+    threading.Thread(target=proxy.serve_forever, daemon=True).start()
+
+    def post(body):
+        c = http.client.HTTPConnection("127.0.0.1",
+                                       proxy.server_address[1], timeout=10)
+        c.request("POST", "/v1/messages", body=json.dumps(body).encode(),
+                  headers={"Content-Type": "application/json"})
+        r = c.getresponse()
+        data = json.loads(r.read())
+        c.close()
+        return r.status, data
+
+    req = {"model": "glm-5.3[1m]", "messages": [{"role": "user",
+                                                 "content": "hi"}]}
+    code, data = post(req)
+    assert code == 200 and data.get("ok") == "primary", (code, data)
+    assert fallback.requests[-1]["model"] == "@preset/cc-flash-high", \
+        fallback.requests[-1]["model"]
+    assert not any(r["model"].startswith("glm") for r in fallback.requests)
+
+    # Live traffic carries the bare name (Claude Code strips [1m]).
+    req_bare = {"model": "glm-5.3-flash", "messages": [{"role": "user",
+                                                        "content": "hi"}]}
+    code, data = post(req_bare)
+    assert code == 200 and data.get("ok") == "primary", (code, data)
+    assert fallback.requests[-1]["model"] == "@preset/cc-flash-med", \
+        fallback.requests[-1]["model"]
+
+    primary.mode = "ok"
+    primary.respond = lambda req: (200, {"ok": "primary",
+                                         "model": req["model"]})
+    n_before = len(fallback.requests)
+    code, data = post(req)
+    assert code == 200 and data.get("model") == "glm-5.3[1m]", (code, data)
+    assert len(fallback.requests) == n_before, "healthy primary must not fail over"
+
+    primary.mode = "ratelimit"
+    primary.respond = lambda req: (429, {"error": {
+        "message": "[1302][Rate limit reached for requests]"}})
+    code, data = post(req)
+    assert code == 429, (code, data)
+    assert len(fallback.requests) == n_before, "1302 must not fail over"
+
+    # Local slot: qwen/ornith/... names route to the LOCAL upstream.
+    localfake = fake("ok")
+    globals()["LOCAL"] = "http://127.0.0.1:%d" % localfake.server_address[1]
+    n_primary = len(primary.requests)
+    code, data = post({"model": "qwen2.5:7b-64k", "messages": [
+        {"role": "user", "content": "hi"}]})
+    assert code == 200 and data.get("ok") == "primary", (code, data)
+    assert localfake.requests[-1]["model"] == "qwen2.5:7b-64k"
+    assert len(primary.requests) == n_primary, "local model must not hit z.ai"
+
+    print("selftest: 5/5 passed")
+    sys.stdout.flush()
+    os._exit(0)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        selftest()
+    else:
+        serve()

@@ -1,0 +1,24 @@
+{
+  "enableArtifact": false,
+  "skillOverrides": {
+    "artifact-design": "off",
+    "artifact-capabilities": "off",
+    "artifact-diagramming": "off"
+  },
+  "modelPicker": {
+    "options": [
+      {
+        "model": "ornith:9b-49k",
+        "label": "Ornith 9B (local)",
+        "description": "49k ctx — short sessions",
+        "behavesAs": "claude-sonnet-4-6"
+      },
+      {
+        "model": "qwen2.5:7b",
+        "label": "Qwen 2.5 7B (local)",
+        "description": "32k ctx — small tasks",
+        "behavesAs": "claude-sonnet-4-6"
+      }
+    ]
+  }
+}
