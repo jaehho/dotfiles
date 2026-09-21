@@ -14,7 +14,7 @@ Use `dotfiles` for status and `dotfiles sync` to converge. Step names come from 
 | Desktop | [swaync](#swaync-width-hover-and-navigation), [Lua reloads](#hyprland-lua-reloads-and-timers), [Waybar ghosts](#waybar-shows-a-closed-window), [wallpaper](#wallpaper-does-not-change), [media keys](#media-and-brightness-keys) |
 | Audio and speech | [silent speakers](#speakers-silent-with-healthy-volume-readouts), [speaker EQ](#speaker-eq-sounds-wrong), [Pulse clients](#pulse-clients-silent-after-audio-changes), [Kokoro](#kokoro-and-speech-dispatcher) |
 | Network | [homelab and backups](#homelab-and-backup-connectivity), [Cooper SSH](#cooper-ssh-host-key-changes), [X2Go](#x2go-latency-and-ghost-windows) |
-| Hardware and sleep | [dock](#dock-input-dead-after-resume), [missing modules](#usb-hotplug-after-a-kernel-upgrade), [battery drain](#battery-drain-and-unexpected-wakes), [dark panel](#black-screen-after-resume), [cold boot](#hibernate-returns-to-a-fresh-session), [logind](#logind-ignores-its-drop-in), [wedged GPU](#dgpu-wedges-during-sleep) |
+| Hardware and sleep | [dock](#dock-input-dead-after-resume), [missing modules](#usb-hotplug-after-a-kernel-upgrade), [battery drain](#battery-drain-and-unexpected-wakes), [battery not charging](#battery-not-charging-while-plugged-in-charge-led-lit), [dark panel](#black-screen-after-resume), [cold boot](#hibernate-returns-to-a-fresh-session), [logind](#logind-ignores-its-drop-in), [wedged GPU](#dgpu-wedges-during-sleep) |
 | API sessions | [OpenRouter stream interruption](#openrouter-stream-interruption) |
 
 ## NVIDIA beta upgrade deadlocks paru
@@ -54,13 +54,22 @@ Preserve the user npm prefix used by `scripts/packages.sh`. Scope any build work
 
 ## swaync width, hover, and navigation
 
-**Ownership:** jaehho fork in `~/projects/swaync`, packaged through `packaging/PKGBUILD`; dotfiles owns `home/swaync/.config/swaync/` and `hypr-swaync-keys`. A newer Arch package can replace the fork: check the installed version before diagnosing missing fork behavior.
+**Ownership:** jaehho fork in `~/projects/forks/swaync`, packaged through `packaging/PKGBUILD`; dotfiles owns `home/swaync/.config/swaync/` and `hypr-swaync-keys`. A newer Arch package can replace the fork: check the installed version before diagnosing missing fork behavior.
 
 **Verified width correction (2026-09-17):** title/DND cards measured 408px, notifications 372px even with the fork's Stack expansion patch. A GTK allocation dump traced the 18px inset per side to `.widget`'s 8px margin + 8px padding on `.widget-notifications`, plus 2px Adwaita list-row padding. `style.css` now zeroes those outer insets; inner card margins supply the spacing. All four card types measured 408px with 8px gaps. Do not restore a fixed min-width or assume hexpand alone fixes it.
 
 **Hover:** the packaged theme paints `.notification-default-action:hover` and `.notification-action:hover`. User overrides must beat those selectors; only the card and actual button should paint their hover backgrounds. Verify body-hover and button-hover separately. A valid stylesheet and successful reload are not visual proof.
 
-**Navigation:** the fork moves directly between rows and numbers action buttons. Arrows/Home/End/digits go directly to swaync. Ctrl+n/p use `hypr-swaync-keys send`; the helper checks visibility before injecting a key and restoring the submap. The watcher must stop and reap its subscriber cleanly. The removed AT-SPI key-stepping workaround was slow; do not restore it.
+**Navigation:** the fork moves directly between rows. Arrows/Home/End go directly to swaync. Action buttons show `</>` as a dim corner badge (digits 3–9 for a rare 3rd+ action) and activate on either `</>` or `,/.`; Enter runs the default action and closes the panel, `x` or Delete clears the focused notification and focus moves to the next row. `hide-on-action` is false: activating an action dismisses that notification but leaves the panel open. Ctrl+n/p use `hypr-swaync-keys send`; the helper checks visibility before injecting a key and restoring the submap. The watcher must stop and reap its subscriber cleanly. The removed AT-SPI key-stepping workaround was slow; do not restore it. Restart swaync (fish):
+
+```fish
+pkill -x swaync
+sleep 1
+hyprctl dispatch 'hl.dsp.exec_cmd("swaync")'
+pgrep -x swaync
+```
+
+Every step guards a real failure. Kill first: launching while an old daemon holds the D-Bus name makes the new one exit silently, so the stale binary keeps serving. No `; and` after pkill: it exits 1 when nothing is running, silently skipping the launch. Sleep: the dying process must release the D-Bus name first. Hyprland exec, never a terminal `&` job: those die with the terminal (looks like "Super+. does nothing"). Plain `hyprctl dispatch exec X` is invalid under the Lua config — `dispatch` takes a Lua expression like `hl.dsp.exec_cmd(...)`.
 
 **Keys silent only with panel open:** check `hyprctl submap` and `hyprctl binds -j`. A submap is exclusive; screenshot/media keys must also be bound there. **Album art:** swaync reads remote URIs through GIO; check `gvfs` and the art-load error before blaming the media player.
 
@@ -182,6 +191,8 @@ systemctl --user list-timers restic-backup.timer
 journalctl --user -u restic-backup -n 40
 ```
 
+**wonhomelab.net unreachable with Tailscale up, fine with it down (2026-09-20).** Split DNS answers `192.168.1.42`, which is only reachable through wonlab's subnet route — the laptop sits on the outer subnet of the double-NAT, so an ARP FAILED for `192.168.1.42` is normal from here, not evidence wonlab is down. The hairpin path (tailscale down → router DNS → public IP `24.47.180.85`) serves ssh/web/restic independently and stays up even when wonlab's tailnet presence is gone. Cause this time: wonlab's control-plane checkins to headscale silently stalled (~40 min; wonlab still reported "Connected" — half-open conn), so the peer showed offline, the subnet route vanished, and split DNS timed out. A fresh `tailscale up` re-registered and wonlab went online instantly. Triage: with Tailscale up, check `tailscale status --json` for the peer's `Online`; if false, the fix is re-establishing control (laptop `tailscale down`/`up`, or wonlab's `sudo journalctl -u tailscaled`), not DNS or hosts-file changes.
+
 **ssh to wonhomelab.net refused with Tailscale up (2026-09-18).** With Tailscale up, split DNS answers `192.168.1.42` and the accepted subnet route sends it via `tailscale0`; the fix lives on wonlab, not the laptop. Instant `Connection refused` on exactly one port means a `reject` rule (fail2ban's `@addr-set-sshd` chain, `reject with icmp port-unreachable`), not an ACL or ufw DROP — those time out. wonlab now has `ufw allow in on tailscale0 to any port 22 proto tcp` and `ignoreip = 127.0.0.1/8 ::1 100.64.0.0/10` in `/etc/fail2ban/jail.d/ignoreip-tailnet.local`, so TOTP failures can no longer ban tailnet sources. The laptop's ts IP (`100.64.0.1`) is what wonlab sees on both paths; the `ControlPersist 4h` master masks connection failures while alive — test with `ssh -o ControlPath=none -o BatchMode=yes` (reaching `Permission denied (keyboard-interactive)` means the path is fine).
 
 ## Cooper SSH host-key changes
@@ -241,6 +252,14 @@ Battery history belongs to `~/projects/battery-log`; its database is `~/.local/s
 `/proc/acpi/wakeup` writes toggle state; check before changing it. Do not disable the wake alarm needed for suspend-then-hibernate. On this NVIDIA setup, `HibernateOnACPower=no` caused the timer's AC re-suspend path to fail with `nv_pmops_suspend ... -5`; current config leaves it at the default. Reproduce a regression before restoring removed sleep layers.
 
 **Correction to old notes:** hibernation did work in later real power-cycle tests. Missing “Image saving progress” lines do not prove the image was never written: post-snapshot messages can disappear on restore. Retained uptime is also expected. Compare actual power-cycle/restore evidence and wall-clock gaps; a `pm_test` success message alone is insufficient.
+
+## Battery not charging while plugged in (charge LED lit)
+
+**Signature:** `BAT0` reports `Not charging` with `power_now` 0 while `ADP1` is online, the charge LED lit, and the ucsi input holding 20 V. **Cause confirmed live 2026-09-19:** the EC pauses charging while CPU package temp (`x86_pkg_temp`) spikes into the ~90-96°C range and resumes below ~70°C. Verified mid-blip: pkg 96°C, input 20 V, charge 0 W. The spikes are seconds-long boost bursts (seen at load ~2, single Firefox processes), so minute-sampled history shows the pauses without always showing the spike; even 0.25 s sampling of `x86_pkg_temp` swings 54→82→54 between reads, so a dropout whose transition sample reads cool (observed: 2 s pause at sampled 63°C, 2026-09-19) is not counter-evidence. With temp oscillating near the threshold, charging flaps on/off in ~7 s ramps; it settles when heat subsides. This is protective EC behavior, not a fault — replug, modprobe cycles, and waiting do not "fix" it; the workload does.
+
+**Not causes:** the adapter (input holds 20 V through dropouts) and `modprobe -r/-i ucsi_acpi` (only re-registers deregistered ucsi source PSYs, restoring telemetry; earlier entries wrongly credited both). `journalctl -k -g ucsi` still shows `failed to re-enable notifications (-110)` on every resume since 2026-09-16 — a separate telemetry loss in the same wake-path family as the touchscreen rate quirk, not the charge dropout cause.
+
+**Check a blip:** query battery-log history (`~/.local/state/battery-log/history.db`, minute samples; `temp_c` is `x86_pkg_temp`) — abnormal dropouts show `status='Not charging' AND ac=1` below the cap with `temp_c` ≥ ~89. Long Not-charging stretches at exactly 79-80% are the EC's separate, normal charge-hold cap (1519 samples the week of 2026-09-13); don't mistake them for this.
 
 ## Black screen after resume
 
@@ -303,3 +322,12 @@ Check the current GPU address and runtime power state rather than copying the ol
 The September investigation considered provider health and preset routing. Record the actual provider, timing, and error; compare endpoints before changing exclusions. A model-wide provider dip does not establish that local networking or one provider is at fault.
 
 Routing/failover and preset APIs can change. Verify current provider documentation before changing a preset; historical notes about sorting, load balancing, or replacement semantics are not sufficient authority. Keep credentials out of output and do not send a mutating preset request as a diagnostic probe. Detailed observations remain in the archive.
+
+## Betterbird profile prefs
+
+`~/.thunderbird/72gsfuug.default-default` is not stow-managed: the profile is 8 GiB of mutable mail data for restic, and the process name is `betterbird-bin`, not `betterbird`. The profile directory name is generated at first run, so re-apply these to whatever profile exists after a rebuild.
+
+Deliberate prefs live in `user.js` in the profile (re-applied at every startup, never rewritten by the app); `prefs.js` is app-owned:
+
+- `mail.minimizeToTray` = true, plus `hyprland` in `mail.minimizeToTray.supportedDesktops` — without it, close-to-tray is swallowed (fixed 2026-09-10).
+- `mail.biff.alert.enabled_actions` = "mark-as-read,archive" — buttons on the new-mail notification. Upstream default is `"mark-as-read,delete"` (defaults/pref/mailnews.js in the installed omni.ja). Trap hit 2026-09-21: appending this pref to `prefs.js` while Betterbird sat in the tray was silently wiped by its next prefs flush — which is why the value lives in `user.js` now.
