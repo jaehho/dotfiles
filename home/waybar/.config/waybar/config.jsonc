@@ -3,6 +3,12 @@
     // style.css (and anything it @imports) applies on save; config changes
     // still need a restart
     "reload_style_on_change": true,
+    // Set-semantics, not a blind toggle: idle-dash-bar reads the bar's real
+    // visibility from `hyprctl layers` and sends the matching signal, so a
+    // stale guess can never flip the state (the old USR1-toggle + state-file
+    // design went permanently inverted; see idle-dash ISSUES.md).
+    "on-sigusr1": "hide",
+    "on-sigusr2": "show",
     "position": "top",
     "height": 34,
     "spacing": 4,

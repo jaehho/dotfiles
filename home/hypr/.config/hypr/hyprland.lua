@@ -34,9 +34,8 @@ local clr = require("colors")
 ---- MY PROGRAMS ----
 ---------------------
 
-local terminal    = "kitty"
-local fileManager = "thunar"
-local menu        = "rofi -show drun"
+local terminal = "kitty"
+local menu     = "rofi -show drun"
 
 -------------------
 ---- AUTOSTART ----
@@ -310,11 +309,11 @@ hl.device({
 
 local mainMod = "SUPER" -- Sets "Windows" key as main modifier
 
-hl.bind(mainMod .. " + Q",         hl.dsp.exec_cmd("env LAUNCH_TMUX=1 " .. terminal)) -- terminal, with tmux
-hl.bind(mainMod .. " + SHIFT + Q", hl.dsp.exec_cmd(terminal)) -- terminal, no tmux
-hl.bind(mainMod .. " + C",         hl.dsp.window.close())
-hl.bind(mainMod .. " + E",         hl.dsp.exec_cmd(fileManager)) -- file manager
-hl.bind(mainMod .. " + V",         hl.dsp.window.float({ action = "toggle" }))
+hl.bind(mainMod .. " + Return",         hl.dsp.exec_cmd("env LAUNCH_TMUX=1 " .. terminal)) -- terminal, with tmux
+hl.bind(mainMod .. " + SHIFT + Return", hl.dsp.exec_cmd(terminal)) -- terminal, no tmux
+hl.bind(mainMod .. " + Q",         hl.dsp.window.close()) -- quit: close the focused window
+-- asst's add-task popup: a layer surface, so no window rule; pressing again closes it
+hl.bind(mainMod .. " + A",         hl.dsp.exec_cmd("asst-gtk quick-add")) -- quick add task
 hl.bind(mainMod .. " + space",     hl.dsp.exec_cmd(menu)) -- app launcher
 hl.bind(mainMod .. " + D",         hl.dsp.exec_cmd("idle-dash toggle")) -- idle dashboard on/off
 hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/hypr-pin-toggle")) -- pin window on top
@@ -336,36 +335,33 @@ local function bind_screenshots()
 end
 bind_screenshots()
 
--- Clipboard history
-hl.bind(mainMod .. " + SHIFT + V", hl.dsp.exec_cmd(
-    [[cliphist list | rofi -dmenu | cliphist decode | wl-copy && sleep 0.05 && if hyprctl activewindow -j | jq -r '.class' | grep -qiE '^(kitty|foot|Alacritty|wezterm)$'; then wtype -M ctrl -M shift v; else wtype -M ctrl v; fi]]
-))
-
 -- Lock screen
 hl.bind(mainMod .. " + escape", hl.dsp.exec_cmd("loginctl lock-session"))
 
--- Fullscreen
-hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen())
+-- Fullscreen and float
+hl.bind(mainMod .. " + F",         hl.dsp.window.fullscreen())
+hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.float({ action = "toggle" })) -- float / unfloat
 
--- Browser
+-- Browser and music
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("firefox-developer-edition"))
-hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("~/.local/bin/hypr-spotify-toggle")) -- spotify: show / hide to tray
+hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("~/.local/bin/hypr-spotify-toggle")) -- spotify: show / hide to tray
 
--- Toggle waybar. SIGUSR1 hides and shows the running bar in place; killing it
--- instead left each custom module's child (steno bar) orphaned to PID 1, one
--- more per press. pkill exits 1 when nothing matched, so a missing bar starts.
-hl.bind(mainMod .. " + B", hl.dsp.exec_cmd(
-    [[pkill -SIGUSR1 -x waybar || { cd ~/.config/waybar && waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP'; } &]]
-)) -- show/hide bar
+-- Toggle waybar. idle-dash-bar reads the bar's real visibility from the
+-- compositor (`hyprctl layers`) and sends the matching set-semantics signal
+-- (USR1 hide / USR2 show, per on-sigusr1/2 in waybar's config), so a stale
+-- guess can never flip the state. Killing the bar instead of signaling left
+-- each custom module's child (steno bar) orphaned to PID 1, one more per
+-- press; a missing bar is started by the script.
+hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("~/.local/bin/idle-dash-bar toggle")) -- show/hide bar
 
 -- Notifications
 hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("swaync-client -t"))
 
 -- Game mode (disable effects for performance)
-hl.bind(mainMod .. " + SHIFT + G", hl.dsp.exec_cmd("~/.local/bin/hypr-gamemode"))
+hl.bind(mainMod .. " + G", hl.dsp.exec_cmd("~/.local/bin/hypr-gamemode"))
 
 -- Night light (blue light filter)
-hl.bind(mainMod .. " + SHIFT + T", hl.dsp.exec_cmd("~/.local/bin/hypr-nightlight-toggle"))
+hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("~/.local/bin/hypr-nightlight-toggle"))
 
 -- Keybind cheatsheet
 hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheatsheet"))
@@ -373,15 +369,8 @@ hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheats
 -- Settings menu: entries live in hypr-settings-menu
 hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("~/.local/bin/hypr-settings-menu")) -- settings menu
 
--- Read screen aloud (toggle — press again to stop)
-hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("~/.local/bin/hypr-read-screen"))
-
--- Taildrop: send files to a tailnet device (+CTRL sends the clipboard)
-hl.bind(mainMod .. " + SHIFT + D", hl.dsp.exec_cmd("~/.local/bin/taildrop-send")) -- taildrop a file
-hl.bind(mainMod .. " + CTRL + SHIFT + D", hl.dsp.exec_cmd("~/.local/bin/taildrop-send --clip")) -- taildrop the clipboard
-
--- asst's add-task popup: a layer surface, so no window rule; pressing again closes it
-hl.bind(mainMod .. " + SHIFT + A", hl.dsp.exec_cmd("asst-gtk quick-add")) -- quick add task
+-- Share: Taildrop a file or the clipboard, or show the clipboard as a QR code
+hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("~/.local/bin/hypr-share-menu")) -- share menu
 
 -- Move focus with mainMod + hjkl
 hl.bind(mainMod .. " + h", hl.dsp.focus({ direction = "left" }))
@@ -390,8 +379,8 @@ hl.bind(mainMod .. " + k", hl.dsp.focus({ direction = "up" }))
 hl.bind(mainMod .. " + j", hl.dsp.focus({ direction = "down" }))
 
 -- Cycle floating windows (focus only reaches tiled windows in dwindle)
-hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.cycle_next({ floating = true }))
-hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.bring_to_top())
+hl.bind(mainMod .. " + ALT + F", hl.dsp.window.cycle_next({ floating = true }))
+hl.bind(mainMod .. " + ALT + F", hl.dsp.window.bring_to_top())
 
 -- Swap windows with mainMod + SHIFT + hjkl
 hl.bind(mainMod .. " + SHIFT + h", hl.dsp.window.swap({ direction = "left" }))
@@ -485,15 +474,15 @@ hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
 hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 
 -- Move project (all windows + name) to next/prev monitor's empty slot
-hl.bind(mainMod .. " + CTRL + right", hl.dsp.exec_cmd("~/.local/bin/hypr-move-project next"))
-hl.bind(mainMod .. " + CTRL + left",  hl.dsp.exec_cmd("~/.local/bin/hypr-move-project prev"))
+hl.bind(mainMod .. " + SHIFT + right", hl.dsp.exec_cmd("~/.local/bin/hypr-move-project next"))
+hl.bind(mainMod .. " + SHIFT + left",  hl.dsp.exec_cmd("~/.local/bin/hypr-move-project prev"))
 
 -- Sequential workspace navigation (desktop-contained, non-empty only)
 hl.bind(mainMod .. " + Tab",         hl.dsp.exec_cmd("~/.local/bin/hypr-tab-nonempty")) -- next non-empty workspace
 hl.bind(mainMod .. " + SHIFT + Tab", hl.dsp.exec_cmd("~/.local/bin/hypr-tab-nonempty prev")) -- previous non-empty workspace
 
--- Resize submap (SUPER+A to enter, hjkl to resize, Esc to exit)
-hl.bind(mainMod .. " + A", hl.dsp.submap("resize")) -- resize mode
+-- Resize submap (SUPER+R to enter, hjkl to resize, Esc to exit)
+hl.bind(mainMod .. " + R", hl.dsp.submap("resize")) -- resize mode
 hl.define_submap("resize", "reset", function()
     -- relative = true, else x/y are treated as an absolute target size
     hl.bind("h", hl.dsp.window.resize({ x = -10, y = 0,   relative = true }), { repeating = true })

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Share menu — what Super+S offers. One list over the channels that already
+# exist: Taildrop for files and clipboard, and a QR code for getting text to a
+# phone without moving a file at all. taildrop-send owns the actual sending.
+set -euo pipefail
+
+choice=$(printf '%s\n' \
+    "Send a file (Taildrop)" \
+    "Send the clipboard (Taildrop)" \
+    "Show the clipboard as a QR code" \
+    | rofi -dmenu -i -p "Share") || exit 0
+
+case $choice in
+    "Send a file (Taildrop)")          exec taildrop-send ;;
+    "Send the clipboard (Taildrop)")   exec taildrop-send --clip ;;
+    "Show the clipboard as a QR code") ;;
+    *) exit 0 ;;
+esac
+
+# QR: clipboard text rendered by qrencode in a floating kitty pane.
+text=$(wl-paste --no-newline 2>/dev/null || true)
+if [ -z "$text" ]; then
+    notify-send -a Share -u critical "Share" "Clipboard is empty."
+    exit 0
+fi
+if [ ${#text} -gt 2000 ]; then
+    notify-send -a Share -u critical "Share" "Clipboard too long for a QR code (${#text} chars)."
+    exit 0
+fi
+exec ~/.local/bin/hypr-pane --float share-qr -- \
+    sh -c "wl-paste --no-newline | qrencode -t ANSIUTF8 -m 2; echo; echo 'close: Q'"
