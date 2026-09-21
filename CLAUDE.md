@@ -1,6 +1,6 @@
 # Dotfiles
 
-GNU Stow dotfiles for Arch + Hyprland and Ubuntu/Debian. `home/` mirrors `$HOME`; `system/` holds system configs; `packages/` holds manifests. Gate distro-specific work through `scripts/lib.sh`. See `TODO.md` for current work.
+GNU Stow dotfiles for Arch + Hyprland and Ubuntu/Debian. `home/` mirrors `$HOME`; `system/` holds system configs; `packages/` holds manifests. Gate distro-specific work through `scripts/lib.sh`. Current work is in GitHub issues (`gh issue list`).
 
 ## Operating model
 
@@ -18,7 +18,7 @@ GNU Stow dotfiles for Arch + Hyprland and Ubuntu/Debian. `home/` mirrors `$HOME`
 - Monitor rules are computed directly by `home/hypr/.config/hypr/monitors.lua`. Do not add a layout daemon or generated config.
 - The keybind sheet parses `hyprland.lua` comments and tmux `-N` notes. Label new binds. Quick-settings IDs in `hypr-settings-menu` are also called by waybar; preserve those callers when renaming.
 - Apps under `~/projects/` own their implementation and install flow. This repo owns their integration; inspect `hyprland.lua`, the converge enable list, and Neovim's lazy specs before moving functionality here.
-- swaync is the jaehho fork in `~/projects/swaync`, packaged by `packaging/PKGBUILD`. Native arrows/action digits pass through; `hypr-swaync-keys` handles Ctrl+n/p and visibility. Exclusive submaps need media/screenshot bindings too.
+- swaync is the jaehho fork in `~/projects/forks/swaync`, packaged by `packaging/PKGBUILD`. Native arrows/action digits pass through; `hypr-swaync-keys` handles Ctrl+n/p and visibility. Exclusive submaps need media/screenshot bindings too.
 
 ## Troubleshooting and documentation
 

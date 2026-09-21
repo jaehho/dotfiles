@@ -31,7 +31,8 @@
 
 ## Project conventions
 
-- Check `Makefile` for common commands and `TODO.md` for current work when relevant; skip for quick questions or non-project work.
+- Check `Makefile` for common commands and GitHub issues (`gh issue list`) for current work when relevant; tasks live only in issues, never in TODO.md files; skip for quick questions or non-project work.
+- Root docs, each only when it has content: `README.md` (install and use), `PRODUCT.md` (what it is and must never become), `DESIGN.md` (how it works now), `DESIGN_LOG.md` (dated decisions and why; append, don't rewrite), `ISSUES.md` (gotchas with evidence), `CHANGELOG.md` (release notes, for published packages), `CLAUDE.md` (agent rules and pointers only).
 - A persistent desktop app of mine has a StatusNotifierItem tray icon and starts hidden from `hyprland.lua`'s tray block. A bar-specific module is not a substitute.
 
 ## Email
@@ -42,6 +43,6 @@ For every draft written, revised, or reviewed, put the text both in chat and in 
 
 ## Maintaining instructions
 
-Keep CLAUDE.md terse and scalable: preferences, constraints, and pointers. Reference `.env.example`, `package.json`, commands, or configs instead of duplicating derivable state. Project instructions should not repeat global ones; detailed recipes belong in troubleshooting docs.
+Keep CLAUDE.md terse and scalable: preferences, constraints, and pointers. Reference `.env.example`, `package.json`, commands, or configs instead of duplicating derivable state. Project instructions should not repeat global ones; detailed recipes belong in troubleshooting docs. That doc is `ISSUES.md` at the repo root, created with the first gotcha and pointed to from CLAUDE.md.
 
 Auto-memory is project-local. Promote cross-project preferences and traps here without asking, and mention the edit. Replace stale guidance rather than appending contradictions; record observations separately from unverified explanations.
