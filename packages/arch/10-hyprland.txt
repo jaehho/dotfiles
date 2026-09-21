@@ -24,7 +24,7 @@ rofi
 sddm
 slurp
 socat
-# built from the jaehho fork (~/projects/swaync/packaging), not the repo —
+# built from the jaehho fork (~/projects/forks/swaync/packaging), not the repo —
 # pacman -Syu past 0.12.6 would replace it; rebuild instead
 swaync
 # Remote URIs load through GIO, which needs the gvfs http backend; without it
