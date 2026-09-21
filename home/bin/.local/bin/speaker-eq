@@ -3,12 +3,12 @@
 
 speaker-measure measures the speakers and fits a correction, but a fit is only
 as right as the mic behind it, and two honest mics can disagree by as much as
-the defects being corrected. This window settles it by ear: it plots the EQ
-over the saved measurements and moves its bands on the live speaker sink while
-music plays. It compares against the saved EQ or against no EQ at matched
-loudness, because a cut-only EQ always plays quieter and quieter always sounds
-worse. Save keeps the result as a run of its own and applies it the way
-`speaker-measure --apply` does.
+the defects being corrected. This window settles it by ear: it moves its bands
+on the live speaker sink while music plays, with the live spectrum of what the
+speakers are getting drawn under the EQ. It compares against the saved EQ or
+against no EQ at matched loudness, because a cut-only EQ always plays quieter
+and quieter always sounds worse. Save keeps the result as a run of its own and
+applies it the way `speaker-measure --apply` does.
 
 How the EQ is built into the sink and applied lives in speaker-measure, which
 this loads as a module; nothing here writes PipeWire config of its own.
@@ -22,6 +22,7 @@ import json
 import math
 import os
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -116,10 +117,6 @@ class Run:
         n = len(self.filters)
         return f"{when} · {how} · {n} band{'s' * (n != 1)}"
 
-    def response(self):
-        data = np.loadtxt(sm.STATE / self.name / "response.csv", delimiter=",", skiprows=1)
-        return data[:, 0], data[:, 1], data[:, 2]
-
 
 def saved_runs():
     """Every run with readable metadata, newest first."""
@@ -135,15 +132,6 @@ def applied_run(runs):
         name = json.loads(sm.APPLIED.read_text()).get("run")
         return next((r for r in runs if r.name == name), None)
     return None
-
-
-def measured_origin(run, runs):
-    """The measured run a tuning descends from, following tuned_from."""
-    by_name, seen = {r.name: r for r in runs}, set()
-    while run is not None and not run.measured and run.name not in seen:
-        seen.add(run.name)
-        run = by_name.get(run.meta.get("tuned_from"))
-    return run
 
 
 def save_tuned(filters, band, source, run_name=None):
@@ -525,6 +513,7 @@ class EqPlot(Gtk.DrawingArea):
         win, c = self.win, self.win.colors
         fr = self.frame = Frame(width, height, self.SPAN)
         draw_axes(cr, fr, c, win.band)
+        win.spectrum.draw_bars(cr, fr)
         xs = fr.x(GRID)
         curves = [band_db(b) for b in win.bands]
         cr.save()
@@ -563,49 +552,103 @@ class EqPlot(Gtk.DrawingArea):
             text(cr, f"{hz}  {db:+.1f} dB", fr.L + fr.pw - 8, fr.T + 6, c["overlay1"], align=1.0)
 
 
-class MeasuredPlot(Gtk.DrawingArea):
-    """A saved measurement, as measured and as the edited EQ would leave it."""
+class Spectrum:
+    """What the speakers are getting right now, drawn into the EQ plot.
 
-    SPAN = GAIN
+    A parec tap on the sink's monitor source feeds a thread that FFTs
+    2048-sample frames into BARS bands spread over the EQ plot's own frequency
+    axis, so a peak in the music sits under the band that would fix it. Bars
+    attack instantly and fall at a fixed dB/s, meter-style. The tap targets
+    the sink by name, so it follows rebuilds, and is retapped here if parec
+    dies. It wakes a suspended sink, which is what a tuner wants anyway.
+    """
+
+    RATE, N, BARS = 48000, 2048, 56
+    RANGE = (-90.0, -6.0)  # drawn floor..ceiling, dBFS
+    FALL = 34.0  # bar fall, dB/s
 
     def __init__(self, win):
-        super().__init__(hexpand=True)
-        self.win, self.run, self.data = win, None, None
-        self.set_content_height(220)
-        self.set_draw_func(self.draw)
+        self.win = win
+        self.want, self.proc, self.tick_id = False, None, None
+        self.lock = threading.Lock()
+        self.disp = np.full(self.BARS, self.RANGE[0])
+        window = np.hanning(self.N).astype(np.float32)
+        self.window, self.scale = window, 2.0 / window.sum()
+        self.freq = np.geomspace(*FREQ, self.BARS + 1)  # bar edges, EQ axis
+        self.mid = np.sqrt(self.freq[:-1] * self.freq[1:])
+        edges = np.clip((self.freq * self.N / self.RATE).astype(int), 1, self.N // 2)
+        self.lo, self.counts = edges[:-1], np.maximum(np.diff(edges), 1)
+        self.tick_id = GLib.timeout_add(50, self.tick)
 
-    def show(self, run):
-        self.run, self.data = run, None
-        if run is not None:
-            with contextlib.suppress(OSError, ValueError):
-                self.data = run.response()
-        self.queue_draw()
+    def start(self):
+        self.want = True
 
-    def draw(self, _area, cr, width, height):
-        c = self.win.colors
-        fr = Frame(width, height, self.SPAN)
-        band = self.run.band if self.run else None
-        draw_axes(cr, fr, c, band)
-        if self.data is None:
-            text(cr, "Pick a measurement to see what this EQ does to it",
-                 fr.L + fr.pw / 2, fr.T + fr.ph / 2, c["overlay1"], align=0.5, valign=0.5)
+    def pause(self):
+        self.want = False
+        if self.proc is not None:
+            self.proc.kill()
+            self.proc = None
+
+    def end(self):
+        self.pause()
+        if self.tick_id is not None:
+            GLib.source_remove(self.tick_id)
+            self.tick_id = None
+
+    def tick(self):
+        if self.proc is not None and self.proc.poll() is not None:
+            self.proc = None  # died, e.g. the sink was rebuilt: retap by name
+        if self.want and self.proc is None:
+            self.spawn()
+        self.win.plot.queue_draw()
+        return True
+
+    def spawn(self):
+        try:
+            # The monitor only exists as a pulse source; a native pw-record
+            # targeting the sink or "<sink>.monitor" falls back to the mic.
+            # Without a latency request parec buffers half a second and
+            # delivers it in bursts.
+            self.proc = subprocess.Popen(
+                ["parec", "--device", f"{self.win.device}.monitor", "--format",
+                 "float32", "--rate", str(self.RATE), "--channels", "1",
+                 "--latency-msec", "20"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        except OSError:
             return
-        freq, measured, target = self.data
-        inband = (freq >= band[0]) & (freq <= band[1]) if band else np.ones_like(freq, bool)
+        threading.Thread(target=self.read, daemon=True).start()
 
-        def centered(y):
-            return y - y[inband].mean()
+    def read(self):
+        proc, stream, last = self.proc, self.proc.stdout, time.monotonic()
+        while proc.poll() is None:
+            buf = stream.read(self.N * 4)
+            if not buf or len(buf) < self.N * 4:
+                break  # EOF, or a partial final frame on a rebuilt sink
+            now = time.monotonic()
+            self.push(buf, now - last)
+            last = now
 
-        eq = sm.total_db(freq, [tuple(b) for b in self.win.bands])
-        xs = fr.x(freq)
-        cr.save()
-        cr.rectangle(fr.L, fr.T, fr.pw, fr.ph)
-        cr.clip()
-        cr.set_line_join(cairo.LINE_JOIN_ROUND)
-        stroke(cr, xs, fr.y(centered(target)), c["overlay1"], 1, alpha=0.8, dash=(5, 4))
-        stroke(cr, xs, fr.y(centered(measured)), c["overlay1"], 1.5)
-        stroke(cr, xs, fr.y(centered(measured + eq)), c["green"], 2.5)
-        cr.restore()
+    def push(self, buf, dt):
+        x = np.frombuffer(buf, "<f4").astype(np.float32)
+        db = 20 * np.log10(np.abs(np.fft.rfft(x * self.window)) * self.scale + 1e-12)
+        bars = np.clip(np.add.reduceat(db, self.lo) / self.counts, *self.RANGE)
+        with self.lock:
+            np.maximum(bars, self.disp - self.FALL * dt, out=self.disp)
+
+    def draw_bars(self, cr, fr):
+        """The bars, inside the EQ plot's frame: it owns background, grid, labels."""
+        c = self.win.colors
+        with self.lock:
+            bars = self.disp.copy()
+        band = self.win.band
+        for i, db in enumerate(bars):
+            h = max(0.0, (db - self.RANGE[0]) / (self.RANGE[1] - self.RANGE[0])) * fr.ph
+            inside = band is None or band[0] <= self.mid[i] <= band[1]
+            cr.set_source_rgba(*(c["blue"] if inside else c["surface2"]),
+                               0.38 if inside else 0.18)
+            x0, x1 = float(fr.x(self.freq[i])), float(fr.x(self.freq[i + 1]))
+            cr.rectangle(x0 + 1.0, fr.T + fr.ph - h, max(x1 - x0 - 2.0, 1.0), h)
+            cr.fill()
 
 
 # --- the window ---------------------------------------------------------------
@@ -649,8 +692,6 @@ class Window(Gtk.ApplicationWindow):
         self.load_button.set_menu_model(self.load_menu())
         self.set_focus(self.plot)  # so Space and the arrow keys work from the start
         self.rebuild_rows()
-        self.pick_measurement(measured_origin(applied, self.runs)
-                              or next((r for r in self.runs if r.measured), None))
         self.changed()
         if self.device is None:
             self.notice("The speakers have never been seen as an output, so there is "
@@ -705,9 +746,10 @@ class Window(Gtk.ApplicationWindow):
         self.notice_revealer.set_child(box)
         body.append(self.notice_revealer)
 
-        eq_panel = self.panel("EQ", "drag a point · scroll over it to widen or narrow · "
-                                    "double-click to add a band · shading is outside what the speakers play")
+        self.spectrum = Spectrum(self)
+        eq_panel = self.panel("EQ")
         self.plot = EqPlot(self)
+        self.plot.connect("destroy", lambda *_: self.spectrum.end())
         eq_panel.append(self.plot)
         body.append(eq_panel)
 
@@ -746,7 +788,7 @@ class Window(Gtk.ApplicationWindow):
         row.append(self.add_button)
         body.append(row)
 
-        bands_panel = self.panel(None, None)
+        bands_panel = self.panel(None)
         header = Gtk.Box(spacing=10, margin_start=6, margin_end=6)
         for label, width in (("", 22), ("Type", 130), ("Frequency (Hz)", 150),
                              ("Gain (dB)", 150), ("Q", 150)):
@@ -755,41 +797,13 @@ class Window(Gtk.ApplicationWindow):
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, css_classes=["bands"])
         bands_panel.append(self.list)
         body.append(bands_panel)
-
-        meas_panel = self.panel("Measured", None)
-        head = meas_panel.get_first_child()
-        self.meas_runs = [r for r in self.runs if r.measured]
-        self.meas_choice = Gtk.DropDown.new_from_strings(["None"] + [r.label() for r in self.meas_runs])
-        self.meas_choice.connect("notify::selected", self.on_measurement)
-        head.append(self.meas_choice)
-        legend = Gtk.Label(use_markup=True, css_classes=["dim"])
-        legend.set_markup(f'<span foreground="#{self.hex["overlay1"]}">━━</span> as measured    '
-                          f'<span foreground="#{self.hex["green"]}">━━</span> with this EQ    '
-                          f'<span foreground="#{self.hex["overlay1"]}">╍╍</span> target')
-        head.append(legend)
-        self.meas_plot = MeasuredPlot(self)
-        meas_panel.append(self.meas_plot)
-        meas_panel.append(Gtk.Label(
-            label="What one mic heard, normalized over the band that run found the speakers play. "
-                  "Two mics can disagree here by as much as the defects themselves, so let your "
-                  "ears overrule these lines.", xalign=0, wrap=True, css_classes=["dim"]))
-        body.append(meas_panel)
-
-        body.append(Gtk.Label(
-            label="Space: Edited or the other · ←/→ frequency · ↑/↓ gain (Shift for bigger steps) · "
-                  "[ ] narrower/wider · Delete remove band · Ctrl+Z undo · Ctrl+Shift+Z redo · Ctrl+S save",
-            xalign=0, wrap=True, css_classes=["dim"]))
         return self.scroller
 
-    def panel(self, title, hint):
+    def panel(self, title):
         panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, css_classes=["panel"])
-        if title or hint:
+        if title:
             head = Gtk.Box(spacing=12)
-            if title:
-                head.append(Gtk.Label(label=title.upper(), css_classes=["heading"]))
-            if hint:
-                head.append(Gtk.Label(label=hint, css_classes=["dim"], xalign=0,
-                                      ellipsize=Pango.EllipsizeMode.END, hexpand=True))
+            head.append(Gtk.Label(label=title.upper(), css_classes=["heading"]))
             panel.append(head)
         return panel
 
@@ -900,7 +914,6 @@ class Window(Gtk.ApplicationWindow):
         self.add_button.set_sensitive(len(self.bands) < MAX_BANDS)
         self.set_title(f"Speaker EQ{' •' if self.dirty else ''}")
         self.plot.queue_draw()
-        self.meas_plot.queue_draw()
 
     def checkpoint(self, key=None):
         """Remember the bands before an edit. The steps of one drag, scroll or
@@ -989,12 +1002,6 @@ class Window(Gtk.ApplicationWindow):
             GLib.timeout_add_seconds(seconds, lambda: self.notice_label.get_text() == message
                                      and self.notice_revealer.set_reveal_child(False))
 
-    def pick_measurement(self, run):
-        names = [r.name for r in self.meas_runs]
-        index = names.index(run.name) + 1 if run is not None and run.name in names else 0
-        self.meas_choice.set_selected(index)
-        self.meas_plot.show(self.meas_runs[index - 1] if index else None)
-
     def load_menu(self):
         menu = Gio.Menu()
         top = Gio.Menu()
@@ -1058,11 +1065,11 @@ class Window(Gtk.ApplicationWindow):
         self.select(i)
         self.edit(i, ("spin", i, field), **{("fc", "gain", "q")[field - 1]: value})
 
-    def on_measurement(self, dropdown, _pspec):
-        i = dropdown.get_selected()
-        self.meas_plot.show(self.meas_runs[i - 1] if 0 < i <= len(self.meas_runs) else None)
-
     def on_status(self, present, state, volume):
+        if present:
+            self.spectrum.start()
+        else:
+            self.spectrum.pause()
         for cls in ("playing", "absent"):
             self.subtitle.remove_css_class(cls)
         if not present:
@@ -1173,6 +1180,7 @@ class Window(Gtk.ApplicationWindow):
         return True
 
     def shutdown(self):
+        self.spectrum.end()
         if self.link is not None and not self.link.closed:
             self.link.close(self.engaged, (list(self.saved), natural_preamp(self.saved)))
 
