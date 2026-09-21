@@ -1,4 +1,5 @@
 audacity
+cava
 espeak-ng
 ffmpegthumbnailer
 gst-libav
