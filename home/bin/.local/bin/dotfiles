@@ -6,6 +6,7 @@
 #   dotfiles sync       converge now instead of waiting for the timer, and follow it
 #   dotfiles decide     open Claude on the open decisions (the notification's button)
 #   dotfiles notify     notify about new decisions (run by dotfiles-digest.path)
+#   dotfiles server     set up or update wonlab (or: dotfiles server HOST); see scripts/server.sh
 #
 # converge.sh records what only the owner can settle in two decisions.json
 # files (system half, user half). dotfiles-digest.path runs `notify` whenever
@@ -71,8 +72,13 @@ case "${1:-status}" in
     addr=$(hyprctl clients -j | jq -r --argjson pid "$(ps -o ppid= -p "$client")" '.[] | select(.pid == $pid) | .address')
     [ -z "$addr" ] || hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null
     ;;
+  server)
+    host=${2:-wonlab}
+    ahead=$(git -C "$DOTFILES" rev-list --count '@{u}..HEAD' 2>/dev/null || echo 0)
+    [ "$ahead" = 0 ] || echo "note: $ahead commit(s) not pushed; $host gets what is on GitHub" >&2
+    exec ssh -t "$host" 'test -d ~/dotfiles || git clone -q https://github.com/jaehho/dotfiles.git ~/dotfiles; exec ~/dotfiles/scripts/server.sh' ;;
   notify) ;;
-  *) sed -n '5,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '5,9p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac
 
 decisions=$(merged)

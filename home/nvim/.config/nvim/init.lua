@@ -683,6 +683,7 @@ require('lazy').setup({
         'markdown', 'markdown_inline', 'python', 'query', 'rust', 'toml',
         'typescript', 'typst', 'vim', 'vimdoc', 'yaml',
       }
+      vim.g.ts_parsers = parsers -- scripts/server.sh waits on this list
       require('nvim-treesitter').install(parsers)
       vim.api.nvim_create_autocmd('FileType', {
         callback = function(args)
