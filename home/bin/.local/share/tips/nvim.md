@@ -178,11 +178,6 @@ Faster than scrolling for the function you half-remember.
 `]d`/`[d` step through them with the float opening automatically,
 `<leader>q` dumps them to the location list, `<leader>sd` fuzzy-finds them.
 
-## Trouble is the diagnostics panel
-
-`<leader>xx` toggles project diagnostics, `<leader>xX` just this buffer,
-`<leader>xs` a symbol outline, `<leader>xq` the quickfix list.
-
 ## Format on demand
 
 `<leader>f` formats the buffer with conform, falling back to the LSP.
@@ -197,7 +192,7 @@ Handy for a language you're still learning, noise once you aren't.
 
 blink.cmp uses the `default` preset: `<C-n>`/`<C-p>` to select,
 `<C-y>` to accept, `<C-space>` for the menu and then the docs, `<C-e>` to
-dismiss. `<Tab>`/`<S-Tab>` jump between snippet fields.
+dismiss.
 
 ## Splits, and moving between them
 
@@ -225,21 +220,11 @@ smart-splits. `<C-w>h/j/k/l` resize instead of moving.
 `<leader>tb` shows the commit that last touched each line, as virtual text.
 `<leader>tw` switches the diff to word granularity.
 
-## The file tree is on demand
-
-`<leader>e` toggles neo-tree. Inside it, `a` adds, `d` deletes, `r`
-renames, `?` shows every binding.
-
-## Sessions restore your layout
-
-`<leader>Sl` restores the session for the current directory, `<leader>SL`
-the last one you had anywhere, `<leader>Sd` stops saving on exit.
-
 ## One key previews whatever you're editing
 
 `<leader>tp` dispatches on filetype: typst and LaTeX compile and open in
 zathura, markdown opens the browser preview, marimo notebooks open a
-tmux pane, CSVs switch to column view, Python starts the debugger.
+tmux pane, Python starts the debugger.
 
 ## Debug from the editor
 
