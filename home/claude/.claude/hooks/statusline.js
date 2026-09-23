@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Claude Code usage monitor — context bar, tokens, cost/credits, rate limits.
-// On gateway models (claude-or on z.ai) the CLI's cost is a Claude-table
+// On gateway models (claude-open on z.ai) the CLI's cost is a Claude-table
 // mispricing and its context window can stick at 100% after a resume, so both
 // are computed from the transcript's usage entries instead (cached
 // incrementally — transcripts are append-only).
@@ -352,7 +352,9 @@ process.stdin.on('end', () => {
         db.exec(`CREATE TABLE IF NOT EXISTS claude_limits (
           ts INTEGER PRIMARY KEY, used_5h REAL, resets_5h INTEGER,
           used_7d REAL, resets_7d INTEGER)`);
-        db.prepare('INSERT OR REPLACE INTO claude_limits VALUES (?,?,?,?,?)').run(
+        // named columns: idle-dash-llm owns an extra `plan` column
+        db.prepare(`INSERT OR REPLACE INTO claude_limits
+          (ts, used_5h, resets_5h, used_7d, resets_7d) VALUES (?,?,?,?,?)`).run(
           Math.floor(Date.now() / 1000),
           rl.five_hour?.used_percentage ?? null,
           rl.five_hour?.resets_at ?? null,
