@@ -34,6 +34,7 @@
 - Check `Makefile` for common commands and GitHub issues (`gh issue list`) for current work when relevant; tasks live only in issues, never in TODO.md files; skip for quick questions or non-project work.
 - Root docs, each only when it has content: `README.md` (install and use), `PRODUCT.md` (what it is and must never become), `DESIGN.md` (how it works now), `DESIGN_LOG.md` (dated decisions and why; append, don't rewrite), `ISSUES.md` (gotchas with evidence), `CHANGELOG.md` (release notes, for published packages), `CLAUDE.md` (agent rules and pointers only).
 - A persistent desktop app of mine has a StatusNotifierItem tray icon and starts hidden from `hyprland.lua`'s tray block. A bar-specific module is not a substitute.
+- Package lists live in `dotfiles/packages/` (`arch/` is a directory of `NN-*.txt`). Converge with `dotfiles sync`, never `make sync` (that name is gone). Status is `dotfiles`.
 
 ## Email
 

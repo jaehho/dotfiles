@@ -3,10 +3,6 @@
     "source": "github",
     "repo": "anthropics/claude-plugins-official"
   },
-  "ponytail": {
-    "source": "github",
-    "repo": "DietrichGebert/ponytail"
-  },
   "zai-coding-plugins": {
     "source": "github",
     "repo": "zai-org/zai-coding-plugins"

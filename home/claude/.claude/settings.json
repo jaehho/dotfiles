@@ -103,16 +103,9 @@
     "rust-analyzer-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "lua-lsp@claude-plugins-official": true,
-    "ponytail@ponytail": true,
     "glm-plan-usage@zai-coding-plugins": true
   },
   "extraKnownMarketplaces": {
-    "ponytail": {
-      "source": {
-        "source": "github",
-        "repo": "DietrichGebert/ponytail"
-      }
-    },
     "zai-coding-plugins": {
       "source": {
         "source": "github",
@@ -123,6 +116,9 @@
   "effortLevel": "high",
   "modelSettings": {
     "claude-opus-5": {
+      "effortLevel": "high"
+    },
+    "mimo-v2.6-pro": {
       "effortLevel": "high"
     }
   },
