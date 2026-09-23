@@ -1,3 +1,14 @@
+# DWT pairs each touchpad with the first internal keyboard. keyd EVIOCGRABs
+# the real AT keyboard, so that node delivers no events and DWT waits forever
+# ("too many internal keyboards for dwt" is the second one). Keep only keyd's
+# virtual keyboard internal so pairing lands on the device that actually types.
+
+[AT Translated Set 2 keyboard]
+MatchName=AT Translated Set 2 keyboard
+MatchBus=ps2
+AttrKeyboardIntegration=external
+
 [keyd virtual keyboard]
 MatchName=keyd virtual keyboard
+MatchUdevType=keyboard
 AttrKeyboardIntegration=internal

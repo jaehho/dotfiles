@@ -14,7 +14,7 @@ Use `dotfiles` for status and `dotfiles sync` to converge. Step names come from 
 | Desktop | [swaync](#swaync-width-hover-and-navigation), [Lua reloads](#hyprland-lua-reloads-and-timers), [Waybar ghosts](#waybar-shows-a-closed-window), [wallpaper](#wallpaper-does-not-change), [media keys](#media-and-brightness-keys) |
 | Audio and speech | [silent speakers](#speakers-silent-with-healthy-volume-readouts), [speaker EQ](#speaker-eq-sounds-wrong), [Pulse clients](#pulse-clients-silent-after-audio-changes), [Kokoro](#kokoro-and-speech-dispatcher) |
 | Network | [homelab and backups](#homelab-and-backup-connectivity), [Cooper SSH](#cooper-ssh-host-key-changes), [X2Go](#x2go-latency-and-ghost-windows) |
-| Hardware and sleep | [dock](#dock-input-dead-after-resume), [missing modules](#usb-hotplug-after-a-kernel-upgrade), [battery drain](#battery-drain-and-unexpected-wakes), [battery not charging](#battery-not-charging-while-plugged-in-charge-led-lit), [dark panel](#black-screen-after-resume), [cold boot](#hibernate-returns-to-a-fresh-session), [logind](#logind-ignores-its-drop-in), [wedged GPU](#dgpu-wedges-during-sleep) |
+| Hardware and sleep | [dock](#dock-input-dead-after-resume), [missing modules](#usb-hotplug-after-a-kernel-upgrade), [battery drain](#battery-drain-and-unexpected-wakes), [battery not charging](#battery-not-charging-while-plugged-in-charge-led-lit), [dark panel](#black-screen-after-resume), [cold boot](#hibernate-returns-to-a-fresh-session), [logind](#logind-ignores-its-drop-in), [wedged GPU](#dgpu-wedges-during-sleep), [touchpad while typing](#touchpad-still-moves-while-typing) |
 | API sessions | [OpenRouter stream interruption](#openrouter-stream-interruption) |
 
 ## NVIDIA beta upgrade deadlocks paru
@@ -224,6 +224,14 @@ Remote profile changes persist in AFS. See the archive for the measured Septembe
 **Recovery, in order:** unplug/replug the laptop USB-C connection after about 10 seconds; if still dead, remove dock power as well; if a PD partner appears but no USB devices enumerate, try the other port or cable orientation. The dock's latched state survived a host reboot in the recorded incident.
 
 Confirm against kernel USB/type-C logs before applying this explanation to every dock failure.
+
+## Touchpad still moves while typing
+
+**Signature:** `input:touchpad:disable_while_typing` is true in Hyprland, but palm contact still moves the cursor. libinput pairs each touchpad with one internal keyboard; with keyd running, the AT keyboard is EVIOCGRAB'd and delivers no events, so DWT waits on the wrong device. libinput's second internal keyboard logs `too many internal keyboards for dwt`.
+
+**Recovery:** `system/libinput/local-overrides.quirks` marks `AT Translated Set 2 keyboard` external and `keyd virtual keyboard` internal. It is already stow-linked into `/etc/libinput/`; restart Hyprland so libinput re-reads quirks and re-pairs. Do not remove the keyd quirk — that is what makes typing visible to DWT.
+
+**Verification:** `libinput quirks list /dev/input/event2` shows `external`, `libinput quirks list` on the keyd node shows `internal`. Type and brush the pad; the cursor should freeze for the DWT timeout.
 
 ## USB hotplug after a kernel upgrade
 
