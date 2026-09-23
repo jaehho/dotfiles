@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Start Claude on a GitHub issue with body + comments as the first message.
+# Launch command is read from the fish abbr of the same spirit — one source
+# of truth in conf.d/abbr.fish, no second copy of the flags:
+#   gh-c  3    → expand `c`  + prompt
+#   gh-co 3    → expand `co` + prompt
+# Extra args go to the launcher before the prompt (e.g. gh-co 3 mimo).
+set -euo pipefail
+
+abbrs=${FISH_ABBR:-$HOME/.config/fish/conf.d/abbr.fish}
+case "${0##*/}" in
+gh-co) name=co ;;
+*) name=c ;;
+esac
+
+# `abbr -a c 'claude --permission-mode auto --model "opus[1M]" --effort high'`
+argv=("$@")
+line=$(sed -n "s/^abbr -a ${name} '\\(.*\\)'\$/\\1/p" "$abbrs" | head -n1)
+[ -n "$line" ] || {
+    echo "gh-c: abbr '$name' not found in $abbrs" >&2
+    exit 1
+}
+eval "set -- $line"
+launcher=("$@")
+[ ${#launcher[@]} -gt 0 ] || {
+    echo "gh-c: abbr '$name' is empty" >&2
+    exit 1
+}
+set -- "${argv[@]}"
+
+n=${1:?usage: gh-c|gh-co <issue#|owner/repo#> [launcher args...]}
+shift
+
+body=$(gh issue view "$n" --json title,body,labels,url,comments --jq '
+  "# \(.title)  \(.url)\nlabels: \([.labels[].name] | join(", "))\n\n\(.body // "(no body)")\n" +
+  ((.comments // []) | if length == 0 then "" else
+     "\n## comments\n" + (map("### \(.author.login // .author // "?")\n\(.body // "")") | join("\n\n"))
+   end)')
+
+# Heredoc: backticks in a double-quoted string are command substitution.
+prompt=$(cat <<EOF
+GitHub issue $n (body + comments) is already in this message.
+
+$body
+
+Phases (do not skip ahead):
+1. Plan. Propose the change, the one runnable check that fails if the fix breaks, any design call I might veto, and whether this wants a PR or a direct commit. Do not edit.
+2. Stop and wait for me to approve or adjust the plan.
+3. Implement.
+4. Verify with that check. Show evidence (command output / what was tested).
+5. Land (only when I need not try it, or after I say it works): commit with 'Fixes #$n' and push — or commit+push+PR if that was the plan, 'Fixes #$n' in the PR body. Evidence goes in the commit body. GitHub closes the issue on push/merge.
+EOF
+)
+
+exec "${launcher[@]}" "$@" "$prompt"
