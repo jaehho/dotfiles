@@ -4,8 +4,8 @@
 #   dotfiles server [host]          from the laptop (default host: wonlab)
 #   ~/dotfiles/scripts/server.sh    on the server itself
 #
-# First run sets up, every run updates: pulls the repo, links fish, tmux, nvim
-# and claude with stow, keeps Neovim and the tree-sitter CLI at their latest
+# First run sets up, every run updates: pulls the repo, links fish, tmux, nvim,
+# claude and theme with stow, keeps Neovim and the tree-sitter CLI at their latest
 # upstream release in ~/.local (Ubuntu's are too old for the nvim config), and
 # brings plugins to the laptop's lazy-lock.json. sudo only when an apt package
 # is missing. No timers: the server changes only when someone runs this. See
@@ -26,7 +26,7 @@ if [ -z "${SERVER_PULLED:-}" ]; then
 fi
 
 STOW_DIR="$DOTFILES/home"
-PKGS=(fish tmux nvim claude)
+PKGS=(fish tmux nvim claude theme)   # theme: tmux's @thm_* status-bar colors
 APT=(fish stow tmux git curl jq ripgrep fd-find fzf unzip gcc make)
 OPT="$HOME/.local/opt" BIN="$HOME/.local/bin"
 LOG="$HOME/.local/state/dotfiles-server"

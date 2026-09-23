@@ -84,7 +84,7 @@ dotfiles server          # from the laptop; or: dotfiles server HOST
 
 One command sets up and updates the homelab server. It SSHes in, clones or
 fast-forwards `~/dotfiles` from GitHub, and runs `scripts/server.sh`: stow links
-fish, tmux, nvim and claude; Neovim and the tree-sitter CLI track their latest
+fish, tmux, nvim, claude and theme (the tmux bar's colors); Neovim and the tree-sitter CLI track their latest
 upstream release in `~/.local` (noble's nvim is 0.9.5); plugins follow the
 laptop's `lazy-lock.json`. sudo is asked for only when an apt package is
 missing. The first run moves wonlab's own `~/.claude/settings.json` to `.bak`.
