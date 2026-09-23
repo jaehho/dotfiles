@@ -93,9 +93,8 @@ step_configs() {
   # Rules only fire on the next uevent, so replay bind for the devices they
   # match -- otherwise the no-wake rule does nothing until the next reboot.
   if [ -n "${fresh[/etc/udev/rules.d]:-}" ] && have udevadm; then
-    # A failed reload is not a reason to abandon the rest of the step.
-    udevadm control --reload || true
-    udevadm trigger --action=bind --subsystem-match=i2c || true
+    udevadm control --reload
+    udevadm trigger --action=bind --subsystem-match=i2c
   fi
   # Reload is enough for the lid drop-in, and is safe. Never *restart* logind
   # here: that kills the Hyprland session. See ISSUES.md "logind ignores its
