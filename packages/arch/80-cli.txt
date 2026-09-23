@@ -1,11 +1,14 @@
 btop
 csvlens
+duf
+dust
 eza
 fastfetch
 fd
 glow
 htop
 kitty
+ncdu
 qalculate-gtk
 restic
 starship

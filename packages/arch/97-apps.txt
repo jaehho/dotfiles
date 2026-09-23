@@ -8,7 +8,7 @@ nextcloud-client
 wallhelper-git
 # battery-log-git -- add once the repo is published; ~/projects/battery-log
 #   installs into ~/.local with `make install` until then
-# asst-git -- same: ~/projects/asst (tasks; replaced planify)
+asst-git
 # meeting-copilot -- same: local-build PKGBUILD in ~/projects/meeting-copilot.
 #   Once `make install` has run there, pacman lists it as a foreign explicit
 #   package and drift will offer to track it -- say no, or the next run tries

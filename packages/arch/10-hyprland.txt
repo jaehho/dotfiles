@@ -1,5 +1,6 @@
 brightnessctl
 cliphist
+geoclue
 grim
 # hypr-keybind-cheatsheet links against libgtk4-layer-shell.so by path and
 # asks for "Adwaita Sans" by name. Both are also pulled in as dependencies of
