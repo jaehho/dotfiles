@@ -507,7 +507,7 @@ now() {
 
   journalctl -f -n 0 -o cat -u dotfiles-converge.service & J1=$!
   journalctl --user -f -n 0 -o cat -u dotfiles-converge.service & J2=$!
-  trap 'kill $J1 $J2 2>/dev/null' EXIT
+  trap 'kill $J1 $J2 2>/dev/null || true' EXIT
   sleep 2
   while busy "" || busy --user; do sleep 2; done
   sleep 1
