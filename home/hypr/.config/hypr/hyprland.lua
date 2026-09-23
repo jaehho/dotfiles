@@ -73,7 +73,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("asst-gtk --background")           -- tasks (~/projects/asst)
     hl.exec_cmd("nextcloud --background")
     hl.exec_cmd("betterbird")                      -- prefs.js: mail.startupMinimized
-    hl.exec_cmd("zotero")                          -- prefs.js: extensions.zotero-tray.startHidden
+    hl.exec_cmd("ZOTERO_TRAY_START_HIDDEN=1 zotero") -- hide until tray click
     -- spotify-launcher passes a URI but no flags, so update through it, then run
     -- the client it installed. Tray needs ui.minimize_to_tray in spotify/prefs.
     -- Wayland, because under XWayland a raised window takes no keys until the
