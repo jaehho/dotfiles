@@ -41,6 +41,10 @@ step_configs() {
 
   for pair in "${SYSTEM_LINKS[@]}"; do
     src="$(src_path "${pair%%:*}")"; dst="${pair##*:}"
+    # An absolute src outside system/ is shipped by another package (the
+    # pipewire alsa conf). Skip until that package lands rather than leave a
+    # dangling symlink on a server that will never have it.
+    [ -e "$src" ] || continue
     [ "$(readlink "$dst" 2>/dev/null)" = "$src" ] || ln -sfn "$src" "$dst"
   done
 
@@ -89,8 +93,9 @@ step_configs() {
   # Rules only fire on the next uevent, so replay bind for the devices they
   # match -- otherwise the no-wake rule does nothing until the next reboot.
   if [ -n "${fresh[/etc/udev/rules.d]:-}" ] && have udevadm; then
-    udevadm control --reload
-    udevadm trigger --action=bind --subsystem-match=i2c
+    # A failed reload is not a reason to abandon the rest of the step.
+    udevadm control --reload || true
+    udevadm trigger --action=bind --subsystem-match=i2c || true
   fi
   # Reload is enough for the lid drop-in, and is safe. Never *restart* logind
   # here: that kills the Hyprland session. See ISSUES.md "logind ignores its
@@ -117,9 +122,12 @@ step_configs() {
   # global override that resolved then races against the Wi-Fi's own servers.
   if systemctl cat systemd-resolved.service >/dev/null 2>&1; then
     systemctl enable --now systemd-resolved.service >/dev/null 2>&1
-    local stub=/run/systemd/resolve/stub-resolv.conf ts=
+    local stub=/run/systemd/resolve/stub-resolv.conf ts= nm=
+    systemctl cat NetworkManager.service >/dev/null 2>&1 && nm=1
+    # NM reads dns= at startup, so a new conf.d needs a bounce -- but only on a
+    # box that has NM. A server on netplan/networkd has no such unit.
     if [ "$(readlink /etc/resolv.conf 2>/dev/null)" != "$stub" ] ||
-       [ -n "${fresh[/etc/NetworkManager/conf.d]:-}" ]; then
+       { [ -n "$nm" ] && [ -n "${fresh[/etc/NetworkManager/conf.d]:-}" ]; }; then
       # Both pick their DNS mode at startup and rewrite a plain file while
       # running, and tailscaled restores its own copy when it stops. So: stop
       # tailscaled, link, restart NetworkManager, start tailscaled.
@@ -127,8 +135,15 @@ step_configs() {
       [ -z "$ts" ] || systemctl stop tailscaled.service
       ln -sfn "$stub" /etc/resolv.conf
       rm -f /etc/resolv.pre-tailscale-backup.conf
-      systemctl try-restart NetworkManager.service
+      # Restore tailscaled before anything that can fail. `try-restart` on a
+      # unit that does not exist is not a no-op (exit 5), and under set -e that
+      # used to skip the start line: tailscaled stayed down and a tailnet SSH
+      # session was cut (wonlab-shaped Ubuntu server, 2026-09-23). A RETURN
+      # trap does not save this -- set -e exits the shell without running it.
+      local nm_rc=0
+      [ -z "$nm" ] || systemctl try-restart NetworkManager.service || nm_rc=$?
       [ -z "$ts" ] || systemctl start tailscaled.service
+      [ "$nm_rc" = 0 ] || return "$nm_rc"
       echo "  /etc/resolv.conf -> resolved stub"
     fi
   fi
@@ -381,17 +396,22 @@ step_stow() {
   #   swayosd-server     the volume/brightness OSD (WantedBy pipewire-pulse, so
   #                      enabling is what wires the restart-with-pulse behaviour)
   #   kokoro-tts         the socket for the speech-dispatcher Kokoro voice
-  systemctl --user daemon-reload
+  # Stow itself needs no session bus; a missing bus must not mark the whole
+  # step failed after every package is already linked.
   local unit
-  for unit in dotfiles-converge.timer dotfiles-digest.path \
-              wallhelper-fetch.timer tip-daily.timer mail-digest.timer \
-              idle-dash-collect.timer idle-dash-llm.timer \
-              notification-log.service battery-logd.service \
-              swayosd-server.service kokoro-tts.socket; do
-    systemctl --user cat "$unit" >/dev/null 2>&1 || continue
-    systemctl --user is-enabled "$unit" >/dev/null 2>&1 && continue
-    systemctl --user enable --now "$unit" >/dev/null 2>&1 && echo "  $unit: enabled"
-  done
+  if systemctl --user daemon-reload 2>/dev/null; then
+    for unit in dotfiles-converge.timer dotfiles-digest.path \
+                wallhelper-fetch.timer tip-daily.timer mail-digest.timer \
+                idle-dash-collect.timer idle-dash-llm.timer \
+                notification-log.service battery-logd.service \
+                swayosd-server.service kokoro-tts.socket; do
+      systemctl --user cat "$unit" >/dev/null 2>&1 || continue
+      systemctl --user is-enabled "$unit" >/dev/null 2>&1 && continue
+      systemctl --user enable --now "$unit" >/dev/null 2>&1 && echo "  $unit: enabled"
+    done
+  else
+    echo "  user systemd unavailable; units enabled on the next logged-in run"
+  fi
 
   # waypaper rewrites its whole config on exit, so it can't be stowed. Its
   # post_command is the one setting that matters: without it a wallpaper
