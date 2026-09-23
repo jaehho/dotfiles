@@ -31,5 +31,5 @@ abbr -a grep 'grep --color=auto'
 abbr -a print lp
 
 # ── Claude ───────────────────────────────────────────────────────────────────
-abbr -a c 'claude --dangerously-skip-permissions --model "opus[1M]" --effort high'
-abbr -a co 'claude-or --dangerously-skip-permissions'
+abbr -a c 'claude --permission-mode auto --model "opus[1M]" --effort high'
+abbr -a co 'claude-open --dangerously-skip-permissions'

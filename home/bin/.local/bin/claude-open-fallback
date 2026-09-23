@@ -2,15 +2,15 @@
 # Failover proxy between Claude Code and the z.ai GLM Coding Plan.
 # Forwards Anthropic Messages traffic to z.ai; on quota/auth failure
 # (429 quota-family error codes, 401/403, connection errors) retries the
-# same request against OpenRouter with the model mapped to a @preset slug.
-# Transient 429s (rate limit 1302, overload 1305) and 5xx pass through;
-# Claude Code retries those itself.
+# same request against OpenRouter with the model mapped to the bare slug
+# (z-ai/glm-5.3, ...). Transient 429s (rate limit 1302, overload 1305) and
+# 5xx pass through; Claude Code retries those itself.
 #
-# claude-or starts this on 127.0.0.1:8927 when both keys exist; it serves
+# claude-open starts this on 127.0.0.1:8927 when both keys exist; it serves
 # until killed or reboot (no idle self-exit: one dead-port window bricks
 # every already-running session pointing at it). Failover events append to
-# ~/.local/state/claude-or/fallback.log. Check the wiring with
-# `claude-or-fallback selftest`.
+# ~/.local/state/claude-open/fallback.log. Check the wiring with
+# `claude-open-fallback selftest`.
 
 import http.client
 import http.server
@@ -22,19 +22,19 @@ import sys
 import time
 from urllib.parse import urlsplit
 
-PORT = int(os.environ.get("CLAUDE_OR_PROXY_PORT", "8927"))
-PRIMARY = os.environ.get("CLAUDE_OR_PRIMARY_URL", "https://api.z.ai/api/anthropic")
-FALLBACK = os.environ.get("CLAUDE_OR_FALLBACK_URL", "https://openrouter.ai/api")
-PRIMARY_KEY = os.environ.get("CLAUDE_OR_PRIMARY_KEY")
-FALLBACK_KEY = os.environ.get("CLAUDE_OR_FALLBACK_KEY")
+PORT = int(os.environ.get("CLAUDE_OPEN_PROXY_PORT", "8927"))
+PRIMARY = os.environ.get("CLAUDE_OPEN_PRIMARY_URL", "https://api.z.ai/api/anthropic")
+FALLBACK = os.environ.get("CLAUDE_OPEN_FALLBACK_URL", "https://openrouter.ai/api")
+PRIMARY_KEY = os.environ.get("CLAUDE_OPEN_PRIMARY_KEY")
+FALLBACK_KEY = os.environ.get("CLAUDE_OPEN_FALLBACK_KEY")
 # Claude Code strips the [1m] suffix client-side, so live traffic carries
-# bare names; both forms are mapped. Presets are sent bare (the suffix only
-# works in the claude-or env path, not raw API bodies).
+# bare names; both forms are mapped. Failover keeps the same GLM model on
+# OpenRouter — output_config.effort rides along in the body, no preset needed.
 MODEL_MAP = {
-    "glm-5.3": "@preset/cc-flash-high",
-    "glm-5.3[1m]": "@preset/cc-flash-high",
-    "glm-5.3-flash": "@preset/cc-flash-med",
-    "glm-5.3-flash[1m]": "@preset/cc-flash-med",
+    "glm-5.3": "z-ai/glm-5.3",
+    "glm-5.3[1m]": "z-ai/glm-5.3",
+    "glm-5.3-flash": "z-ai/glm-5.3-flash",
+    "glm-5.3-flash[1m]": "z-ai/glm-5.3-flash",
 }
 # 1308-1310 quota/expiry hard stops, 1316-1321 extra-usage family (see
 # docs.z.ai/api-reference/api-code.md).
@@ -43,10 +43,10 @@ HOP_HEADERS = {"host", "authorization", "content-length", "connection",
                "accept-encoding", "transfer-encoding"}
 # Models routed to the local Ollama daemon instead of z.ai, so /model
 # <local> works mid-session. Unknown names still go to the primary.
-LOCAL = os.environ.get("CLAUDE_OR_LOCAL_URL", "http://127.0.0.1:11434")
+LOCAL = os.environ.get("CLAUDE_OPEN_LOCAL_URL", "http://127.0.0.1:11434")
 LOCAL_PREFIXES = ("qwen", "ornith", "granite", "gemma", "gpt-oss",
                   "llama", "deepseek", "mistral")
-STATE_DIR = os.path.expanduser("~/.local/state/claude-or")
+STATE_DIR = os.path.expanduser("~/.local/state/claude-open")
 
 
 def log(msg):
@@ -159,7 +159,7 @@ class Proxy(http.server.BaseHTTPRequestHandler):
             if fail is not None:  # ollama down: surface it, don't fail over
                 payload = json.dumps({"type": "error", "error": {
                     "type": "api_error",
-                    "message": "claude-or-fallback: local ollama (%s) failed: "
+                    "message": "claude-open-fallback: local ollama (%s) failed: "
                                "%s" % (LOCAL, fail)}}).encode()
                 self.send_response(502)
                 self.send_header("Content-Type", "application/json")
@@ -183,7 +183,7 @@ class Proxy(http.server.BaseHTTPRequestHandler):
                 log("fallback failed reason=%s" % fail2)
                 payload = json.dumps({"type": "error", "error": {
                     "type": "api_error",
-                    "message": "claude-or-fallback: both upstreams failed "
+                    "message": "claude-open-fallback: both upstreams failed "
                                "(%s, then %s)" % (fail, fail2)}}).encode()
                 self.send_response(502)
                 self.send_header("Content-Type", "application/json")
@@ -225,7 +225,7 @@ class Proxy(http.server.BaseHTTPRequestHandler):
 def serve():
     load_keys()
     if not PRIMARY_KEY or not FALLBACK_KEY:
-        print("claude-or-fallback: need ZAI_API_KEY and OPENROUTER_API_KEY",
+        print("claude-open-fallback: need ZAI_API_KEY and OPENROUTER_API_KEY",
               file=sys.stderr)
         sys.exit(1)
     try:
@@ -300,16 +300,15 @@ def selftest():
                                                  "content": "hi"}]}
     code, data = post(req)
     assert code == 200 and data.get("ok") == "primary", (code, data)
-    assert fallback.requests[-1]["model"] == "@preset/cc-flash-high", \
+    assert fallback.requests[-1]["model"] == "z-ai/glm-5.3", \
         fallback.requests[-1]["model"]
-    assert not any(r["model"].startswith("glm") for r in fallback.requests)
 
     # Live traffic carries the bare name (Claude Code strips [1m]).
     req_bare = {"model": "glm-5.3-flash", "messages": [{"role": "user",
                                                         "content": "hi"}]}
     code, data = post(req_bare)
     assert code == 200 and data.get("ok") == "primary", (code, data)
-    assert fallback.requests[-1]["model"] == "@preset/cc-flash-med", \
+    assert fallback.requests[-1]["model"] == "z-ai/glm-5.3-flash", \
         fallback.requests[-1]["model"]
 
     primary.mode = "ok"

@@ -61,7 +61,7 @@ case "${1:-status}" in
   sync) exec bash "$DOTFILES/scripts/converge.sh" now ;;
   --list) list; exit 0 ;;
   decide)
-    cmd=(claude-or --model opus --add-dir "$SYSTEM_STATE" --add-dir "$DOTFILES_STATE"
+    cmd=(claude-open --model opus --add-dir "$SYSTEM_STATE" --add-dir "$DOTFILES_STATE"
       --append-system-prompt "$(brief)" "Walk me through the pending dotfiles decisions.")
     # A window in the most recently used tmux session, and focus the terminal
     # showing it; with no attached client, a fresh terminal on a new session.

@@ -1,0 +1,240 @@
+#!/bin/bash
+# Claude Code on non-Anthropic models. One entry; the provider lane is picked
+# at launch and stays for the session:
+#   claude-open [zai|mimo|openrouter|local] [claude args...]
+# Lane may sit after leading flags (the `co` abbr expands to
+# `claude-open --dangerously-skip-permissions ...` first).
+# No lane = MiMo if MIMO_API_KEY, else z.ai, else OpenRouter.
+# Each lane shows only its own models in /model. Mid-session hops to another
+# provider are not routed; switch by relaunching.
+#
+# Keys (one per file): ~/.config/zai.env ZAI_API_KEY; ~/.config/mimo.env
+# MIMO_API_KEY plus optional MIMO_BASE_URL (default: token plan; pay-as-you-go
+# is https://api.xiaomimimo.com/anthropic with an sk- key); ~/.config/openrouter.env
+# OPENROUTER_API_KEY. Effort is the /effort command (output_config.effort on
+# the wire) — honored by z.ai and OpenRouter, ignored by MiMo. OpenRouter
+# uses bare model slugs; the old @preset/cc-* wrappers only existed to pin
+# effort per row and are not needed for that.
+# Env overrides: CLAUDE_OPEN_NO_FALLBACK=1 (keep the hard z.ai quota stop),
+# CLAUDE_OPEN_LOCAL_MODEL, CLAUDE_OPEN_LOCAL_CTX.
+export PATH="$HOME/.local/bin:$PATH"   # claude's native install; bare units lack it
+command -v claude >/dev/null || { echo 'claude-open: claude not on PATH' >&2; exit 1; }
+
+# First bare lane word in the leading flag run wins (so
+# `claude-open --dangerously-skip-permissions openrouter` works). Everything
+# else passes through verbatim. ponytail: a prompt word that is exactly a
+# lane name, as in `-p openrouter`, is stripped; use `--` or rephrase.
+lane= looking=1 rest=()
+for a in "$@"; do
+    if [ -n "$looking" ]; then
+        case "$a" in
+            zai|mimo|openrouter|local)
+                if [ -z "$lane" ]; then lane=$a; continue; fi
+                ;;
+            --) looking= ;;
+            -*) ;;
+            *) looking= ;;
+        esac
+    fi
+    rest+=("$a")
+done
+set -- "${rest[@]}"
+
+read_key() { sed -n "s/^${2}=//p" "${1}" 2>/dev/null | head -n1; }
+zai_file=${ZAI_ENV:-$HOME/.config/zai.env}
+mimo_file=${MIMO_ENV:-$HOME/.config/mimo.env}
+or_file=${OPENROUTER_ENV:-$HOME/.config/openrouter.env}
+zai_key=$(read_key "$zai_file" ZAI_API_KEY)
+mimo_key=$(read_key "$mimo_file" MIMO_API_KEY)
+or_key=$(read_key "$or_file" OPENROUTER_API_KEY)
+
+if [ -z "$lane" ]; then
+    if [ -n "$mimo_key" ]; then
+        lane=mimo
+    elif [ -n "$zai_key" ]; then
+        echo "claude-open: no MIMO_API_KEY in $mimo_file, using z.ai" >&2
+        lane=zai
+    elif [ -n "$or_key" ]; then
+        echo "claude-open: no MIMO_API_KEY in $mimo_file, using OpenRouter" >&2
+        lane=openrouter
+    else
+        echo "claude-open: no MIMO_API_KEY in $mimo_file, no ZAI_API_KEY in $zai_file, and no OPENROUTER_API_KEY in $or_file" >&2
+        exit 1
+    fi
+fi
+
+# Per lane: endpoint, keys, slot map (opus/fable = main tier, sonnet = session
+# default, haiku = background calls like session naming), and the /model rows.
+# rows is JSON for the shared settings template at the bottom; keep entries
+# comma-separated with no trailing comma.
+case "$lane" in
+zai)
+    [ -n "$zai_key" ] || { echo "claude-open: no ZAI_API_KEY in $zai_file" >&2; exit 1; }
+    # GLM Coding Plan (docs.z.ai/devpack/tool/claude): opus/fable ->
+    # glm-5.3, sonnet/haiku -> glm-5.3-flash, 1M context suffix.
+    base_url=https://api.z.ai/api/anthropic
+    token=$zai_key
+    fable='glm-5.3[1m]' opus='glm-5.3[1m]' sonnet='glm-5.3-flash[1m]' haiku='glm-5.3-flash[1m]'
+    rows='      {
+        "model": "glm-5.3[1m]",
+        "label": "GLM 5.3",
+        "description": "1M ctx — main model",
+        "behavesAs": "claude-sonnet-4-6"
+      },
+      {
+        "model": "glm-5.3-flash[1m]",
+        "label": "GLM 5.3 Flash",
+        "description": "1M ctx — cheap/fast",
+        "behavesAs": "claude-sonnet-4-6"
+      }'
+    if [ -n "$or_key" ] && [ -z "$CLAUDE_OPEN_NO_FALLBACK" ]; then
+        # Runtime failover: route through claude-open-fallback on :8927, which
+        # retries quota/auth failures against OpenRouter (model mapped to the
+        # bare z-ai/* slug). CLAUDE_OPEN_NO_FALLBACK=1 keeps the hard quota stop.
+        if ! curl -sf -o /dev/null http://127.0.0.1:8927/healthz; then
+            mkdir -p "$HOME/.local/state/claude-open"
+            CLAUDE_OPEN_PRIMARY_KEY="$zai_key" CLAUDE_OPEN_FALLBACK_KEY="$or_key" \
+                setsid claude-open-fallback serve >>"$HOME/.local/state/claude-open/proxy.log" 2>&1 &
+            i=0
+            while [ "$i" -lt 20 ] && ! curl -sf -o /dev/null http://127.0.0.1:8927/healthz; do
+                sleep 0.1; i=$((i+1))
+            done
+        fi
+        base_url=http://127.0.0.1:8927
+    fi
+    ;;
+mimo)
+    [ -n "$mimo_key" ] || { echo "claude-open: no MIMO_API_KEY in $mimo_file" >&2; exit 1; }
+    # Xiaomi MiMo (mimo.mi.com/docs/en-US/tokenplan/integration/claudecode).
+    # Four ids on the plan (probed 2026-09-21): v2.6-pro / v2.6-flash /
+    # v2.5-pro / v2.5. Only v2.6-pro has the documented [1m] 1M-context
+    # suffix; the bare ids make Claude Code assume 200K — verify any with
+    # /context before trusting a bigger window.
+    base_url=$(read_key "$mimo_file" MIMO_BASE_URL)
+    base_url=${base_url:-https://token-plan-cn.xiaomimimo.com/anthropic}
+    token=$mimo_key
+    fable='mimo-v2.6-pro[1m]' opus='mimo-v2.6-pro[1m]'
+    sonnet='mimo-v2.6-pro[1m]' haiku='mimo-v2.6-flash'
+    rows='      {
+        "model": "mimo-v2.6-pro[1m]",
+        "label": "MiMo v2.6 Pro",
+        "description": "1M ctx — main model",
+        "behavesAs": "claude-sonnet-4-6"
+      },
+      {
+        "model": "mimo-v2.6-flash",
+        "label": "MiMo v2.6 Flash",
+        "description": "cheap/fast — background tier",
+        "behavesAs": "claude-sonnet-4-6"
+      }'
+    ;;
+openrouter)
+    [ -n "$or_key" ] || { echo "claude-open: no OPENROUTER_API_KEY in $or_file" >&2; exit 1; }
+    # Bare slugs. /effort -> output_config.effort (low..xhigh all accepted;
+    # only OpenAI's minimal/none 400). Omitting it defaults to max on GLM.
+    base_url=https://openrouter.ai/api
+    token=$or_key
+    fable='openai/gpt-6-astra[1m]' opus='z-ai/glm-5.3[1m]'
+    sonnet='z-ai/glm-5.3-flash[1m]' haiku='z-ai/glm-5.3-flash[1m]'
+    rows='      {
+        "model": "z-ai/glm-5.3[1m]",
+        "label": "GLM 5.3",
+        "description": "main model",
+        "behavesAs": "claude-sonnet-4-6"
+      },
+      {
+        "model": "z-ai/glm-5.3-flash[1m]",
+        "label": "GLM 5.3 Flash",
+        "description": "cheap/fast",
+        "behavesAs": "claude-sonnet-4-6"
+      },
+      {
+        "model": "z-ai/glm-5.3-flashx[1m]",
+        "label": "GLM 5.3 FlashX",
+        "description": "high-speed flash variant",
+        "behavesAs": "claude-sonnet-4-6"
+      },
+      {
+        "model": "openai/gpt-6-astra[1m]",
+        "label": "GPT-6 Astra",
+        "description": "fable slot",
+        "behavesAs": "claude-sonnet-4-6"
+      }'
+    ;;
+local)
+    # Ollama (>=0.14) serves the Anthropic Messages API natively on :11434.
+    # ornith:9b-49k (created via `ollama create`, num_ctx 49152) is the
+    # default: agentic-coding model, and at 49152 the allocator spills ~23%
+    # to CPU instead of clamping context — ollama's 4096 default and any ctx
+    # below the ~34k prompt floor silently truncate Claude Code's system
+    # prompt + tool schemas to garbage. Needs the q4_0 KV cache on the ollama
+    # service (drop-in at /etc/systemd/system/ollama.service.d/kv-quant.conf).
+    # CLAUDE_CODE_MAX_CONTEXT_TOKENS must match num_ctx. Override the model
+    # with CLAUDE_OPEN_LOCAL_MODEL.
+    lm=${CLAUDE_OPEN_LOCAL_MODEL:-ornith:9b-49k}
+    base_url=http://127.0.0.1:11434
+    token=ollama
+    ctx=${CLAUDE_OPEN_LOCAL_CTX:-49152}
+    export CLAUDE_CODE_MAX_CONTEXT_TOKENS="$ctx"
+    fable=$lm opus=$lm sonnet=$lm haiku=$lm
+    rows='      {
+        "model": "ornith:9b-49k",
+        "label": "Ornith 9B (local)",
+        "description": "49k ctx — short sessions",
+        "behavesAs": "claude-sonnet-4-6"
+      },
+      {
+        "model": "qwen2.5:7b",
+        "label": "Qwen 2.5 7B (local)",
+        "description": "32k ctx — small tasks",
+        "behavesAs": "claude-sonnet-4-6"
+      }'
+    ;;
+esac
+
+pass=("$@")
+# Full system-prompt replacement from claude-open-system-prompt.md next to this
+# script; __CC_MEMORY_DIR__ in it is filled with this project's memory dir.
+sp_dir=$(dirname "$(readlink -f "$0")")
+if [ -f "$sp_dir/claude-open-system-prompt.md" ]; then
+    mem="$HOME/.claude/projects/$(printf '%s' "$PWD" | sed 's|/|-|g')"
+    pass=("--system-prompt" "$(sed "s|__CC_MEMORY_DIR__|$mem|" "$sp_dir/claude-open-system-prompt.md")" "${pass[@]}")
+fi
+# One shared settings template, generated per launch with this lane's /model
+# rows — single source of truth here, not four mostly-identical JSON files.
+# Artifacts are off because they need a claude.ai login, which
+# ANTHROPIC_AUTH_TOKEN always shadows; plain/login claude never sees this file.
+settings="$HOME/.local/state/claude-open/settings-$lane.json"
+mkdir -p "$HOME/.local/state/claude-open"
+cat > "$settings" <<EOF
+{
+  "enableArtifact": false,
+  "skillOverrides": {
+    "artifact-design": "off",
+    "artifact-capabilities": "off",
+    "artifact-diagramming": "off"
+  },
+  "modelPicker": {
+    "replaceBuiltInOptions": true,
+    "options": [
+$rows
+    ]
+  }
+}
+EOF
+pass=("--settings" "$settings" "${pass[@]}")
+# ANTHROPIC_MODEL must name a model the picker rows know: an alias like
+# "sonnet" expands at request time but shows up in /model as a "Custom model"
+# row. The main model (opus slot) is the session default; haiku-tier calls
+# (session naming, classifiers) go to the haiku slot.
+ANTHROPIC_BASE_URL="$base_url" \
+ANTHROPIC_AUTH_TOKEN="$token" \
+ANTHROPIC_API_KEY= \
+API_TIMEOUT_MS=3000000 \
+ANTHROPIC_DEFAULT_FABLE_MODEL="$fable" \
+ANTHROPIC_DEFAULT_OPUS_MODEL="$opus" \
+ANTHROPIC_DEFAULT_SONNET_MODEL="$sonnet" \
+ANTHROPIC_DEFAULT_HAIKU_MODEL="$haiku" \
+ANTHROPIC_DEFAULT_MODEL="$opus" \
+ANTHROPIC_MODEL="$opus" \
+exec claude "${pass[@]}"
