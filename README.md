@@ -84,14 +84,17 @@ dotfiles server          # from the laptop; or: dotfiles server HOST
 
 One command sets up and updates the homelab server. It SSHes in, clones or
 fast-forwards `~/dotfiles` from GitHub, and runs `scripts/server.sh`: stow links
-fish, tmux, nvim, claude and theme (the tmux bar's colors); Neovim and the tree-sitter CLI track their latest
-upstream release in `~/.local` (noble's nvim is 0.9.5); plugins follow the
-laptop's `lazy-lock.json`. sudo is asked for only when an apt package is
-missing. The first run moves wonlab's own `~/.claude/settings.json` to `.bak`.
+fish, git, tmux, nvim, claude, theme (the tmux bar's colors) and bin (server
+tools: `claude-open`, `diff-highlight` for git's pager). Neovim and the
+tree-sitter CLI track their latest upstream release in `~/.local` (noble's nvim
+is 0.9.5); plugins follow the laptop's `lazy-lock.json`. sudo is asked for only
+when an apt package is missing. The first run moves wonlab's own
+`~/.claude/settings.json` to `.bak`.
 
 Nothing runs on a timer and nothing runs as root: the server changes only when
-you run this, and only to what is pushed. `git` is left out because its pager
-needs `diff-highlight` from `bin`, which is otherwise laptop scripts.
+you run this, and only to what is pushed. `home/laptop` (desktop scripts, tip,
+notify, converge timers) stays off the server. Provider keys for `claude-open`
+(`~/.config/{zai,mimo,openrouter}.env`) are never synced — copy them by hand.
 
 ## Troubleshooting
 

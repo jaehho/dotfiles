@@ -40,7 +40,7 @@ HOST_SSHFS_SKIP="${HOST_SSHFS_SKIP:-}"
 HOST_NO_AAAA="${HOST_NO_AAAA:-0}"
 
 # --- stow packages --------------------------------------------------------
-COMMON_STOW=(fish git tmux nvim claude codex sshfs bin kitty ssh mime restic zathura
+COMMON_STOW=(fish git tmux nvim claude codex sshfs bin laptop kitty ssh mime restic zathura
              visidata tridactyl tailscale theme audio)
 ARCH_STOW=(hypr swaync rofi waybar)
 

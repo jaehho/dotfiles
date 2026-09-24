@@ -5,11 +5,12 @@
 #   ~/dotfiles/scripts/server.sh    on the server itself
 #
 # First run sets up, every run updates: pulls the repo, links fish, tmux, nvim,
-# claude and theme with stow, keeps Neovim and the tree-sitter CLI at their latest
-# upstream release in ~/.local (Ubuntu's are too old for the nvim config), and
-# brings plugins to the laptop's lazy-lock.json. sudo only when an apt package
-# is missing. No timers: the server changes only when someone runs this. See
-# README "Server (wonlab)".
+# claude, theme, git and bin with stow (theme: the tmux bar's colors; git's
+# pager needs bin's diff-highlight), keeps Neovim and the tree-sitter CLI at
+# their latest upstream release in ~/.local (Ubuntu's are too old for the nvim
+# config), and brings plugins to the laptop's lazy-lock.json. sudo only when an
+# apt package is missing. No timers: the server changes only when someone runs
+# this. See README "Server (wonlab)".
 
 set -euo pipefail
 
@@ -26,8 +27,10 @@ if [ -z "${SERVER_PULLED:-}" ]; then
 fi
 
 STOW_DIR="$DOTFILES/home"
-PKGS=(fish tmux nvim claude theme)   # theme: tmux's @thm_* status-bar colors
-APT=(fish stow tmux git curl jq ripgrep fd-find fzf unzip gcc make)
+# bin is only the server tools (claude-open, diff-highlight); laptop scripts
+# live in home/laptop and stay off this host.
+PKGS=(fish git tmux nvim claude theme bin)
+APT=(fish stow tmux git curl jq ripgrep fd-find fzf unzip gcc make python3)
 OPT="$HOME/.local/opt" BIN="$HOME/.local/bin"
 LOG="$HOME/.local/state/dotfiles-server"
 mkdir -p "$OPT" "$BIN" "$LOG"
@@ -92,6 +95,13 @@ command -v claude >/dev/null || curl -fsSL https://claude.ai/install.sh | bash
     echo "  backed up ~/$rel -> ~/$rel.bak"
   done
 stow -d "$STOW_DIR" -t "$HOME" --no-folding -R "${PKGS[@]}"
+
+# claude-open reads provider keys at runtime; they are never synced. Copy them
+# by hand from the laptop (see home/claude/.claude/reconcile/secrets.env.example).
+if [ ! -e "$HOME/.config/zai.env" ] && [ ! -e "$HOME/.config/mimo.env" ] &&
+   [ ! -e "$HOME/.config/openrouter.env" ]; then
+  echo "  note: no ~/.config/{zai,mimo,openrouter}.env — claude-open has no keys on this host"
+fi
 
 # --- plugins --------------------------------------------------------------------
 
