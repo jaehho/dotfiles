@@ -4,6 +4,7 @@
     "pr": ""
   },
   "permissions": {
+    "defaultMode": "auto",
     "allow": [
       "Bash(gog *)"
     ],
@@ -41,12 +42,12 @@
   },
   "model": "sonnet",
   "skillOverrides": {
-    "cetz": "user-invocable-only",
+    "cetz": "off",
     "impeccable": "user-invocable-only",
-    "orcaslicer-presets": "user-invocable-only",
-    "touying-author": "user-invocable-only",
+    "orcaslicer-presets": "off",
+    "touying-author": "off",
     "typst-author": "user-invocable-only",
-    "typst-packages": "user-invocable-only"
+    "typst-packages": "off"
   },
   "deniedMcpServers": [
     {
@@ -98,12 +99,12 @@
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
-    "claude-md-management@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": false,
     "pyright-lsp@claude-plugins-official": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": false,
     "lua-lsp@claude-plugins-official": true,
-    "glm-plan-usage@zai-coding-plugins": true
+    "glm-plan-usage@zai-coding-plugins": false
   },
   "extraKnownMarketplaces": {
     "zai-coding-plugins": {

@@ -91,7 +91,11 @@
       "click-path-audit": "on",
       "inherit-legacy-style": "on",
       "security-review": "on",
-      "regex-vs-llm-structured-text": "on"
+      "regex-vs-llm-structured-text": "on",
+      "cetz": "off",
+      "orcaslicer-presets": "off",
+      "touying-author": "off",
+      "typst-packages": "off"
     }
   }
 }
