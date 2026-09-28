@@ -1,7 +1,36 @@
-" Swap the default tab-switching direction (default: J = prev, K = next)
+" Shared muscle memory with nvim (home/nvim/.config/nvim/init.lua).
+" Leader is Space there; keep that prefix for browser actions too.
+
+" Tab switching — this config's direction (default J = prev, K = next)
 bind J tabnext
 bind K tabprev
 
 bind <Space>d tabdetach
+
+" <leader><leader> switches buffers in nvim → switch tabs here
+bind <Space><Space> fillcmdline tab
+
+" nvim <leader>s* is the Search group. Web search lives there, not on s,
+" so s stays free for jump-to-label (flash.nvim owns s/S in nvim).
+bind <Space>s fillcmdline open search
+bind <Space>S fillcmdline tabopen search
+bind s hint
+bind S hint -b
+
+" Find like nvim: / ? n N (default / is Firefox Quick Find; Ctrl+g cannot be rebound)
+bind / fillcmdline find
+bind ? fillcmdline find --reverse
+bind n findnext --search-from-view
+bind N findnext --search-from-view --reverse
+bind gn findselect
+
+" Esc clears search highlight, same as nvim's <Esc> → :nohlsearch
+bind <Escape> composite mode normal ; hidecmdline ; nohlsearch
+
+" Completions (b / : / t …) like blink.cmp: C-n/C-p select, C-y accept.
+" C-n is Firefox New Window until you clear it in about:keyboard (FF 147+).
+bind --mode=ex <C-n> ex.next_completion
+bind --mode=ex <C-p> ex.prev_completion
+bind --mode=ex <C-y> ex.accept_line
 
 blacklistadd cvat.jaehho.com

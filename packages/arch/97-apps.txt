@@ -5,6 +5,7 @@ gnome-keyring
 gogcli-bin
 google-chrome
 nextcloud-client
+obsidian
 wallhelper-git
 # battery-log-git -- add once the repo is published; ~/projects/battery-log
 #   installs into ~/.local with `make install` until then
