@@ -40,5 +40,5 @@ vim.keymap.set('n', '<leader>tp', function() require('config.preview').toggle() 
 -- Zotero annotation → markdown blockquote at cursor (stock local API :23119)
 vim.keymap.set('n', '<leader>zq', function() require('zotero_quotes').pick() end, { desc = 'Zotero [Q]uote' })
 
--- Claude Code memory and CLAUDE.md files across projects (<c-x> deletes)
+-- Claude Code memory and CLAUDE.md files across projects (<c-x> deletes, <c-g> toggles full-text grep)
 vim.api.nvim_create_user_command('ClaudeMemory', function() require('claude_memory').pick() end, {})

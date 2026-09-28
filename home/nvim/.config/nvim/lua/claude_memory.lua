@@ -146,7 +146,75 @@ local function delete_file(file)
   end
 end
 
-function M.pick()
+-- Shared by both pickers: delete selected files (confirm first), then refresh.
+local function delete_action(p)
+  local files, seen = {}, {}
+  for _, i in ipairs(p:selected { fallback = true }) do
+    if i.file and not seen[i.file] then
+      seen[i.file] = true
+      files[#files + 1] = i.file
+    end
+  end
+  if #files == 0 then
+    return
+  end
+  local names = vim.tbl_map(function(f)
+    return '  ' .. short(f)
+  end, files)
+  local msg = 'Delete ' .. #files .. ' file(s)?\n' .. table.concat(names, '\n')
+  if vim.fn.confirm(msg, '&Yes\n&No', 2) ~= 1 then
+    return
+  end
+  for _, f in ipairs(files) do
+    delete_file(f)
+  end
+  -- Grep passes explicit file paths to rg; drop the deleted ones.
+  if p.opts.dirs then
+    p.opts.dirs = vim.tbl_filter(function(f)
+      return not seen[f]
+    end, p.opts.dirs)
+  end
+  p.list:set_selected()
+  p:find()
+end
+
+local function open(p, fn)
+  local search = p.input:get()
+  p:close()
+  vim.schedule(function()
+    fn(search)
+  end)
+end
+
+local win = {
+  preview = { wo = { wrap = true, linebreak = true } },
+  input = {
+    keys = {
+      ['<c-x>'] = { 'memory_delete', mode = { 'n', 'i' } },
+      ['<c-g>'] = { 'memory_toggle', mode = { 'n', 'i' } },
+    },
+  },
+}
+
+-- Live grep over the full text of the same files. <c-g> returns to the list.
+function M.grep(search)
+  require('snacks.picker').grep {
+    title = 'Claude memory grep',
+    dirs = vim.tbl_map(function(i)
+      return i.file
+    end, collect()),
+    search = search,
+    actions = {
+      memory_delete = delete_action,
+      memory_toggle = function(p)
+        open(p, M.pick)
+      end,
+    },
+    win = win,
+  }
+end
+
+function M.pick(pattern)
   local ok, picker = pcall(require, 'snacks.picker')
   if not ok then
     vim.notify('Claude memory: snacks.picker unavailable', vim.log.levels.ERROR)
@@ -155,6 +223,7 @@ function M.pick()
   picker.pick {
     title = 'Claude memory',
     finder = collect,
+    pattern = pattern,
     sort = false,
     format = function(item)
       return {
@@ -171,29 +240,12 @@ function M.pick()
       end
     end,
     actions = {
-      memory_delete = function(p)
-        local sel = p:selected { fallback = true }
-        if #sel == 0 then
-          return
-        end
-        local names = vim.tbl_map(function(i)
-          return '  ' .. short(i.file)
-        end, sel)
-        local msg = 'Delete ' .. #sel .. ' file(s)?\n' .. table.concat(names, '\n')
-        if vim.fn.confirm(msg, '&Yes\n&No', 2) ~= 1 then
-          return
-        end
-        for _, i in ipairs(sel) do
-          delete_file(i.file)
-        end
-        p.list:set_selected()
-        p:find()
+      memory_delete = delete_action,
+      memory_toggle = function(p)
+        open(p, M.grep)
       end,
     },
-    win = {
-      preview = { wo = { wrap = true, linebreak = true } },
-      input = { keys = { ['<c-x>'] = { 'memory_delete', mode = { 'n', 'i' } } } },
-    },
+    win = win,
   }
 end
 
