@@ -4,7 +4,6 @@
     "pr": ""
   },
   "permissions": {
-    "defaultMode": "auto",
     "allow": [
       "Bash(gog *)"
     ],
@@ -38,9 +37,10 @@
       "Bash(gog *gmail labels rm*)",
       "Bash(gog *gmail labels del*)",
       "Bash(gog *auth*)"
-    ]
+    ],
+    "defaultMode": "auto"
   },
-  "model": "sonnet",
+  "model": "opus",
   "skillOverrides": {
     "cetz": "off",
     "impeccable": "user-invocable-only",
@@ -127,5 +127,39 @@
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "remoteControlAtStartup": false,
-  "agentPushNotifEnabled": true
+  "agentPushNotifEnabled": true,
+  "autoMode": {
+    "environment": [
+      "### Org-wide",
+      "**Organization**: None configured",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: PUBLIC — github.com/jaehho/dotfiles (default branch: master)",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: None configured",
+      "**Default / protected branches**: Default branch is `master`; no branch protection rules or rulesets listed via gh (treat as unprotected)",
+      "**CI/CD deploy targets**: None configured",
+      "**Network posture**: None configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine with open internet",
+      "**Source control**: The trusted repo (github.com/jaehho/dotfiles) and its remote only (no additional orgs configured)",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: None configured",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar; note `.env` appears in .gitignore and as a sensitive-looking path — treat local `.env` contents as sensitive and never commit them despite the repo being public",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: personal dotfiles / systems management (Arch + Hyprland, Ubuntu/Debian) — hobby/personal posture",
+      "**Trusted repo**: ~/dotfiles (github.com/jaehho/dotfiles) — PUBLIC repo; only this repo's own work belongs here, confidential/personal material should not be committed regardless of visibility",
+      "**Org-specific CLIs**: None configured (repo-specific tools observed: `dotfiles`, `stow`, `hyprctl`, `asst`, `claude-open`, `reel` — personal project tooling, not org CLIs)",
+      "routine under ~/dotfiles/ prefix: converge/sync operations (`./scripts/converge.sh`, `dotfiles sync`), stow operations, and edits under `home/`, `system/`, `scripts/` are routine project work"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Bash(sudo pacman:*) — privileged package operations in this repo's converge flow; CLAUDE.md states sudo should never be run directly by the agent, prefer flagging for owner-run script instead",
+      "Bash(rm:* system/*) — deletions under boot-critical system/ paths in ~/dotfiles warrant confirmation given boot-critical nature noted in README/CLAUDE.md"
+    ]
+  }
 }

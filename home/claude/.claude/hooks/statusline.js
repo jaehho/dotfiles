@@ -342,17 +342,17 @@ process.stdin.on('end', () => {
     const z7 = limRow(zaiWeek, zaiResetsWeek, pre7);
     if (z7) parts.push(z7);
 
-    // idle-dash: archive server-truth rate limits; the dashboard reads this
+    // dash: archive server-truth rate limits; the dashboard reads this
     const rl = data.rate_limits;
     if (rl && (rl.five_hour || rl.seven_day)) {
       try {
         const { DatabaseSync } = require('node:sqlite');
         const db = new DatabaseSync(
-          path.join(os.homedir(), '.local/state/idle-dash/state.db'));
+          path.join(os.homedir(), '.local/state/dash/state.db'));
         db.exec(`CREATE TABLE IF NOT EXISTS claude_limits (
           ts INTEGER PRIMARY KEY, used_5h REAL, resets_5h INTEGER,
           used_7d REAL, resets_7d INTEGER)`);
-        // named columns: idle-dash-llm owns an extra `plan` column
+        // named columns: dash-llm owns an extra `plan` column
         db.prepare(`INSERT OR REPLACE INTO claude_limits
           (ts, used_5h, resets_5h, used_7d, resets_7d) VALUES (?,?,?,?,?)`).run(
           Math.floor(Date.now() / 1000),
