@@ -8,6 +8,7 @@ fd
 glow
 htop
 kitty
+lazygit
 ncdu
 qalculate-gtk
 restic

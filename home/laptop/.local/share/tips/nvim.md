@@ -1,14 +1,13 @@
 # Neovim
 
-Roughly easiest-first: core motions and operators before this config's plugin
-binds. Leader is `<Space>`. Anything with a leader was read out of
-`home/nvim/.config/nvim/init.lua`, so it is what your config actually does.
+This config is LazyVim plus personal extras. Roughly easiest-first: core
+motions and operators before plugin binds. Leader is `<Space>`. Press
+`<Space>` and wait -- which-key lists every leader bind, grouped.
 
 ## Which-key will tell you the rest
 
-Press `<Space>` and wait. A menu of every leader bind appears, grouped.
-Same for `g`, `[`, `]`, `z`, `"`. You never have to memorise a leader map --
-just the first key.
+A menu of every leader bind appears after `<Space>`, `g`, `[`, `]`, `z`.
+You never have to memorise a leader map -- just the first key.
 
 ## Search your own keymaps
 
@@ -24,7 +23,7 @@ When two plugins fight over a key, `:verbose nmap s` names the winner.
 
 `ciw` changes the word under the cursor, `ci"` the string, `ci(` the
 parens, `cit` an HTML tag. Swap `i` for `a` to include the delimiters.
-This config's mini.ai extends these to functions and arguments.
+mini.ai extends these to functions, arguments, and more.
 
 ## The dot is your macro
 
@@ -86,7 +85,6 @@ they go. In visual mode they move the whole selection.
 
 flash.nvim owns `s` (jump to any label on screen) and `S` (treesitter
 select). The builtin `s`/`S` are gone -- use `cl` and `cc` instead.
-Note mini.surround also wants `s`; `:verbose nmap s` settles it.
 
 ## Flash is a two-character jump
 
@@ -95,8 +93,9 @@ label that appears. Faster than counting lines or searching.
 
 ## Surround with mini.surround
 
-`saiw)` wraps the word in parens, `sd'` deletes the surrounding quotes,
-`sr)'` replaces parens with quotes. Add, Delete, Replace.
+`gsa` adds a surrounding, `gsd` deletes one, `gsr` replaces one.
+`gsaiw)` wraps the word in parens, `gsd'` deletes the surrounding quotes,
+`gsr)'` replaces parens with quotes.
 
 ## Registers are named clipboards
 
@@ -128,34 +127,26 @@ mode exactly where you last left it.
 `<C-a>` adds one, `<C-x>` subtracts. In visual mode `g<C-a>` turns a
 column of zeros into an ascending sequence.
 
-## Find files, not directories
+## Find files
 
-`<leader>sf` fuzzy-finds files in the project.
-`<leader><leader>` switches between open buffers -- usually the faster one.
+`<leader><space>` or `<leader>ff` fuzzy-finds files in the project root.
+`<leader>fb` switches between open buffers -- usually the faster one.
+`<leader>fr` lists recent files, `<leader>fc` your Neovim config files.
 
 ## Grep the whole project
 
 `<leader>sg` live-greps as you type. `<leader>sw` greps the word under the
-cursor. `<leader>sr` resumes your last search with its results intact.
+cursor. `<leader>sr` is search-and-replace across the project.
 
-## Fuzzy-find inside the current file
+## Fuzzy-find and help
 
-`<leader>/` searches the current buffer. `<leader>s/` searches only the
-files you have open. Both beat scrolling.
-
-## Read the manual from inside the editor
-
+`<leader>/` greps (same as `<leader>sg`).
 `<leader>sh` fuzzy-searches the help tags. `:help` topics are excellent --
 try `:help text-objects` and `:help ins-completion`.
 
-## Recent files and the config
-
-`<leader>s.` lists recently opened files.
-`<leader>sn` jumps straight into your Neovim config directory.
-
 ## Go to definition and back
 
-`grd` goes to the definition, `<C-t>` (or `<C-o>`) comes back.
+`grd` (or `gd`) goes to the definition, `<C-t>` (or `<C-o>`) comes back.
 `grr` lists references, `gri` implementations, `grt` the type definition.
 
 ## Rename a symbol everywhere
@@ -173,19 +164,19 @@ missing name, add the type, remove the unused variable.
 `gO` lists the symbols in the current buffer, `gW` across the workspace.
 Faster than scrolling for the function you half-remember.
 
-## Diagnostics, three ways
+## Diagnostics
 
-`]d`/`[d` step through them with the float opening automatically,
-`<leader>q` dumps them to the location list, `<leader>sd` fuzzy-finds them.
+`]d`/`[d` step through them (a float opens so you can read the error),
+`<leader>sd` fuzzy-finds them, `<leader>xx` opens the trouble list.
 
 ## Format on demand
 
-`<leader>f` formats the buffer with conform, falling back to the LSP.
-Format-on-save is configured per filetype in `init.lua`.
+`<leader>cf` formats the buffer with conform, falling back to the LSP.
+Format-on-save is LazyVim's; formatters live in `lua/plugins/lsp.lua`.
 
 ## Toggle inlay hints
 
-`<leader>th` turns the LSP's inline type hints on and off.
+`<leader>uh` turns the LSP's inline type hints on and off.
 Handy for a language you're still learning, noise once you aren't.
 
 ## Completion is control-y, not tab
@@ -194,54 +185,62 @@ blink.cmp uses the `default` preset: `<C-n>`/`<C-p>` to select,
 `<C-y>` to accept, `<C-space>` for the menu and then the docs, `<C-e>` to
 dismiss.
 
+## Ghost text from minuet
+
+When the Ollama tunnel is up (`ssh -N -L 21434:127.0.0.1:11434 raider`),
+minuet offers a grey completion. `<A-A>` accepts it, `<A-a>` accepts the
+line, `<A-]>`/`<A-[>` cycle, `<A-e>` dismisses.
+
 ## Splits, and moving between them
 
 `:vsplit`/`:split` (or `<C-w>v` / `<C-w>s`) split the window.
 `<C-h/j/k/l>` move between splits here -- and across tmux panes, via
 smart-splits. `<C-w>h/j/k/l` resize instead of moving.
 
-## Stage a hunk without leaving the buffer
+## Git hunks without leaving the buffer
 
-`<leader>hs` stages the hunk under the cursor, `<leader>hr` resets it,
-`<leader>hp` previews it. In visual mode they act on the selected lines.
-
-## Walk the changed hunks
-
-`]c` and `[c` jump to the next and previous git hunk in the file.
-`<leader>hb` blames the current line in full.
+`<leader>ghs` stages the hunk under the cursor, `<leader>ghr` resets it,
+`<leader>ghp` previews it inline, `<leader>ghb` blames the line.
+`<leader>gs` is git status, `<leader>gl` the log.
 
 ## See the diff properly
 
-`<leader>gd` opens diffview over the working tree.
-`<leader>gh` is the current file's history, `<leader>gH` the repo's.
-
-## Toggle inline blame
-
-`<leader>tb` shows the commit that last touched each line, as virtual text.
-`<leader>tw` switches the diff to word granularity.
+`<leader>gv` opens diffview over the working tree.
+`<leader>gH` is the current file's history, `<leader>gF` the repo's.
 
 ## One key previews whatever you're editing
 
 `<leader>tp` dispatches on filetype: typst and LaTeX compile and open in
 zathura, markdown opens the browser preview, marimo notebooks open a
-tmux pane, Python starts the debugger.
+tmux pane running `marimo run --watch` (installs `watchdog` into the
+project venv on first open if missing), Python starts the debugger.
 
 ## Debug from the editor
 
 `<leader>db` toggles a breakpoint, `<leader>dc` starts or continues,
-`<leader>do`/`<leader>di`/`<leader>dO` step over/into/out, `<leader>du`
-toggles the UI. `<F5>` and `<F10>`-`<F12>` mirror the step keys.
+`<leader>dO`/`<leader>di`/`<leader>do` step over/into/out, `<leader>du`
+toggles the UI. Python runs use the project `.venv` when present.
 
 ## Your TODO comments are searchable
 
 todo-comments highlights `TODO`, `FIXME`, `HACK`, `NOTE`.
-`:TodoTelescope` lists every one in the project.
+`<leader>st` lists every one in the project.
+
+## Hardtime is watching
+
+hardtime nudges you off repeated `hjkl` spam and other habits. If it
+blocks a motion you meant, count first (`5j`) or disable it for that
+buffer.
+
+## Typing practice
+
+`:Typr` is a typing drill. `:TyprStats` shows your history (closing stats
+keeps Typr usable -- patched locally).
 
 ## Quickfix is a worklist
 
 `:copen` opens it, `:cnext`/`:cprev` step through, `:cdo s/a/b/g | update`
-runs a substitution on every entry. Telescope sends results there with
-`<C-q>` from inside the picker.
+runs a substitution on every entry.
 
 ## Marks span files
 
@@ -282,6 +281,7 @@ The single best tool for "why does this key do that".
 
 `:checkhealth` reports on providers, LSPs, treesitter, and each plugin.
 `:Lazy` manages plugins, `:Mason` manages LSPs and formatters.
+`:LazyExtras` toggles LazyVim extras (mini-surround and dap.core are on).
 
 ## Count prefixes work everywhere
 
