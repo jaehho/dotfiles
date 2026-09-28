@@ -14,8 +14,9 @@ Use `dotfiles` for status and `dotfiles sync` to converge. Step names come from 
 | Desktop | [swaync](#swaync-width-hover-and-navigation), [Lua reloads](#hyprland-lua-reloads-and-timers), [Waybar ghosts](#waybar-shows-a-closed-window), [wallpaper](#wallpaper-does-not-change), [media keys](#media-and-brightness-keys) |
 | Audio and speech | [silent speakers](#speakers-silent-with-healthy-volume-readouts), [speaker EQ](#speaker-eq-sounds-wrong), [Pulse clients](#pulse-clients-silent-after-audio-changes), [Kokoro](#kokoro-and-speech-dispatcher) |
 | Network | [homelab and backups](#homelab-and-backup-connectivity), [Cooper SSH](#cooper-ssh-host-key-changes), [X2Go](#x2go-latency-and-ghost-windows) |
-| Hardware and sleep | [dock](#dock-input-dead-after-resume), [missing modules](#usb-hotplug-after-a-kernel-upgrade), [battery drain](#battery-drain-and-unexpected-wakes), [battery not charging](#battery-not-charging-while-plugged-in-charge-led-lit), [dark panel](#black-screen-after-resume), [cold boot](#hibernate-returns-to-a-fresh-session), [logind](#logind-ignores-its-drop-in), [wedged GPU](#dgpu-wedges-during-sleep), [touchpad while typing](#touchpad-still-moves-while-typing) |
+| Hardware and sleep | [dock](#dock-input-dead-after-resume), [missing modules](#usb-hotplug-after-a-kernel-upgrade), [battery drain](#battery-drain-and-unexpected-wakes), [battery not charging](#battery-not-charging-while-plugged-in-charge-led-lit), [dark panel](#black-screen-after-resume), [cold boot](#hibernate-returns-to-a-fresh-session), [hibernate entry hang](#hung-at-hibernate-entry), [logind](#logind-ignores-its-drop-in), [wedged GPU](#dgpu-wedges-during-sleep), [touchpad while typing](#touchpad-still-moves-while-typing) |
 | API sessions | [OpenRouter stream interruption](#openrouter-stream-interruption) |
+| Editor | [E21 or stray highlights in nvim under tmux](#e21-or-stray-highlights-in-nvim-under-tmux) |
 
 ## NVIDIA beta upgrade deadlocks paru
 
@@ -193,7 +194,11 @@ journalctl --user -u restic-backup -n 40
 
 **wonhomelab.net unreachable with Tailscale up, fine with it down (2026-09-20).** Split DNS answers `192.168.1.42`, which is only reachable through wonlab's subnet route — the laptop sits on the outer subnet of the double-NAT, so an ARP FAILED for `192.168.1.42` is normal from here, not evidence wonlab is down. The hairpin path (tailscale down → router DNS → public IP `24.47.180.85`) serves ssh/web/restic independently and stays up even when wonlab's tailnet presence is gone. Cause this time: wonlab's control-plane checkins to headscale silently stalled (~40 min; wonlab still reported "Connected" — half-open conn), so the peer showed offline, the subnet route vanished, and split DNS timed out. A fresh `tailscale up` re-registered and wonlab went online instantly. Triage: with Tailscale up, check `tailscale status --json` for the peer's `Online`; if false, the fix is re-establishing control (laptop `tailscale down`/`up`, or wonlab's `sudo journalctl -u tailscaled`), not DNS or hosts-file changes.
 
-**ssh to wonhomelab.net refused with Tailscale up (2026-09-18).** With Tailscale up, split DNS answers `192.168.1.42` and the accepted subnet route sends it via `tailscale0`; the fix lives on wonlab, not the laptop. Instant `Connection refused` on exactly one port means a `reject` rule (fail2ban's `@addr-set-sshd` chain, `reject with icmp port-unreachable`), not an ACL or ufw DROP — those time out. wonlab now has `ufw allow in on tailscale0 to any port 22 proto tcp` and `ignoreip = 127.0.0.1/8 ::1 100.64.0.0/10` in `/etc/fail2ban/jail.d/ignoreip-tailnet.local`, so TOTP failures can no longer ban tailnet sources. The laptop's ts IP (`100.64.0.1`) is what wonlab sees on both paths; the `ControlPersist 4h` master masks connection failures while alive — test with `ssh -o ControlPath=none -o BatchMode=yes` (reaching `Permission denied (keyboard-interactive)` means the path is fine).
+**ssh to wonhomelab.net / wonlab refused with Tailscale up (2026-09-18, recurred 2026-09-27).** Instant `Connection refused` on exactly one port means a `reject` rule (fail2ban's `@addr-set-sshd` chain, `reject with icmp port-unreachable`), not an ACL or ufw DROP — those time out. The laptop's tailnet IP (`100.64.0.1`) is what wonlab sees on both the public and tailnet paths. Check `sudo fail2ban-client banned` first; leave foreign scanner IPs banned and unban only the tailnet IP by address (`fail2ban-client set sshd unbanip 100.64.0.1`).
+
+The 2026-09-18 fix put `ignoreip = 127.0.0.1/8 ::1 100.64.0.0/10` only in `/etc/fail2ban/jail.d/ignoreip-tailnet.local` under `[DEFAULT]`. That was incomplete: `/etc/fail2ban/jail.local` set `[sshd] ignoreip = 127.0.0.1`, and a jail-level `ignoreip` replaces the default list rather than extending it, so the tailnet carve-out never applied to `sshd`. TOTP failures (including retries through `raider`'s `ProxyJump wonlab`) then banned `100.64.0.1`. The full list must appear under `[sshd]`, not only `[DEFAULT]`. `ufw allow in on tailscale0 to any port 22 proto tcp` remains on wonlab (load-bearing only if ufw is active).
+
+Test with `ssh -o ControlPath=none -o BatchMode=yes wonlab 'echo ok'`. Reaching `Permission denied (keyboard-interactive)` means the TCP path is fine and BatchMode only skipped TOTP; a normal `ssh wonlab` should then prompt. `ControlPersist` masks connection failures while a master is alive.
 
 ## Cooper SSH host-key changes
 
@@ -302,6 +307,18 @@ The demonstrated cause was early NVIDIA loading from initramfs while `NVreg_Pres
 
 **Recovery:** correct the repo's boot config and apply through converge's system `boot` step, which copies/rebuilds with rollback. If manual privileged repair is required, prepare the script for the owner. Verify the rebuilt image and a real resume. Compression and image-size overrides were removed in the sleep reset; do not copy the archived experimental values.
 
+## Hung at hibernate entry
+
+**Signature:** s2h s2idle works; journal ends at `PM: hibernation: hibernation entry` with no `Freezing user space processes` and no freeze-timeout line. Userspace may still log briefly after entry. Battery-log has a hole; the next `start` shows a large energy drop (this class burned 31–37 Wh). Next boot is a cold start with `Image not found` / `Unable to resume … offset 0`. Distinct from [Hibernate returns to a fresh session](#hibernate-returns-to-a-fresh-session) (image written, resume handoff fails).
+
+**Stage:** stall is in `PM_HIBERNATION_PREPARE` notifiers or `ksys_sync` (before `freeze_processes`). `pm_freeze_timeout` cannot fire there. Do not read a multi-hour journal gap as a slow freeze — see [2026-09-25 write-up](docs/history/2026-09-25-hibernate-entry-hang.md).
+
+**Best fit:** NVIDIA VRAM preserve on the s2h hibernate leg (`PreserveVideoMemoryAllocations=1`, `UseKernelSuspendNotifiers=1`). That leg does not run `nvidia-hibernate.service`; the system-sleep hook only `echo hibernate` and ignores errors. Intermittent: same boot can complete several real s2h cycles first.
+
+**Recovery:** power-cycle if wedged (keyd may eat SysRq). Do not drop VRAM preservation, re-add nvidia to `MODULES`, or restore removed sleep layers to “fix” it.
+
+**Verification / next hang:** stacks via `/proc/*/stack`, `ls /var/tmp/nvidia*`, then `journalctl -k -b -1` for `PM:|NVRM|Freezing|Filesystems sync`. One A/B at a time: plain `systemctl hibernate` vs s2h, or `NVreg_UseKernelSuspendNotifiers=0` via converge `boot`. Stage table and evidence: [docs/history/2026-09-25-hibernate-entry-hang.md](docs/history/2026-09-25-hibernate-entry-hang.md).
+
 ## logind ignores its drop-in
 
 **Signature:** `systemd-analyze cat-config` shows a setting that logind's actual D-Bus property does not reflect.
@@ -339,3 +356,30 @@ Deliberate prefs live in `user.js` in the profile (re-applied at every startup, 
 
 - `mail.minimizeToTray` = true, plus `hyprland` in `mail.minimizeToTray.supportedDesktops` — without it, close-to-tray is swallowed (fixed 2026-09-10).
 - `mail.biff.alert.enabled_actions` = "mark-as-read,archive" — buttons on the new-mail notification. Upstream default is `"mark-as-read,delete"` (defaults/pref/mailnews.js in the installed omni.ja). Trap hit 2026-09-21: appending this pref to `prefs.js` while Betterbird sat in the tray was silently wiped by its next prefs flush — which is why the value lives in `user.js` now.
+
+### Thunderbird Conversations
+
+Installed 2026-09-25 for Gmail-style thread grouping and quote collapsing. ATN slug `gmail-conversation-view`, id `gconversation@xulforum.org`, version 4.3.12 (TB 140–157). XPI lives in the profile as `extensions/gconversation@xulforum.org.xpi`.
+
+Why the extra prefs in `user.js`: TB 153 allows `experiment_apis` only for ids listed in `extensions.experiments.allowed` (stock: `tbpro-add-on@thunderbird.net,owl@beonex.com`). Conversations declares several, and without the id on that list it is blocklisted as a suppressed experiment (`ExtensionUtilities.sys.mjs`). `extensions.startupScanScopes` must include the profile scope or a dropped XPI is never scanned; `autoDisableScopes` 0 so the scan does not leave it disabled.
+
+Re-install after a profile rebuild: download the ATN XPI (or `https://addons.thunderbird.net/thunderbird/downloads/latest/gmail-conversation-view/latest.xpi`) into `extensions/gconversation@xulforum.org.xpi` and keep the three prefs above. ATN ships it without a Mozilla signature; Betterbird's `xpinstall.signatures.required` default is already false.
+
+Known issue: Conversations #2422 (Betterbird `collapse_thread_to_most_recent` → `NS_MSG_INVALID_DBVIEW_INDEX`).
+
+## Hyprland never starts graphical-session.target
+
+**Signature:** a user unit with `WantedBy=graphical-session.target` is `enabled` but `inactive (dead)` after login, and a client that needs it fails (e.g. asst's Apply today → `tcp connect error: Connection refused`).
+
+This session runs Hyprland without uwsm/GNOME session glue, so `graphical-session.target` stays inactive and never pulls its wants. Units that must run at login use `WantedBy=default.target` (asstd, battery-logd). Wayland-dependent units also need `ConditionEnvironment=WAYLAND_DISPLAY` plus an explicit `systemctl --user start …` from `hyprland.lua` after `import-environment` (swayosd-server, awatcher).
+
+**Check:** `systemctl --user is-active graphical-session.target` (expected inactive here); `systemctl --user status <unit>` shows `Loaded: loaded` and `Active: inactive`.
+
+## E21 or stray highlights in nvim under tmux
+
+**Signature:** `:checkhealth` (or anything that runs snacks.image terminal detection) shows several `E21: Cannot make changes, 'modifiable' is off` and gold highlights on every character before a `t`. Kitty's XTVERSION reply `<Esc>P>|kitty(…)<Esc>\` arrived as normal-mode keys: `P` and `.` hit the nomodifiable buffer, and `tt` became a flash.nvim till-`t` search.
+
+**Cause:** tmux `extended-keys always` stops nvim's `TermResponse` from catching the reply, and snacks only switches to its tmux-query fallback when the option is exactly `on` (upstream PRs folke/snacks.nvim#2790, #2864). `home/tmux/.tmux.conf` uses `on`; nvim still receives modified keys because it requests them.
+
+**Verification (2026-09-28):** in a hidden kitty → tmux → bare `nvim`, log keys with `vim.on_key` and type `:checkhealth`. With `always` the reply appears in the key log and `:messages` has 5× E21; with `on` neither appears and snacks health reports kitty.
+

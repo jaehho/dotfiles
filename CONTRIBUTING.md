@@ -47,7 +47,7 @@ sudo ./scripts/converge.sh system boot
 
 ## Best Practices
 
-- Keep it simple (ponytail mode)
+- Keep it simple
 - One file, one purpose
 - Document decisions in comments
 - Test before committing
