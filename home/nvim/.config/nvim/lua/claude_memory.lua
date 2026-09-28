@@ -192,13 +192,7 @@ function M.pick()
     },
     win = {
       preview = { wo = { wrap = true, linebreak = true } },
-      input = {
-        keys = {
-          ['<c-x>'] = { 'memory_delete', mode = { 'n', 'i' } },
-          ['dd'] = { 'memory_delete', mode = 'n' },
-        },
-      },
-      list = { keys = { ['dd'] = 'memory_delete' } },
+      input = { keys = { ['<c-x>'] = { 'memory_delete', mode = { 'n', 'i' } } } },
     },
   }
 end
