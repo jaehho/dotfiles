@@ -42,4 +42,3 @@ vim.keymap.set('n', '<leader>zq', function() require('zotero_quotes').pick() end
 
 -- Claude Code memory and CLAUDE.md files across projects (<c-x> deletes)
 vim.api.nvim_create_user_command('ClaudeMemory', function() require('claude_memory').pick() end, {})
-vim.keymap.set('n', '<leader>fM', function() require('claude_memory').pick() end, { desc = 'Claude [M]emory' })
