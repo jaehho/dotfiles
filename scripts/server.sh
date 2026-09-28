@@ -28,8 +28,9 @@ fi
 
 STOW_DIR="$DOTFILES/home"
 # bin is only the server tools (claude-open, diff-highlight); laptop scripts
-# live in home/laptop and stay off this host.
-PKGS=(fish git tmux nvim claude theme bin)
+# live in home/laptop and stay off this host. server holds units that only
+# make sense here (raider-ollama: expose the GPU box's Ollama on the tailnet).
+PKGS=(fish git tmux nvim claude theme bin server)
 APT=(fish stow tmux git curl jq ripgrep fd-find fzf unzip gcc make python3)
 OPT="$HOME/.local/opt" BIN="$HOME/.local/bin"
 LOG="$HOME/.local/state/dotfiles-server"
@@ -124,5 +125,15 @@ say "neovim plugins, parsers, language servers"
 grep -iE 'error|fail' "$LOG/nvim.log" | sed 's/^/  /' | head -10 || true
 command -v npm >/dev/null ||
   echo "  npm not found: mason's npm-based servers (pyright, bash-language-server) are skipped"
+
+# raider-ollama: tailnet :11434 → raider Ollama (minuet on the laptop). Stowed
+# from home/server; enable once so linger keeps it up after logout.
+if [ -e "$HOME/.config/systemd/user/raider-ollama.service" ]; then
+  loginctl enable-linger "$USER" >/dev/null 2>&1 || true
+  systemctl --user daemon-reload 2>/dev/null || true
+  systemctl --user enable --now raider-ollama.service 2>/dev/null &&
+    echo "  raider-ollama: enabled on 100.64.0.3:11434" ||
+    echo "  raider-ollama: enable failed (no user bus?)"
+fi
 
 say "done: nvim $("$BIN/nvim" --version | awk 'NR==1 {print $2}'), tree-sitter $("$BIN/tree-sitter" --version | awk '{print $2}'). Logs in ${LOG/#$HOME/\~}"
