@@ -104,7 +104,8 @@
     "rust-analyzer-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": false,
     "lua-lsp@claude-plugins-official": true,
-    "glm-plan-usage@zai-coding-plugins": false
+    "glm-plan-usage@zai-coding-plugins": false,
+    "cowork-plugin-management@synced": false
   },
   "extraKnownMarketplaces": {
     "zai-coding-plugins": {
