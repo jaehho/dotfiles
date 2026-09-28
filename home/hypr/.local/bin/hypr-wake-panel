@@ -4,7 +4,8 @@
 # helps; a dpms off -> on cycle forces the modeset. Dispatches are silently
 # dropped while the session is inactive (VT 63 during s2h), so wait for it,
 # and judge by grim, never by hyprctl's "ok". See ISSUES.md "Black screen
-# after resume". Logs under tag hypr-wake-panel.
+# after resume". Logs every run under tag hypr-wake-panel, so a dark panel
+# with a "lit" line means Hyprland was presenting while the panel showed black.
 
 mon=eDP-1
 session=${XDG_SESSION_ID:?}
@@ -19,14 +20,17 @@ wait_active() {
 lit() { timeout 3 grim -o "$mon" - >/dev/null 2>&1; }
 
 # Docked with the panel disabled by monitors.lua: nothing to wake.
-hyprctl monitors -j | jq -e --arg m "$mon" 'any(.[]; .name == $m)' >/dev/null || exit 0
+hyprctl monitors -j | jq -e --arg m "$mon" 'any(.[]; .name == $m)' >/dev/null || { log "$mon absent; nothing to wake"; exit 0; }
 
+log "start: session $session active=$(active && echo yes || echo no), vt $(cat /sys/class/tty/tty0/active), $mon dpmsStatus=$(hyprctl monitors -j | jq --arg m "$mon" '.[] | select(.name == $m) | .dpmsStatus')"
 dpms on
 for attempt in $(seq 10); do
+    t0=$SECONDS
     wait_active || { log "session $session never became active; giving up"; exit 1; }
+    [ $((SECONDS - t0)) -gt 0 ] && log "session active after $((SECONDS - t0))s"
     sleep 2
     if lit; then
-        [ "$attempt" -gt 1 ] && log "$mon lit after $((attempt - 1)) off/on cycle(s)"
+        log "$mon lit (grim ok) after $((attempt - 1)) off/on cycle(s)"
         exit 0
     fi
     active || continue
