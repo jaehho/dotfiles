@@ -92,6 +92,7 @@
       "inherit-legacy-style": "on",
       "security-review": "on",
       "regex-vs-llm-structured-text": "on",
+      "gui-testing": "on",
       "cetz": "off",
       "orcaslicer-presets": "off",
       "touying-author": "off",

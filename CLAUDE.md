@@ -12,6 +12,8 @@ GNU Stow dotfiles for Arch + Hyprland and Ubuntu/Debian. Gate distro-specific wo
 
 ## Change boundaries
 
+- Commit work in small WIP commits instead of leaving it uncommitted. Never discard uncommitted work (`git checkout`/`restore` on a file); repo files are the live configs through stow.
+
 - Stow uses `--no-folding`. Boot-critical and sandbox-consumed configs must be real files, not symlinks into `/home`; follow `SYSTEM_LINKS`, `SYSTEM_INSTALLS`, and `SYSTEM_COPIES` in `scripts/lib.sh`. The boot step rebuilds and rolls back failed changes.
 - DNS belongs to systemd-resolved, including its stub link and NetworkManager integration. Preserve Tailscale split DNS.
 - Claude configuration is declarative: see `home/claude/.claude/reconcile/README.md` and `scripts/claude-reconcile.sh`. Do not put secrets in manifests.
