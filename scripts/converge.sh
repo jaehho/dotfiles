@@ -395,15 +395,17 @@ step_stow() {
   #   swayosd-server     the volume/brightness OSD (WantedBy pipewire-pulse, so
   #                      enabling is what wires the restart-with-pulse behaviour)
   #   kokoro-tts         the socket for the speech-dispatcher Kokoro voice
+  #   awatcher           ActivityWatch sensor for asst track (WantedBy default;
+  #                      hyprland.lua starts it once WAYLAND_DISPLAY is imported)
   # Stow itself needs no session bus; a missing bus must not mark the whole
   # step failed after every package is already linked.
   local unit
   if systemctl --user daemon-reload 2>/dev/null; then
     for unit in dotfiles-converge.timer dotfiles-digest.path \
                 wallhelper-fetch.timer tip-daily.timer mail-digest.timer \
-                idle-dash-collect.timer idle-dash-llm.timer \
+                dash-collect.timer dash-llm.timer \
                 notification-log.service battery-logd.service \
-                swayosd-server.service kokoro-tts.socket; do
+                swayosd-server.service kokoro-tts.socket awatcher.service; do
       systemctl --user cat "$unit" >/dev/null 2>&1 || continue
       systemctl --user is-enabled "$unit" >/dev/null 2>&1 && continue
       systemctl --user enable --now "$unit" >/dev/null 2>&1 && echo "  $unit: enabled"

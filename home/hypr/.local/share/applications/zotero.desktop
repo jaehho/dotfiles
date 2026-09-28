@@ -2,7 +2,7 @@
 Name=Zotero
 GenericName=Reference management tool
 Comment=Your personal research assistant
-Exec=zotero-focus
+Exec=zotero-focus %U
 Icon=zotero
 Type=Application
 Terminal=false

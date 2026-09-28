@@ -1,0 +1,19 @@
+[Unit]
+Description=ActivityWatch capture (awatcher bundle: server + Hyprland watchers)
+Documentation=https://github.com/2e3s/awatcher
+
+# awatcher is the window/AFK sensor asst track reads on :5600. Hyprland never
+# starts graphical-session.target, so WantedBy there leaves it dead after every
+# login (Apply today then fails with Connection refused). Start from default
+# like asstd, and again from hyprland.lua once WAYLAND_DISPLAY is in the manager
+# -- same shape as swayosd-server.
+ConditionEnvironment=WAYLAND_DISPLAY
+StartLimitIntervalSec=0
+
+[Service]
+ExecStart=%h/.local/opt/awatcher/awatcher --no-tray
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

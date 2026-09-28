@@ -28,6 +28,17 @@ if not ok then
     hl.notification.create({ text = "monitors.lua failed: " .. tostring(monitors), timeout = 10000, icon = "error" })
     monitors = { apply = function() end }
 end
+
+-- workspaces.lua packs each monitor's ids when one is removed. Same require
+-- cache/shape guards as monitors.lua above.
+package.loaded["workspaces"] = nil
+local ok_ws, workspaces = pcall(require, "workspaces")
+if ok_ws and (type(workspaces) ~= "table" or workspaces.plan_pack == nil) then
+    ok_ws, workspaces = false, "workspaces.lua did not return its module table"
+end
+if not ok_ws then
+    hl.notification.create({ text = "workspaces.lua failed: " .. tostring(workspaces), timeout = 10000, icon = "error" })
+end
 local clr = require("colors")
 
 ---------------------
@@ -59,7 +70,9 @@ hl.on("hyprland.start", function()
     -- swayosd-server is a user unit; a copy launched here grabs its app id and
     -- makes the unit crash-loop "already running" (ISSUES.md). Start the unit
     -- only once WAYLAND_DISPLAY is in the manager, or its condition skips it.
-    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user start swayosd-server")
+    -- awatcher is the same: asst track reads its :5600 sensor, and Hyprland
+    -- never starts graphical-session.target, so the unit needs this kick.
+    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user start swayosd-server awatcher")
     hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
     hl.exec_cmd("~/.local/bin/laptop-watchdog &")
     hl.exec_cmd("playerctld daemon")
@@ -315,7 +328,7 @@ hl.bind(mainMod .. " + Q",         hl.dsp.window.close()) -- quit: close the foc
 -- asst's add-task popup: a layer surface, so no window rule; pressing again closes it
 hl.bind(mainMod .. " + A",         hl.dsp.exec_cmd("asst-gtk quick-add")) -- quick add task
 hl.bind(mainMod .. " + space",     hl.dsp.exec_cmd(menu)) -- app launcher
-hl.bind(mainMod .. " + D",         hl.dsp.exec_cmd("idle-dash toggle")) -- idle dashboard on/off
+hl.bind(mainMod .. " + D",         hl.dsp.exec_cmd("dash toggle")) -- idle dashboard on/off
 hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/hypr-pin-toggle")) -- pin window on top
 hl.bind(mainMod .. " + T",         hl.dsp.layout("togglesplit"))                    -- toggle split direction (dwindle)
 
@@ -346,13 +359,13 @@ hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.float({ action = "toggle" })) -
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("firefox-developer-edition"))
 hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("~/.local/bin/hypr-spotify-toggle")) -- spotify: show / hide to tray
 
--- Toggle waybar. idle-dash-bar reads the bar's real visibility from the
+-- Toggle waybar. dash-bar reads the bar's real visibility from the
 -- compositor (`hyprctl layers`) and sends the matching set-semantics signal
 -- (USR1 hide / USR2 show, per on-sigusr1/2 in waybar's config), so a stale
 -- guess can never flip the state. Killing the bar instead of signaling left
 -- each custom module's child (steno bar) orphaned to PID 1, one more per
 -- press; a missing bar is started by the script.
-hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("~/.local/bin/idle-dash-bar toggle")) -- show/hide bar
+hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("~/.local/bin/dash-bar toggle")) -- show/hide bar
 
 -- Notifications
 hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("swaync-client -t"))
@@ -389,8 +402,22 @@ hl.bind(mainMod .. " + SHIFT + k", hl.dsp.window.swap({ direction = "up" }))
 hl.bind(mainMod .. " + SHIFT + j", hl.dsp.window.swap({ direction = "down" }))
 
 -- Switch workspaces / move active window with mainMod (+ SHIFT) + [1-9]
+-- Super+N is workspace id N (holes allowed). A missing id is created on the
+-- focused monitor; pin that id's rule first so creation is not redirected to
+-- its round-robin output. monitors.apply() still snaps ids back to the
+-- round-robin on the next hotplug / Super+Ctrl+R.
+local function focus_workspace(n)
+    if hl.get_workspace(n) == nil then
+        local mon = hl.get_active_monitor()
+        local name = mon and mon.name
+        if name then
+            hl.workspace_rule({ workspace = tostring(n), monitor = name })
+        end
+    end
+    hl.dispatch(hl.dsp.focus({ workspace = n }))
+end
 for i = 1, 9 do
-    hl.bind(mainMod .. " + " .. i,         hl.dsp.focus({ workspace = i }))
+    hl.bind(mainMod .. " + " .. i, function() focus_workspace(i) end)
     hl.bind(mainMod .. " + SHIFT + " .. i, hl.dsp.window.move({ workspace = i })) -- send window to workspace
 end
 
@@ -714,14 +741,6 @@ hl.window_rule({
     float  = true,
     size   = "800 600",
     center = true,
-})
-
--- Betterbird/Zotero — prevent focus-stealing (focus_on_activate is on)
-hl.window_rule({
-    name  = "betterbird-zotero-no-activate",
-    match = { class = [[^(eu\.betterbird\.Betterbird|Zotero)$]] },
-
-    suppress_event = "activate",
 })
 
 ---------------------

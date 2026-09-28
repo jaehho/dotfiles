@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 # Focus existing Zotero window, or launch a new one.
+# Forward zotero:// URLs (and any other -url argument) to the running instance.
+url=${1:-}
 if hyprctl clients -j | jq -e '.[] | select(.class == "Zotero")' >/dev/null 2>&1; then
     hyprctl dispatch 'hl.dsp.focus({ window = "class:Zotero" })'
+    if [[ -n $url ]]; then
+        # Running Zotero receives the URL via its existing-instance handoff.
+        /usr/bin/zotero -url "$url" >/dev/null 2>&1 &
+    fi
 else
-    /usr/bin/zotero &
+    if [[ -n $url ]]; then
+        /usr/bin/zotero -url "$url" &
+    else
+        /usr/bin/zotero &
+    fi
 fi

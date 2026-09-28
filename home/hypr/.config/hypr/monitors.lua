@@ -214,6 +214,44 @@ local function apply()
     end
 end
 
+-- Slot ids each output owns under the live layout (round-robin, same formula
+-- and mode filter as apply()). workspaces.lua packs only into these so the
+-- id ↔ monitor map hypr-tab-nonempty and hypr-move-project assume survives.
+local function slots_by_monitor()
+    local monitors = hl.get_monitors()
+    if monitors == nil or #monitors == 0 then return {} end
+    for _, m in ipairs(monitors) do
+        if m.width == 0 or m.height == 0 then return {} end
+    end
+
+    local ordered = order_monitors(monitors)
+    local laptop, externals = nil, {}
+    for _, m in ipairs(ordered) do
+        if is_laptop(m) then laptop = m else externals[#externals + 1] = m end
+    end
+
+    local mirrored = laptop and type(laptop.mirrors) == "table" and next(laptop.mirrors) ~= nil
+    if #externals == 0 and not mirrored then
+        -- laptop-only (or every output already in ordered)
+    elseif #externals == 0 then
+        ordered = { laptop }
+    elseif mode == "mirror" and laptop then
+        ordered = { laptop }
+    elseif mode == "external" and laptop then
+        ordered = externals
+    end
+
+    local slots = {}
+    local count = #ordered
+    if count == 0 then return {} end
+    for ws = 1, MAX_WORKSPACES do
+        local name = ordered[((ws - 1) % count) + 1].name
+        slots[name] = slots[name] or {}
+        slots[name][#slots[name] + 1] = ws
+    end
+    return slots
+end
+
 -- Trailing-edge debounce: hotplug fires several events in a burst.
 -- opts.type is mandatory ("repeat" or "oneshot") and hl.timer returns nil
 -- without it. Creating it armed also gives us the initial apply, since the
@@ -273,4 +311,5 @@ return {
     set_mode = set_mode,
     mode = function() return mode end,
     has_external = has_external,
+    slots_by_monitor = slots_by_monitor,
 }

@@ -11,7 +11,7 @@ hypridle
 hyprland
 hyprlock
 hyprpaper
-# idle-dash (~/projects/idle-dash) is a Quickshell QML app
+# dash (~/projects/dash) is a Quickshell QML app
 quickshell
 hyprscratch
 hyprsunset
