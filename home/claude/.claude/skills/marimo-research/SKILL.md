@@ -1,125 +1,141 @@
 ---
 name: marimo-research
-description: Rules and checklist for writing or editing marimo notebooks used for research analysis (data collection, analysis, figures), where the code is the lab record. Use whenever creating, restructuring, or editing a research marimo notebook or a project's notebooks/ folder. Not for driving a live kernel (that is marimo-pair).
+description: Rules and checklist for writing or editing marimo notebooks used for scientific or data-science research (data collection, analysis, figures), where the notebooks are the lab record. Use whenever creating, restructuring, or editing a research marimo notebook or a project's notebooks/ folder. Not for driving a live kernel (that is marimo-pair).
 ---
 
 # Research marimo notebooks
 
-The code is the lab record, and every number must trace to a function, a file, and a stated choice. Question notebooks are also the research log: they say what the results mean and what to test next. Repo-specific constants (stacks, product ids, seed lists) belong in that repo's `CLAUDE.md` and its `config.py`, not here.
+Notebooks are the lab record. Every number must trace to code, a data file, and a stated choice, and each question notebook is a written account of the scientific method applied to one question. Project-specific constants (datasets, ids, thresholds) belong in that project's `CLAUDE.md` and `config.py`, not here.
 
 ## Layout
 
-Flat `notebooks/`, files named by role so they stay importable (`from load import load_census`). No stage numbers: a module name cannot start with a digit, and the import graph already shows order without drifting.
+Flat `notebooks/`, files named by role so they stay importable (`from load import load_measurements`). No stage numbers: a module name cannot start with a digit, and the import graph already shows order.
 
 | file | role | network | writes |
 |---|---|---|---|
 | `config.py` | shared constants (`Cfg`): paths, dataset ids, knobs shared by more than one notebook | no | nothing |
 | `collect.py` | every fetch; the only writer of `data/`; owns remote ids (`Sources`) | yes | `data/` |
 | `load.py` | pure readers and transforms of `data/` | no | nothing |
-| `<question>.py` | one scientific question each; a research log (see below) | no | nothing |
+| `<question>.py` | one research question, as one or two scientific-method cycles | no | nothing |
 | `fig_<name>.py` | figures | no | `figures/` |
 | `tool_<name>.py` | debug and API tools | only when the tool is about the API | `figures/` or nothing |
 
-- Two registers. `config`, `collect`, `load`, `fig_*`, and `tool_*` are polished references: present tense, no results discussion, no log. Question notebooks read as a research log.
-- Enforce the boundaries with a test, not a comment: an AST test in `tests/` that only `collect.py` and `tool_*` import network clients, that `data/` paths and remote ids appear as literals only in `config.py` / `collect.py`, and that every `@app.function` / `@app.class_definition` is used by some cell in its own notebook (`main` exempt). A rule without a test drifts.
-- Shared constants live once in `config.py`. Knobs used by one notebook stay in that notebook as plain setup constants, not a second class named `Cfg`. Never restate a path, id, or threshold as a literal; reference the symbol, including in default args, button labels, and docstrings.
-- Reusable code is `@app.function` / `@app.class_definition` in the notebook that owns the concept; other notebooks and `tests/` import it. Split a notebook that grows past roughly 400 lines by concern, into another notebook. Use a plain `.py` module only for code no notebook tour explains (vendored helpers). Large HTML/CSS/JS templates go in `assets/` and load by a path from `Cfg`.
-- Tests import notebooks through pytest `pythonpath = ["notebooks"]`, not `sys.path` hacks. marimo already puts the notebook's directory on `sys.path`.
+- Two registers. `config`, `collect`, `load`, `fig_*`, and `tool_*` are polished references: present tense, no results discussion. Question notebooks are the research record (see Question notebooks).
+- Shared constants live once in `config.py`. Knobs used by one notebook stay in that notebook as setup constants, not a second `Cfg`. Never restate a path, id, or threshold as a literal; reference the symbol.
+- A notebook that grows past roughly 400 lines, or past two cycles, splits by question. Large HTML/CSS/JS templates go in `assets/` and load by a path from `Cfg`.
+- Tests import notebooks through pytest `pythonpath = ["notebooks"]`, not `sys.path` hacks.
+
+## Functions or cells
+
+A step used once is a cell. Make it an `@app.function` only when it is used from more than one place: two or more cells, another notebook, or a test that guards it. Turning every step into a function hides the analysis behind names and adds a demo for each.
+
+- Loop over cases inside one cell (`for _t in types:`) instead of writing a function to call once per case.
+- Reusable code lives in the notebook that owns the concept; others import it. A plain `.py` module is only for code no notebook explains (vendored helpers).
+- Each `@app.function` is used by some cell in its own notebook, so the reader sees it on real data. A network function runs on one small input behind a run button.
+- When a function stops being reused, inline it.
 
 ## Structure of a notebook
 
-- Imports, including cross-notebook imports, go in `with app.setup:`. Setup names are visible to every cell and every `@app.function`.
-- Reusable-function unit: a markdown cell saying what the step is (research-grade math in `$$...$$` only when it earns its place; see Math), the `@app.function`, then a small demo cell that calls it on real local data. Merge or split when the content wants it; a markdown cell that only titles the function is noise.
-- Every function gets a demo, no exceptions but `main`. A network function demos on one small input behind a run button; a function that writes demos to a scratch path; a guard demos its failure path by catching the error and showing the message; a constants class shows its values as a table. Writing the demo is how a reader learns why the function exists, so a function whose demo would be pointless is a sign to inline it.
-- One fact per cell. Do not pack results with `mo.vstack`, `mo.plain`, or dicts. Use real displays: a DataFrame as the last expression, `mo.ui.table`, a matplotlib or plotly figure, `mo.md` with numbers interpolated.
-- Cell-local temporaries, including loop variables, are `_`-prefixed (`for _t in types:`); marimo keeps those local, so there is no `MultipleDefinitionError`. Never define the same public name in two cells.
-- Never mutate an object another cell defined (`df["x"] = ...`); marimo does not rerun dependents on mutation. Build a new value (`df.assign(x=...)`) under a new name.
-- Python cells keep code visible. Markdown explanation cells may be `hide_code=True` (per cell; there is no global default).
-- Network cells sit behind `mo.ui.run_button`. Opening or batch-running a notebook must not fetch. Secrets come from the environment, never a cell.
-- Batch entry is `if __name__ == "__main__": app.run()` in every notebook, collectors included; `python notebooks/x.py` runs every cell headless with run buttons off, so it never fetches. Do not add a `main()` that re-implements the tour. The exception is a collector or API check whose batch job is to fetch: its `main()` calls the same `@app.function`s, and the Makefile calls it directly (`cd notebooks && python -c 'import collect; collect.main()'`).
+- Imports, including cross-notebook imports, go in `with app.setup:`. The setup cell may not reference any other cell's variables.
+- One fact per cell. Use real displays: a DataFrame as the last expression, a figure, `mo.md` with numbers interpolated. Do not pack results with `mo.vstack` or dicts.
+- Cell-local temporaries, including loop variables, are `_`-prefixed; never define the same public name in two cells.
+- Never mutate an object another cell defined; marimo does not rerun dependents on mutation. Build a new value under a new name.
+- Markdown cells may be `hide_code=True`; Python cells keep code visible.
+- Network cells sit behind `mo.ui.run_button`. Opening or batch-running a notebook must not fetch. Secrets come from the environment.
+- Batch entry is `if __name__ == "__main__": app.run()`. A collector whose batch job is to fetch also has a `main()` that calls the same functions; the Makefile calls it directly.
 
-## Question notebooks are research logs
+## Question notebooks follow the scientific method
 
-A question notebook does more than lay out tools. It says what the numbers show, what they mean, and which hypotheses they raise, and later work builds on those hypotheses.
+The notebook is the log. Each question notebook holds one cycle, at most two, in order:
 
-- After each result that matters, add a short markdown cell that states the result with the numbers interpolated from live values (`mo.md(f"...")`). Such a claim cannot drift from the data.
-- End the notebook with a `## Log` section: one hidden markdown cell that states the convention, then one cell per dated entry `### YYYY-MM-DD`, oldest first. Numbers in an entry are as of its date. Entries are append-only; a later entry corrects an earlier one instead of editing it.
-- Each entry has three parts. **Seen**: what the notebook showed, with the scope (hemisphere, cutoff, dataset version). **Reading**: the skeptic's case first, then what the result does and does not establish. **Hypotheses**: numbered, each with a concrete test and the outcome that would refute it.
-- Before writing an entry, check every claim against the rendered output. A table you did not look at is not evidence; add the cell that shows it.
-- Link across notebooks by name (`lc_output_clusters`) when one result bears on another's conclusion, and log that in the affected notebook too.
-- Scientific history (what we found, what we now think, what changed our mind) goes in the log. Code and debugging history still goes in issues (see Issues).
-- Enforce the register split with a test: each question notebook has exactly one `## Log`, as its last section, with dated entries in order; polished notebooks have none.
+```
+# Title
+Short context: what is studied, scope (subset, dataset version), terms.
+
+## Cycle 1 (YYYY-MM-DD): <short question>
+### Question
+### Hypothesis     who posed it and when; numbered predictions that could fail
+### Methods        data, definitions, diagrams, reused functions
+### Results        outputs, each claim interpolated from live values
+### Discussion     prediction by prediction: holds or fails, skeptic's case, conclusion, decision
+### Next           hypotheses for the next cycle, each with a test and what would refute it
+```
+
+- The hypothesis and its predictions come before the methods and are stated as they were posed. Do not dress a post-hoc finding as an a-priori prediction; label exploratory results as exploratory.
+- When one analysis maps to one prediction, interleave method and result under `### Methods and results`, one analysis at a time.
+- Result cells state numbers with `mo.md(f"...")` from live values so a claim cannot drift from the data. The Discussion may quote numbers as of the cycle's date.
+- Check every claim in the Discussion against the rendered output. A table you did not look at is not evidence; add the cell that shows it.
+- A new cycle is a new `## Cycle n (date)` section, or a new notebook when the question changes. Earlier cycles are not rewritten; a later cycle corrects an earlier one.
+- Link across notebooks by name when one result bears on another's conclusion, and note it in both.
+- Scientific history (what we predicted, found, and now think) belongs here. Code and debugging history goes in issues.
 
 ## Diagrams
 
-When a definition compares two quantities or describes a structure (an aggregation over cells, a graph motif, a pipeline), put a small schematic next to the math. A picture of the definition catches misreadings that the formula does not.
+When a definition compares two quantities or describes a structure (an aggregation, a graph motif, a pipeline), put a small schematic in the Methods next to it.
 
-- Draw it with an `@app.function` that takes a toy input and computes every label with the notebook's own functions, so the picture cannot disagree with the code. The demo cell builds the toy input and draws it.
-- Pick toy values that make the distinction visible: the case where the two definitions disagree, or where excluded context would change the answer if it were counted.
-- Color the objects the definition is about, one color per role, and gray out the context it excludes. Encode magnitude (edge width, size) as well as labeling it. Put the computed values on the figure.
-- Colors are setup constants; state their roles in a comment. Use matplotlib, no external assets.
-- Follow the diagram with a one-line interpolated caption that says what the toy example shows.
+- Choose the tool by what the picture must get right. Use **mermaid** (`mo.mermaid`) for flow and process: pipelines, decision logic, data lineage, where automatic layout is fine and the text source is the point. Use **matplotlib** when geometry carries meaning (positions, ordering, magnitude as width or size) or when labels are computed; mermaid reorders nodes and routes edges on its own. Render once and look before keeping either.
+- Build the toy input in the cell and compute the labels with the notebook's own functions, so the picture cannot disagree with the code. A single-use diagram is drawn inline in its cell, not in a function.
+- Pick toy values that make the distinction visible: the case where two definitions disagree, or where excluded context would change the answer.
+- One color per role, gray for context the definition excludes. Colors are setup constants with their roles in a comment.
+- Follow it with a one-line interpolated caption that says what the toy example shows.
 
 ## Math
 
-Display math is a definition or a claim, never decoration. Write research-grade statements: a reader who takes the notation seriously must not hit an undefined symbol, an unstated domain, or a claim with no hypotheses. Prose is the default; a display earns its place only when the precision of the notation is the point.
+Display math is a definition or a claim, never decoration. A reader who takes the notation seriously must not hit an undefined symbol, an unstated domain, or a claim with no hypotheses. Prose is the default; a display earns its place when the precision is the point.
 
-- Introduce every symbol in a display before that display, with its domain and the ambient universe stated once at first use ("a synapse $s$ at materialization 783", "$R \subseteq \mathrm{RootId}$ a set of root ids", "$w(i \to j)$ the synapse count from cell $i$ to cell $j$"). Later displays reuse the same meaning or say they do not.
-- Mark definitions as definitions ("define $S(R)$ to be", "write $W(A \to B)$ for"). A bare equation is a claim: give its hypotheses and a short justification in prose, or drop it.
-- No program notation in math. $s.\mathrm{pre}$ is an attribute access; either define $\mathrm{pre}$ as a map on synapses or write the fact in prose.
-- One meaning per symbol across the project. Do not overload a letter for two roles (a seed set and a synapse set). A type name is not a set of cells: write $\mathrm{cells}(T)$, or define types as the sets once and say so.
-- Types of the objects match the operations. Do not sum over a type name, take cardinality of a string, or use $A \in S$ when $S$ holds type names and $A$ is a set of cells.
-- Set-builder displays get a left-hand side. A bare $\{\, \ldots \,\}$ is not a definition of anything.
-- If the display only restates one line of pandas in worse notation, use prose instead.
+- Introduce every symbol before its display, with its domain ("$x_i \in \mathbb{R}^d$ the feature vector of sample $i$", "$w(i \to j)$ the count of events from $i$ to $j$").
+- Mark definitions as definitions ("define", "write ... for"). A bare equation is a claim: give its hypotheses and a justification, or drop it.
+- No program notation in math (`s.pre`, `df.col`). Define a map, or say it in prose.
+- One meaning per symbol across the project. A category label is not a set of members: write $\mathrm{members}(G)$, or define groups as sets once.
+- Set-builder displays get a left-hand side.
+- If the display only restates one line of pandas in worse notation, use prose.
 
-Bad (undefined constructor, unmarked definition, silent universe):
-
-$$S(R) = \{\, s : s.\mathrm{pre} \in R \ \lor\ s.\mathrm{post} \in R \,\}$$
-
-Good: a synapse is a contact $s$ with pre- and post-synaptic root ids $\mathrm{pre}(s), \mathrm{post}(s) \in \mathrm{RootId}$. For $R \subseteq \mathrm{RootId}$, define
-
-$$S(R) = \{\, s : \mathrm{pre}(s) \in R \ \lor\ \mathrm{post}(s) \in R \,\}$$
-
-to be the synapses that touch $R$.
+Bad: $S(R) = \{\, s : s.\mathrm{src} \in R \,\}$. Good: each record $s$ has a source $\mathrm{src}(s) \in U$; for $R \subseteq U$ define $S(R) = \{\, s : \mathrm{src}(s) \in R \,\}$, the records that start in $R$.
 
 ## Issues
 
-GitHub issues hold tasks, gotchas, decisions, and how a bug was found. Code in a notebook is a polished account of the method as it stands, not a design log; the scientific log lives in a question notebook's `## Log`.
+GitHub issues hold tasks, gotchas, decisions, and how a bug was found.
 
-- Never cite an issue number in a notebook: markdown, comments, docstrings, or strings all count.
-- Never narrate past wrong versions or debugging history ("counting before that dedup doubled every weight", "this caught that twice"). State the rule the code enforces and, where there is a real choice, the options and why this one. The story goes in an issue; the code and its comment keep only the current decision.
-- A choice comment is present-tense design rationale. If it reads like a postmortem, cut it to the rationale or move it to an issue.
-- Enforce the issue-number ban with a test in `tests/`, not a reminder comment. Hex color literals (`#0b0b0b`) are not issue refs; the test must not flag them.
+- Never cite an issue number in a notebook.
+- Never narrate past wrong code or debugging history. State the rule the code enforces and, where there is a real choice, the options and why this one.
+- A choice comment is present-tense rationale. If it reads like a postmortem, cut it or move it to an issue.
 
 ## Readability
 
 - Explicit step-by-step code. No clever one-liners or deep helper chains.
-- Parameters and variables are named for what they hold (`census`, `type_of`), not abbreviations (`ct`). A lookup's docstring says what it is used for, not only its shape.
-- Provenance lives in function names, docstrings, and constants. Do not pack URLs or product ids into markdown; let the dependency graph show data flow. Issue numbers never appear in a notebook (see Issues).
-- Choice comments are short prose at the site of the choice, reading like the rest of the file: name the real options and why this one; for open-ended options, say what question the knob answers and give a couple of concrete values; say "arbitrary" when it is. No labels or lists. Do not hard-wrap comment lines.
+- Names say what they hold (`measurements`, `label_of`), not abbreviations.
+- Provenance lives in names, docstrings, and constants; let the dependency graph show data flow.
+- Choice comments are short prose at the site of the choice: the real options and why this one; for open-ended knobs, what question the knob answers and a couple of concrete values; "arbitrary" when it is. No hard-wrapped comment lines.
 
 ```python
-# Ranking cutoff in synapses, not a biological threshold. Twenty keeps the long tail from drowning the figure; raise it toward 50 or 100 if you only want strong partners, or swap in a quantile if the distribution shifts.
-MIN_SYN = 20
+# Minimum count for a pair to be ranked. Twenty keeps the long tail from drowning the figure; raise it toward 50 if you only want strong pairs, or use a quantile if the distribution shifts.
+MIN_COUNT = 20
 ```
+
+## Tests
+
+Tests guard what breaks silently and is cheap to check. They do not police style.
+
+- Worth a test: the network boundary (only `collect.py` and `tool_*` import network clients), no `data/` paths or remote ids outside `config.py` / `collect.py`, no issue numbers in notebooks, and functions other notebooks import.
+- Not worth a test: prose conventions, section order, single-use cells. Research needs room to try things; a rule that is annoying to satisfy and rarely catches a real mistake costs more than it saves.
+- When unsure, state the rule here and add a test only after it has been broken in practice.
 
 ## Checklist before calling it done
 
-1. `marimo check --strict notebooks/` is clean (in `make test` if the repo has one).
-2. `make test` passes, including the boundary test.
-3. `python notebooks/<file>.py` runs headless without network. Open it in `marimo edit --watch` and look at the rendered cells, or say you only ran it headless.
-4. `grep` for each literal you touched (paths, ids, thresholds): one definition only.
-5. Every network path is in `collect.py` or a `tool_*`, behind a run button.
-6. Every `$$...$$` is research-grade: symbols introduced with domains first, definitions marked, one meaning per symbol, no program notation.
-7. No issue numbers and no code or debugging history anywhere in the notebook.
-8. Question notebook: results cells interpolate live numbers, and a new dated `## Log` entry (Seen, Reading with the skeptic's case first, Hypotheses with tests) matches the rendered outputs.
-9. Every definition that compares quantities or describes a structure has a toy diagram drawn by the notebook's own functions.
+1. `marimo check --strict notebooks/` is clean and the project's tests pass.
+2. `python notebooks/<file>.py` runs headless without network. Open it in `marimo edit` and look at the rendered cells, or say you only ran it headless.
+3. Each literal you touched (paths, ids, thresholds) has one definition.
+4. Functions exist only where reused; single-use steps are cells.
+5. Question notebook: question, hypothesis with predictions, methods, results, discussion, next, in that order; the discussion matches the rendered outputs.
+6. Each `$$...$$` is research-grade; each definition that compares quantities or describes a structure has a diagram you have looked at.
+7. No issue numbers and no code or debugging history in the notebook.
 
 ## Improving this skill
 
 This skill grows from the user's edits to single notebooks.
 
-- When the user suggests a meaningful change to one notebook (structure, prose, figures, math, naming, testing), make the change, then decide whether it would apply to research notebooks in general.
-- If it would, end the reply by offering a skill update: quote the exact text to add or change and name the section. Do not edit the skill until the user agrees.
-- Skip one-off preferences, data-specific fixes, and anything a section here already covers; say "already covered by <section>" instead when relevant.
-- On approval, edit the stow target `~/dotfiles/home/claude/.claude/skills/marimo-research/SKILL.md` (not the `~/.claude` symlink), keep rules short and testable, add a checklist item when the rule can be checked, and commit in `~/dotfiles` with only that file staged.
+- When the user suggests a meaningful change to one notebook (structure, prose, figures, math, naming, testing), make the change, then decide whether it applies to research notebooks in general.
+- If it does, end the reply by offering a skill update: quote the exact text to add or change and name the section. Do not edit the skill until the user agrees, unless they asked for the skill change directly.
+- Skip one-off preferences and data-specific fixes; say "already covered by <section>" when relevant.
+- Keep the skill domain-neutral: examples use generic data, not one project's field.
+- Edit the stow target `~/dotfiles/home/claude/.claude/skills/marimo-research/SKILL.md` (not the `~/.claude` symlink) and commit in `~/dotfiles` with only that file staged.
