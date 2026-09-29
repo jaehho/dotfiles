@@ -192,6 +192,16 @@ Minuet offers a grey completion from raider's Ollama via wonlab's
 `<A-A>` accepts it, `<A-a>` accepts the line, `<A-]>`/`<A-[>` cycle,
 `<A-e>` dismisses.
 
+## Explain a selection
+
+Visual-select some lines and press `<leader>ce`. Type a question (default
+"Explain this code") and the answer opens in a float with ~50 lines of
+surrounding context sent along. `q` closes the float.
+
+Minuet and explain both go through wonlab's logging proxy. Every request
+(prompt, response, latency) is in `~/.local/state/ollama/requests.jsonl` on
+wonlab: `ssh wonlab 'tail -f ~/.local/state/ollama/requests.jsonl'`.
+
 ## Splits, and moving between them
 
 `:vsplit`/`:split` (or `<C-w>v` / `<C-w>s`) split the window.
