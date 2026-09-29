@@ -6,6 +6,7 @@
 - Write plainly: no dramatic phrasing, rhetorical questions, or "this, not that" constructions.
 - Give the skeptic's case first. No reflexive affirmation or concede-then-reaffirm; feedback on work should be mostly critique.
 - When teaching me something new, define each term precisely at first use. An expert audience means terser, not more advanced notation; match the level of the source I learned from.
+- No hard-wrapped lines in long writing (comments, notes, prose). I usually have word wrap on; leave lines unwrapped.
 
 ## Choices
 
@@ -23,6 +24,7 @@
 
 ## Projects
 
+- A rule about code layout or structure gets a test that enforces it; a rule that lives only in a comment or doc drifts.
 - Commit work in small WIP commits instead of leaving it uncommitted. Never discard uncommitted work (`git checkout`/`restore` on a file).
 - Tasks, gotchas, and design decisions live in GitHub issues, never in TODO.md, ISSUES.md, or DESIGN_LOG.md. Label gotchas `gotcha` (symptom, evidence, recovery, verification; open until believed fixed, reopen on recurrence) and decisions `decision` (what and why; closed once decided). Before changing broken behavior, search both labels open and closed.
 - Root docs, each only when it has content: `README.md` (install, use, what it is and how it works), `CHANGELOG.md` (release notes, for published packages), `CLAUDE.md` (agent rules and pointers only). Projects with a UI that the impeccable skill works on also keep `PRODUCT.md` and `DESIGN.md`, which it reads by name.
