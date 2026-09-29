@@ -31,6 +31,7 @@ Flat `notebooks/`, files named by role so they stay importable (`from load impor
 - Reusable-function unit: a markdown cell saying what the step is (math in `$$...$$` when it clarifies), the `@app.function`, then a small demo cell that calls it on real local data. Merge or split when the content wants it; a markdown cell that only titles the function is noise.
 - One fact per cell. Do not pack results with `mo.vstack`, `mo.plain`, or dicts. Use real displays: a DataFrame as the last expression, `mo.ui.table`, a matplotlib or plotly figure, `mo.md` with numbers interpolated.
 - Cell-local temporaries, including loop variables, are `_`-prefixed (`for _t in types:`); marimo keeps those local, so there is no `MultipleDefinitionError`. Never define the same public name in two cells.
+- Never mutate an object another cell defined (`df["x"] = ...`); marimo does not rerun dependents on mutation. Build a new value (`df.assign(x=...)`) under a new name.
 - Python cells keep code visible. Markdown explanation cells may be `hide_code=True` (per cell; there is no global default).
 - Network cells sit behind `mo.ui.run_button`. Opening or batch-running a notebook must not fetch. Secrets come from the environment, never a cell.
 - Batch entry is `if __name__ == "__main__": app.run()`; `python notebooks/x.py` runs every cell headless, with run buttons off. Do not add a `main()` that re-implements the tour. The exception is a collector whose batch job is to fetch; its `main()` calls the same `@app.function`s.
