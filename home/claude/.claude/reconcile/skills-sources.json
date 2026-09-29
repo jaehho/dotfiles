@@ -93,6 +93,7 @@
       "security-review": "on",
       "regex-vs-llm-structured-text": "on",
       "gui-testing": "on",
+      "marimo-research": "on",
       "cetz": "off",
       "orcaslicer-presets": "off",
       "touying-author": "off",
