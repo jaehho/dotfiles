@@ -1,9 +1,12 @@
 [Unit]
-Description=Expose raider Ollama on 100.64.0.3:11434 (tailnet) for FIM clients
-# wonlab → raider is key-based and LAN-fast. Bind only the tailnet address so
-# the unauthenticated Ollama API is not on the public hairpin.
+Description=Expose raider Ollama on 100.64.0.3:11434 (tailnet) with request logging
+# wonlab → raider is key-based and LAN-fast. ollama-forward runs a localhost
+# SSH tunnel plus ollama-log-proxy; the proxy binds only the tailnet address so
+# the unauthenticated Ollama API is not on the public hairpin. Every request
+# (minuet FIM, explain chat, curl) is appended to
+# ~/.local/state/ollama/requests.jsonl.
 # Linger must be on (loginctl enable-linger) or this dies at logout.
-# Laptop minuet: end_point = http://100.64.0.3:11434/v1/completions
+# Clients use end_point = http://100.64.0.3:11434/... unchanged.
 Wants=network-online.target
 After=network-online.target
 # Disable systemd's default start-rate-limit (5 starts / 10s) so the
@@ -11,13 +14,7 @@ After=network-online.target
 StartLimitIntervalSec=0
 
 [Service]
-ExecStart=/usr/bin/ssh -N \
-  -o BatchMode=yes \
-  -o ExitOnForwardFailure=yes \
-  -o ServerAliveInterval=15 \
-  -o ServerAliveCountMax=3 \
-  -o ConnectTimeout=10 \
-  -L 100.64.0.3:11434:127.0.0.1:11434 raider
+ExecStart=%h/.local/bin/ollama-forward
 Restart=on-failure
 RestartSec=10
 RestartSteps=10

@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""Log every Ollama HTTP request/response that crosses a reverse proxy.
+
+Sits on wonlab in front of the SSH tunnel to raider (see ollama-forward) so
+all tailnet clients -- minuet, explain, curl -- land in one JSONL file. The
+wire protocol is unchanged: streaming responses (Ollama NDJSON / SSE) are
+passed through chunk by chunk and only summarized in the log when the stream
+ends.
+
+    ollama-log-proxy --listen 100.64.0.3:11434 --upstream http://127.0.0.1:11435
+
+Each request appends one JSON object per line to
+~/.local/state/ollama/requests.jsonl:
+
+    {"ts","method","path","client","status","latency_ms",
+     "model","prompt","response","truncated"}
+
+`prompt` is the request `prompt` string, else `messages` serialized.
+`response` is the raw body (JSON or concatenated stream text). Fields are
+capped at 64 KiB; `truncated` is true if anything was cut. Failures and
+upstream errors are logged too.
+"""
+
+import argparse
+import datetime
+import fcntl
+import http.client
+import json
+import os
+import socket
+import sys
+import threading
+import time
+import urllib.parse
+
+FIELD_LIMIT = 64 * 1024
+HOP_BY_HOP = {
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
+}
+
+_log_lock = threading.Lock()
+
+
+def log_path():
+    state = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+    d = os.path.join(state, "ollama")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "requests.jsonl")
+
+
+def clip(text):
+    """Return (text, truncated) with a hard cap so the log stays greppable."""
+    if text is None:
+        return "", False
+    if not isinstance(text, str):
+        text = str(text)
+    if len(text) <= FIELD_LIMIT:
+        return text, False
+    return text[:FIELD_LIMIT] + "\n...[truncated]", True
+
+
+def extract_prompt(body_text):
+    """Best-effort prompt field from an Ollama/OpenAI-style JSON body."""
+    if not body_text:
+        return ""
+    try:
+        data = json.loads(body_text)
+    except (ValueError, UnicodeDecodeError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    if isinstance(data.get("prompt"), str):
+        return data["prompt"]
+    if data.get("messages") is not None:
+        return json.dumps(data["messages"], ensure_ascii=False)
+    return ""
+
+
+def extract_model(body_text):
+    if not body_text:
+        return ""
+    try:
+        data = json.loads(body_text)
+    except (ValueError, UnicodeDecodeError):
+        return ""
+    if isinstance(data, dict) and isinstance(data.get("model"), str):
+        return data["model"]
+    return ""
+
+
+def append_log(record):
+    line = json.dumps(record, ensure_ascii=False)
+    path = log_path()
+    with _log_lock:
+        with open(path, "a", encoding="utf-8") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                f.write(line + "\n")
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+class Proxy:
+    def __init__(self, upstream):
+        u = urllib.parse.urlparse(upstream)
+        if u.scheme != "http":
+            raise SystemExit("ollama-log-proxy: only http upstreams are supported")
+        self.upstream_host = u.hostname or "127.0.0.1"
+        self.upstream_port = u.port or 80
+
+    def handle(self, client_sock, client_addr):
+        t0 = time.perf_counter()
+        method = path = ""
+        status = 0
+        prompt = resp_raw = ""
+        model = ""
+        truncated = False
+        try:
+            req = http.client.HTTPConnection(self.upstream_host, self.upstream_port, timeout=300)
+            # Re-read the request line + headers from the client socket via
+            # a one-shot file wrapper, then body by Content-Length.
+            rf = client_sock.makefile("rb")
+            request_line = rf.readline()
+            if not request_line:
+                return
+            parts = request_line.decode("latin-1").split()
+            if len(parts) < 2:
+                return
+            method, path = parts[0], parts[1]
+
+            headers = []
+            while True:
+                line = rf.readline()
+                if not line or line in (b"\r\n", b"\n"):
+                    break
+                headers.append(line.decode("latin-1").rstrip("\r\n"))
+
+            body = b""
+            hdr_map = {}
+            for h in headers:
+                if ":" in h:
+                    k, v = h.split(":", 1)
+                    hdr_map[k.strip().lower()] = v.strip()
+            length = int(hdr_map.get("content-length", "0") or "0")
+            if length > 0:
+                body = rf.read(length)
+
+            req_text = body.decode("utf-8", errors="replace")
+            model = extract_model(req_text)
+            prompt, p_trunc = clip(extract_prompt(req_text))
+            truncated = truncated or p_trunc
+
+            fwd = []
+            for h in headers:
+                if ":" not in h:
+                    continue
+                k, v = h.split(":", 1)
+                if k.strip().lower() in HOP_BY_HOP:
+                    continue
+                fwd.append((k.strip(), v.strip()))
+            # Make the upstream see a single-connection request even when
+            # the client asked for keep-alive through us.
+            fwd = [(k, v) for k, v in fwd if k.lower() != "host"]
+            fwd.append(("Host", f"{self.upstream_host}:{self.upstream_port}"))
+            fwd.append(("Connection", "close"))
+
+            req.request(method, path, body=body or None, headers=dict(fwd))
+            resp = req.getresponse()
+            status = resp.status
+
+            # Status + headers to the client. Drop hop-by-hop so we can
+            # stream the body ourselves regardless of upstream framing.
+            out = [f"HTTP/1.1 {resp.status} {resp.reason}\r\n"]
+            for k, v in resp.getheaders():
+                if k.lower() in HOP_BY_HOP:
+                    continue
+                out.append(f"{k}: {v}\r\n")
+            out.append("Connection: close\r\n\r\n")
+            client_sock.sendall("".join(out).encode("latin-1"))
+
+            chunks = []
+            while True:
+                chunk = resp.read(8192)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                try:
+                    client_sock.sendall(chunk)
+                except OSError:
+                    # Client went away mid-stream; still log what we saw.
+                    break
+
+            resp_bytes = b"".join(chunks)
+            resp_text = resp_bytes.decode("utf-8", errors="replace")
+            resp_clip, r_trunc = clip(resp_text)
+            truncated = truncated or r_trunc
+            resp_raw = resp_clip
+        except Exception as e:
+            status = status or 502
+            err = f"ollama-log-proxy error: {e}"
+            try:
+                client_sock.sendall(
+                    b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n"
+                    b"Connection: close\r\n\r\n" + err.encode()
+                )
+            except OSError:
+                pass
+            resp_raw = err
+        finally:
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            if method or path:
+                try:
+                    append_log(
+                        {
+                            "ts": datetime.datetime.now(datetime.timezone.utc)
+                            .isoformat(timespec="milliseconds")
+                            .replace("+00:00", "Z"),
+                            "method": method,
+                            "path": path,
+                            "client": client_addr[0] if client_addr else "",
+                            "status": status,
+                            "latency_ms": latency_ms,
+                            "model": model,
+                            "prompt": prompt,
+                            "response": resp_raw,
+                            "truncated": truncated,
+                        }
+                    )
+                except OSError as e:
+                    print(f"ollama-log-proxy: log write failed: {e}", file=sys.stderr)
+            try:
+                client_sock.close()
+            except OSError:
+                pass
+
+
+class Server(threading.Thread):
+    def __init__(self, listen, proxy):
+        super().__init__(daemon=True)
+        host, port = listen.rsplit(":", 1)
+        self.addr = (host, int(port))
+        self.proxy = proxy
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.bind(self.addr)
+        self.sock.listen(128)
+
+    def run(self):
+        while True:
+            try:
+                client, caddr = self.sock.accept()
+            except OSError:
+                break
+            t = threading.Thread(target=self.proxy.handle, args=(client, caddr), daemon=True)
+            t.start()
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Logging reverse proxy for Ollama")
+    ap.add_argument("--listen", required=True, help="host:port to bind (tailnet address)")
+    ap.add_argument("--upstream", required=True, help="http://host:port of real Ollama")
+    args = ap.parse_args()
+
+    proxy = Proxy(args.upstream)
+    server = Server(args.listen, proxy)
+    server.start()
+    print(
+        f"ollama-log-proxy: {args.listen} -> {args.upstream}; log {log_path()}",
+        file=sys.stderr,
+        flush=True,
+    )
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

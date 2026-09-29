@@ -126,8 +126,9 @@ grep -iE 'error|fail' "$LOG/nvim.log" | sed 's/^/  /' | head -10 || true
 command -v npm >/dev/null ||
   echo "  npm not found: mason's npm-based servers (pyright, bash-language-server) are skipped"
 
-# raider-ollama: tailnet :11434 → raider Ollama (minuet on the laptop). Stowed
-# from home/server; enable once so linger keeps it up after logout.
+# raider-ollama: tailnet :11434 → raider Ollama, via ollama-forward (SSH tunnel
+# + logging proxy). Stowed from home/server; enable once so linger keeps it up
+# after logout. Request log: ~/.local/state/ollama/requests.jsonl.
 if [ -e "$HOME/.config/systemd/user/raider-ollama.service" ]; then
   loginctl enable-linger "$USER" >/dev/null 2>&1 || true
   systemctl --user daemon-reload 2>/dev/null || true
