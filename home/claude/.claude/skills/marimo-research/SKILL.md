@@ -11,7 +11,7 @@ Notebooks are the lab record. Every number must trace to code, a data file, and 
 
 Flat `notebooks/`, files named by role so they stay importable (`from load import load_measurements`). No stage numbers: a module name cannot start with a digit, and the import graph already shows order.
 
-| file | role | network | writes |
+| file | role | fetches | writes |
 |---|---|---|---|
 | `config.py` | shared constants (`Cfg`): paths, dataset ids, knobs shared by more than one notebook | no | nothing |
 | `collect.py` | every fetch; the only writer of `data/`; owns remote ids (`Sources`) | yes | `data/` |
@@ -31,7 +31,7 @@ A step used once is a cell. Make it an `@app.function` only when it is used from
 
 - Loop over cases inside one cell (`for _t in types:`) instead of writing a function to call once per case.
 - Reusable code lives in the notebook that owns the concept; others import it. A plain `.py` module is only for code no notebook explains (vendored helpers).
-- Each `@app.function` is used by some cell in its own notebook, so the reader sees it on real data. A network function runs on one small input behind a run button.
+- Each `@app.function` is immediately followed by the cell that calls it (its demo), so the reader sees what it returns before meeting the next definition. Never batch several definitions and demonstrate them later. Demo on real project data when that is clearest; a small sample is fine, and often clearer, for a pure transform or a metric. A function that fetches remote data runs on one small input behind a run button.
 - When a function stops being reused, inline it.
 
 ## Structure of a notebook
@@ -41,7 +41,7 @@ A step used once is a cell. Make it an `@app.function` only when it is used from
 - Cell-local temporaries, including loop variables, are `_`-prefixed; never define the same public name in two cells.
 - Never mutate an object another cell defined; marimo does not rerun dependents on mutation. Build a new value under a new name.
 - Markdown cells may be `hide_code=True`; Python cells keep code visible.
-- Network cells sit behind `mo.ui.run_button`. Opening or batch-running a notebook must not fetch. Secrets come from the environment.
+- Cells that fetch sit behind `mo.ui.run_button`. Opening or batch-running a notebook must not fetch. Secrets come from the environment.
 - Batch entry is `if __name__ == "__main__": app.run()`. A collector whose batch job is to fetch also has a `main()` that calls the same functions; the Makefile calls it directly.
 
 ## Question notebooks follow the scientific method
@@ -116,14 +116,14 @@ MIN_COUNT = 20
 
 Tests guard what breaks silently and is cheap to check. They do not police style.
 
-- Worth a test: the network boundary (only `collect.py` and `tool_*` import network clients), no `data/` paths or remote ids outside `config.py` / `collect.py`, no issue numbers in notebooks, and functions other notebooks import.
+- Worth a test: the fetch boundary (only `collect.py` and `tool_*` import anything that opens a connection: HTTP, database, cloud storage), no `data/` paths or remote ids outside `config.py` / `collect.py`, no issue numbers in notebooks, and functions other notebooks import.
 - Not worth a test: prose conventions, section order, single-use cells. Research needs room to try things; a rule that is annoying to satisfy and rarely catches a real mistake costs more than it saves.
 - When unsure, state the rule here and add a test only after it has been broken in practice.
 
 ## Checklist before calling it done
 
 1. `marimo check --strict notebooks/` is clean and the project's tests pass.
-2. `python notebooks/<file>.py` runs headless without network. Open it in `marimo edit` and look at the rendered cells, or say you only ran it headless.
+2. `python notebooks/<file>.py` runs headless without fetching. Open it in `marimo edit` and look at the rendered cells, or say you only ran it headless.
 3. Each literal you touched (paths, ids, thresholds) has one definition.
 4. Functions exist only where reused; single-use steps are cells.
 5. Question notebook: question, hypothesis with predictions, methods, results, discussion, next, in that order; the discussion matches the rendered outputs.
