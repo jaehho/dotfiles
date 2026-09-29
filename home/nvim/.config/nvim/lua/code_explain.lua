@@ -62,12 +62,12 @@ end
 
 ---@param text string
 local function show(text)
+  -- Bottom split, not a float: the selection stays visible while you read.
   Snacks.win {
     text = text,
     ft = 'markdown',
-    width = 0.6,
-    height = 0.6,
-    border = 'rounded',
+    position = 'bottom',
+    height = 0.35,
     wo = { wrap = true, linebreak = true },
     keys = { q = 'close' },
   }

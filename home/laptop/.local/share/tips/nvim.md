@@ -195,8 +195,8 @@ Minuet offers a grey completion from raider's Ollama via wonlab's
 ## Explain a selection
 
 Visual-select some lines and press `<leader>ce`. Type a question (default
-"Explain this code") and the answer opens in a float with ~50 lines of
-surrounding context sent along. `q` closes the float.
+"Explain this code") and the answer opens in a bottom split with ~50 lines
+of surrounding context sent along. `q` closes the split.
 
 Minuet and explain both go through wonlab's logging proxy. Every request
 (prompt, response, latency) is in `~/.local/state/ollama/requests.jsonl` on
