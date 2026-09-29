@@ -24,7 +24,7 @@
 
 ## Projects
 
-- A rule about code layout or structure gets a test that enforces it; a rule that lives only in a comment or doc drifts.
+- Add a test when a rule breaks silently and is cheap to check (network boundaries, path literals, imported helpers). Don't test style, prose, or section conventions; research needs room to move. State a rule first and add a test after it has been broken in practice.
 - Commit work in small WIP commits instead of leaving it uncommitted. Never discard uncommitted work (`git checkout`/`restore` on a file).
 - Tasks, gotchas, and design decisions live in GitHub issues, never in TODO.md, ISSUES.md, or DESIGN_LOG.md. Label gotchas `gotcha` (symptom, evidence, recovery, verification; open until believed fixed, reopen on recurrence) and decisions `decision` (what and why; closed once decided). Before changing broken behavior, search both labels open and closed.
 - Root docs, each only when it has content: `README.md` (install, use, what it is and how it works), `CHANGELOG.md` (release notes, for published packages), `CLAUDE.md` (agent rules and pointers only). Projects with a UI that the impeccable skill works on also keep `PRODUCT.md` and `DESIGN.md`, which it reads by name.
