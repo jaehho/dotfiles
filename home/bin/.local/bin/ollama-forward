@@ -9,6 +9,9 @@
 # public hairpin. The proxy binds the tailnet address and forwards there.
 set -euo pipefail
 
+# systemd user units have a minimal PATH; the proxy lives in ~/.local/bin.
+export PATH="$HOME/.local/bin:$PATH"
+
 TUNNEL_PORT="${OLLAMA_TUNNEL_PORT:-11435}"
 LISTEN="${OLLAMA_LISTEN:-100.64.0.3:11434}"
 UPSTREAM="http://127.0.0.1:${TUNNEL_PORT}"
