@@ -187,9 +187,10 @@ dismiss.
 
 ## Ghost text from minuet
 
-When the Ollama tunnel is up (`ssh -N -L 21434:127.0.0.1:11434 raider`),
-minuet offers a grey completion. `<A-A>` accepts it, `<A-a>` accepts the
-line, `<A-]>`/`<A-[>` cycle, `<A-e>` dismisses.
+Minuet offers a grey completion from raider's Ollama via wonlab's
+`raider-ollama.service` (`http://100.64.0.3:11434`). No laptop-side tunnel.
+`<A-A>` accepts it, `<A-a>` accepts the line, `<A-]>`/`<A-[>` cycle,
+`<A-e>` dismisses.
 
 ## Splits, and moving between them
 
