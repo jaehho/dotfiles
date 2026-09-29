@@ -6,7 +6,7 @@
     // Set-semantics, not a blind toggle: dash-bar reads the bar's real
     // visibility from `hyprctl layers` and sends the matching signal, so a
     // stale guess can never flip the state (the old USR1-toggle + state-file
-    // design went permanently inverted; see dash ISSUES.md).
+    // design went permanently inverted; see jaehho/dash#7).
     "on-sigusr1": "hide",
     "on-sigusr2": "show",
     "position": "top",
