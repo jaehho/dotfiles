@@ -244,7 +244,7 @@ install_missing() {
       # --needed leaves the install reason alone, so a tracked package that
       # something else depends on stays a "dependency", invisible to
       # `pacman -Qqe`, and drift would call it missing forever. Being in the
-      # manifest is the explicit request. See ISSUES.md.
+      # manifest is the explicit request. See issue #7.
       promote=$(comm -12 <(echo "$pkgs" | sort -u) <(pacman -Qqd | sort -u) || true)
       [ -z "$promote" ] || pacman -D -q --asexplicit -- $promote
       ;;
@@ -301,16 +301,16 @@ for item in ET.parse(sys.stdin).getroot().iter("item"):
 ' "$1"
 }
 
-# nvidia beta bumps deadlock paru (ISSUES.md "nvidia beta upgrade deadlocks
-# paru"). Everything else upgrades; the beta set waits for the manual recipe.
+# nvidia beta bumps deadlock paru (issue #6). Everything else upgrades; the
+# beta set waits for the manual recipe.
 nvidia_beta_hold() {
   local pending held
   pending=$(as_owner paru -Qua 2>/dev/null | awk '$1 ~ /nvidia.*-beta/ {print $1 " " $2 " -> " $4}' || true)
   [ -n "$pending" ] || return 0
   held=$(pacman -Qq | grep -E '^(lib32-)?(nvidia|opencl-nvidia).*-beta' | paste -sd, || true)
   decide "nvidia-beta-$(digest_of <<<"$pending")" \
-    "nvidia beta update held back: it needs the manual build in ISSUES.md" \
-    "$pending"$'\n'"Held: $held. Recipe: ISSUES.md \"make sync: nvidia beta upgrade deadlocks paru\", then reboot."
+    "nvidia beta update held back: it needs the manual build in https://github.com/jaehho/dotfiles/issues/6" \
+    "$pending"$'\n'"Held: $held. Recipe: https://github.com/jaehho/dotfiles/issues/6, then reboot."
   echo "--ignore=$held"
 }
 
@@ -353,7 +353,7 @@ upgrade_arch() {
 }
 
 # cargo has no upgrade-all of its own (cargo-update supplies one), and Arch's
-# rustup package never updates the toolchain, so crates outgrow it (ISSUES.md).
+# rustup package never updates the toolchain, so crates outgrow it (issue #7).
 upgrade_tools() {
   local stamp="$DOTFILES_STATE/tools-upgraded"
   if [ -f "$stamp" ] && [ $(( $(date +%s) - $(stat -c %Y "$stamp") )) -lt "$UPGRADE_MAX_AGE" ]; then

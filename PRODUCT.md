@@ -19,7 +19,7 @@ Keep each machine matching the repo: dotfiles linked, `/etc` and boot configs in
 - The repo always carries uncommitted work; stowed files are symlinks, so edits are live.
 - Claude Code in `~/dotfiles` is the usual way changes get made.
 - Notifications via swaync; terminal is kitty; shell is fish.
-- `ISSUES.md` holds recurring traps (nvidia upgrade deadlock, stale daemons after upgrades).
+- GitHub issues labeled `gotcha` hold recurring traps (nvidia upgrade deadlock, stale daemons after upgrades).
 
 ## Capabilities and Constraints
 

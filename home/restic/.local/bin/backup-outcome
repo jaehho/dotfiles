@@ -4,7 +4,7 @@
 #
 # The alarm is deliberately NOT "the last run failed". The backup runs four
 # times a day, and the homelab repo is reachable from only one of the two
-# subnets this laptop roams between (see ISSUES.md), so individual failures
+# subnets this laptop roams between (see issue #19), so individual failures
 # are expected and there is nothing to do about one. What matters is whether
 # a run has succeeded *recently* -- so a success leaves a marker, and a
 # failure only speaks up when that marker has gone stale.

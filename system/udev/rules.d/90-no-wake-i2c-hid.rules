@@ -8,7 +8,7 @@
 # per idle period, so nothing retries. The machine then sat awake on battery
 # for 70 minutes. Same device also emits phantom contacts while untouched
 # (~5 IRQ/s idle, plus libinput "Touch jump detected and discarded"), which is
-# what makes dpms-off fail to stick. See ISSUES.md 2026-09-01.
+# what makes dpms-off fail to stick. See issue #25.
 #
 # Matched by driver, not by ACPI HID, so this holds on any host and survives a
 # touchpad swap. Nothing here should ever wake a closed laptop; the keyboard

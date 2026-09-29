@@ -79,7 +79,7 @@ step_configs() {
   # systemd-sleep(8) v260+ only scans /usr/lib/systemd/system-sleep/, so drop
   # the copies an older sync left in /etc. hyprlock-restart is gone from both:
   # it killed a healthy hyprlock and cycled the session lock on every resume.
-  # The rest went in the 2026-09-12 sleep reset back to stock (ISSUES.md).
+  # The rest went in the 2026-09-12 sleep reset back to stock (issue #25).
   rm -f /etc/systemd/system-sleep/fuse-mounts \
         /etc/systemd/system-sleep/hyprlock-restart \
         /usr/lib/systemd/system-sleep/hyprlock-restart \
@@ -97,8 +97,7 @@ step_configs() {
     udevadm trigger --action=bind --subsystem-match=i2c
   fi
   # Reload is enough for the lid drop-in, and is safe. Never *restart* logind
-  # here: that kills the Hyprland session. See ISSUES.md "logind ignores its
-  # drop-in".
+  # here: that kills the Hyprland session. See issue #30.
   [ -z "${fresh[/etc/systemd/logind.conf.d]:-}" ] || systemctl reload systemd-logind.service
   # UPower reads its drop-ins only at startup; restarting it is harmless.
   if [ -n "${fresh[/etc/UPower/UPower.conf.d]:-}" ] && systemctl cat upower.service >/dev/null 2>&1; then
@@ -316,7 +315,7 @@ step_reboot() {
   if [ -z "$found" ]; then
     v=$(file -bL /boot/vmlinuz-linux 2>/dev/null | sed -n 's/.*version \([^ ]*\).*/\1/p')
     decide "reboot-${v:-kernel}" "Reboot into the upgraded kernel ${v:-} (running $running)" \
-      "Until then, modules for the running kernel only load from kernel-modules-hook's copy; USB hotplug is the usual casualty (ISSUES.md)."
+      "Until then, modules for the running kernel only load from kernel-modules-hook's copy; USB hotplug is the usual casualty (issue #24)."
   fi
 }
 

@@ -68,7 +68,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("wl-paste --type image --watch cliphist store")
     hl.exec_cmd("/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1")
     -- swayosd-server is a user unit; a copy launched here grabs its app id and
-    -- makes the unit crash-loop "already running" (ISSUES.md). Start the unit
+    -- makes the unit crash-loop "already running" (issue #14). Start the unit
     -- only once WAYLAND_DISPLAY is in the manager, or its condition skips it.
     -- awatcher is the same: asst track reads its :5600 sensor, and Hyprland
     -- never starts graphical-session.target, so the unit needs this kick.
@@ -526,7 +526,7 @@ end)
 -- exits non-zero when nothing owns the bus name, but exits 0 when a server
 -- answers and refuses the call -- which is what a server still running a
 -- binary that an upgrade deleted does, so these keys go silently dead until it
--- restarts. `make sync` now handles that; see ISSUES.md.
+-- restarts. `make sync` now handles that; see issue #14.
 --
 -- Do not "fix" this by calling busctl with a literal signature here: the
 -- signature is what moved in swayosd 0.3.1 -> 0.3.2, so pinning it just

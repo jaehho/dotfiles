@@ -24,7 +24,7 @@
 # symptom -- PipeWire suffixes genuinely distinct nodes (.2, .3), so two nodes
 # sharing a name verbatim only happens when a device leaked them.
 #
-# See ISSUES.md.
+# See issue #15.
 
 set -uo pipefail
 

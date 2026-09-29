@@ -48,7 +48,7 @@ This machine converges on ~/dotfiles by itself: scripts/converge.sh runs as root
 Start by reading both decisions.json files and the logs they point to, then take the decisions one at a time: say what happened and recommend what to do. Usual resolutions:
 - package drift: file untracked packages under packages/ (arch: the fitting packages/arch/*.txt, or 99-inbox.txt) or tell the owner to uninstall; drop entries that should go.
 - a held upgrade (Arch news): summarize the news and whether anything must be done first; once it is safe, acknowledge with: touch $ACK_DIR/<decision id>
-- a failed step: diagnose from the log; check ISSUES.md for a known recipe first.
+- a failed step: diagnose from the log; search gotcha issues first (gh issue list --label gotcha --state all --search <term>).
 - anything needing root: write a script to /tmp/<name>.sh for the owner to run with sudo. Never run sudo yourself.
 After changes, rerun both halves with: dotfiles sync (it follows the output). Do not edit decisions.json by hand; the next run rewrites it.
 EOF

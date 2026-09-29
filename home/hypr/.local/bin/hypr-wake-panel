@@ -3,8 +3,8 @@
 # reports dpmsStatus true, so a plain `dpms on` is a no-op and no keypress
 # helps; a dpms off -> on cycle forces the modeset. Dispatches are silently
 # dropped while the session is inactive (VT 63 during s2h), so wait for it,
-# and judge by grim, never by hyprctl's "ok". See ISSUES.md "Black screen
-# after resume". Logs every run under tag hypr-wake-panel, so a dark panel
+# and judge by grim, never by hyprctl's "ok". See issue #27.
+# Logs every run under tag hypr-wake-panel, so a dark panel
 # with a "lit" line means Hyprland was presenting while the panel showed black.
 
 mon=eDP-1

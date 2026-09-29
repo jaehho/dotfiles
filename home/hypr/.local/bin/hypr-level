@@ -8,7 +8,7 @@
 # levels creep and high ones keep the old 5%.
 #
 # The change is made here, not by swayosd-client, so the keys still work when
-# the server refuses calls (ISSUES.md); SwayOSD only draws the bar, and it
+# the server refuses calls (issue #14); SwayOSD only draws the bar, and it
 # can't draw a sub-percent step through its own volume/brightness actions.
 
 MIN=0.5 MAX=5

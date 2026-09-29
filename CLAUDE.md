@@ -12,8 +12,7 @@ GNU Stow dotfiles for Arch + Hyprland and Ubuntu/Debian. Gate distro-specific wo
 
 ## Change boundaries
 
-- Commit work in small WIP commits instead of leaving it uncommitted. Never discard uncommitted work (`git checkout`/`restore` on a file); repo files are the live configs through stow.
-
+- Repo files are the live configs through stow, so discarding uncommitted work reverts the running system.
 - Stow uses `--no-folding`. Boot-critical and sandbox-consumed configs must be real files, not symlinks into `/home`; follow `SYSTEM_LINKS`, `SYSTEM_INSTALLS`, and `SYSTEM_COPIES` in `scripts/lib.sh`. The boot step rebuilds and rolls back failed changes.
 - DNS belongs to systemd-resolved, including its stub link and NetworkManager integration. Preserve Tailscale split DNS.
 - Claude configuration is declarative: see `home/claude/.claude/reconcile/README.md` and `scripts/claude-reconcile.sh`. Do not put secrets in manifests.
@@ -25,6 +24,8 @@ GNU Stow dotfiles for Arch + Hyprland and Ubuntu/Debian. Gate distro-specific wo
 
 ## Troubleshooting and documentation
 
-Read [ISSUES.md](ISSUES.md) before changing a broken converge step or system behavior. It holds symptom checks, recovery, and links to historical evidence. Add recurring fixes there instead of adding speculative layers to `scripts/`.
+Known traps are GitHub issues labeled `gotcha`: open means not yet believed fixed, closed means believed fixed. Before changing a broken converge step or system behavior, search them open and closed (`gh issue list --label gotcha --state all --search <term>`), reopen one that recurs, and file a new one for a new recurring fix instead of adding speculative layers to `scripts/`. Keep each to symptom, evidence, recovery, verification; start from the symptom and confirm its signature. Commands in them are diagnostic unless labeled **Recovery**. For privileged repairs, write a reviewed script in `/tmp/` for the owner; never run sudo.
 
-Keep this file to ownership rules and non-obvious constraints. Put detailed recipes in ISSUES.md and dated investigation history in `docs/history/`; correct disproved conclusions in memory as well as documentation.
+Design decisions are issues labeled `decision`, closed once decided. Long investigations go in `docs/history/`; the archived pre-2026-09-17 incident log there contains superseded diagnoses, and the issues take precedence.
+
+Keep this file to ownership rules and non-obvious constraints; correct disproved conclusions in memory as well as in the issues.

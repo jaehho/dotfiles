@@ -98,7 +98,7 @@ notify, converge timers) stays off the server. Provider keys for `claude-open`
 
 ## Troubleshooting
 
-See [ISSUES.md](ISSUES.md) for known issues and fixes.
+Known traps and their recovery are GitHub issues labeled [`gotcha`](https://github.com/jaehho/dotfiles/issues?q=label%3Agotcha): open ones are not yet believed fixed, closed ones are fixed until they recur.
 
 ## Notes
 

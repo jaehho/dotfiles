@@ -7,7 +7,7 @@ Description=SwayOSD server (volume and brightness OSD)
 # HandleAction with `true`, while every volume action silently does nothing.
 # swayosd-client exits 0 either way, so hyprland.lua's `|| wpctl` fallback never
 # fires and the volume keys simply go dead. Tie its lifetime to the Pulse server
-# instead of hoping it survives one. See ISSUES.md.
+# instead of hoping it survives one. See issue #14.
 #
 # Both directions are needed, and neither alone is enough:
 #   PartOf   propagates a stop/restart of pipewire-pulse to us

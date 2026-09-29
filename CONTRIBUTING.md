@@ -3,7 +3,7 @@
 ## Before Making Changes
 
 1. Read [README.md](README.md) to understand the system
-2. Check [ISSUES.md](ISSUES.md) for known issues
+2. Search [`gotcha` issues](https://github.com/jaehho/dotfiles/issues?q=label%3Agotcha), open and closed, for known traps
 3. Understand the architecture (see above)
 
 ## Making Changes

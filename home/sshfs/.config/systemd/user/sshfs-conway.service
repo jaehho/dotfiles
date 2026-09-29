@@ -12,7 +12,7 @@ TimeoutStartSec=20
 ExecStartPre=-/usr/bin/fusermount3 -uz %h/mnt/conway
 ExecStartPre=/usr/bin/mkdir -p %h/mnt/conway
 # No `reconnect`: on connection loss, sshfs must exit so in-flight FUSE
-# calls return EIO instead of hanging forever (see ISSUES.md).
+# calls return EIO instead of hanging forever.
 ExecStart=/usr/bin/sshfs conway:/ %h/mnt/conway \
   -o ServerAliveInterval=5,ServerAliveCountMax=2 \
   -o ConnectTimeout=10 \
