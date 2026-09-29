@@ -11,7 +11,9 @@
 -- stay). The target id must be free globally, so movers go through temp ids
 -- first; a plain low-to-high walk is not enough when off-slot ids swap.
 -- Each change_id is followed by a same-name rename so waybar hears the name
--- (see the comment in pack_now; hyprland renames silently).
+-- (see the comment in pack_now; hyprland renames silently). Quickshell (dash)
+-- has no changeworkspaceid handler either; dash's shell.qml confirms
+-- emptiness with hyprctl so a stale toplevels list cannot hide waybar.
 
 local M = {}
 
