@@ -671,16 +671,6 @@ hl.window_rule({
     center = true,
 })
 
--- Mail digest viewer (mail-digest-view)
-hl.window_rule({
-    name  = "float-mail-digest",
-    match = { class = "^(dev.jaeho.maildigest)$" },
-
-    float  = true,
-    size   = "640 760",
-    center = true,
-})
-
 -- Battery dashboard: a window you open to answer one question and then close
 hl.window_rule({
     name  = "battery-log-float",
