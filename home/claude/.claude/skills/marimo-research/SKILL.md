@@ -59,11 +59,20 @@ $$S(R) = \{\, s : \mathrm{pre}(s) \in R \ \lor\ \mathrm{post}(s) \in R \,\}$$
 
 to be the synapses that touch $R$.
 
+## Issues
+
+GitHub issues hold tasks, gotchas, decisions, and how a bug was found. A notebook is a polished account of the work as it stands, not a design log.
+
+- Never cite an issue number in a notebook: markdown, comments, docstrings, or strings all count.
+- Never narrate past wrong versions or debugging history ("counting before that dedup doubled every weight", "this caught that twice"). State the rule the code enforces and, where there is a real choice, the options and why this one. The story goes in an issue; the code and its comment keep only the current decision.
+- A choice comment is present-tense design rationale. If it reads like a postmortem, cut it to the rationale or move it to an issue.
+- Enforce the issue-number ban with a test in `tests/`, not a reminder comment. Hex color literals (`#0b0b0b`) are not issue refs; the test must not flag them.
+
 ## Readability
 
 - Explicit step-by-step code. No clever one-liners or deep helper chains.
 - Parameters and variables are named for what they hold (`census`, `type_of`), not abbreviations (`ct`). A lookup's docstring says what it is used for, not only its shape.
-- Provenance lives in function names, docstrings, and constants. Do not pack URLs, issue numbers, or product ids into markdown; let the dependency graph show data flow.
+- Provenance lives in function names, docstrings, and constants. Do not pack URLs or product ids into markdown; let the dependency graph show data flow. Issue numbers never appear in a notebook (see Issues).
 - Choice comments are short prose at the site of the choice, reading like the rest of the file: name the real options and why this one; for open-ended options, say what question the knob answers and give a couple of concrete values; say "arbitrary" when it is. No labels or lists. Do not hard-wrap comment lines.
 
 ```python
@@ -79,3 +88,4 @@ MIN_SYN = 20
 4. `grep` for each literal you touched (paths, ids, thresholds): one definition only.
 5. Every network path is in `collect.py` or a `tool_*`, behind a run button.
 6. Every `$$...$$` is research-grade: symbols introduced with domains first, definitions marked, one meaning per symbol, no program notation.
+7. No issue numbers and no design-log narrative anywhere in the notebook.
