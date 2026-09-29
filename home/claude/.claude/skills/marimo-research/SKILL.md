@@ -28,7 +28,7 @@ Flat `notebooks/`, files named by role so they stay importable (`from load impor
 ## Structure of a notebook
 
 - Imports, including cross-notebook imports, go in `with app.setup:`. Setup names are visible to every cell and every `@app.function`.
-- Reusable-function unit: a markdown cell saying what the step is (math in `$$...$$` when it clarifies), the `@app.function`, then a small demo cell that calls it on real local data. Merge or split when the content wants it; a markdown cell that only titles the function is noise.
+- Reusable-function unit: a markdown cell saying what the step is (research-grade math in `$$...$$` only when it earns its place; see Math), the `@app.function`, then a small demo cell that calls it on real local data. Merge or split when the content wants it; a markdown cell that only titles the function is noise.
 - Every function gets a demo, no exceptions but `main`. A network function demos on one small input behind a run button; a function that writes demos to a scratch path; a guard demos its failure path by catching the error and showing the message; a constants class shows its values as a table. Writing the demo is how a reader learns why the function exists, so a function whose demo would be pointless is a sign to inline it.
 - One fact per cell. Do not pack results with `mo.vstack`, `mo.plain`, or dicts. Use real displays: a DataFrame as the last expression, `mo.ui.table`, a matplotlib or plotly figure, `mo.md` with numbers interpolated.
 - Cell-local temporaries, including loop variables, are `_`-prefixed (`for _t in types:`); marimo keeps those local, so there is no `MultipleDefinitionError`. Never define the same public name in two cells.
@@ -36,6 +36,28 @@ Flat `notebooks/`, files named by role so they stay importable (`from load impor
 - Python cells keep code visible. Markdown explanation cells may be `hide_code=True` (per cell; there is no global default).
 - Network cells sit behind `mo.ui.run_button`. Opening or batch-running a notebook must not fetch. Secrets come from the environment, never a cell.
 - Batch entry is `if __name__ == "__main__": app.run()` in every notebook, collectors included; `python notebooks/x.py` runs every cell headless with run buttons off, so it never fetches. Do not add a `main()` that re-implements the tour. The exception is a collector or API check whose batch job is to fetch: its `main()` calls the same `@app.function`s, and the Makefile calls it directly (`cd notebooks && python -c 'import collect; collect.main()'`).
+
+## Math
+
+Display math is a definition or a claim, never decoration. Write research-grade statements: a reader who takes the notation seriously must not hit an undefined symbol, an unstated domain, or a claim with no hypotheses. Prose is the default; a display earns its place only when the precision of the notation is the point.
+
+- Introduce every symbol in a display before that display, with its domain and the ambient universe stated once at first use ("a synapse $s$ at materialization 783", "$R \subseteq \mathrm{RootId}$ a set of root ids", "$w(i \to j)$ the synapse count from cell $i$ to cell $j$"). Later displays reuse the same meaning or say they do not.
+- Mark definitions as definitions ("define $S(R)$ to be", "write $W(A \to B)$ for"). A bare equation is a claim: give its hypotheses and a short justification in prose, or drop it.
+- No program notation in math. $s.\mathrm{pre}$ is an attribute access; either define $\mathrm{pre}$ as a map on synapses or write the fact in prose.
+- One meaning per symbol across the project. Do not overload a letter for two roles (a seed set and a synapse set). A type name is not a set of cells: write $\mathrm{cells}(T)$, or define types as the sets once and say so.
+- Types of the objects match the operations. Do not sum over a type name, take cardinality of a string, or use $A \in S$ when $S$ holds type names and $A$ is a set of cells.
+- Set-builder displays get a left-hand side. A bare $\{\, \ldots \,\}$ is not a definition of anything.
+- If the display only restates one line of pandas in worse notation, use prose instead.
+
+Bad (undefined constructor, unmarked definition, silent universe):
+
+$$S(R) = \{\, s : s.\mathrm{pre} \in R \ \lor\ s.\mathrm{post} \in R \,\}$$
+
+Good: a synapse is a contact $s$ with pre- and post-synaptic root ids $\mathrm{pre}(s), \mathrm{post}(s) \in \mathrm{RootId}$. For $R \subseteq \mathrm{RootId}$, define
+
+$$S(R) = \{\, s : \mathrm{pre}(s) \in R \ \lor\ \mathrm{post}(s) \in R \,\}$$
+
+to be the synapses that touch $R$.
 
 ## Readability
 
@@ -56,3 +78,4 @@ MIN_SYN = 20
 3. `python notebooks/<file>.py` runs headless without network. Open it in `marimo edit --watch` and look at the rendered cells, or say you only ran it headless.
 4. `grep` for each literal you touched (paths, ids, thresholds): one definition only.
 5. Every network path is in `collect.py` or a `tool_*`, behind a run button.
+6. Every `$$...$$` is research-grade: symbols introduced with domains first, definitions marked, one meaning per symbol, no program notation.
