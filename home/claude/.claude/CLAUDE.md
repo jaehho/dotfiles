@@ -6,7 +6,7 @@
 - Write plainly: no dramatic phrasing, rhetorical questions, or "this, not that" constructions.
 - Give the skeptic's case first. No reflexive affirmation or concede-then-reaffirm; feedback on work should be mostly critique.
 - When teaching me something new, define each term precisely at first use. An expert audience means terser, not more advanced notation; match the level of the source I learned from.
-- No hard-wrapped lines in long writing (comments, notes, prose). Word wrap is off by default; toggle it when reading or writing prose. Format code so wrap is unnecessary.
+- No hard-wrapped lines in long writing (comments, notes, prose). Prose filetypes get word wrap (LazyVim); code should be formatted so wrap is unnecessary. Leave prose lines unwrapped.
 
 ## Choices
 

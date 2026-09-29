@@ -27,21 +27,3 @@ if vim.v.vim_did_enter == 1 then
 else
   vim.api.nvim_create_autocmd('VimEnter', { desc = 'Drop matchit a% so it does not nest under mini.ai a', callback = drop_matchit_a })
 end
-
--- LazyVim wrap_spell turns wrap on for prose. Keep spell; wrap is a manual
--- toggle (<leader>uw). Code should be formatted so wrap is unnecessary.
-local prose = { 'text', 'plaintex', 'typst', 'gitcommit', 'markdown' }
-local wrap_group = vim.api.nvim_create_augroup('lazyvim_wrap_spell', { clear = true })
-vim.api.nvim_create_autocmd('FileType', {
-  group = wrap_group,
-  pattern = prose,
-  callback = function()
-    vim.opt_local.wrap = false
-    vim.opt_local.spell = true
-  end,
-})
-for _, win in ipairs(vim.api.nvim_list_wins()) do
-  if vim.tbl_contains(prose, vim.bo[vim.api.nvim_win_get_buf(win)].filetype) then
-    vim.wo[win].wrap = false
-  end
-end
