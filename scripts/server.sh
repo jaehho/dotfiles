@@ -115,9 +115,13 @@ say "tmux plugins"
 # requires a parser update after a plugin update), then mason's tools. The
 # config starts the parser install asynchronously; waiting on the same list
 # joins it rather than racing it.
+# Lazy restore rewrites lazy-lock.json to whatever is installed here. That
+# dirties the worktree and the next `git pull` aborts, so put the laptop's
+# lockfile back. Do not commit a server-local lock.
 say "neovim plugins, parsers, language servers"
 {
   nvim --headless '+Lazy! restore' +qa
+  git -C "$DOTFILES" restore --source=HEAD --worktree -- home/nvim/.config/nvim/lazy-lock.json
   nvim --headless "+lua require('nvim-treesitter').update():wait(600000)" \
     "+lua require('nvim-treesitter').install(vim.g.ts_parsers):wait(600000)" +qa
   nvim --headless '+MasonToolsUpdateSync' +qa
@@ -132,9 +136,14 @@ command -v npm >/dev/null ||
 if [ -e "$HOME/.config/systemd/user/raider-ollama.service" ]; then
   loginctl enable-linger "$USER" >/dev/null 2>&1 || true
   systemctl --user daemon-reload 2>/dev/null || true
-  systemctl --user enable --now raider-ollama.service 2>/dev/null &&
-    echo "  raider-ollama: enabled on 100.64.0.3:11434" ||
+  # enable --now does not restart an already-running unit, so a changed
+  # ExecStart keeps the old process until something stops it. Restart always.
+  if systemctl --user enable raider-ollama.service 2>/dev/null \
+    && systemctl --user restart raider-ollama.service 2>/dev/null; then
+    echo "  raider-ollama: running on 100.64.0.3:11434 (log ~/.local/state/ollama/requests.jsonl)"
+  else
     echo "  raider-ollama: enable failed (no user bus?)"
+  fi
 fi
 
 say "done: nvim $("$BIN/nvim" --version | awk 'NR==1 {print $2}'), tree-sitter $("$BIN/tree-sitter" --version | awk '{print $2}'). Logs in ${LOG/#$HOME/\~}"
