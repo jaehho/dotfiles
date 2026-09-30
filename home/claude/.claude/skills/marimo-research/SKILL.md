@@ -32,7 +32,7 @@ A step used once is a cell. Make it an `@app.function` only when it is used from
 - Loop over cases inside one cell (`for _t in types:`) instead of writing a function to call once per case.
 - Reusable code lives in the notebook that owns the concept; others import it. A plain `.py` module is only for code no notebook explains (vendored helpers).
 - Each `@app.function` is immediately followed by the cell that calls it (its demo), so the reader sees what it does before meeting the next definition. Never batch several definitions and demonstrate them later.
-- The demo names both sides of the call: a comment in `input -> return` form says what goes in and what comes back (`# pairs (pre, post, weight) -> one total per partner`). marimo displays only a cell's last expression, so the input cannot sit beside its result and has to be written down.
+- The demo displays the return. It does not display or describe the input; the call shows what goes in, and when an input needs inspecting, probe the notebook with a cell that displays it.
 - Demo on real project data when that is clearest; a small sample is fine, and often clearer, for a pure transform or a metric. A function that fetches remote data runs on one small input behind a run button.
 - When a function stops being reused, inline it.
 
