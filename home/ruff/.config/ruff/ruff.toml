@@ -1,0 +1,22 @@
+# Shared curated-strict lint for first-party Python.
+# Each project extends this file and keeps only local knobs:
+#   extend = "~/.config/ruff/ruff.toml"
+#   line-length / target-version / extend-exclude / lint.per-file-ignores
+#
+# Do not set lint.select in a child. A child select is a new baseline and
+# discards this file's lint.ignore. Omit select here-from children so the
+# parent selection and both ignore lists merge.
+
+[lint]
+select = [
+  "E", "W", "F", "I", "N", "UP", "B", "C4",
+  "SIM", "RUF", "PERF", "PIE", "RET", "RSE",
+  "ARG", "PTH", "FLY", "PL", "TRY", "T20", "T10",
+]
+ignore = [
+  # formatter-safe (even without ruff format)
+  "E501",
+  "COM812", "COM819", "ISC001",
+  # assert is fine in tests; S is not selected
+  "S101",
+]
