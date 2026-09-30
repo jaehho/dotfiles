@@ -78,12 +78,95 @@ The notebook is the log. A question notebook covers one question, two at most, i
 
 When a definition compares two quantities or describes a structure (an aggregation, a graph motif, a pipeline), put a small schematic in the Methods next to it.
 
-- Choose the tool by what the picture must get right. Use **mermaid** (`mo.mermaid`) for flow and process: pipelines, decision logic, data lineage, where automatic layout is fine and the text source is the point. Use **matplotlib** when geometry carries meaning (positions, ordering, magnitude as width or size) or when labels are computed; mermaid reorders nodes and routes edges on its own. Render once and look before keeping either.
+- Choose the tool by what the picture must get right. Use **mermaid** (`mo.mermaid`) for flow and process: pipelines, decision logic, data lineage, where automatic layout is fine and the text source is the point. Use **manim** when the schematic should look designed and geometry carries meaning: nodes, arrows as wide as their weight, LaTeX labels, a legend. Use **matplotlib** when the picture is a plot with computed geometry. mermaid reorders nodes and routes edges on its own. Render once and look before keeping any of them.
+- manim draws a still: render the scene inside `mn.tempconfig({... "save_last_frame": True, "output_file": "<name>", "media_dir": <temp dir>})` and show the PNG with `mo.image`. The scene class is an `@app.class_definition` that takes its data as constructor arguments and reads colors from the setup (a class defined inside a cell breaks the rule that cells define no functions), and needs a demo cell like any definition. It needs system LaTeX, cairo, and pango, and a cold render takes seconds. Use manim directly; video-oriented manim skills (scripts, `final.mp4`) are more than a still needs.
 - Build the toy input in the cell and compute the labels with the notebook's own functions, so the picture cannot disagree with the code. A single-use diagram is drawn inline in its cell, not in a function.
 - Pick toy values that make the distinction visible: the case where two definitions disagree, or where excluded context would change the answer.
 - One color per role, gray for context the definition excludes. Colors are setup constants with their roles in a comment.
 - Show the context the definition leaves out, not only what it counts: units of another class, contacts it ignores (dashed), and a unit that connects to several targets. Use the fewest units that can carry all of that.
 - Follow it with a one-line interpolated caption that says what the toy example shows.
+
+## Figures
+
+Keep aesthetics at the defaults. Set one base look in the setup cell, and let a plot state a size, color, marker, or line width only when the data or the reader needs it, with a short comment saying why: one color per category, a figsize for a multi-panel grid, a marker area that encodes a count, a thick line so a fit stays visible over its curve.
+
+```python
+# Base look of every figure: one color per category, used everywhere, so a plot states only what its data needs.
+CATEGORY_COLORS = {"a": "#D55E00", "b": "#E69F00", "c": "#0072B2", "d": "#009E73"}  # colorblind-safe
+
+plt.rcParams.update(
+    {
+        "axes.prop_cycle": cycler(color=list(CATEGORY_COLORS.values())),
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "legend.frameon": False,
+        "figure.constrained_layout.use": True,
+    }
+)
+
+
+@alt.theme.register("lab", enable=True)
+def lab_theme() -> alt.theme.ThemeConfig:
+    return alt.theme.ThemeConfig(
+        {
+            "config": {
+                "view": {"stroke": "transparent"},
+                "range": {"category": list(CATEGORY_COLORS.values())},
+            }
+        }
+    )
+
+
+mn.Text.set_default(font="DejaVu Sans")  # only when the notebook uses manim
+```
+
+Move it to a shared module next to `config` when a second notebook needs it.
+
+- Axis limits follow the data. Do not leave an empty decade because another panel reaches it, unless panels share an axis on purpose.
+- Show the groups side by side. A dropdown that shows one group at a time hides the comparison the figure exists for.
+
+### Interactive figures
+
+When a reader would ask "which points are those?", make the figure selectable and show the selection in the next cell. Choose the widget by what the figure needs.
+
+| need | use | notes |
+|---|---|---|
+| altair look, tooltips, legend clicks, one chart | `mo.ui.altair_chart(chart, chart_selection="interval")` (or `"point"`); `.value` is the selected rows | layered chart: put an explicit `alt.selection_interval` on one layer and read `chart.apply_selection(df)`. Faceted chart: a brush in one panel filters every panel's data, so use one widget per panel. Never enable the vegafusion transformer; it silently turns selection off. Ids above 2^53 go in chart data as strings |
+| matplotlib look (shading, annotations, log axes), region selection | `mo.ui.matplotlib(ax)`: drag a box, shift-drag a lasso; `.value.get_mask(x, y)` on the arrays that were plotted | one axes per widget; no hover or click. Several panels: one figure per panel, collected in a `mo.ui.dictionary` and laid out with `mo.hstack` and `mo.vstack` |
+| 3D, WebGL point clouds, click and box on subplots | `mo.ui.plotly(fig)`; `.value` lists points with `curveNumber` and `pointIndex` | the reader must pick the box-select tool before dragging |
+
+```python
+# One cell builds the widgets, one lays them out, and a later cell reads the selections.
+_widgets = {}
+for _group in groups:
+    _fig, _ax = plt.subplots()
+    _ax.scatter(data[_group]["x"], data[_group]["y"])
+    _widgets[_group] = mo.ui.matplotlib(_ax)
+    plt.close(_fig)
+panels = mo.ui.dictionary(_widgets)
+mo.hstack([panels[_group] for _group in groups])
+```
+
+- Build the mask from the same arrays the figure plotted; store jittered coordinates in the frame so the plotted and the selected positions agree.
+- The selection cell starts with `mo.stop(not widget.value, mo.md("_Nothing selected._"))` and ends with the selected rows as a table.
+- A drag cannot be simulated inside marimo. Run the notebook with `marimo run`, drive it with Playwright (the Python package only, `uv run --with playwright`, and the system Chrome through `executable_path`), and read the result cell. marimo's widgets sit in shadow DOM, so work from screenshot coordinates after scrolling the `#App` container. Otherwise say you only checked the filter.
+
+## Libraries
+
+Pick by scenario, not one library for everything. Each row is where the library is the best tool; leave it when its "not for" applies.
+
+| library | use it for | not for |
+|---|---|---|
+| polars | every table you read, reshape, join, or aggregate; `scan_csv` and `scan_parquet` for files larger than memory. marimo displays it, and altair, matplotlib, and numpy accept it | |
+| pandas | only at an edge where another library hands one back or demands one: `pl.from_pandas` on the way in, `.to_pandas()` on the way out. It stays a transitive dependency because many client libraries return it | pipelines you write |
+| altair | charts that map columns to encodings: distributions, bars, small multiples, scatters up to a few thousand marks, with tooltips and legends | more than roughly 5,000 marks (aggregate in polars first), geometry you place by hand |
+| matplotlib | figures you control mark by mark: shaded regions, annotations, chords drawn on a curve, shared-axis grids, rasters (`imshow`, `hexbin`), large point clouds, files written to `figures/` | hover tooltips |
+| plotly | 3D, WebGL point clouds too large for altair, subplots that need click and box selection | figures that must match the base look |
+| manim | explanatory schematics where layout is the point (see Diagrams) | data plots |
+| mermaid | flow and process as text (see Diagrams) | geometry that carries meaning |
+
+- Test polars membership with a list or a semi join; `is_in` with a Series is deprecated.
+- Name the project's chart library for each figure kind in its `CLAUDE.md` only when the project departs from this table.
 
 ## Math
 
@@ -94,7 +177,7 @@ Display math is a definition or a claim, never decoration. A reader who takes th
 - No program notation in math (`s.pre`, `df.col`). Define a map, or say it in prose.
 - One meaning per symbol across the project. A category label is not a set of members: write $\mathrm{members}(G)$, or define groups as sets once.
 - Set-builder displays get a left-hand side.
-- If the display only restates one line of pandas in worse notation, use prose.
+- If the display only restates one line of dataframe code in worse notation, use prose.
 
 Bad: $S(R) = \{\, s : s.\mathrm{src} \in R \,\}$. Good: each record $s$ has a source $\mathrm{src}(s) \in U$; for $R \subseteq U$ define $S(R) = \{\, s : \mathrm{src}(s) \in R \,\}$, the records that start in $R$.
 
@@ -123,7 +206,6 @@ def zotero_open(url: str, label: str) -> mo.ui.button:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        return None
 
     return mo.ui.button(label=label, on_click=open_in_zotero, tooltip=url)
 ```
@@ -180,6 +262,7 @@ Tests guard what breaks silently and is cheap to check. They do not police style
 6. Each `$$...$$` is research-grade; each definition that compares quantities or describes a structure has a diagram you have looked at.
 7. No issue numbers and no code or debugging history in the notebook.
 8. Each literature claim in the Background is quoted or linked as in Citations.
+9. Figures use the base look, state aesthetics only with a reason, and use the library for their scenario; a selectable figure was dragged in a browser, or say you checked only the filter.
 
 ## Improving this skill
 
