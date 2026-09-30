@@ -395,6 +395,8 @@ step_stow() {
   #   kokoro-tts         the socket for the speech-dispatcher Kokoro voice
   #   awatcher           ActivityWatch sensor for asst track (WantedBy default;
   #                      hyprland.lua starts it once WAYLAND_DISPLAY is imported)
+  #   aw-watcher-claude  Claude Code session project/tokens (from aw-watchers)
+  #   aw-watcher-terminal kitty/tmux cwd (from aw-watchers; needs kitty listen_on)
   # Stow itself needs no session bus; a missing bus must not mark the whole
   # step failed after every package is already linked.
   local unit
@@ -403,7 +405,8 @@ step_stow() {
                 wallhelper-fetch.timer tip-daily.timer \
                 dash-collect.timer dash-llm.timer \
                 notification-log.service battery-logd.service \
-                swayosd-server.service kokoro-tts.socket awatcher.service; do
+                swayosd-server.service kokoro-tts.socket awatcher.service \
+                aw-watcher-claude.service aw-watcher-terminal.service; do
       systemctl --user cat "$unit" >/dev/null 2>&1 || continue
       systemctl --user is-enabled "$unit" >/dev/null 2>&1 && continue
       systemctl --user enable --now "$unit" >/dev/null 2>&1 && echo "  $unit: enabled"
