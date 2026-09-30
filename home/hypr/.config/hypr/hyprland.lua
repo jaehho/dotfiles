@@ -421,6 +421,27 @@ for i = 1, 9 do
     hl.bind(mainMod .. " + SHIFT + " .. i, hl.dsp.window.move({ workspace = i })) -- send window to workspace
 end
 
+-- Super+Shift+D: send window to the first free workspace. Free means id 1-10
+-- with no windows (a missing id counts). Super+N is 1-9 and Super+Shift+0 is
+-- the scratchpad, so this is also the only Super+Shift way to reach 10.
+-- Focus follows the window, matching Super+Shift+N.
+local function first_free_workspace()
+    for i = 1, 10 do
+        local ws = hl.get_workspace(i)
+        if ws == nil or (ws.windows or 0) == 0 then
+            return i
+        end
+    end
+end
+hl.bind(mainMod .. " + SHIFT + D", function()
+    local target = first_free_workspace()
+    if target == nil then
+        hl.notification.create({ text = "No free workspace", timeout = 1500, icon = "info" })
+        return
+    end
+    hl.dispatch(hl.dsp.window.move({ workspace = target }))
+end) -- send window to first free workspace
+
 -- Move all windows in active workspace to target workspace with mainMod + CTRL + [1-9]
 -- (0 is the scratchpad's row)
 for i = 1, 9 do
