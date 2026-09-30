@@ -65,6 +65,7 @@ The notebook is the log. A question notebook covers one question, two at most, i
 ```
 
 - The expectations come before the methods and results and are stated as they were posed. They are reasoning that warrants the experiments, not labeled hypotheses. Do not dress a post-hoc finding as an expectation; label exploratory results as exploratory.
+- When a filter decides which records count (quality, completeness, a proofread flag), run the main analysis on the records the question is about and show the unfiltered version beside it in the figures where it changes the conclusion.
 - Headings are plain and undated. No "Hypothesis", "Skeptic's case", "Decision", or "Next".
 - What follows the Introduction is methods, with no header. When one analysis maps to one expectation, interleave method and result.
 - Result cells state numbers with `mo.md(f"...")` from live values so a claim cannot drift from the data. The Discussion may quote numbers as of writing.
@@ -203,6 +204,7 @@ GitHub issues hold tasks, gotchas, decisions, and how a bug was found.
 
 - Explicit step-by-step code. No clever one-liners or deep helper chains.
 - Names say what they hold (`measurements`, `label_of`), not abbreviations.
+- Use the literature's words. Before naming a quantity, see what the papers you cite call it and use that word. Define each term once, where it first appears, and say there where you use it differently from the literature. Then keep one word per thing and one thing per word across prose, code names, column names, and figure labels.
 - Explanatory text is a markdown cell in complete sentences with transitions, not a comment at the top of a code cell. Introduce each definition, function, and figure with a markdown cell that says what it is for and what to look at. Comments stay for a choice at its site (a constant, a threshold) and stay short.
 - Provenance lives in names, docstrings, and constants; let the dependency graph show data flow.
 - Choice comments are short prose at the site of the choice: the real options and why this one; for open-ended knobs, what question the knob answers and a couple of concrete values; "arbitrary" when it is. No hard-wrapped comment lines.
