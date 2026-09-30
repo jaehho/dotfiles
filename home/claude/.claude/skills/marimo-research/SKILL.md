@@ -103,10 +103,43 @@ Bad: $S(R) = \{\, s : s.\mathrm{src} \in R \,\}$. Good: each record $s$ has a so
 Claims from the literature come from the user's Zotero library, not from memory (Zotero before web search).
 
 - Find the item with `zotero_search_items`, its highlights with `zotero_get_annotations`, and an unmarked passage with `zotero_read_pdf_pages`. Quote exactly; never paraphrase inside quotation marks.
-- Quote a source the way the user's `<leader>zq` does: a blockquote of the highlight, then `> — Author year, p. N · [PDF p. N](zotero://open-pdf/library/items/<attachment key>?page=N&annotation=<annotation key>) · [<doi>](https://doi.org/<doi>)`, then the user's annotation comment outside the quote, rewritten as complete sentences. No citekeys (Better BibTeX can rewrite them).
+- Quote a source as a blockquote of the highlight, then `> — Author year, p. N · <PDF button> · [<doi>](https://doi.org/<doi>)`, then the user's annotation comment outside the quote, rewritten as complete sentences. This is the user's `<leader>zq` shape with the PDF deep link opened from a button instead of a link. No citekeys (Better BibTeX can rewrite them).
+- Never put a `zotero://` URL in a markdown link. marimo's HTML sanitizer drops custom-scheme `href`s, so the click is dead. Open the PDF with `zotero_open` (setup below) and keep the same URL in a code span so it is still copyable into a browser.
 - A passage with no highlight gets the same block with `?page=N` and no `annotation=`; offer to highlight it in Zotero. Creating or changing annotations is a write to the user's library: ask first, and tag them `claude`.
 - In running text cite as `[Author et al. year](https://doi.org/<doi>)`. Put each quote beside the one claim it supports, in the Background.
 - If nothing in Zotero supports a claim, say so and do not cite it.
+
+`zotero_open` lives in the setup of any notebook that quotes. Move it to a shared module when a second notebook needs it.
+
+```python
+import subprocess
+
+def zotero_open(url: str, label: str) -> mo.ui.button:
+    """Button that opens a Zotero link from the kernel, not the page."""
+
+    def open_in_zotero(_click):
+        subprocess.Popen(
+            ["xdg-open", url],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return None
+
+    return mo.ui.button(label=label, on_click=open_in_zotero, tooltip=url)
+```
+
+A quote cell interpolates the button and the URL into the blockquote line:
+
+```python
+_url = "zotero://open-pdf/library/items/IDT2EG5W?page=1&annotation=AS2FBX8Q"
+mo.md(f"""
+> Here we characterize lobula columnar (LC) cells, a class of Drosophila VPNs that project to distinct central brain structures called optic glomeruli.
+>
+> — Wu et al. 2016, p. 1 · {zotero_open(_url, "PDF p. 1")} · [10.7554/eLife.21022](https://doi.org/10.7554/eLife.21022)
+
+`{_url}`
+""")
+```
 
 ## Issues
 
