@@ -88,8 +88,8 @@ end
 -- marimo discovery uses the local server registry
 -- (~/.local/state/marimo/servers). marimo only registers servers started
 -- with --no-token; that is also what keeps ?file= URLs free of a login
--- page. Open is not a toggle: each use reveals the notebook (xdg-open
--- focuses an existing tab with the same URL).
+-- page. Open is not a toggle: each use reveals the notebook in an
+-- existing window, or opens one.
 local function marimo_servers_dir()
   local state = vim.env.XDG_STATE_HOME
   if state and state ~= '' then
@@ -213,11 +213,71 @@ local function find_marimo_workspace(src)
   return best
 end
 
+local function title_has_basename(title, basename)
+  -- Basename match with word boundaries so plot.py does not hit myplot.py.
+  local init = 1
+  while true do
+    local s, e = title:find(basename, init, true)
+    if not s then
+      return false
+    end
+    local before = s == 1 or not title:sub(s - 1, s - 1):match '[%w_]'
+    local after = e >= #title or not title:sub(e + 1, e + 1):match '[%w_]'
+    if before and after then
+      return true
+    end
+    init = s + 1
+  end
+end
+
+-- Firefox does not focus an existing tab for an xdg-open URL; it opens
+-- another tab. One notebook per window, then hyprctl can find and focus
+-- it by title (marimo sets document.title to the file basename).
+local function focus_marimo_window(title_fragment)
+  local out = vim.system({ 'hyprctl', 'clients', '-j' }, { text = true }):wait()
+  local ok, clients = pcall(vim.json.decode, out.stdout or '')
+  if not ok or type(clients) ~= 'table' then
+    return false
+  end
+  for _, c in ipairs(clients) do
+    local title = type(c) == 'table' and c.title or ''
+    if type(title) == 'string' and title_has_basename(title, title_fragment) then
+      if c.address then
+        -- Hyprland Lua dispatchers (see hypr-waybar-window-click).
+        vim.system({
+          'hyprctl',
+          'dispatch',
+          ('hl.dsp.focus({ window = "address:%s" })'):format(c.address),
+        }, { text = true })
+        return true
+      end
+    end
+  end
+  return false
+end
+
+local function firefox_bin()
+  for _, bin in ipairs { 'firefox-developer-edition', 'firefox' } do
+    if vim.fn.executable(bin) == 1 then
+      return bin
+    end
+  end
+end
+
 local function open_marimo_workspace(server, src)
   local host = marimo_url_host(server.host)
   local file = server.file_key or src
   local url = ('http://%s:%d%s/?file=%s'):format(host, server.port, server.base_url or '', vim.uri_encode(file, true))
-  vim.fn.jobstart({ 'xdg-open', url }, { detach = true })
+  local title_fragment = vim.fs.basename(src)
+  if focus_marimo_window(title_fragment) then
+    return url
+  end
+  local bin = firefox_bin()
+  if bin then
+    vim.fn.jobstart({ bin, '--new-window', url }, { detach = true })
+  else
+    vim.fn.jobstart({ 'xdg-open', url }, { detach = true })
+  end
   return url
 end
 
