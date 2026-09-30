@@ -85,118 +85,138 @@ local function ensure_watchdog(py)
   end
 end
 
--- Returns has_edit, name: the `edit` token is present, and the path operand
--- after it (nil for a bare `edit`, which serves cwd).
-local function marimo_edit_name(cmd)
-  local tokens = vim.split(cmd, '%s+', { trimempty = true })
+-- marimo discovery uses the local server registry
+-- (~/.local/state/marimo/servers). marimo only registers servers started
+-- with --no-token; that is also what keeps ?file= URLs free of a login
+-- page. Open is not a toggle: each use reveals the notebook (xdg-open
+-- focuses an existing tab with the same URL).
+local function marimo_servers_dir()
+  local state = vim.env.XDG_STATE_HOME
+  if state and state ~= '' then
+    return state .. '/marimo/servers'
+  end
+  return vim.fn.expand '~/.local/state/marimo/servers'
+end
+
+local function marimo_registry()
+  local entries = {}
+  for name, kind in vim.fs.dir(marimo_servers_dir()) do
+    if kind == 'file' and name:match '%.json$' then
+      local path = marimo_servers_dir() .. '/' .. name
+      local lines = vim.fn.readfile(path)
+      local ok, data = pcall(vim.json.decode, table.concat(lines, '\n'))
+      if ok and type(data) == 'table' and type(data.port) == 'number' and type(data.pid) == 'number' then
+        if vim.uv.kill(data.pid, 0) == 0 then
+          entries[#entries + 1] = data
+        end
+      end
+    end
+  end
+  return entries
+end
+
+local function marimo_url_host(host)
+  if not host or host == '*' or host == '0.0.0.0' or host == '::' or host == '' then
+    return '127.0.0.1'
+  end
+  if host:find ':' and not host:find '^%[' then
+    return '[' .. host .. ']'
+  end
+  return host
+end
+
+-- What the server serves, from the registered pid: directory operand of
+-- `marimo edit [NAME]`, or the single file. Registry entries do not carry
+-- a root, and the workspace_files API wants a skew-protection token.
+local function marimo_workspace_root(server)
+  local proc = '/proc/' .. server.pid
+  local fd = vim.uv.fs_open(proc .. '/cmdline', 'r', 0)
+  if not fd then
+    return nil
+  end
+  -- /proc files report size 0; read a fixed cap.
+  local data = vim.uv.fs_read(fd, 65536, 0) or ''
+  vim.uv.fs_close(fd)
+  local tokens = vim.split((data:gsub('%z', ' ')), '%s+', { trimempty = true })
+  local cwd = vim.uv.fs_realpath(proc .. '/cwd') or ''
+
+  local name
   for i, t in ipairs(tokens) do
     if t == 'edit' then
       local j = i + 1
       while j <= #tokens do
         local a = tokens[j]
         if a:sub(1, 1) ~= '-' then
-          return true, a
+          name = a
+          break
         end
-        if a:match '^%-%-%w+=' then
-          j = j + 1
-        elseif a == '-p' or a == '--port' or a == '--host' or a == '--proxy' or a == '--base-url'
-          or a == '--token-password' or a == '--token-password-file' or a == '--allow-origins'
-        then
-          j = j + 2
-        else
-          j = j + 1
+        if not a:match '^%-%-%w+=' then
+          local takes_value = a == '-p'
+            or a == '--port'
+            or a == '--host'
+            or a == '--proxy'
+            or a == '--base-url'
+            or a == '--token-password'
+            or a == '--token-password-file'
+            or a == '--allow-origins'
+          if takes_value then
+            j = j + 1
+          end
         end
+        j = j + 1
       end
-      return true, nil
+      break
     end
   end
-  return false, nil
+
+  if not name then
+    return cwd, nil
+  end
+  local abs = name:sub(1, 1) == '/' and vim.fs.normalize(name) or vim.fs.normalize(cwd .. '/' .. name)
+  local st = vim.uv.fs_stat(abs)
+  if st and st.type == 'directory' then
+    return abs, nil
+  end
+  return nil, abs
 end
 
--- Listening TCP port for pid, preferring 127.0.0.1.
-local function marimo_listen_port(pid)
-  local out = vim.system({ 'ss', '-ltnp' }, { text = true }):wait()
-  local fallback
-  for line in (out.stdout or ''):gmatch '[^\r\n]+' do
-    if line:find('pid=' .. pid .. ',', 1, true) then
-      local addr = line:match '^%S+%s+%d+%s+%d+%s+(%S+)'
-      local host, port
-      if addr then
-        host, port = addr:match '^(.+):(%d+)$'
-      end
-      if port then
-        if host == '*' or host == '0.0.0.0' or host == '127.0.0.1' then
-          return '127.0.0.1', tonumber(port)
-        end
-        fallback = { host = host, port = tonumber(port) }
-      end
-    end
-  end
-  if fallback then
-    return fallback.host, fallback.port
-  end
-end
-
--- A live `marimo edit` whose workspace contains src.
--- Directory workspaces (`edit --watch notebooks/`) beat single-file servers.
+-- A registered marimo server that covers src, deepest root first.
 local function find_marimo_workspace(src)
   src = vim.fs.normalize(src)
-  local out = vim.system({ 'pgrep', '-af', 'marimo' }, { text = true }):wait()
   local best, best_score = nil, -1
-
-  for line in (out.stdout or ''):gmatch '[^\r\n]+' do
-    local pid, cmd = line:match '^(%d+) (.+)$'
-    local has_edit, name = false, nil
-    if pid then
-      has_edit, name = marimo_edit_name(cmd)
-    end
-    -- uv wrapper is fine; it carries the same argv. A listen port picks the
-    -- real server over the wrapper.
-    if has_edit then
-      local host, port = marimo_listen_port(tonumber(pid))
-      if port then
-        local cwd = vim.uv.fs_realpath('/proc/' .. pid .. '/cwd') or ''
-        local workspace_dir, file_arg
-        if name and name ~= '' then
-          local abs = name:sub(1, 1) == '/' and vim.fs.normalize(name) or vim.fs.normalize(cwd .. '/' .. name)
-          local st = vim.uv.fs_stat(abs)
-          if st and st.type == 'directory' then
-            workspace_dir = abs
-          else
-            file_arg = abs
-          end
-        else
-          workspace_dir = cwd
-        end
-
-        local score = -1
-        if file_arg and file_arg == src then
-          score = 100
-        elseif workspace_dir and (src == workspace_dir or vim.startswith(src, workspace_dir .. '/')) then
-          score = #workspace_dir
-        end
-        if score > best_score then
-          best_score = score
-          best = { host = host, port = port, dir = workspace_dir }
-        end
+  for _, server in ipairs(marimo_registry()) do
+    local root, only_file = marimo_workspace_root(server)
+    local score = -1
+    local file_key = src
+    if only_file then
+      if only_file == src then
+        score = 1
       end
+    elseif root and (src == root or vim.startswith(src, root .. '/')) then
+      score = #root
+      file_key = src:sub(#root + 2)
+      if file_key == '' then
+        file_key = src
+      end
+    end
+    if score > best_score then
+      best_score = score
+      best = {
+        host = server.host,
+        port = server.port,
+        base_url = server.base_url or '',
+        root = root or '',
+        file_key = file_key,
+      }
     end
   end
   return best
 end
 
 local function open_marimo_workspace(server, src)
-  -- Directory workspaces list files relative to the served dir; the
-  -- server also accepts absolute paths inside that dir.
-  local file = src
-  if server.dir and vim.startswith(src, server.dir .. '/') then
-    file = src:sub(#server.dir + 2)
-  end
-  local host = server.host
-  if host:find ':' and not host:find '^%[' then
-    host = '[' .. host .. ']'
-  end
-  local url = ('http://%s:%d/?file=%s'):format(host, server.port, vim.uri_encode(file, true))
+  local host = marimo_url_host(server.host)
+  local file = server.file_key or src
+  local url = ('http://%s:%d%s/?file=%s'):format(host, server.port, server.base_url or '', vim.uri_encode(file, true))
   vim.fn.jobstart({ 'xdg-open', url }, { detach = true })
   return url
 end
@@ -237,6 +257,7 @@ function M.toggle()
       local src = vim.api.nvim_buf_get_name(0)
       local bufnr = vim.api.nvim_get_current_buf()
 
+      -- A pane we spawned is ours to toggle off.
       if vim.b.marimo_pane then
         vim.system { 'tmux', 'kill-pane', '-t', vim.b.marimo_pane }
         vim.b.marimo_pane = nil
@@ -244,17 +265,12 @@ function M.toggle()
         return
       end
 
-      -- Attach to a live `marimo edit` workspace (e.g. `uv run marimo edit
-      -- --watch notebooks/`) instead of starting another server on a new port.
-      if vim.b.marimo_attached then
-        vim.b.marimo_attached = nil
-        vim.notify('Preview stopped (existing marimo workspace left running)', vim.log.levels.INFO)
-        return
-      end
+      -- Live workspace: reveal/switch, never stop. Stable ?file= URL so a
+      -- second press focuses the tab instead of opening another one.
       local server = find_marimo_workspace(src)
       if server then
-        vim.b.marimo_attached = open_marimo_workspace(server, src)
-        vim.notify(('Using marimo workspace on :%d'):format(server.port), vim.log.levels.INFO)
+        open_marimo_workspace(server, src)
+        vim.notify(('Opened in marimo workspace :%d'):format(server.port), vim.log.levels.INFO)
         return
       end
 
@@ -264,8 +280,11 @@ function M.toggle()
       local venv_python = root .. '/.venv/bin/python'
       local py = vim.uv.fs_stat(venv_python) and venv_python or 'python3'
       ensure_watchdog(py)
-      -- edit --watch: notebook UI (code cells visible) + reload on nvim saves
-      local cmd = vim.fn.shellescape(marimo_bin) .. ' edit --watch ' .. vim.fn.shellescape(src)
+      -- edit --watch: notebook UI + reload on nvim saves. --no-token: no login
+      -- page, and the server registers for the next find_marimo_workspace.
+      local cmd = vim.fn.shellescape(marimo_bin)
+        .. ' edit --watch --no-token '
+        .. vim.fn.shellescape(src)
       local result = vim.system {
         'tmux', 'split-window', '-v', '-d', '-l', '10', '-P', '-F', '#{pane_id}',
         cmd,
@@ -277,9 +296,6 @@ function M.toggle()
         callback = function()
           if vim.b[bufnr].marimo_pane then
             vim.system { 'tmux', 'kill-pane', '-t', vim.b[bufnr].marimo_pane }
-          end
-          if vim.b[bufnr].marimo_attached then
-            vim.b[bufnr].marimo_attached = nil
           end
         end,
       })
