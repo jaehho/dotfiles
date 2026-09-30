@@ -40,6 +40,7 @@ A step used once is a cell. Make it an `@app.function` only when it is used from
 
 - Imports, including cross-notebook imports, go in `with app.setup:`. The setup cell may not reference any other cell's variables.
 - One fact per cell. Use real displays: a DataFrame as the last expression, a figure, `mo.md` with numbers interpolated. Do not pack results with `mo.vstack` or dicts.
+- Do not truncate a display with `.head()` or `.tail()`: marimo pages a DataFrame and adds column summaries, which say more than the first rows. Sort or filter only when the selection is itself the result.
 - Cell-local temporaries, including loop variables, are `_`-prefixed; never define the same public name in two cells.
 - Never mutate an object another cell defined; marimo does not rerun dependents on mutation. Build a new value under a new name.
 - Markdown cells may be `hide_code=True`; Python cells keep code visible.
@@ -48,28 +49,28 @@ A step used once is a cell. Make it an `@app.function` only when it is used from
 
 ## Question notebooks follow the scientific method
 
-The notebook is the log. Each question notebook holds one cycle, at most two, in order:
+The notebook is the log. A question notebook covers one question, two at most, in this order:
 
 ```
 # Title
-Short context: what is studied, scope (subset, dataset version), terms.
-
-## Cycle 1 (YYYY-MM-DD): <short question>
-### Question
-### Hypothesis     who posed it and when; numbered predictions that could fail
-### Methods        data, definitions, diagrams, reused functions
-### Results        outputs, each claim interpolated from live values
-### Discussion     prediction by prediction: holds or fails, skeptic's case, conclusion, decision
-### Next           hypotheses for the next cycle, each with a test and what would refute it
+## Introduction
+### Question        what is asked and the terms it uses
+### Background      what is known, why the question matters, the reasoning behind the expected answer, and the design; expectations that could fail
+(methods, no header: data, definitions, diagrams, reused functions, each under its own ## section when it needs one)
+## Results
+## Discussion        what the results say, expectation by expectation
+### Limitations      what else could produce the result and what it does not show
+### Open questions  follow-up questions, each with a test and the outcome that would refute it
 ```
 
-- The hypothesis and its predictions come before the methods and are stated as they were posed. Do not dress a post-hoc finding as an a-priori prediction; label exploratory results as exploratory.
-- When one analysis maps to one prediction, interleave method and result under `### Methods and results`, one analysis at a time.
-- Result cells state numbers with `mo.md(f"...")` from live values so a claim cannot drift from the data. The Discussion may quote numbers as of the cycle's date.
-- Check every claim in the Discussion against the rendered output. A table you did not look at is not evidence; add the cell that shows it.
-- A new cycle is a new `## Cycle n (date)` section, or a new notebook when the question changes. Earlier cycles are not rewritten; a later cycle corrects an earlier one.
-- Link across notebooks by name when one result bears on another's conclusion, and note it in both.
-- Scientific history (what we predicted, found, and now think) belongs here. Code and debugging history goes in issues.
+- The expectations come before the methods and results and are stated as they were posed. They are reasoning that warrants the experiments, not labeled hypotheses. Do not dress a post-hoc finding as an expectation; label exploratory results as exploratory.
+- Headings are plain and undated. No "Hypothesis", "Skeptic's case", "Decision", or "Next".
+- What follows the Introduction is methods, with no header. When one analysis maps to one expectation, interleave method and result.
+- Result cells state numbers with `mo.md(f"...")` from live values so a claim cannot drift from the data. The Discussion may quote numbers as of writing.
+- Check every claim in the Discussion against the rendered output. A table or figure you did not look at is not evidence; add the cell that shows it.
+- A new question is a new notebook. Earlier conclusions are not rewritten; a later notebook corrects an earlier one and says so in both.
+- Link across notebooks by name when one result bears on another's conclusion.
+- Scientific history (what we expected, found, and now think) belongs here. Code and debugging history goes in issues.
 
 ## Diagrams
 
@@ -79,6 +80,7 @@ When a definition compares two quantities or describes a structure (an aggregati
 - Build the toy input in the cell and compute the labels with the notebook's own functions, so the picture cannot disagree with the code. A single-use diagram is drawn inline in its cell, not in a function.
 - Pick toy values that make the distinction visible: the case where two definitions disagree, or where excluded context would change the answer.
 - One color per role, gray for context the definition excludes. Colors are setup constants with their roles in a comment.
+- Show the context the definition leaves out, not only what it counts: units of another class, contacts it ignores (dashed), and a unit that connects to several targets. Use the fewest units that can carry all of that.
 - Follow it with a one-line interpolated caption that says what the toy example shows.
 
 ## Math
@@ -128,7 +130,7 @@ Tests guard what breaks silently and is cheap to check. They do not police style
 2. `python notebooks/<file>.py` runs headless without fetching. Open it in `marimo edit` and look at the rendered cells, or say you only ran it headless.
 3. Each literal you touched (paths, ids, thresholds) has one definition.
 4. Functions exist only where reused; single-use steps are cells.
-5. Question notebook: question, hypothesis with predictions, methods, results, discussion, next, in that order; the discussion matches the rendered outputs.
+5. Question notebook: introduction (question, background with expectations), methods, results, discussion (limitations, open questions), in that order; the discussion matches the rendered outputs.
 6. Each `$$...$$` is research-grade; each definition that compares quantities or describes a structure has a diagram you have looked at.
 7. No issue numbers and no code or debugging history in the notebook.
 
