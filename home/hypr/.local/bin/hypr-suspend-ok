@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# hypridle condition_cmd for the idle-suspend listener. Exit 0 allows
+# `systemctl suspend-then-hibernate`; non-zero defers it.
+#
+# Defer while a Claude session is up and the lid is open, so a long turn is
+# not cut by the idle timer. Lid close is logind's HandleLidSwitch and is
+# not gated here: closing the lid still suspends. Matches `claude` and
+# `claude-open` (the latter execs into claude, so this is belt and braces).
+
+if pgrep -x claude >/dev/null || pgrep -x claude-open >/dev/null; then
+    while read -r _ state; do
+        [[ $state == open ]] && exit 1
+    done < <(cat /proc/acpi/button/lid/*/state 2>/dev/null)
+fi
+exit 0
