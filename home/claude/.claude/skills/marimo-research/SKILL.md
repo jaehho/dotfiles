@@ -40,6 +40,7 @@ A step used once is a cell. Make it an `@app.function` only when it is used from
 
 - Imports, including cross-notebook imports, go in `with app.setup:`. The setup cell may not reference any other cell's variables.
 - One fact per cell. Use real displays: a DataFrame as the last expression, a figure, `mo.md` with numbers interpolated. Do not pack results with `mo.vstack` or dicts.
+- Prefer a figure to a table. Use a table for exact values a reader will look up; show distributions, comparisons, and fits (a slope, a cutoff) drawn on the data.
 - Do not truncate a display with `.head()` or `.tail()`: marimo pages a DataFrame and adds column summaries, which say more than the first rows. Sort or filter only when the selection is itself the result.
 - Cell-local temporaries, including loop variables, are `_`-prefixed; never define the same public name in two cells.
 - Never mutate an object another cell defined; marimo does not rerun dependents on mutation. Build a new value under a new name.
@@ -70,6 +71,7 @@ The notebook is the log. A question notebook covers one question, two at most, i
 - Check every claim in the Discussion against the rendered output. A table or figure you did not look at is not evidence; add the cell that shows it.
 - A new question is a new notebook. Earlier conclusions are not rewritten; a later notebook corrects an earlier one and says so in both.
 - Link across notebooks by name when one result bears on another's conclusion.
+- Claims from the literature in the Background are cited as in Citations.
 - Scientific history (what we expected, found, and now think) belongs here. Code and debugging history goes in issues.
 
 ## Diagrams
@@ -96,6 +98,16 @@ Display math is a definition or a claim, never decoration. A reader who takes th
 
 Bad: $S(R) = \{\, s : s.\mathrm{src} \in R \,\}$. Good: each record $s$ has a source $\mathrm{src}(s) \in U$; for $R \subseteq U$ define $S(R) = \{\, s : \mathrm{src}(s) \in R \,\}$, the records that start in $R$.
 
+## Citations
+
+Claims from the literature come from the user's Zotero library, not from memory (Zotero before web search).
+
+- Find the item with `zotero_search_items`, its highlights with `zotero_get_annotations`, and an unmarked passage with `zotero_read_pdf_pages`. Quote exactly; never paraphrase inside quotation marks.
+- Quote a source the way the user's `<leader>zq` does: a blockquote of the highlight, then `> — Author year, p. N · [PDF p. N](zotero://open-pdf/library/items/<attachment key>?page=N&annotation=<annotation key>) · [<doi>](https://doi.org/<doi>)`, then the user's annotation comment outside the quote, rewritten as complete sentences. No citekeys (Better BibTeX can rewrite them).
+- A passage with no highlight gets the same block with `?page=N` and no `annotation=`; offer to highlight it in Zotero. Creating or changing annotations is a write to the user's library: ask first, and tag them `claude`.
+- In running text cite as `[Author et al. year](https://doi.org/<doi>)`. Put each quote beside the one claim it supports, in the Background.
+- If nothing in Zotero supports a claim, say so and do not cite it.
+
 ## Issues
 
 GitHub issues hold tasks, gotchas, decisions, and how a bug was found.
@@ -108,6 +120,7 @@ GitHub issues hold tasks, gotchas, decisions, and how a bug was found.
 
 - Explicit step-by-step code. No clever one-liners or deep helper chains.
 - Names say what they hold (`measurements`, `label_of`), not abbreviations.
+- Explanatory text is a markdown cell in complete sentences with transitions, not a comment at the top of a code cell. Introduce each definition, function, and figure with a markdown cell that says what it is for and what to look at. Comments stay for a choice at its site (a constant, a threshold) and stay short.
 - Provenance lives in names, docstrings, and constants; let the dependency graph show data flow.
 - Choice comments are short prose at the site of the choice: the real options and why this one; for open-ended knobs, what question the knob answers and a couple of concrete values; "arbitrary" when it is. No hard-wrapped comment lines.
 
@@ -133,6 +146,7 @@ Tests guard what breaks silently and is cheap to check. They do not police style
 5. Question notebook: introduction (question, background with expectations), methods, results, discussion (limitations, open questions), in that order; the discussion matches the rendered outputs.
 6. Each `$$...$$` is research-grade; each definition that compares quantities or describes a structure has a diagram you have looked at.
 7. No issue numbers and no code or debugging history in the notebook.
+8. Each literature claim in the Background is quoted or linked as in Citations.
 
 ## Improving this skill
 
