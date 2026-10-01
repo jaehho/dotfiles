@@ -41,12 +41,21 @@ from gi.repository import Gdk, Gio, GLib, Gtk, Pango, PangoCairo
 
 
 def load_speaker_measure():
-    """speaker-measure is a script rather than a package, so load it by path."""
+    """speaker-measure is a script rather than a package, so load it by path.
+
+    Bytecode is off: a .pyc next to the script lands inside the stow package
+    and collides with the same relative path under home/bin.
+    """
     path = Path(__file__).resolve().parent / "speaker-measure"
     loader = importlib.machinery.SourceFileLoader("speaker_measure", str(path))
     module = importlib.util.module_from_spec(
         importlib.util.spec_from_loader(loader.name, loader))
-    loader.exec_module(module)
+    prev = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = prev
     return module
 
 
