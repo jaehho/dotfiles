@@ -3,11 +3,13 @@
 
 Not a browser. `<leader>tp` asks this surface to show
 `http://host:port/?file=...` for a registered `marimo edit --no-token`
-server. A second call navigates and raises the same window.
+server. Each notebook stays in a hidden WebView, so switching is a
+visibility flip, not a reload.
 
 usage: marimo-view URL
 """
 
+import os
 import sys
 
 import gi
@@ -16,7 +18,14 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("WebKit2", "4.1")
 from gi.repository import Gio, GLib, Gtk, WebKit2  # noqa: E402
 
-APP_ID = "dev.jaeho.marimo-view"
+# D-Bus well-known names cannot contain hyphens; keep this in sync with
+# speaker-eq / hypr-settings-menu.
+APP_ID = "dev.jaeho.marimoview"
+MAX_PAGES = 12
+
+
+def _page_key(url):
+    return (url or "").split("#", 1)[0].rstrip("/") or url
 
 
 class App(Gtk.Application):
@@ -26,43 +35,135 @@ class App(Gtk.Application):
             flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
         )
         self.window = None
-        self.webview = None
+        self.stack = None
+        self.context = None
+        self.pages = {}
+        self.order = []
+        self.last_url = None
+
+    def do_startup(self):
+        Gtk.Application.do_startup(self)
+        # Firefox gets its own text path; match the usual Xft antialias settings
+        # so WebKitGTK is not the odd, aliased one.
+        settings = Gtk.Settings.get_default()
+        if settings is not None:
+            settings.set_property("gtk-xft-antialias", 1)
+            settings.set_property("gtk-xft-hinting", 1)
+            settings.set_property("gtk-xft-hintstyle", "hintslight")
+            settings.set_property("gtk-xft-rgba", "rgb")
+
+        cache = os.path.join(GLib.get_user_cache_dir(), "marimo-view")
+        os.makedirs(cache, exist_ok=True)
+        try:
+            manager = WebKit2.WebsiteDataManager(
+                base_cache_directory=cache,
+                base_data_directory=cache,
+            )
+            self.context = WebKit2.WebContext.new_with_website_data_manager(manager)
+        except (TypeError, AttributeError):
+            self.context = WebKit2.WebContext.get_default()
 
     def do_command_line(self, command_line):
-        args = list(command_line.get_arguments())[1:]
-        url = args[0] if args else None
+        # argv may include the program name or not, depending on the caller.
+        url = None
+        for arg in command_line.get_arguments():
+            if isinstance(arg, bytes):
+                arg = arg.decode()
+            if arg.startswith(("http://", "https://")):
+                url = arg
+                break
         if url is None and self.window is None:
             sys.stderr.write("usage: marimo-view URL\n")
-            return 1
-        if url is not None and not url.startswith(("http://", "https://")):
-            sys.stderr.write(f"marimo-view: not an http URL: {url}\n")
             return 1
 
         if self.window is None:
             self._build_window()
-        if url is not None and not _same_page(self.webview.get_uri(), url):
-            self.webview.load_uri(url)
+        if url is not None:
+            self.last_url = url
+        target = url or self.last_url
+        if target is not None:
+            self._show_url(target)
         self.window.present()
         return 0
 
     def _build_window(self):
-        self.webview = WebKit2.WebView()
-        self.webview.connect("notify::title", self._on_title)
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.NONE)
         self.window = Gtk.ApplicationWindow(application=self, title="marimo")
         self.window.set_default_size(1280, 900)
-        self.window.add(self.webview)
+        self.window.add(self.stack)
         self.window.connect("destroy", lambda _w: self.quit())
-        self.webview.show_all()
+        self.stack.show_all()
+
+    def _new_webview(self):
+        settings = WebKit2.Settings()
+        settings.set_hardware_acceleration_policy(WebKit2.HardwareAccelerationPolicy.ALWAYS)
+        settings.set_enable_smooth_scrolling(True)
+        try:
+            settings.set_enable_accelerated_2d_canvas(True)
+            settings.set_enable_2d_canvas_acceleration(True)
+        except AttributeError:
+            pass
+        webview = WebKit2.WebView.new_with_context(self.context)
+        webview.set_settings(settings)
+        webview.connect("notify::title", self._on_title)
+        webview.connect("load-changed", self._on_load_changed)
+        return webview
 
     def _on_title(self, webview, _pspec):
-        title = webview.get_title()
-        self.window.set_title(title if title else "marimo")
+        if self.stack.get_visible_child() is webview:
+            self.window.set_title(webview.get_title() or "marimo")
 
+    def _on_load_changed(self, webview, event):
+        if event == WebKit2.LoadEvent.FINISHED and self.stack.get_visible_child() is webview:
+            self.window.set_title(webview.get_title() or "marimo")
 
-def _same_page(current, wanted):
-    if not current:
-        return False
-    return current.rstrip("/") == wanted.rstrip("/")
+    @staticmethod
+    def _title_for(url, webview=None):
+        if webview is not None:
+            title = webview.get_title()
+            if title:
+                return title
+        if "file=" in (url or ""):
+            return url.split("file=", 1)[1].split("&", 1)[0] or "marimo"
+        return "marimo"
+
+    def _show_url(self, url):
+        key = _page_key(url)
+        self._touch(key)
+        if key in self.pages:
+            webview = self.pages[key]
+            self.stack.set_visible_child(webview)
+            self.window.set_title(self._title_for(url, webview))
+            self._evict()
+            return
+        webview = self._new_webview()
+        self.pages[key] = webview
+        self.stack.add_named(webview, key)
+        self.stack.set_visible_child(webview)
+        webview.show_all()
+        self.window.set_title(self._title_for(url))
+        webview.load_uri(url)
+        self._evict()
+
+    def _touch(self, key):
+        if key in self.order:
+            self.order.remove(key)
+        self.order.append(key)
+
+    def _evict(self):
+        visible = self.stack.get_visible_child()
+        while len(self.pages) > MAX_PAGES:
+            victim = None
+            for key in self.order:
+                if self.pages[key] is not visible:
+                    victim = key
+                    break
+            if victim is None:
+                break
+            webview = self.pages.pop(victim)
+            self.order.remove(victim)
+            self.stack.remove(webview)
+            webview.destroy()
 
 
 def main():
