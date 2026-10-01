@@ -4,6 +4,9 @@
 return {
   {
     'selimacerbas/markdown-preview.nvim',
+    -- Distinct from iamcco/markdown-preview.nvim (lang.markdown); lazy keys
+    -- by the trailing name and would otherwise merge the two.
+    name = 'markdown-preview-selimacerbas',
     cmd = { 'MarkdownPreview', 'MarkdownPreviewRefresh', 'MarkdownPreviewStop' },
     ft = 'markdown',
     dependencies = { 'selimacerbas/live-server.nvim' },

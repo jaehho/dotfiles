@@ -20,6 +20,26 @@ require('lazy').setup {
     { import = 'lazyvim.plugins.extras.coding.mini-surround' },
     { import = 'lazyvim.plugins.extras.dap.core' },
     { import = 'lazyvim.plugins.extras.lang.python' },
+    { import = 'lazyvim.plugins.extras.util.mini-hipatterns' },
+
+    -- Config formats in this repo: SchemaStore + yamlls / jsonls / taplo
+    { import = 'lazyvim.plugins.extras.lang.json' },
+    { import = 'lazyvim.plugins.extras.lang.yaml' },
+    { import = 'lazyvim.plugins.extras.lang.toml' },
+
+    -- Editing: yank ring, smart increment
+    { import = 'lazyvim.plugins.extras.coding.yanky' },
+    { import = 'lazyvim.plugins.extras.editor.dial' },
+
+    -- Trials against the live stack. Overrides live in plugins/trials.lua;
+    -- drop both to return to the old path.
+    { import = 'lazyvim.plugins.extras.lang.markdown' },
+    { import = 'lazyvim.plugins.extras.lang.typst' },
+    { import = 'lazyvim.plugins.extras.lang.tex' },
+    { import = 'lazyvim.plugins.extras.util.gh' },
+    { import = 'lazyvim.plugins.extras.util.octo' },
+    { import = 'lazyvim.plugins.extras.ai.claudecode' },
+
     { import = 'plugins' },
   },
   defaults = {
