@@ -29,30 +29,10 @@ return {
   },
 
   { -- ActivityWatch: file, language, git branch, project → aw-server :5600
+    -- Record every buffer as-is (including Claude temps). Classification
+    -- belongs in awq, not a drop at the watcher.
     'lowitea/aw-watcher.nvim',
     event = 'VeryLazy',
     opts = {},
-    config = function(_, opts)
-      -- Skip Claude temp dumps and empty/help buffers so they do not land in
-      -- the project bucket (they were showing up as champalimaud "coding").
-      local function polluted()
-        local f = vim.fn.expand('%p')
-        if f == '' or vim.bo.buftype ~= '' then
-          return true
-        end
-        return f:find('/tmp/claude-', 1, true) ~= nil
-          or f:find('/tmp/claude-1000/', 1, true) ~= nil
-          or vim.startswith(f, 'health://')
-      end
-      local aw = require('aw_watcher')
-      local orig = aw.heartbeat
-      aw.heartbeat = function()
-        if polluted() then
-          return
-        end
-        orig()
-      end
-      aw.setup(opts)
-    end,
   },
 }
