@@ -222,11 +222,11 @@ smart-splits. `<C-w>h/j/k/l` resize instead of moving.
 ## One key previews whatever you're editing
 
 `<leader>tp` dispatches on filetype: typst and LaTeX compile and open in
-zathura, markdown opens the browser preview, marimo notebooks show in
-`marimo-view` (one webview; reuses a `marimo edit --watch --no-token`
-workspace when one is registered, else starts `edit --watch --no-token
---headless` in tmux and installs `watchdog` into the project venv if
-missing), Python starts the debugger.
+zathura, markdown opens the browser preview, marimo notebooks open in
+Firefox (reuses a `marimo edit --watch --no-token` workspace when one is
+registered; else starts `edit --watch --no-token --headless` in tmux and
+installs `watchdog` into the project venv if missing), Python starts the
+debugger.
 
 ## Debug from the editor
 
