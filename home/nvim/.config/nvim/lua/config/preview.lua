@@ -172,66 +172,13 @@ local function find_marimo_workspace(src)
   return best
 end
 
--- Firefox is the render surface (WebKitGTK upsampled marimo's PNG figures).
--- One window per notebook; raise by title so a second <leader>tp does not
--- spawn another tab. marimo-view (home/laptop) is an unused WebKit experiment.
-local function title_has_basename(title, basename)
-  local init = 1
-  while true do
-    local s, e = title:find(basename, init, true)
-    if not s then
-      return false
-    end
-    local before = s == 1 or not title:sub(s - 1, s - 1):match '[%w_]'
-    local after = e >= #title or not title:sub(e + 1, e + 1):match '[%w_]'
-    if before and after then
-      return true
-    end
-    init = s + 1
-  end
-end
-
-local function focus_marimo_window(title_fragment)
-  local out = vim.system({ 'hyprctl', 'clients', '-j' }, { text = true }):wait()
-  local ok, clients = pcall(vim.json.decode, out.stdout or '')
-  if not ok or type(clients) ~= 'table' then
-    return false
-  end
-  for _, c in ipairs(clients) do
-    local title = type(c) == 'table' and c.title or ''
-    if type(title) == 'string' and title_has_basename(title, title_fragment) and c.address then
-      vim.system({
-        'hyprctl',
-        'dispatch',
-        ('hl.dsp.focus({ window = "address:%s" })'):format(c.address),
-      }, { text = true })
-      return true
-    end
-  end
-  return false
-end
-
-local function firefox_bin()
-  for _, bin in ipairs { 'firefox-developer-edition', 'firefox' } do
-    if vim.fn.executable(bin) == 1 then
-      return bin
-    end
-  end
-end
-
+-- Open the notebook in the default browser (Firefox tab). marimo-view
+-- (home/laptop) is an unused WebKit experiment.
 local function show_marimo(server, src)
   local host = marimo_url_host(server.host)
   local file = server.file_key or src
   local url = ('http://%s:%d%s/?file=%s'):format(host, server.port, server.base_url or '', vim.uri_encode(file, true))
-  if focus_marimo_window(vim.fs.basename(src)) then
-    return url
-  end
-  local bin = firefox_bin()
-  if bin then
-    vim.fn.jobstart({ bin, '--new-window', url }, { detach = true })
-  else
-    vim.fn.jobstart({ 'xdg-open', url }, { detach = true })
-  end
+  vim.fn.jobstart({ 'xdg-open', url }, { detach = true })
   return url
 end
 
