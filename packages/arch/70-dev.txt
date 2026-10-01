@@ -10,6 +10,7 @@ git-filter-repo
 github-cli
 go
 google-cloud-cli
+graphviz
 jdk-openjdk
 julia
 lua-language-server
