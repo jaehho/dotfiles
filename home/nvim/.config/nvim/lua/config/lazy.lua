@@ -31,12 +31,10 @@ require('lazy').setup {
     { import = 'lazyvim.plugins.extras.coding.yanky' },
     { import = 'lazyvim.plugins.extras.editor.dial' },
 
-    -- Trials against the live stack. Overrides live in plugins/trials.lua;
-    -- drop both to return to the old path.
+    -- render-markdown, typst-preview, vimtex, octo, Claude Code bridge
     { import = 'lazyvim.plugins.extras.lang.markdown' },
     { import = 'lazyvim.plugins.extras.lang.typst' },
     { import = 'lazyvim.plugins.extras.lang.tex' },
-    { import = 'lazyvim.plugins.extras.util.gh' },
     { import = 'lazyvim.plugins.extras.util.octo' },
     { import = 'lazyvim.plugins.extras.ai.claudecode' },
 

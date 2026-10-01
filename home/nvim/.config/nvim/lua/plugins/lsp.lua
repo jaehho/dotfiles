@@ -36,6 +36,9 @@ return {
         sh = { 'shfmt' },
         bash = { 'shfmt' },
         typst = { 'typstyle' },
+        -- lang.markdown wants prettier too; it reflows prose. lint/toc only.
+        markdown = { 'markdownlint-cli2', 'markdown-toc' },
+        ['markdown.mdx'] = { 'markdownlint-cli2', 'markdown-toc' },
       },
     },
   },

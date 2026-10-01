@@ -1,13 +1,14 @@
 -- UI extras beyond LazyVim's lualine/bufferline/snacks.indent.
 return {
-  { -- Render markdown inline in Neovim
-    'OXY2DEV/markview.nvim',
-    lazy = false,
+  { -- Inline markdown via lang.markdown's render-markdown. The extra mutes
+    -- checkboxes and heading icons; put those back.
+    'MeanderingProgrammer/render-markdown.nvim',
     opts = {
-      preview = {
-        hybrid_modes = { 'n', 'i' },
-        filetypes = { 'markdown', 'quarto', 'rmd' },
+      heading = {
+        sign = false,
+        icons = { '󰲡 ', '󰲣 ', '󰲥 ', '󰲧 ', '󰲩 ', '󰲫 ' },
       },
+      checkbox = { enabled = true },
     },
   },
 }

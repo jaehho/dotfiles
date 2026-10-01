@@ -1,47 +1,6 @@
--- Unified preview toggle: dispatches by filetype (typst, tex, markdown, marimo, python, html)
+-- Unified preview toggle: dispatches by filetype (typst, tex, markdown, marimo, python, html).
+-- Typst/TeX PDF-in-zathura is gone; typst-preview and vimtex own those.
 local M = {}
-
-local function stop_pdf_preview(bufnr)
-  local ok, preview = pcall(function() return vim.b[bufnr].pdf_preview end)
-  if not ok or not preview then return end
-  if preview.pane_id and preview.pane_id ~= '' then
-    vim.system { 'tmux', 'kill-pane', '-t', preview.pane_id }
-  end
-  if preview.zathura_id then
-    pcall(vim.fn.jobstop, preview.zathura_id)
-  end
-  pcall(function() vim.b[bufnr].pdf_preview = nil end)
-  pcall(vim.api.nvim_del_augroup_by_name, 'PdfPreview' .. bufnr)
-end
-
-local function start_pdf_preview(compile_cmd, watch_cmd, src, pdf)
-  local bufnr = vim.api.nvim_get_current_buf()
-
-  if vim.b.pdf_preview then
-    stop_pdf_preview(bufnr)
-    vim.notify('Preview stopped', vim.log.levels.INFO)
-    return
-  end
-
-  vim.system(compile_cmd):wait()
-  local result = vim.system {
-    'tmux', 'split-window', '-v', '-d', '-l', '6', '-P', '-F', '#{pane_id}',
-    watch_cmd,
-  }:wait()
-  local pane_id = vim.trim(result.stdout or '')
-  local zathura_id = vim.fn.jobstart({ 'zathura', pdf }, {
-    on_exit = function()
-      vim.schedule(function() stop_pdf_preview(bufnr) end)
-    end,
-  })
-  vim.b.pdf_preview = { pane_id = pane_id, zathura_id = zathura_id }
-  local augroup = vim.api.nvim_create_augroup('PdfPreview' .. bufnr, { clear = true })
-  vim.api.nvim_create_autocmd({ 'BufDelete', 'VimLeavePre' }, {
-    group = augroup,
-    buffer = bufnr,
-    callback = function() stop_pdf_preview(bufnr) end,
-  })
-end
 
 local function is_marimo_notebook()
   local markers = {
@@ -280,26 +239,10 @@ function M.toggle()
   local ft = vim.bo.filetype
 
   if ft == 'typst' then
-    local src = vim.api.nvim_buf_get_name(0)
-    local root = vim.fs.root(0, '.git') or vim.fn.fnamemodify(src, ':h')
-    local pdf = src:gsub('%.typ$', '.pdf')
-    start_pdf_preview(
-      { 'typst', 'compile', '--root', root, src, pdf },
-      'typst watch --root ' .. vim.fn.shellescape(root) .. ' ' .. vim.fn.shellescape(src) .. ' ' .. vim.fn.shellescape(pdf),
-      src,
-      pdf
-    )
+    vim.cmd 'TypstPreviewToggle'
   elseif ft == 'tex' then
-    local src = vim.api.nvim_buf_get_name(0)
-    local build_dir = vim.fn.fnamemodify(src, ':h') .. '/build'
-    vim.fn.mkdir(build_dir, 'p')
-    local pdf = build_dir .. '/' .. vim.fn.fnamemodify(src, ':t'):gsub('%.tex$', '.pdf')
-    start_pdf_preview(
-      { 'latexmk', '-pdf', '-g', '-interaction=nonstopmode', '-output-directory=' .. build_dir, src },
-      'latexmk -pdf -pvc -g -interaction=nonstopmode -output-directory=' .. vim.fn.shellescape(build_dir) .. ' ' .. vim.fn.shellescape(src),
-      src,
-      pdf
-    )
+    -- vimtex continuous compile; <localLeader>lv opens the PDF viewer
+    vim.cmd 'VimtexCompile'
   elseif ft == 'markdown' then
     -- selimacerbas has start/stop, not Toggle; hooks set markdown_preview_on.
     if vim.g.markdown_preview_on then
