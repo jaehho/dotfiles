@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""marimo-view — one window for a marimo notebook UI.
+
+Not a browser. `<leader>tp` asks this surface to show
+`http://host:port/?file=...` for a registered `marimo edit --no-token`
+server. A second call navigates and raises the same window.
+
+usage: marimo-view URL
+"""
+
+import sys
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("WebKit2", "4.1")
+from gi.repository import Gio, GLib, Gtk, WebKit2  # noqa: E402
+
+APP_ID = "dev.jaeho.marimo-view"
+
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(
+            application_id=APP_ID,
+            flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
+        )
+        self.window = None
+        self.webview = None
+
+    def do_command_line(self, command_line):
+        args = list(command_line.get_arguments())[1:]
+        url = args[0] if args else None
+        if url is None and self.window is None:
+            sys.stderr.write("usage: marimo-view URL\n")
+            return 1
+        if url is not None and not url.startswith(("http://", "https://")):
+            sys.stderr.write(f"marimo-view: not an http URL: {url}\n")
+            return 1
+
+        if self.window is None:
+            self._build_window()
+        if url is not None and not _same_page(self.webview.get_uri(), url):
+            self.webview.load_uri(url)
+        self.window.present()
+        return 0
+
+    def _build_window(self):
+        self.webview = WebKit2.WebView()
+        self.webview.connect("notify::title", self._on_title)
+        self.window = Gtk.ApplicationWindow(application=self, title="marimo")
+        self.window.set_default_size(1280, 900)
+        self.window.add(self.webview)
+        self.window.connect("destroy", lambda _w: self.quit())
+        self.webview.show_all()
+
+    def _on_title(self, webview, _pspec):
+        title = webview.get_title()
+        self.window.set_title(title if title else "marimo")
+
+
+def _same_page(current, wanted):
+    if not current:
+        return False
+    return current.rstrip("/") == wanted.rstrip("/")
+
+
+def main():
+    return App().run(sys.argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
