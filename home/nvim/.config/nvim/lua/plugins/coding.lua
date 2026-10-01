@@ -122,12 +122,11 @@ return {
     end,
   },
 
-  { -- Trial: ghost text from raider's Ollama (stock throttle/debounce).
-    -- Endpoint is wonlab:11434 (user unit raider-ollama.service there forwards
-    -- to raider). No laptop-side tunnel — nothing to revive after sleep.
-    -- accept <A-A>, line <A-a>, cycle <A-]>/<A-[>, dismiss <A-e>
-    -- Virtual text only — no blink.cmp collision. Stash (enabled=false) if binds fight LazyVim.
+  { -- Off: qwen2.5-coder:7b on raider is too weak. copilot-native owns ghost
+    -- text. Endpoint notes if revived: wonlab:11434 (raider-ollama.service);
+    -- accept <A-A>, line <A-a>, cycle <A-]>/<A-[>, dismiss <A-e>.
     'milanglacier/minuet-ai.nvim',
+    enabled = false,
     event = 'InsertEnter',
     config = function()
       require('minuet').setup {

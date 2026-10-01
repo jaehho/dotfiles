@@ -37,6 +37,7 @@ require('lazy').setup {
     { import = 'lazyvim.plugins.extras.lang.tex' },
     { import = 'lazyvim.plugins.extras.util.octo' },
     { import = 'lazyvim.plugins.extras.ai.claudecode' },
+    { import = 'lazyvim.plugins.extras.ai.copilot-native' },
 
     { import = 'plugins' },
   },

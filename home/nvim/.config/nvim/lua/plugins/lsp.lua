@@ -76,6 +76,7 @@ return {
     opts = {
       ensure_installed = {
         'bash-language-server',
+        'copilot-language-server',
         'lua-language-server',
         'marksman',
         'pyright',
