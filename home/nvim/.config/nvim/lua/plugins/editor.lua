@@ -16,6 +16,13 @@ return {
     },
   },
 
+  { -- Wrap inline hunk preview (virt_lines) to the window width
+    'lewis6991/gitsigns.nvim',
+    opts = function()
+      require('config.gitsigns_wrap').patch()
+    end,
+  },
+
   { -- Diff viewer with word-level highlights
     -- Maps avoid snacks git_diff's <leader>gd / <leader>gD
     'sindrets/diffview.nvim',
