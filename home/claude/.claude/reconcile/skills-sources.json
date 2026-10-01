@@ -19,6 +19,14 @@
     "ecc": {
       "url": "https://github.com/affaan-m/ECC.git",
       "ref": "c752aac18616e26bf146f034a86947d8f6fc207e"
+    },
+    "WH-2099": {
+      "url": "https://github.com/WH-2099/mermaid-skill.git",
+      "ref": "982d9035231312c527197501a882cf6c8f4394cc"
+    },
+    "Yusuke710": {
+      "url": "https://github.com/Yusuke710/manim-skill.git",
+      "ref": "efb82d224201ce7f6f8d72f7ad972c8cd1b0a6ae"
     }
   },
   "skills": {
@@ -77,6 +85,14 @@
     "regex-vs-llm-structured-text": {
       "source": "ecc",
       "path": "skills/regex-vs-llm-structured-text"
+    },
+    "mermaid": {
+      "source": "WH-2099",
+      "path": ".claude/skills/mermaid"
+    },
+    "manim": {
+      "source": "Yusuke710",
+      "path": "skills/manim-skill"
     }
   },
   "managed": ["synced"],
@@ -94,6 +110,9 @@
       "regex-vs-llm-structured-text": "on",
       "gui-testing": "on",
       "marimo-research": "on",
+      "read-article": "on",
+      "mermaid": "on",
+      "manim": "on",
       "cetz": "off",
       "orcaslicer-presets": "off",
       "touying-author": "off",

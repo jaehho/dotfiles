@@ -6,5 +6,9 @@
   "zai-coding-plugins": {
     "source": "github",
     "repo": "zai-org/zai-coding-plugins"
+  },
+  "marimo-pair": {
+    "source": "github",
+    "repo": "marimo-team/marimo-pair"
   }
 }
