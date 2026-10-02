@@ -1,4 +1,5 @@
 betterbird-bin
+claude-desktop
 discord
 firefox-developer-edition
 gnome-keyring

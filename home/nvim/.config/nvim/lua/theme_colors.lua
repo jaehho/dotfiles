@@ -11,7 +11,7 @@ return {
   base07 = "#9da7a9", -- lightest (rarely used)
   base08 = "#cf7f79", -- variables, errors
   base09 = "#ca865e", -- constants, numbers
-  base0A = "#b0954a", -- classes, search
+  base0A = "#c0a55a", -- classes, search
   base0B = "#70a971", -- strings
   base0C = "#43ac9b", -- support, regex
   base0D = "#609fd2", -- functions

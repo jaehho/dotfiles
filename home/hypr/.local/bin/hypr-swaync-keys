@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Readline-style navigation inside the swaync control center.
+# Readline/vim navigation inside the swaync control center.
 #
 # swaync's shortcuts are compiled in and cannot be configured: Up/Down,
 # Home/End, Return, Delete/BackSpace, Escape, Shift+C, Shift+D and 1-9. This
-# adds Ctrl+n / Ctrl+p on top by translating them into the keys swaync already
-# understands, through a Hyprland submap that is only active while the panel is
-# open -- binding Ctrl+n globally would break it in every other application.
+# adds Ctrl+n / Ctrl+p and j/k/gg/G on top by translating them into the keys
+# swaync already understands, through a Hyprland submap that is only active
+# while the panel is open -- binding these globally would break every other
+# application.
 #
 # Two roles, one file:
 #   (no args)        watch swaync and enter/leave the submap
@@ -52,17 +53,46 @@ set_submap() {
 }
 
 enter() { set_submap swaync  'hl.dsp.submap("swaync")'; }
-leave() { set_submap default 'hl.dsp.submap("reset")'; }
+leave() {
+    rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/hypr-swaync-keys/pending-g"
+    set_submap default 'hl.dsp.submap("reset")'
+}
 
 # Handled before the watcher's EXIT trap is installed -- `send` must not reset
 # the submap on its way out, it has to put it back.
+#
+# g is the vim gg prefix: the first press is swallowed and stamped, the second
+# becomes Home. Any other send cancels the stamp. Unbound keys pass straight to
+# swaync and cannot cancel it, so the stamp expires -- one second, roughly vim's
+# timeoutlen.
 if [ "${1:-}" = send ]; then
-    case "${2:-}" in
-        Up|Down) ;;
-        *) echo "usage: hypr-swaync-keys send Up|Down" >&2; exit 2 ;;
+    key="${2:-}"
+    state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-swaync-keys"
+    stamp="$state_dir/pending-g"
+    case "$key" in
+        Up|Down|Home|End) ;;
+        g)
+            now=$(date +%s%N)
+            prev=$(cat "$stamp" 2>/dev/null || echo 0)
+            if [ -f "$stamp" ] && [ $((now - prev)) -lt 1000000000 ]; then
+                rm -f "$stamp"
+                key=Home
+            else
+                mkdir -p "$state_dir"
+                printf %s "$now" >"$stamp"
+                panel_visible || { leave; exit 0; }
+                enter
+                exit 0
+            fi
+            ;;
+        *)
+            echo "usage: hypr-swaync-keys send Up|Down|Home|End|g" >&2
+            exit 2
+            ;;
     esac
+    rm -f "$stamp"
     panel_visible || { leave; exit 0; }
-    wtype -k "$2"
+    wtype -k "$key"
     enter
     exit 0
 fi

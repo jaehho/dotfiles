@@ -4,43 +4,12 @@
     "pr": ""
   },
   "permissions": {
-    "allow": [
-      "Bash(gog *)"
-    ],
-    "deny": [
-      "Bash(gog *gmail send*)",
-      "Bash(gog *gmail reply*)",
-      "Bash(gog *gmail forward*)",
-      "Bash(gog *gmail fwd*)",
-      "Bash(gog *gmail autoreply*)",
-      "Bash(gog *gmail import*)",
-      "Bash(gog *gmail track*)",
-      "Bash(gog *gmail trash*)",
-      "Bash(gog *gmail drafts send*)",
-      "Bash(gog *gmail drafts post*)",
-      "Bash(gog *gmail batch delete*)",
-      "Bash(gog *gmail batch rm*)",
-      "Bash(gog *gmail batch del*)",
-      "Bash(gog *gmail batch remove*)",
-      "Bash(gog *gmail settings forwarding*)",
-      "Bash(gog *gmail settings autoforward*)",
-      "Bash(gog *gmail settings delegates*)",
-      "Bash(gog *gmail settings sendas*)",
-      "Bash(gog *config set gmail_no_send false*)",
-      "Bash(gog *config unset gmail_no_send*)"
-    ],
-    "ask": [
-      "Bash(gog *gmail settings*)",
-      "Bash(gog *gmail filters*)",
-      "Bash(gog *gmail drafts*)",
-      "Bash(gog *gmail labels delete*)",
-      "Bash(gog *gmail labels rm*)",
-      "Bash(gog *gmail labels del*)",
-      "Bash(gog *auth*)"
-    ],
+    "allow": [],
+    "deny": [],
+    "ask": [],
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "sonnet",
   "skillOverrides": {
     "cetz": "off",
     "impeccable": "user-invocable-only",
@@ -105,13 +74,20 @@
     "typescript-lsp@claude-plugins-official": false,
     "lua-lsp@claude-plugins-official": true,
     "glm-plan-usage@zai-coding-plugins": false,
-    "cowork-plugin-management@synced": false
+    "cowork-plugin-management@synced": false,
+    "marimo-pair@marimo-pair": true
   },
   "extraKnownMarketplaces": {
     "zai-coding-plugins": {
       "source": {
         "source": "github",
         "repo": "zai-org/zai-coding-plugins"
+      }
+    },
+    "marimo-pair": {
+      "source": {
+        "source": "github",
+        "repo": "marimo-team/marimo-pair"
       }
     }
   },
@@ -122,6 +98,9 @@
     },
     "mimo-v2.6-pro": {
       "effortLevel": "high"
+    },
+    "claude-sonnet-5-5": {
+      "effortLevel": "xhigh"
     }
   },
   "tui": "fullscreen",
@@ -129,6 +108,11 @@
   "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true,
   "autoMode": {
+    "soft_deny": [
+      "$defaults",
+      "Bash(sudo pacman:*) — privileged package operations in this repo's converge flow; CLAUDE.md states sudo should never be run directly by the agent, prefer flagging for owner-run script instead",
+      "Bash(rm:* system/*) — deletions under boot-critical system/ paths in ~/dotfiles warrant confirmation given boot-critical nature noted in README/CLAUDE.md"
+    ],
     "environment": [
       "### Org-wide",
       "**Organization**: None configured",
@@ -155,11 +139,6 @@
       "**Trusted repo**: ~/dotfiles (github.com/jaehho/dotfiles) — PUBLIC repo; only this repo's own work belongs here, confidential/personal material should not be committed regardless of visibility",
       "**Org-specific CLIs**: None configured (repo-specific tools observed: `dotfiles`, `stow`, `hyprctl`, `asst`, `claude-open`, `reel` — personal project tooling, not org CLIs)",
       "routine under ~/dotfiles/ prefix: converge/sync operations (`./scripts/converge.sh`, `dotfiles sync`), stow operations, and edits under `home/`, `system/`, `scripts/` are routine project work"
-    ],
-    "soft_deny": [
-      "$defaults",
-      "Bash(sudo pacman:*) — privileged package operations in this repo's converge flow; CLAUDE.md states sudo should never be run directly by the agent, prefer flagging for owner-run script instead",
-      "Bash(rm:* system/*) — deletions under boot-critical system/ paths in ~/dotfiles warrant confirmation given boot-critical nature noted in README/CLAUDE.md"
     ]
   }
 }

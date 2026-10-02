@@ -806,16 +806,16 @@ hl.layer_rule({
     ignore_alpha = 0.5,
 })
 
--- Ctrl+n / Ctrl+p inside the control center. `hypr-swaync-keys` enters and
--- leaves this submap by watching swaync's own `visible` flag, so it is never
--- entered by hand. The helper checks visibility before restoring it.
+-- Vim-style navigation inside the control center. `hypr-swaync-keys` enters
+-- and leaves this submap by watching swaync's own `visible` flag, so it is
+-- never entered by hand. The helper checks visibility before restoring it.
 --
--- Only the Ctrl+n / Ctrl+p translations are bound. Everything swaync already
--- handles -- Return, Delete/BackSpace, Home/End, Escape, Shift+C (clear all),
--- Shift+D (DND), 1-9 (actions) -- is deliberately left unbound so Hyprland
--- forwards it untouched, and bare letters stay free. A `catchall` here would
--- swallow the lot. Media keys and screenshots are re-declared below because
--- they are compositor binds that an exclusive submap would otherwise silence.
+-- Only the translations below are bound. Everything swaync already handles --
+-- Return, Delete/BackSpace/x, Home/End, Escape, Shift+C (clear all), Shift+D
+-- (DND), 1-9 (actions) -- is deliberately left unbound so Hyprland forwards
+-- it untouched, and bare letters stay free. A `catchall` here would swallow
+-- the lot. Media keys and screenshots are re-declared below because they are
+-- compositor binds that an exclusive submap would otherwise silence.
 local function swaync_key(key)
     return hl.dsp.exec_cmd("~/.local/bin/hypr-swaync-keys send " .. key)
 end
@@ -823,6 +823,10 @@ end
 hl.define_submap("swaync", "reset", function()
     hl.bind("CTRL + n", swaync_key("Down"), { repeating = true }) -- next notification
     hl.bind("CTRL + p", swaync_key("Up"),   { repeating = true }) -- previous notification
+    hl.bind("j", swaync_key("Down"), { repeating = true }) -- next notification
+    hl.bind("k", swaync_key("Up"),   { repeating = true }) -- previous notification
+    hl.bind("g", swaync_key("g")) -- gg: first g is a prefix, second goes to top
+    hl.bind("G", swaync_key("End")) -- bottom
     -- Native Up/Down, Home/End and 1-9 go straight to swaync. The fork
     -- labels action buttons with their numbers; no synthetic keypress needed.
     -- Passthroughs: a submap is exclusive, so without these it would silence
