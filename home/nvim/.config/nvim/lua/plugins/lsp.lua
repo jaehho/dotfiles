@@ -90,10 +90,13 @@ return {
     end,
   },
 
-  { -- scripts/server.sh runs :MasonToolsUpdateSync from this plugin
+  { -- scripts/server.sh runs :MasonToolsUpdateSync from this plugin.
+    -- run_on_start off: headless `+qa` in that script would otherwise abort
+    -- whatever the startup install had open, and the log grep reads as failure.
     'WhoIsSethDaniel/mason-tool-installer.nvim',
     dependencies = { 'mason-org/mason.nvim' },
     opts = {
+      run_on_start = false,
       ensure_installed = {
         'bash-language-server',
         'copilot-language-server',
@@ -116,8 +119,9 @@ return {
     dependencies = {
       'mfussenegger/nvim-dap',
       {
+        -- debugpy is in mason-tool-installer; do not start a second install here.
         'jay-babu/mason-nvim-dap.nvim',
-        opts = { ensure_installed = { 'debugpy' } },
+        opts = { ensure_installed = { 'debugpy' }, automatic_installation = false },
       },
     },
     config = function()
