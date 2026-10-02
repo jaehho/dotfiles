@@ -29,6 +29,17 @@ merged() {
   jq -s '[.[] | .scope as $s | .decisions[] | . + {scope: $s}]' "${files[@]}"
 }
 
+# Single-quote argv for `fish -c`. In fish '', only \\ and \' are escapes.
+fish_cmd() {
+  local out=() a
+  for a in "$@"; do
+    a=${a//\\/\\\\}
+    a=${a//\'/\\\'}
+    out+=("'$a'")
+  done
+  printf '%s' "${out[*]}"
+}
+
 list() {
   local f label=system
   for f in "${SOURCES[@]}"; do
@@ -65,11 +76,15 @@ case "${1:-status}" in
     cmd=(claude-open --dangerously-skip-permissions
       --add-dir "$SYSTEM_STATE" --add-dir "$DOTFILES_STATE"
       --append-system-prompt "$(brief)" "Walk me through the pending dotfiles decisions.")
+    # Through fish so config.fish exports apply (EDITOR for ctrl+g, PATH, tokens).
+    # A bare systemd notification has none of them, and tmux execs a multi-arg
+    # command directly, which skips fish.
+    fcmd=(fish -c "$(fish_cmd "${cmd[@]}")")
     # A window in the most recently used tmux session, and focus the terminal
     # showing it; with no attached client, a fresh terminal on a new session.
     client=$(tmux list-clients -F '#{client_activity} #{client_pid}' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2)
-    [ -n "$client" ] || exec kitty tmux new-session -c "$DOTFILES" "${cmd[@]}"
-    tmux new-window -c "$DOTFILES" -n decisions "${cmd[@]}"
+    [ -n "$client" ] || exec kitty tmux new-session -c "$DOTFILES" "${fcmd[@]}"
+    tmux new-window -c "$DOTFILES" -n decisions "${fcmd[@]}"
     addr=$(hyprctl clients -j | jq -r --argjson pid "$(ps -o ppid= -p "$client")" '.[] | select(.pid == $pid) | .address')
     [ -z "$addr" ] || hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null
     ;;
