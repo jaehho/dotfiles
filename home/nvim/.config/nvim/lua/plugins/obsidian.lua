@@ -20,7 +20,7 @@ return {
       templates = { folder = vim.NIL },
       -- Link/tag completion goes through blink_cmp_obsidian, not nvim-cmp.
       completion = { nvim_cmp = false, min_chars = 2 },
-      -- markview already renders markdown; leave conceallevel alone.
+      -- render-markdown already draws markdown; leave conceallevel alone.
       ui = { enable = false },
     },
   },
