@@ -6,11 +6,12 @@
 #
 # First run sets up, every run updates: pulls the repo, links fish, tmux, nvim,
 # claude, theme, git and bin with stow (theme: the tmux bar's colors; git's
-# pager needs bin's diff-highlight), keeps Neovim and the tree-sitter CLI at
-# their latest upstream release in ~/.local (Ubuntu's are too old for the nvim
+# pager needs bin's diff-highlight), sets fish as the login shell (otherwise
+# conf.d/abbr.fish never loads), keeps Neovim and the tree-sitter CLI at their
+# latest upstream release in ~/.local (Ubuntu's are too old for the nvim
 # config), and brings plugins to the laptop's lazy-lock.json. sudo only when an
-# apt package is missing. No timers: the server changes only when someone runs
-# this. See README "Server (wonlab)".
+# apt package is missing or the login shell is still not fish. No timers: the
+# server changes only when someone runs this. See README "Server (wonlab)".
 
 set -euo pipefail
 
@@ -31,7 +32,9 @@ STOW_DIR="$DOTFILES/home"
 # live in home/laptop and stay off this host. server holds units that only
 # make sense here (raider-ollama: expose the GPU box's Ollama on the tailnet).
 PKGS=(fish git tmux nvim claude theme bin server)
-APT=(fish stow tmux git curl jq ripgrep fd-find fzf unzip gcc make python3)
+# python3-venv: mason's debugpy installer runs `python3 -m venv`, which on
+# Debian/Ubuntu is in python3-venv (ensurepip), not the python3 metapackage.
+APT=(fish stow tmux git curl jq ripgrep fd-find fzf unzip gcc make python3 python3-venv)
 OPT="$HOME/.local/opt" BIN="$HOME/.local/bin"
 LOG="$HOME/.local/state/dotfiles-server"
 mkdir -p "$OPT" "$BIN" "$LOG"
@@ -96,6 +99,15 @@ command -v claude >/dev/null || curl -fsSL https://claude.ai/install.sh | bash
     echo "  backed up ~/$rel -> ~/$rel.bak"
   done
 stow -d "$STOW_DIR" -t "$HOME" --no-folding -R "${PKGS[@]}"
+
+# fish is installed and linked, but sshd still starts bash until passwd says
+# otherwise, so abbreviations and the rest of conf.d never run. chsh is
+# interactive for the account password; go through sudo like apt does.
+fish_bin=$(command -v fish)
+if [ -n "$fish_bin" ] && [ "$(getent passwd "$USER" | cut -d: -f7)" != "$fish_bin" ]; then
+  say "login shell -> $fish_bin (sudo)"
+  sudo chsh -s "$fish_bin" "$USER"
+fi
 
 # claude-open reads provider keys at runtime; they are never synced. Copy them
 # by hand from the laptop (see home/claude/.claude/reconcile/secrets.env.example).
