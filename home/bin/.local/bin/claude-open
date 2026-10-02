@@ -18,9 +18,6 @@
 # Env overrides: CLAUDE_OPEN_NO_FALLBACK=1 (keep the hard z.ai quota stop),
 # CLAUDE_OPEN_LOCAL_MODEL, CLAUDE_OPEN_LOCAL_CTX.
 export PATH="$HOME/.local/bin:$PATH"   # claude's native install; bare units lack it
-# Ctrl+g's external editor: VISUAL, then EDITOR, else code/vi/nano. Fish sets
-# both, but this often runs as a bare tmux/systemd command, so default them.
-export VISUAL="${VISUAL:-nvim}" EDITOR="${EDITOR:-nvim}"
 command -v claude >/dev/null || { echo 'claude-open: claude not on PATH' >&2; exit 1; }
 
 # First bare lane word in the leading flag run wins (so
