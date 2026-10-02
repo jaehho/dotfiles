@@ -1,5 +1,7 @@
-/* swaync style — Solarized palette; theme-apply rewrites the hex values in
-   place when the palette changes. */
+/* swaync style — palette colors come from colors.css (theme-apply).
+   Do not hardcode palette hexes here; only the shadow is literal black. */
+
+@import "colors.css";
 
 /* One radius scale. Upstream drives every corner from a single
    `--border-radius`; hand-tweaking individual rules is how this file ended up
@@ -44,21 +46,21 @@
 }
 
 .notification-row .notification-background .notification {
-  background: #20282a;
-  background-color: #20282a;
-  color: #cfdadc;
-  border: 2px solid #609fd2;
+  background: var(--surface0);
+  background-color: var(--surface0);
+  color: var(--text);
+  border: 2px solid var(--blue);
   border-radius: var(--radius);
   padding: 12px;
   margin: 0;
 }
 
 .notification-row .notification-background .notification.low {
-  border-color: #70a971;
+  border-color: var(--green);
 }
 
 .notification-row .notification-background .notification.critical {
-  border-color: #cf7f79;
+  border-color: var(--red);
 }
 
 /* Keyboard focus / selection — swaync (GTK4) uses Adwaita's `row:selected`
@@ -96,8 +98,8 @@
 
 .notification-row:hover .notification-background .notification,
 .notification-group:hover .notification-background .notification {
-  background: #2f3739;
-  background-color: #2f3739;
+  background: var(--surface1);
+  background-color: var(--surface1);
 }
 
 /* Highlight only the directly-focused row. Don't cascade :focus-within
@@ -107,9 +109,9 @@
 .notification-group:focus .notification-background .notification,
 .notification-row:focus .notification-background .notification,
 .notification-row:selected .notification-background .notification {
-  background: #2f3739;
-  background-color: #2f3739;
-  border-color: #b883bb;
+  background: var(--surface1);
+  background-color: var(--surface1);
+  border-color: var(--pink);
 }
 
 /* Urgency outranks selection. Without this the selected row's border colour
@@ -121,14 +123,14 @@
 .notification-group:focus .notification-background .notification.low,
 .notification-row:focus .notification-background .notification.low,
 .notification-row:selected .notification-background .notification.low {
-  border-color: #70a971;
+  border-color: var(--green);
 }
 
 .notification-group:selected .notification-background .notification.critical,
 .notification-group:focus .notification-background .notification.critical,
 .notification-row:focus .notification-background .notification.critical,
 .notification-row:selected .notification-background .notification.critical {
-  border-color: #cf7f79;
+  border-color: var(--red);
 }
 
 .notification-default-action {
@@ -160,7 +162,7 @@
 .notification-row .notification-background .notification .notification-action > button,
 .notification-row .notification-background .notification .notification-action > button:focus {
   background: transparent;
-  color: #cfdadc;
+  color: var(--text);
   border: none;
   box-shadow: none;
   outline: none;
@@ -170,33 +172,33 @@
 }
 
 .notification-row .notification-background .notification .notification-action > button:hover {
-  background-color: #41494c;
+  background-color: var(--surface2);
 }
 
 .summary {
   font-weight: 600;
-  color: #cfdadc;
+  color: var(--text);
 }
 
 .time {
-  color: #9da7a9;
+  color: var(--subtext0);
   font-size: 11px;
 }
 
 .body {
-  color: #cfdadc;
+  color: var(--text);
 }
 
 .close-button {
   background: transparent;
-  color: #9da7a9;
+  color: var(--subtext0);
   border: none;
   padding: 2px 6px;
   margin: 0;
 }
 
 .close-button:hover {
-  color: #cf7f79;
+  color: var(--red);
 }
 
 /* Inline image / icon */
@@ -216,7 +218,7 @@
   border: none;
   box-shadow: none;
   padding: 0;
-  color: #cfdadc;
+  color: var(--text);
 }
 
 /* Cards: title, DND and the media player. Notification rows already paint
@@ -224,8 +226,8 @@
 .widget-title,
 .widget-dnd,
 .widget-mpris {
-  background-color: #20282a;
-  border: 2px solid #609fd2;
+  background-color: var(--surface0);
+  border: 2px solid var(--blue);
   border-radius: var(--radius);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
 }
@@ -258,42 +260,42 @@
 }
 
 .control-center-list-placeholder {
-  color: #9da7a9;
+  color: var(--subtext0);
 }
 
 .widget-title > label {
-  color: #cfdadc;
+  color: var(--text);
   font-weight: 600;
   font-size: 14px;
 }
 
 .widget-title > button {
-  background-color: #2f3739;
-  color: #cfdadc;
+  background-color: var(--surface1);
+  color: var(--text);
   border: none;
   border-radius: var(--radius-sm);
   padding: 4px 10px;
 }
 
 .widget-title > button:hover {
-  background-color: #41494c;
+  background-color: var(--surface2);
 }
 
 .widget-dnd > label {
-  color: #cfdadc;
+  color: var(--text);
 }
 
 .widget-dnd > switch {
-  background-color: #2f3739;
+  background-color: var(--surface1);
   border-radius: var(--radius-pill);
 }
 
 .widget-dnd > switch:checked {
-  background-color: #609fd2;
+  background-color: var(--blue);
 }
 
 .widget-dnd > switch slider {
-  background-color: #cfdadc;
+  background-color: var(--text);
   border-radius: var(--radius-pill);
 }
 
@@ -303,8 +305,8 @@
 }
 
 .widget-buttons-grid > flowbox > flowboxchild > button {
-  background-color: #2f3739;
-  color: #cfdadc;
+  background-color: var(--surface1);
+  color: var(--text);
   border: none;
   border-radius: var(--radius-sm);
   padding: 8px 12px;
@@ -312,12 +314,12 @@
 }
 
 .widget-buttons-grid > flowbox > flowboxchild > button:hover {
-  background-color: #41494c;
+  background-color: var(--surface2);
 }
 
 .widget-buttons-grid > flowbox > flowboxchild > button.active {
-  background-color: #609fd2;
-  color: #0c1315;
+  background-color: var(--blue);
+  color: var(--crust);
 }
 
 .widget-mpris .widget-mpris-player {
@@ -338,12 +340,12 @@
 }
 
 .widget-mpris-title {
-  color: #cfdadc;
+  color: var(--text);
   font-weight: 600;
 }
 
 .widget-mpris-subtitle {
-  color: #9da7a9;
+  color: var(--subtext0);
 }
 
 /* Notifications inside the panel: the global .notification-row rule above
@@ -354,11 +356,11 @@
 
 /* Floating progress bar (volume / brightness OSD via notifications) */
 progressbar {
-  background-color: #2f3739;
+  background-color: var(--surface1);
   border-radius: var(--radius-pill);
 }
 
 progressbar progress {
-  background-color: #609fd2;
+  background-color: var(--blue);
   border-radius: var(--radius-pill);
 }
