@@ -22,6 +22,13 @@ command -v apt-get >/dev/null || { echo "server.sh is for Debian/Ubuntu" >&2; ex
 # Pull, then run the pulled copy: bash reads a script as it goes, so it must
 # not keep executing a file that the pull just rewrote.
 if [ -z "${SERVER_PULLED:-}" ]; then
+  # Claude Code writes settings.json through the stow symlink (model, skills),
+  # so a session on this host dirties the worktree and the next pull aborts.
+  # The laptop owns the committed file. Stash the drift; never restore it.
+  if ! git -C "$DOTFILES" diff --quiet -- home/claude/.claude/settings.json 2>/dev/null; then
+    git -C "$DOTFILES" stash push -q -m "claude settings drift $(date -u +%F-%H%M)" \
+      -- home/claude/.claude/settings.json
+  fi
   git -C "$DOTFILES" pull -q --ff-only
   SERVER_PULLED=1 exec bash "$DOTFILES/scripts/server.sh" "$@"
 fi
