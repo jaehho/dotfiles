@@ -92,7 +92,7 @@ when an apt package is missing. The first run moves wonlab's own
 `~/.claude/settings.json` to `.bak`.
 
 Nothing runs on a timer and nothing runs as root: the server changes only when
-you run this, and only to what is pushed. `home/laptop` (desktop scripts, tip,
+you run this, and only to what is pushed. `home/laptop` (desktop scripts,
 notify, converge timers) stays off the server. Provider keys for `claude-open`
 (`~/.config/{zai,mimo,openrouter}.env`) are never synced — copy them by hand.
 

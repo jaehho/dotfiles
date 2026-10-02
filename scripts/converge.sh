@@ -387,7 +387,6 @@ step_stow() {
   #   dotfiles-converge  this script's user half, at login and daily
   #   dotfiles-digest    runs `dotfiles notify` when either half records a new decision
   #   wallhelper-fetch   the day's photo (arch only -- ships with the hypr package)
-  #   tip-daily          the day's nvim/tridactyl keybinding, via `tip`
   #   notification-log   the searchable notification history
   #   battery-logd       the battery sampler (packaged with the app, enabled here)
   #   swayosd-server     the volume/brightness OSD (WantedBy pipewire-pulse, so
@@ -402,7 +401,7 @@ step_stow() {
   local unit
   if systemctl --user daemon-reload 2>/dev/null; then
     for unit in dotfiles-converge.timer dotfiles-digest.path \
-                wallhelper-fetch.timer tip-daily.timer \
+                wallhelper-fetch.timer \
                 dash-collect.timer dash-llm.timer \
                 notification-log.service battery-logd.service \
                 swayosd-server.service kokoro-tts.socket awatcher.service \
