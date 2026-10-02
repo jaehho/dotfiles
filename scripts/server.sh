@@ -70,6 +70,14 @@ if [ ${#missing[@]} -gt 0 ]; then
   sudo apt-get install -y "${missing[@]}"
 fi
 
+# tmux refuses TERM=xterm-kitty (the laptop's kitty) until this host has that
+# terminfo. Debian's ncurses packages do not ship it. Install into ~/.terminfo
+# (no root) from the source kept in scripts/terminfo/.
+if ! infocmp xterm-kitty >/dev/null 2>&1; then
+  say "terminfo xterm-kitty"
+  tic -x -o "$HOME/.terminfo" "$DOTFILES/scripts/terminfo/xterm-kitty.terminfo"
+fi
+
 # --- Neovim and tree-sitter, upstream -----------------------------------------
 
 tag=$(latest_tag neovim/neovim)
