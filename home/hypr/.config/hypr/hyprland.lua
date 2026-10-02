@@ -811,8 +811,8 @@ hl.layer_rule({
 -- never entered by hand. The helper checks visibility before restoring it.
 --
 -- Only the translations below are bound. Everything swaync already handles --
--- Return, Delete/BackSpace/x, Home/End, Escape, Shift+C (clear all), Shift+D
--- (DND), 1-9 (actions) -- is deliberately left unbound so Hyprland forwards
+-- Return, Delete/BackSpace/x/d, Home/End, Escape, q (close), Shift+C (clear
+-- all), 1-9 (actions) -- is deliberately left unbound so Hyprland forwards
 -- it untouched, and bare letters stay free. A `catchall` here would swallow
 -- the lot. Media keys and screenshots are re-declared below because they are
 -- compositor binds that an exclusive submap would otherwise silence.
@@ -825,8 +825,16 @@ hl.define_submap("swaync", "reset", function()
     hl.bind("CTRL + p", swaync_key("Up"),   { repeating = true }) -- previous notification
     hl.bind("j", swaync_key("Down"), { repeating = true }) -- next notification
     hl.bind("k", swaync_key("Up"),   { repeating = true }) -- previous notification
-    hl.bind("g", swaync_key("g")) -- gg: first g is a prefix, second goes to top
-    hl.bind("G", swaync_key("End")) -- bottom
+    -- g is the gg prefix (second g sends Home). End is SHIFT+g, not the keysym
+    -- "G": Hyprland treats bare "G" as the g key too, which made every g jump
+    -- to the bottom.
+    hl.bind("g", swaync_key("g")) -- gg: top
+    hl.bind("SHIFT + g", swaync_key("End")) -- bottom
+    hl.bind("d", swaync_key("Delete")) -- dismiss
+    hl.bind("q", hl.dsp.exec_cmd("swaync-client -t")) -- close
+    -- Swallow Shift+D so it cannot reach swaync's DND toggle. The underline
+    -- on that switch is gone too (config.json).
+    hl.bind("SHIFT + d", function() end)
     -- Native Up/Down, Home/End and 1-9 go straight to swaync. The fork
     -- labels action buttons with their numbers; no synthetic keypress needed.
     -- Passthroughs: a submap is exclusive, so without these it would silence

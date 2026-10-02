@@ -70,7 +70,7 @@ if [ "${1:-}" = send ]; then
     state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-swaync-keys"
     stamp="$state_dir/pending-g"
     case "$key" in
-        Up|Down|Home|End) ;;
+        Up|Down|Home|End|Delete|BackSpace) ;;
         g)
             now=$(date +%s%N)
             prev=$(cat "$stamp" 2>/dev/null || echo 0)
@@ -86,7 +86,7 @@ if [ "${1:-}" = send ]; then
             fi
             ;;
         *)
-            echo "usage: hypr-swaync-keys send Up|Down|Home|End|g" >&2
+            echo "usage: hypr-swaync-keys send Up|Down|Home|End|Delete|g" >&2
             exit 2
             ;;
     esac
