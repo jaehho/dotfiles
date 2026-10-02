@@ -1,7 +1,21 @@
-/* swaync style — palette colors come from colors.css (theme-apply).
-   Do not hardcode palette hexes here; only the shadow is literal black. */
-
-@import "colors.css";
+/* swaync style — stock colors inlined (theme-apply retired, issue #38).
+   Only the shadow is literal black. */
+:root {
+  --base: #232323;
+  --crust: #111111;
+  --surface0: #2e2e2e;
+  --surface1: #383838;
+  --surface2: #444444;
+  --text: #ffffff;
+  --subtext0: #969696;
+  --blue: #0080ff;
+  --green: #5faf5f;
+  --red: #d54e53;
+  --pink: #c678dd;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-pill: 9999px;
+}
 
 /* One radius scale. Upstream drives every corner from a single
    `--border-radius`; hand-tweaking individual rules is how this file ended up
@@ -9,11 +23,6 @@
    Cards and containers get --radius, controls nested inside a card get
    --radius-sm, and anything that should read as fully round gets --radius-pill
    rather than a large-but-finite value. */
-:root {
-  --radius: 12px;
-  --radius-sm: 8px;
-  --radius-pill: 9999px;
-}
 
 * {
   font-family: "JetBrainsMono Nerd Font", monospace;

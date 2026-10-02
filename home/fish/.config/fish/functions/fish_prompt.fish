@@ -2,12 +2,12 @@ function fish_prompt
     set -l last_status $status
     set -l duration $CMD_DURATION
 
-    # Theme colors (set by ~/.config/fish/conf.d/theme-colors.fish)
-    set -l blue $thm_blue
-    set -l overlay $thm_overlay
-    set -l yellow $thm_yellow
-    set -l green $thm_green
-    set -l red $thm_red
+    # Stock fish colors (theme-apply retired, issue #38)
+    set -l blue blue
+    set -l overlay brblack
+    set -l yellow yellow
+    set -l green green
+    set -l red red
 
     # ── Line 1: directory + git + duration ───────────────────────────────────
 
