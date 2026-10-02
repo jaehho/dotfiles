@@ -23,6 +23,14 @@ return {
     end,
   },
 
+  { -- Word-wrap copilot ghost text; 'linebreak' ignores virt_text spaces
+    'neovim/nvim-lspconfig',
+    optional = true,
+    init = function()
+      require('config.inline_completion_wrap').patch()
+    end,
+  },
+
   { -- Diff viewer with word-level highlights
     -- Maps avoid snacks git_diff's <leader>gd / <leader>gD
     'sindrets/diffview.nvim',
