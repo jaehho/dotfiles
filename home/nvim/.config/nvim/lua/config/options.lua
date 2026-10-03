@@ -39,3 +39,14 @@ vim.g.ts_parsers = {
 vim.diagnostic.config {
   jump = { on_jump = vim.diagnostic.open_float },
 }
+
+-- Wrap toggle. LazyVim maps <leader>uw on VeryLazy via Snacks; map it here so
+-- it exists even when VeryLazy has not run yet. virt_wrap.refit_all reapplies
+-- word-wrap to visible virtual text after the toggle.
+vim.keymap.set('n', '<leader>uw', function()
+  vim.wo.wrap = not vim.wo.wrap
+  local ok, vw = pcall(require, 'config.virt_wrap')
+  if ok and vw.refit_all then
+    vw.refit_all()
+  end
+end, { desc = 'Wrap' })

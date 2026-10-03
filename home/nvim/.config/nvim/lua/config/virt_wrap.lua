@@ -13,6 +13,11 @@ local api = vim.api
 
 local M = {}
 
+--- Re-apply wrap fitting to saved inline completions (call after toggle wrap).
+function M.refit_all()
+  -- filled in by patch()
+end
+
 local function dw(text, col)
   return vim.fn.strdisplaywidth(text, col or 0)
 end
@@ -375,6 +380,7 @@ end
 local patched = false
 --- Original unsplit opts per (bufnr, mark id), for wrap toggle / resize.
 local originals = {}
+local refit_fn
 
 function M.patch()
   if patched then
@@ -428,9 +434,8 @@ function M.patch()
   end
 
   -- Snacks <leader>uw uses nvim_set_option_value; OptionSet never fires.
-  -- Hook the map after VeryLazy instead of a decoration provider (on_win is
-  -- experimental and can stall startup / redraw).
-  local function refit_all()
+  -- After VeryLazy, wrap whatever map exists so the toggle also refits.
+  function M.refit_all()
     for bufnr in pairs(originals) do
       refit(bufnr)
     end
@@ -446,7 +451,7 @@ function M.patch()
       end
       vim.keymap.set('n', '<leader>uw', function()
         map.callback()
-        vim.schedule(refit_all)
+        vim.schedule(M.refit_all)
       end, { desc = map.desc or 'Wrap', noremap = true })
     end,
   })
