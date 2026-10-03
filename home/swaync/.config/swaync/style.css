@@ -1,11 +1,12 @@
 /* swaync style — stock colors inlined (theme-apply retired, issue #38).
-   Only the shadow is literal black. */
+   Card fills are opaque on purpose: a translucent panel plus hyprland blur
+   reads as frosted glass over a bright wallpaper. Only the shadow is black. */
 :root {
-  --base: #232323;
+  --base: #1a1a1a;
   --crust: #111111;
-  --surface0: #2e2e2e;
-  --surface1: #383838;
-  --surface2: #444444;
+  --surface0: #202020;
+  --surface1: #282828;
+  --surface2: #303030;
   --text: #ffffff;
   --subtext0: #969696;
   --blue: #0080ff;
@@ -55,13 +56,15 @@
 }
 
 .notification-row .notification-background .notification {
-  background: var(--surface0);
-  background-color: var(--surface0);
+  background: #202020;
+  background-color: #202020;
   color: var(--text);
   border: 2px solid var(--blue);
   border-radius: var(--radius);
   padding: 12px;
   margin: 0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
+  opacity: 1;
 }
 
 .notification-row .notification-background .notification.low {
@@ -107,8 +110,8 @@
 
 .notification-row:hover .notification-background .notification,
 .notification-group:hover .notification-background .notification {
-  background: var(--surface1);
-  background-color: var(--surface1);
+  background: #282828;
+  background-color: #282828;
 }
 
 /* Highlight only the directly-focused row. Don't cascade :focus-within
@@ -118,8 +121,8 @@
 .notification-group:focus .notification-background .notification,
 .notification-row:focus .notification-background .notification,
 .notification-row:selected .notification-background .notification {
-  background: var(--surface1);
-  background-color: var(--surface1);
+  background: #282828;
+  background-color: #282828;
   border-color: var(--pink);
 }
 
@@ -181,7 +184,7 @@
 }
 
 .notification-row .notification-background .notification .notification-action > button:hover {
-  background-color: var(--surface2);
+  background-color: #303030;
 }
 
 .summary {
@@ -235,10 +238,11 @@
 .widget-title,
 .widget-dnd,
 .widget-mpris {
-  background-color: var(--surface0);
+  background-color: #202020;
+  background: #202020;
   border: 2px solid var(--blue);
   border-radius: var(--radius);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
 }
 
 .widget-title,
@@ -279,7 +283,7 @@
 }
 
 .widget-title > button {
-  background-color: var(--surface1);
+  background-color: #282828;
   color: var(--text);
   border: none;
   border-radius: var(--radius-sm);
@@ -287,7 +291,7 @@
 }
 
 .widget-title > button:hover {
-  background-color: var(--surface2);
+  background-color: #303030;
 }
 
 .widget-dnd > label {
@@ -295,7 +299,7 @@
 }
 
 .widget-dnd > switch {
-  background-color: var(--surface1);
+  background-color: #282828;
   border-radius: var(--radius-pill);
 }
 
@@ -314,7 +318,7 @@
 }
 
 .widget-buttons-grid > flowbox > flowboxchild > button {
-  background-color: var(--surface1);
+  background-color: #282828;
   color: var(--text);
   border: none;
   border-radius: var(--radius-sm);
@@ -323,7 +327,7 @@
 }
 
 .widget-buttons-grid > flowbox > flowboxchild > button:hover {
-  background-color: var(--surface2);
+  background-color: #303030;
 }
 
 .widget-buttons-grid > flowbox > flowboxchild > button.active {
@@ -365,7 +369,7 @@
 
 /* Floating progress bar (volume / brightness OSD via notifications) */
 progressbar {
-  background-color: var(--surface1);
+  background-color: #282828;
   border-radius: var(--radius-pill);
 }
 

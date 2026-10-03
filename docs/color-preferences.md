@@ -28,7 +28,8 @@ Current desktop values. Named tool colors (fish `blue`, `brblack`, `yellow`, `gr
 | text | `#e8e8e8` | primary |
 | subtext | `#b0b0b0` | resting |
 | overlay | `#777777` | off / dim |
-| base | `#232323` | panel fill |
+| base | `#232323` | bar / island fill |
+| card | `#202020` | notification and panel cards (opaque) |
 | crust | `#111111` | deeper fill / shadow |
 
 ## Surfaces
