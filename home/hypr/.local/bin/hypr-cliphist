@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Clipboard history — what Super+V offers. Pick a cliphist entry and copy it.
+set -euo pipefail
+
+entry=$(cliphist list | rofi -dmenu -i -p "Clipboard") || exit 0
+[ -n "$entry" ] || exit 0
+printf '%s\n' "$entry" | cliphist decode | wl-copy

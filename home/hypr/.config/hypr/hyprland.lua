@@ -390,6 +390,9 @@ hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("~/.local/bin/hypr-settings-m
 -- Share: Taildrop a file or the clipboard, or show the clipboard as a QR code
 hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("~/.local/bin/hypr-share-menu")) -- share menu
 
+-- Clipboard history (cliphist; pick copies the entry back to the clipboard)
+hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("~/.local/bin/hypr-cliphist")) -- clipboard history
+
 -- Move focus with mainMod + hjkl
 hl.bind(mainMod .. " + h", hl.dsp.focus({ direction = "left" }))
 hl.bind(mainMod .. " + l", hl.dsp.focus({ direction = "right" }))
