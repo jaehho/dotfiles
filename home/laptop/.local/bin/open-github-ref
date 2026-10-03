@@ -1,10 +1,14 @@
 #!/usr/bin/env fish
 # Expand a bare GitHub issue ref (owner/repo#123 or #123) and open it.
-# Used by kitty open-actions.conf after detect_url_regex.
+# Also accepts full URLs (kitten hints --program / open-actions).
+# Used by kitty open-actions.conf after detect_url_regex, and by keyboard hints.
 set ref $argv[1]
 if test -z "$ref"
     exit 1
 end
+
+# Sentence punctuation rides along when the match is a URL.
+set ref (string replace -r '[.,;:!?)\]}]+$' '' -- $ref)
 
 if string match -rq '^(?<owner>[^/]+)/(?<repo>[^#]+)#(?<n>[0-9]+)$' -- $ref
     xdg-open "https://github.com/$owner/$repo/issues/$n"
