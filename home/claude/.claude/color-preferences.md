@@ -42,10 +42,4 @@ Current desktop values. Named tool colors (fish `blue`, `brblack`, `yellow`, `gr
 
 ## Updating
 
-1. Change the role table or grey ramp when taste itself changes.
-2. Append a one-line entry under Log (date, what changed, why).
-3. Do not log every per-app tweak. Do not generate configs from this file.
-
-## Log
-
-- 2026-10-02: Written after retiring theme-apply (dotfiles issue #38). Semantic roles taken from the waybar and swaync design; grey-is-default and one-job-per-hue were already how those surfaces worked.
+Edit the role table or grey ramp when taste itself changes. Git history is the log. Do not generate configs from this file.
