@@ -327,8 +327,8 @@ hl.device({
 
 local mainMod = "SUPER" -- Sets "Windows" key as main modifier
 
-hl.bind(mainMod .. " + Return",         hl.dsp.exec_cmd("env LAUNCH_TMUX=1 " .. terminal)) -- terminal, with tmux
-hl.bind(mainMod .. " + SHIFT + Return", hl.dsp.exec_cmd(terminal)) -- terminal, no tmux
+hl.bind(mainMod .. " + Return",         hl.dsp.exec_cmd(terminal)) -- terminal (new tmux session)
+hl.bind(mainMod .. " + SHIFT + Return", hl.dsp.exec_cmd("env NO_TMUX=1 " .. terminal)) -- terminal, no tmux
 hl.bind(mainMod .. " + Q",         hl.dsp.window.close()) -- quit: close the focused window
 -- asst's add-task popup: a layer surface, so no window rule; pressing again closes it
 hl.bind(mainMod .. " + A",         hl.dsp.exec_cmd("asst-gtk quick-add")) -- quick add task

@@ -1,26 +1,18 @@
 status is-interactive; or return
 
-# ── tmux auto-launch ─────────────────────────────────────────────────────────
-# Launch tmux session picker only when LAUNCH_TMUX is set (via keybind).
-# Skip bare TTYs (where arch.fish may exec Hyprland) and skip if already
-# inside tmux.
-if command -q tmux; and not set -q TMUX; and set -q LAUNCH_TMUX
+# ── tmux auto-start ──────────────────────────────────────────────────────────
+# Every interactive shell outside tmux gets a new session. No picker; switch
+# with prefix+s. Skip if tmux is missing, already inside tmux, or NO_TMUX is
+# set (Super+Shift+Return). arch.fish execs Hyprland on TTY1 before this file
+# is sourced.
+if command -q tmux; and not set -q TMUX; and not set -q NO_TMUX
     # Push current Hyprland/Wayland env into tmux global env so existing
     # sessions (including continuum-restored ones) pick up fresh values.
     # No-op if tmux server isn't running yet (new-session inherits directly).
     for var in HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY DISPLAY
         set -q $var; and tmux setenv -g $var $$var 2>/dev/null
     end
-    # Clean up unattached picker sessions from previous escapes
-    for s in (tmux list-sessions -f '#{?session_attached,0,1}' -F '#S' 2>/dev/null)
-        string match -q 'tmp*' $s; and tmux kill-session -t $s 2>/dev/null
-    end
-    set -l unattached (tmux list-sessions -f '#{?session_attached,0,1}' -F '#S' 2>/dev/null)
-    if test (count $unattached) -ge 1
-        exec tmux new-session -s tmp-$fish_pid \; choose-tree -Zs -f '#{?session_attached,0,1}' "switch-client -t '%%' ; kill-session -t 'tmp-$fish_pid'"
-    else
-        exec tmux new-session
-    end
+    exec tmux new-session
 end
 
 # ── tmux env refresh ────────────────────────────────────────────────────────
