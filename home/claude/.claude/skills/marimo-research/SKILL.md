@@ -56,23 +56,23 @@ The notebook is the log. A question notebook covers one question, two at most, i
 # Title
 ## Introduction
 ### Question        what is asked
-### Terms           the words used in one sense throughout, as a list of "term: definition" lines
 ### Background      only what bears on this question: what is known, why it matters, the reasoning behind the expected answer, and the design; expectations that could fail
 (methods, no header: data, definitions, diagrams, reused functions, each under its own ## section when it needs one)
 ## <one section per question the analyses answer, named for what it shows>
 ## Discussion        what the sections say, expectation by expectation
 ### Limitations      what else could produce the result and what it does not show
 ### Open questions  follow-up questions, each with a test and the outcome that would refute it
+## Terms             a glossary, as a list of "term: definition" lines
 ```
 
-- Terms lists only words the literature uses loosely or differently, or that a reader could misread. Use the literature's word, say where this notebook departs from it, and give each term one meaning.
-- Name an analysis section for what it shows ("Who the partners are", "Where the data put the cutoff"), not "Results": that word says the work is final, and the notebook is the current understanding. The order the work was done in lives in git and the issues.
-- Open each analysis section by saying whether it tests a stated expectation or is exploratory, and keep that label in the Discussion. An exploration that changed a decision gets its own section before the method it motivated, and states the decision.
+- Terms is a glossary at the end, for any word a reader may need a reminder of or that is niche in the field. It is loose: it is not limited to words that clash with the literature. Each term is also defined in the prose where it first appears, so a reader never has to jump. Use the literature's word, say where this notebook departs from it, and give each term one meaning.
+- Name an analysis section for what it shows ("Who the partners are", "Where the data put the cutoff"), not "Results": that word says the work is final, and the notebook is the current understanding. Give each analysis its own `##` heading; do not wrap them in a `## Results`. The order the work was done in lives in git and the issues.
+- Do not label sections planned or exploratory: a question notebook is exploratory as a whole. An exploration that changed a decision gets its own section before the method it motivated, and states the decision.
 - Write in any order. The cell graph does not depend on cell order, so jump between sections while developing, and reread the notebook top to bottom at each commit and reorder it for the reader.
 - Background does not need a quote for every claim. Quote where a passage carries the claim, paraphrase with a link where none does, and leave out a general introduction to the system. A claim the notebook cannot fully test gets an open question.
 - Each exclusion or data quirk the analysis handles gets one sentence in the Background saying where it comes from, with a source quote when the literature has one.
 - An expectation says what the data would look like without the effect, and why. Do not assume a distribution family (power law, normal) without a reason.
-- The expectations come before the methods and the analysis sections and are stated as they were posed. They are reasoning that warrants the experiments, not labeled hypotheses. Do not dress a post-hoc finding as an expectation; label exploratory results as exploratory.
+- The expectations come before the methods and the analysis sections and are stated as they were posed. They are reasoning that warrants the experiments, not labeled hypotheses. Do not dress a post-hoc finding as an expectation; report it as found.
 - Do not bake an exclusion into the definition of what is analyzed. Define the objects of study as broadly as the question allows, apply an exclusion after the first result, and show its effect beside the unfiltered version.
 - A cutoff or parameter taken from a convention is named and commented as a standard the notebook tests. When the data could set it, add a section that derives it (a fitted breakpoint, marks spaced on a log scale) instead of marks picked by hand.
 - When a filter decides which records count (quality, completeness, a proofread flag), run the main analysis on the records the question is about and show the unfiltered version beside it in the figures where it changes the conclusion.
@@ -241,7 +241,7 @@ Tests guard what breaks silently and is cheap to check. They do not police style
 2. `python notebooks/<file>.py` runs headless without fetching. Open it in `marimo edit` and look at the rendered cells, or say you only ran it headless.
 3. Each literal you touched (paths, ids, thresholds) has one definition.
 4. Functions exist only where reused; single-use steps are cells.
-5. Question notebook: introduction (question, terms, background with expectations), methods, one section per analysis named for what it shows and marked planned or exploratory, discussion (limitations, open questions), in that order; the discussion matches the rendered outputs.
+5. Question notebook: introduction (question, background with expectations), methods, one section per analysis named for what it shows (no `## Results` wrapper), discussion (limitations, open questions), terms, in that order; each term is defined where it first appears; the discussion matches the rendered outputs.
 6. Each `$$...$$` is research-grade; each definition that compares quantities or describes a structure has a diagram you have looked at.
 7. No issue numbers and no code or debugging history in the notebook.
 8. Each literature claim in the Background is quoted or linked as in Citations.
