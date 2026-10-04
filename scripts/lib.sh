@@ -42,7 +42,7 @@ HOST_NO_AAAA="${HOST_NO_AAAA:-0}"
 # --- stow packages --------------------------------------------------------
 COMMON_STOW=(fish git tmux nvim claude codex sshfs bin laptop kitty ssh mime restic zathura
              visidata tridactyl tailscale audio marimo)
-ARCH_STOW=(hypr swaync rofi waybar)
+ARCH_STOW=(hypr swaync rofi waybar sunshine)
 
 STOW_PACKAGES=()
 for _p in "${COMMON_STOW[@]}"; do STOW_PACKAGES+=("$_p"); done

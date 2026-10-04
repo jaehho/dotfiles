@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# tablet-display on|off|status: use the Galaxy Tab as a second screen.
+#
+# `on` creates a headless Hyprland output and starts Sunshine against it; the
+# Moonlight app on the tablet then shows that output. monitors.lua treats it as
+# any other external, so it sits right of the laptop and takes workspaces 2, 4,
+# and so on. `off` stops Sunshine and removes the output, and the workspaces
+# fall back to the laptop.
+#
+# The output must exist before Sunshine starts: it resolves output_name once at
+# startup and would capture the wrong display otherwise. The name is read from
+# sunshine.conf so the two cannot drift.
+#
+# Stream over USB tethering (plug in, then Settings > Connections > Mobile
+# Hotspot and Tethering > USB tethering), not Tailscale. On a Wi-Fi that isolates
+# clients, Tailscale falls back to a DERP relay, and a relayed stream glitches as
+# soon as anything on screen moves. The USB link is direct and about 2 ms.
+#
+# Sunshine is not enabled at login: it listens on every interface, so it runs
+# only while this is on.
+
+set -uo pipefail
+
+SUNSHINE_CONF="$HOME/.config/sunshine/sunshine.conf"
+UNIT=app-dev.lizardbyte.app.Sunshine.service
+WEB_UI=https://localhost:47990
+MODE=1920x1080@60   # Moonlight's 1080p, so Sunshine does not rescale the capture
+SCALE=1
+READY_TIMEOUT=30    # seconds; the unit sleeps 5 before it starts Sunshine
+
+die() { echo "tablet-display: $*" >&2; exit 1; }
+
+OUTPUT=$(awk -F'[[:space:]]*=[[:space:]]*' '$1 == "output_name" { print $2 }' "$SUNSHINE_CONF" 2>/dev/null)
+[ -n "$OUTPUT" ] || die "no output_name in $SUNSHINE_CONF"
+
+output_exists() {
+    hyprctl monitors -j 2>/dev/null | jq -e --arg n "$OUTPUT" 'any(.[]; .name == $n)' >/dev/null
+}
+
+sunshine_active() {
+    systemctl --user is-active --quiet "$UNIT"
+}
+
+# IPv4 of each USB network interface (the tethered tablet). The tablet's own
+# address is the link's gateway; Moonlight connects to the laptop's.
+usb_addrs() {
+    local dev
+    for dev in /sys/class/net/*; do
+        [[ "$(readlink -f "$dev/device" 2>/dev/null)" == */usb* ]] || continue
+        ip -j -4 addr show dev "${dev##*/}" | jq -r '.[].addr_info[].local'
+    done
+}
+
+wait_for() {
+    local what="$1" i
+    shift
+    for ((i = 0; i < READY_TIMEOUT * 4; i++)); do
+        "$@" && return 0
+        sleep 0.25
+    done
+    die "$what did not come up within ${READY_TIMEOUT}s"
+}
+
+sunshine_ready() {
+    curl -ks -o /dev/null --max-time 1 "$WEB_UI"
+}
+
+report_address() {
+    local addrs
+    addrs=$(usb_addrs)
+    if [ -n "$addrs" ]; then
+        echo "Moonlight host: $(echo "$addrs" | paste -sd' ')"
+    else
+        echo "no USB tether link: Moonlight would go through Tailscale and glitch on motion" >&2
+    fi
+}
+
+cmd_on() {
+    local created=0
+    if ! output_exists; then
+        hyprctl output create headless "$OUTPUT" >/dev/null || die "could not create output $OUTPUT"
+        wait_for "output $OUTPUT" output_exists
+        created=1
+    fi
+    hyprctl eval "hl.monitor({ output = \"$OUTPUT\", mode = \"$MODE\", position = \"auto\", scale = \"$SCALE\" })" >/dev/null ||
+        die "could not set $OUTPUT to $MODE"
+
+    # Sunshine already running from before the output existed has the wrong one cached.
+    if sunshine_active; then
+        [ "$created" = 1 ] && systemctl --user restart "$UNIT"
+    else
+        systemctl --user start "$UNIT" || die "could not start $UNIT"
+    fi
+    wait_for Sunshine sunshine_ready
+    echo "on: $OUTPUT $MODE"
+    report_address
+}
+
+cmd_off() {
+    sunshine_active && systemctl --user stop "$UNIT"
+    if output_exists; then
+        hyprctl output remove "$OUTPUT" >/dev/null || die "could not remove output $OUTPUT"
+    fi
+    echo off
+}
+
+cmd_status() {
+    if output_exists; then
+        hyprctl monitors -j | jq -r --arg n "$OUTPUT" '.[] | select(.name == $n) | "output: \(.name) \(.width)x\(.height)@\(.refreshRate | floor)"'
+    else
+        echo "output: none"
+    fi
+    if sunshine_active; then echo "sunshine: running"; else echo "sunshine: stopped"; fi
+    report_address
+}
+
+case "${1:-status}" in
+    on) cmd_on ;;
+    off) cmd_off ;;
+    status) cmd_status ;;
+    *) die "usage: tablet-display on|off|status" ;;
+esac
