@@ -19,5 +19,6 @@ perl-file-mimeinfo
 prismlauncher
 reel-git
 steam
+sunshine
 thunar
 zoom
