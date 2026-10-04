@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 fc-sweep — interactive parameter sweep + STL export for one Body.
 
@@ -19,7 +20,6 @@ from pathlib import Path
 
 import FreeCAD
 import MeshPart
-
 
 BRACKET_RE = re.compile(r"<<([^>]+)>>\.(\w+)")
 PLAIN_RE = re.compile(r"\b([A-Za-z_]\w*)\.(\w+)")
@@ -155,15 +155,14 @@ def _description(container, alias):
         if not m:
             return ""
         raw = container.getContents(f"A{m.group(2)}") or ""
-        if raw.startswith("'"):
-            raw = raw[1:]
+        raw = raw.removeprefix("'")
         raw = raw.strip()
         if raw and raw != alias and not (raw.startswith("[") and raw.endswith("]")):
             return raw
         return ""
     try:
         return container.getDocumentationOfProperty(alias) or ""
-    except Exception:
+    except (AttributeError, RuntimeError):
         return ""
 
 

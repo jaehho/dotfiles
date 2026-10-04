@@ -44,6 +44,7 @@ def fingerprint(target: Path) -> str:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         h.update(result.stdout.encode())
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -116,6 +117,7 @@ def main() -> int:
             capture_output=True,
             text=True,
             timeout=TIMEOUT_S,
+            check=False,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return 0

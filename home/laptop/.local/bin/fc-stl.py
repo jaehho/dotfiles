@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 fc-stl — export visible PartDesign Bodies to STL.
 
