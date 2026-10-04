@@ -1,3 +1,4 @@
+android-tools
 cargo-update
 clang
 cmake
