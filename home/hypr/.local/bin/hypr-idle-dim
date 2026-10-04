@@ -1,0 +1,11 @@
+#!/bin/bash
+# hypridle on-timeout for the dim listener. Save the current brightness (the
+# listener's on-resume runs `brightnessctl -r`), then dim to the lower of 10% of
+# max and half the current raw value, so a screen already below 10% gets dimmer
+# instead of brighter. Raw value 1 is the floor; 0 turns the backlight off.
+
+IFS=, read -r _ _ raw _ max < <(brightnessctl -m)
+target=$(( max / 10 ))
+(( raw / 2 < target )) && target=$(( raw / 2 ))
+(( target < 1 )) && target=1
+brightnessctl -q -s set "$target"
