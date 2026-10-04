@@ -1,3 +1,4 @@
+inter-font
 noto-fonts-cjk
 noto-fonts-emoji
 otf-font-awesome
