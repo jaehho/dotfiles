@@ -68,7 +68,7 @@ window {
     width:            42em;
     padding:          0;
     border:           2px;
-    border-radius:    14px;
+    border-radius:    12px;
     border-color:     @surface2;
     background-color: @base-blur;
 }
@@ -81,7 +81,7 @@ mainbox {
 inputbar {
     padding:          10px 14px;
     spacing:          10px;
-    border-radius:    10px;
+    border-radius:    8px;
     background-color: @surface0-blur;
     text-color:       @text;
     children:         [ "prompt", "entry", "num-filtered-rows", "textbox-num-sep", "num-rows" ];
@@ -118,7 +118,7 @@ element {
     padding:       8px 12px;
     spacing:       12px;
     border:        0;
-    border-radius: 10px;
+    border-radius: 8px;
     cursor:        pointer;
 }
 element normal.normal {
@@ -173,7 +173,7 @@ element-text {
 }
 message {
     padding:          8px 12px;
-    border-radius:    10px;
+    border-radius:    8px;
     border:           0;
     background-color: @surface0;
 }

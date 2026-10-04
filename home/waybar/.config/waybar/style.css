@@ -45,7 +45,7 @@ window#waybar {
 .modules-right {
     background-color: @base-88;
     border: 1px solid @blue-18;
-    border-radius: 14px;
+    border-radius: 12px;
     margin: 4px 0;
     padding: 0 6px;
 }
@@ -90,7 +90,7 @@ window#waybar {
     background: transparent;
     color: @subtext0;
     padding: 0 7px;
-    border-radius: 9px;
+    border-radius: 8px;
     transition: color 0.2s ease, background-color 0.2s ease;
 }
 
@@ -133,7 +133,7 @@ window#waybar {
     color: @overlay0;
     background: transparent;
     border: none;
-    border-radius: 9px;
+    border-radius: 8px;
     margin: 3px 2px;
     padding: 0 7px;
     transition: color 0.2s ease, background-color 0.2s ease;
@@ -347,7 +347,7 @@ window#waybar {
 
 #tray > * {
     padding: 0 4px;
-    border-radius: 9px;
+    border-radius: 8px;
     transition: opacity 0.2s ease, background-color 0.2s ease;
 }
 
@@ -374,11 +374,11 @@ menu {
     background-color: @base;
     color: @text;
     border: 1px solid @blue-18;
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 4px;
 }
 menuitem {
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 4px 12px;
 }
 menuitem:hover {

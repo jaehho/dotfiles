@@ -17,6 +17,7 @@ GNU Stow dotfiles for Arch + Hyprland and Ubuntu/Debian. Gate distro-specific wo
 - DNS belongs to systemd-resolved, including its stub link and NetworkManager integration. Preserve Tailscale split DNS.
 - Claude configuration is declarative: see `home/claude/.claude/reconcile/README.md` and `scripts/claude-reconcile.sh`. Do not put secrets in manifests.
 - Monitor rules are computed directly by `home/hypr/.config/hypr/monitors.lua`. Do not add a layout daemon or generated config.
+- Corner radii share one scale: 12px for windows and containers, 8px for controls nested inside, pill for fully round. Hyprland `rounding`, hyprlock, waybar, rofi, and swaync follow it; a new surface picks from the scale instead of a new number.
 - The keybind sheet parses `hyprland.lua` comments and tmux `-N` notes. Label new binds. Quick-settings IDs in `hypr-settings-menu` are also called by waybar; preserve those callers when renaming.
 - Apps under `~/projects/` own their implementation and install flow. This repo owns their integration; inspect `hyprland.lua`, the converge enable list, and Neovim's lazy specs before moving functionality here.
 - `home/bin` is the server tools (`scripts/server.sh`); `home/laptop` is desktop/laptop-only (timers, notify, tip, FreeCAD helpers). Put new scripts in one or the other, not both.
