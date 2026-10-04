@@ -13,6 +13,7 @@
 - Prefer maintained open-source, standalone tools over suite-bound ones.
 - Keep system behavior close to distro/upstream defaults. When a fix adds a layer over earlier fixes, consider removing layers first.
 - I use fish, Firefox, and nvim. Python is uv (`uv sync`, `uv run`), never pip or a hand-activated venv.
+- Dataframes: polars, not pandas; convert where a library hands back pandas.
 - Colors: before choosing or changing any color (UI, charts, notebooks, themes), read `~/dotfiles/docs/color-preferences.md` and follow it. Update that file only when taste changes, not for a one-off surface.
 
 ## Working

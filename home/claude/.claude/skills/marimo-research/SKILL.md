@@ -55,16 +55,26 @@ The notebook is the log. A question notebook covers one question, two at most, i
 ```
 # Title
 ## Introduction
-### Question        what is asked and the terms it uses
-### Background      what is known, why the question matters, the reasoning behind the expected answer, and the design; expectations that could fail
+### Question        what is asked
+### Terms           the words used in one sense throughout, as a list of "term: definition" lines
+### Background      only what bears on this question: what is known, why it matters, the reasoning behind the expected answer, and the design; expectations that could fail
 (methods, no header: data, definitions, diagrams, reused functions, each under its own ## section when it needs one)
-## Results
-## Discussion        what the results say, expectation by expectation
+## <one section per question the analyses answer, named for what it shows>
+## Discussion        what the sections say, expectation by expectation
 ### Limitations      what else could produce the result and what it does not show
 ### Open questions  follow-up questions, each with a test and the outcome that would refute it
 ```
 
-- The expectations come before the methods and results and are stated as they were posed. They are reasoning that warrants the experiments, not labeled hypotheses. Do not dress a post-hoc finding as an expectation; label exploratory results as exploratory.
+- Terms lists only words the literature uses loosely or differently, or that a reader could misread. Use the literature's word, say where this notebook departs from it, and give each term one meaning.
+- Name an analysis section for what it shows ("Who the partners are", "Where the data put the cutoff"), not "Results": that word says the work is final, and the notebook is the current understanding. The order the work was done in lives in git and the issues.
+- Open each analysis section by saying whether it tests a stated expectation or is exploratory, and keep that label in the Discussion. An exploration that changed a decision gets its own section before the method it motivated, and states the decision.
+- Write in any order. The cell graph does not depend on cell order, so jump between sections while developing, and reread the notebook top to bottom at each commit and reorder it for the reader.
+- Background does not need a quote for every claim. Quote where a passage carries the claim, paraphrase with a link where none does, and leave out a general introduction to the system. A claim the notebook cannot fully test gets an open question.
+- Each exclusion or data quirk the analysis handles gets one sentence in the Background saying where it comes from, with a source quote when the literature has one.
+- An expectation says what the data would look like without the effect, and why. Do not assume a distribution family (power law, normal) without a reason.
+- The expectations come before the methods and the analysis sections and are stated as they were posed. They are reasoning that warrants the experiments, not labeled hypotheses. Do not dress a post-hoc finding as an expectation; label exploratory results as exploratory.
+- Do not bake an exclusion into the definition of what is analyzed. Define the objects of study as broadly as the question allows, apply an exclusion after the first result, and show its effect beside the unfiltered version.
+- A cutoff or parameter taken from a convention is named and commented as a standard the notebook tests. When the data could set it, add a section that derives it (a fitted breakpoint, marks spaced on a log scale) instead of marks picked by hand.
 - When a filter decides which records count (quality, completeness, a proofread flag), run the main analysis on the records the question is about and show the unfiltered version beside it in the figures where it changes the conclusion.
 - Headings are plain and undated. No "Hypothesis", "Skeptic's case", "Decision", or "Next".
 - What follows the Introduction is methods, with no header. When one analysis maps to one expectation, interleave method and result.
@@ -205,6 +215,9 @@ GitHub issues hold tasks, gotchas, decisions, and how a bug was found.
 - Explicit step-by-step code. No clever one-liners or deep helper chains.
 - Names say what they hold (`measurements`, `label_of`), not abbreviations.
 - Use the literature's words. Before naming a quantity, see what the papers you cite call it and use that word. Define each term once, where it first appears, and say there where you use it differently from the literature. Then keep one word per thing and one thing per word across prose, code names, column names, and figure labels.
+- Introduce each table, function, and variable in prose by the name it has in the code (`census`, `connections`, `proofread_ids`), not by a descriptive name of its own.
+- Load each table in one cell and pass the variable on. A later cell takes the variable; it does not call the loader again.
+- marimo regenerates the file whenever it saves, so comments between cells and trailing comments on lines of `with app.setup:` and `@app.function` bodies are lost. Put a comment on its own line inside a cell, function, or setup block.
 - Explanatory text is a markdown cell in complete sentences with transitions, not a comment at the top of a code cell. Introduce each definition, function, and figure with a markdown cell that says what it is for and what to look at. Comments stay for a choice at its site (a constant, a threshold) and stay short.
 - Provenance lives in names, docstrings, and constants; let the dependency graph show data flow.
 - Choice comments are short prose at the site of the choice: the real options and why this one; for open-ended knobs, what question the knob answers and a couple of concrete values; "arbitrary" when it is. No hard-wrapped comment lines.
@@ -228,7 +241,7 @@ Tests guard what breaks silently and is cheap to check. They do not police style
 2. `python notebooks/<file>.py` runs headless without fetching. Open it in `marimo edit` and look at the rendered cells, or say you only ran it headless.
 3. Each literal you touched (paths, ids, thresholds) has one definition.
 4. Functions exist only where reused; single-use steps are cells.
-5. Question notebook: introduction (question, background with expectations), methods, results, discussion (limitations, open questions), in that order; the discussion matches the rendered outputs.
+5. Question notebook: introduction (question, terms, background with expectations), methods, one section per analysis named for what it shows and marked planned or exploratory, discussion (limitations, open questions), in that order; the discussion matches the rendered outputs.
 6. Each `$$...$$` is research-grade; each definition that compares quantities or describes a structure has a diagram you have looked at.
 7. No issue numbers and no code or debugging history in the notebook.
 8. Each literature claim in the Background is quoted or linked as in Citations.
@@ -238,6 +251,7 @@ Tests guard what breaks silently and is cheap to check. They do not police style
 
 This skill grows from the user's edits to single notebooks.
 
+- When the user leaves comments inside a notebook, treat each as an instruction: address it, apply the same fix to the rest of the notebook past the last comment, delete the comment, and add the general rule here.
 - When the user suggests a meaningful change to one notebook (structure, prose, figures, math, naming, testing), make the change, then decide whether it applies to research notebooks in general.
 - If it does, end the reply by offering a skill update: quote the exact text to add or change and name the section. Do not edit the skill until the user agrees, unless they asked for the skill change directly.
 - Skip one-off preferences and data-specific fixes; say "already covered by <section>" when relevant.
