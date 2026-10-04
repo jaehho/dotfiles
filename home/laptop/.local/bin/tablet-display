@@ -71,7 +71,8 @@ report_address() {
     if [ -n "$addrs" ]; then
         echo "Moonlight host: $(echo "$addrs" | paste -sd' ')"
     else
-        echo "no USB tether link: Moonlight would go through Tailscale and glitch on motion" >&2
+        echo "no USB tether link: turn on USB tethering on the tablet (Android resets it when the cable is replugged)." >&2
+        echo "Without it Moonlight goes through Tailscale and glitches on motion." >&2
     fi
 }
 
