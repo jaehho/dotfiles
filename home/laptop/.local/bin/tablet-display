@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tablet-display on|off|status: use the Galaxy Tab as a second screen.
+# tablet-display on|off|toggle|status: use the Galaxy Tab as a second screen.
 #
 # `on` creates a headless Hyprland output, starts Sunshine against it, and
 # opens the stream in Moonlight on the tablet. monitors.lua treats the output
@@ -24,6 +24,12 @@
 #
 # Sunshine is not enabled at login: it listens on every interface, so it runs
 # only while this is on.
+#
+# Meant to run from a keybind, so it takes a lock (a second press while the
+# first waits for an unlock does nothing), reports through notifications when
+# there is no terminal, checks the tablet before creating anything, and undoes
+# what it created if a later step fails. `toggle` turns it off whenever either
+# half is up, so a stale output is one keypress from gone.
 
 set -uo pipefail
 
@@ -37,7 +43,26 @@ SCALE=1
 READY_TIMEOUT=30    # seconds; the unit sleeps 5 before it starts Sunshine
 UNLOCK_TIMEOUT=60   # seconds to wait for the tablet to be unlocked
 
-die() { echo "tablet-display: $*" >&2; exit 1; }
+# Terminal: print. Keybind: notify, since there is nowhere to read stderr.
+say() {
+    if [ -t 2 ]; then echo "tablet-display: $*" >&2; else notify-send -a tablet-display "Tablet display" "$*"; fi
+}
+
+CREATED=0   # this run created the output
+STARTED=0   # this run started Sunshine
+
+rollback() {
+    [ "$STARTED" = 1 ] && systemctl --user stop "$UNIT"
+    [ "$CREATED" = 1 ] && hyprctl output remove "$OUTPUT" >/dev/null 2>&1
+    CREATED=0 STARTED=0
+}
+
+die() { say "$*"; exit 1; }
+# A failure after something was created: undo it so no invisible output keeps workspaces.
+fail() { rollback; die "$*"; }
+
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/tablet-display.lock"
+flock -n 9 || die "already running"
 
 OUTPUT=$(awk -F'[[:space:]]*=[[:space:]]*' '$1 == "output_name" { print $2 }' "$SUNSHINE_CONF" 2>/dev/null)
 [ -n "$OUTPUT" ] || die "no output_name in $SUNSHINE_CONF"
@@ -48,7 +73,8 @@ APP_NAME=$(jq -r '.apps[0].name' "$APPS_JSON" 2>/dev/null)
 [ -n "$APP_NAME" ] && [ "$APP_NAME" != null ] || die "no app in $APPS_JSON"
 
 output_exists() {
-    hyprctl monitors -j 2>/dev/null | jq -e --arg n "$OUTPUT" 'any(.[]; .name == $n)' >/dev/null
+    # `all`: a mirrored output (Super+P) drops out of the plain listing.
+    hyprctl monitors all -j 2>/dev/null | jq -e --arg n "$OUTPUT" 'any(.[]; .name == $n)' >/dev/null
 }
 
 sunshine_active() {
@@ -71,7 +97,28 @@ tether_up() {
 
 # True when exactly one authorized tablet is attached over adb.
 have_tablet() {
-    command -v adb >/dev/null && [ "$(adb get-state 2>/dev/null)" = device ]
+    command -v adb >/dev/null && [ "$(timeout 10 adb get-state 2>/dev/null)" = device ]
+}
+
+# Why the tablet cannot be reached, or nothing and success when it can: the
+# tether link is up, or adb sees exactly one authorized device to turn it on.
+tablet_problem() {
+    local states
+    tether_up && return 0
+    command -v adb >/dev/null || { echo "USB tethering is off and adb is not installed"; return 1; }
+    mapfile -t states < <(timeout 10 adb devices 2>/dev/null | awk 'NR > 1 && NF { print $2 }')
+    case "${#states[@]}:${states[0]:-}" in
+        1:device) return 0 ;;
+        1:unauthorized) echo "approve USB debugging on the tablet, then try again"; return 1 ;;
+        1:offline) echo "tablet is offline on adb; replug the cable"; return 1 ;;
+        0:) if lsusb -d 04e8: >/dev/null 2>&1; then
+                echo "tablet is plugged in but USB debugging is off; turn it on, or turn on USB tethering"
+            else
+                echo "tablet is not connected over USB"
+            fi
+            return 1 ;;
+        *) echo "more than one adb device attached; unplug the others"; return 1 ;;
+    esac
 }
 
 wait_for() {
@@ -81,7 +128,7 @@ wait_for() {
         "$@" && return 0
         sleep 0.25
     done
-    die "$what did not come up within ${READY_TIMEOUT}s"
+    fail "$what did not come up within ${READY_TIMEOUT}s"
 }
 
 sunshine_ready() {
@@ -91,42 +138,46 @@ sunshine_ready() {
 # adb drops while the USB function changes, so the command's exit status says
 # nothing; the link coming up is the check.
 enable_tether() {
-    adb shell svc usb setFunctions rndis >/dev/null 2>&1
+    timeout 10 adb shell svc usb setFunctions rndis >/dev/null 2>&1
 }
 
 keyguard_showing() {
-    adb shell dumpsys window 2>/dev/null | grep -q 'isKeyguardShowing=true'
+    timeout 10 adb shell dumpsys window 2>/dev/null | grep -q 'isKeyguardShowing=true'
 }
 
 launch_moonlight() {
     local i
-    timeout "$READY_TIMEOUT" adb wait-for-device || die "tablet did not come back on adb"
-    adb shell input keyevent KEYCODE_WAKEUP
+    timeout "$READY_TIMEOUT" adb wait-for-device || { say "tablet did not come back on adb"; return 1; }
+    timeout 10 adb shell input keyevent KEYCODE_WAKEUP
     for ((i = 0; i < UNLOCK_TIMEOUT; i++)); do
         keyguard_showing || break
-        [ "$i" = 0 ] && echo "unlock the tablet"
+        [ "$i" = 0 ] && say "unlock the tablet"
         sleep 1
     done
     if keyguard_showing; then
-        echo "tablet still locked; open $APP_NAME on $PC_NAME in Moonlight yourself" >&2
+        say "tablet still locked; open $APP_NAME on $PC_NAME in Moonlight yourself"
         return 1
     fi
-    adb shell am start -n "$MOONLIGHT/.ShortcutTrampoline" --es Name "$PC_NAME" --es AppName "$APP_NAME" >/dev/null
+    timeout 10 adb shell am start -n "$MOONLIGHT/.ShortcutTrampoline" --es Name "$PC_NAME" --es AppName "$APP_NAME" 2>&1 |
+        grep -q '^Error' && { say "Moonlight did not start on the tablet"; return 1; }
+    return 0
 }
 
 report_address() {
     local addrs
     addrs=$(usb_addrs)
     if [ -n "$addrs" ]; then
-        echo "Moonlight host: $(echo "$addrs" | paste -sd' ')"
+        echo "Moonlight host $(echo "$addrs" | paste -sd' ')"
     else
-        echo "no USB tether link: turn on USB tethering on the tablet (Android resets it when the cable is replugged)." >&2
-        echo "Without it Moonlight goes through Tailscale and glitches on motion." >&2
+        echo "no USB tether link, so Moonlight goes through Tailscale and glitches on motion"
     fi
 }
 
 cmd_on() {
-    local created=0 adb_ok=0
+    local adb_ok=0 problem
+    hyprctl version >/dev/null 2>&1 || die "Hyprland is not running"
+    # Check the tablet before creating anything.
+    problem=$(tablet_problem) || die "$problem"
     # Start the tether switch first; it takes about as long as Sunshine does.
     if have_tablet; then
         adb_ok=1
@@ -135,26 +186,26 @@ cmd_on() {
 
     if ! output_exists; then
         hyprctl output create headless "$OUTPUT" >/dev/null || die "could not create output $OUTPUT"
+        CREATED=1
         wait_for "output $OUTPUT" output_exists
-        created=1
     fi
     hyprctl eval "hl.monitor({ output = \"$OUTPUT\", mode = \"$MODE\", position = \"auto\", scale = \"$SCALE\" })" >/dev/null ||
-        die "could not set $OUTPUT to $MODE"
+        fail "could not set $OUTPUT to $MODE"
 
     # Sunshine already running from before the output existed has the wrong one cached.
     if sunshine_active; then
-        [ "$created" = 1 ] && systemctl --user restart "$UNIT"
+        [ "$CREATED" = 1 ] && { systemctl --user restart "$UNIT" || fail "could not restart $UNIT"; }
     else
-        systemctl --user start "$UNIT" || die "could not start $UNIT"
+        STARTED=1
+        systemctl --user start "$UNIT" || fail "could not start $UNIT (is another Sunshine running?)"
     fi
     wait_for Sunshine sunshine_ready
-    echo "on: $OUTPUT $MODE"
 
     if [ "$adb_ok" = 1 ]; then
         wait_for "USB tether link" tether_up
         launch_moonlight
     fi
-    report_address
+    say "on: $OUTPUT $MODE, $(report_address)"
 }
 
 cmd_off() {
@@ -162,12 +213,16 @@ cmd_off() {
     if output_exists; then
         hyprctl output remove "$OUTPUT" >/dev/null || die "could not remove output $OUTPUT"
     fi
-    echo off
+    say off
+}
+
+cmd_toggle() {
+    if output_exists || sunshine_active; then cmd_off; else cmd_on; fi
 }
 
 cmd_status() {
     if output_exists; then
-        hyprctl monitors -j | jq -r --arg n "$OUTPUT" '.[] | select(.name == $n) | "output: \(.name) \(.width)x\(.height)@\(.refreshRate | floor)"'
+        hyprctl monitors all -j | jq -r --arg n "$OUTPUT" '.[] | select(.name == $n) | "output: \(.name) \(.width)x\(.height)@\(.refreshRate | floor)"'
     else
         echo "output: none"
     fi
@@ -179,6 +234,7 @@ cmd_status() {
 case "${1:-status}" in
     on) cmd_on ;;
     off) cmd_off ;;
+    toggle) cmd_toggle ;;
     status) cmd_status ;;
-    *) die "usage: tablet-display on|off|status" ;;
+    *) die "usage: tablet-display on|off|toggle|status" ;;
 esac
