@@ -1,0 +1,478 @@
+#!/usr/bin/env python3
+"""hypr-display-menu — display layout, per-screen on/off, and the tablet (F1, Super + P).
+
+Reads what Hyprland reports (`hyprctl monitors all`) and refreshes while open, so
+the cards follow plugging, unplugging, and the tablet coming up. Changes go to
+monitors.lua through `hyprctl eval`, which owns the layout; the tablet goes
+through `tablet-display`. The F1 key opens this with Extend focused.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import threading
+
+HOME = os.path.expanduser("~")
+PALETTE = os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config") + "/theme/palette"
+TABLET = f"{HOME}/.local/bin/tablet-display"
+SUNSHINE_CONF = f"{HOME}/.config/sunshine/sunshine.conf"
+BLANK_DELAY = 1.2  # seconds; a key release counts as input and would wake the screen
+
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+def output(cmd, timeout=3):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def spawn(cmd):
+    """Fire and forget: the child outlives the menu closing."""
+    subprocess.Popen(cmd, shell=True, start_new_session=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL)
+
+
+def monitors_lua(code):
+    subprocess.run(["hyprctl", "eval", f'require("monitors").{code}'], capture_output=True)
+
+
+def tablet_output():
+    """The headless output tablet-display creates; it reads the same line."""
+    try:
+        with open(SUNSHINE_CONF) as fh:
+            for line in fh:
+                key, _, value = line.partition("=")
+                if key.strip() == "output_name":
+                    return value.strip()
+    except OSError:
+        pass
+    return "tablet"
+
+
+# ── state ────────────────────────────────────────────────────────────────────
+
+ICONS = dict(laptop="\U000F0322", laptop_off="\U000F06E7", monitor="\U000F0379",
+             monitor_off="\U000F0D90", tablet="\U000F04F6")
+
+
+def read_screens(tablet):
+    """Every output Hyprland knows, enabled or not, left to right, off ones last."""
+    try:
+        mons = json.loads(output(["hyprctl", "monitors", "all", "-j"]) or "[]")
+        spaces = json.loads(output(["hyprctl", "workspaces", "-j"]) or "[]")
+    except ValueError:
+        return []
+    by_mon = {}
+    for ws in spaces:
+        if ws["id"] > 0:
+            by_mon.setdefault(ws["monitor"], []).append(ws["id"])
+
+    screens = []
+    for m in mons:
+        name = m["name"]
+        kind = "laptop" if name.startswith("eDP-") else "tablet" if name == tablet else "monitor"
+        mirrored = m.get("mirrorOf") not in (None, "none", "")
+        title = {"laptop": "Laptop panel", "tablet": "Tablet screen"}.get(kind) \
+            or " ".join(p for p in (m.get("make"), m.get("model")) if p and p != "0x0000") \
+            or m.get("description") or name
+        screens.append(dict(
+            name=name, kind=kind, title=title, on=not m.get("disabled") and not mirrored,
+            mirrored=mirrored, focused=bool(m.get("focused")), x=m.get("x", 0),
+            size=(m["width"], m["height"]) if m.get("width") else None,
+            workspaces=sorted(by_mon.get(name, []))))
+    screens.sort(key=lambda s: (not s["on"], s["x"]))
+    return screens
+
+
+def current_layout(screens):
+    laptops = [s for s in screens if s["kind"] == "laptop"]
+    others = [s for s in screens if s["kind"] != "laptop"]
+    if any(s["mirrored"] for s in others):
+        return "mirror"
+    if all(s["on"] for s in screens):
+        return "extend"
+    if laptops and others:
+        if not laptops[0]["on"]:
+            return "external"
+        if not any(s["on"] for s in others):
+            return "laptop"
+    return "custom"
+
+
+def read_tablet():
+    """(state, reason) from `tablet-display state`: on, off, or starting."""
+    lines = output([TABLET, "state"], timeout=15).splitlines()
+    return (lines[0] if lines else "off"), (lines[1] if len(lines) > 1 else "")
+
+
+# ── GUI ──────────────────────────────────────────────────────────────────────
+
+# gtk4-layer-shell must load before libwayland-client; see hypr-keybind-cheatsheet.
+PRELOAD = "/usr/lib/libgtk4-layer-shell.so"
+if os.path.exists(PRELOAD) and PRELOAD not in os.environ.get("LD_PRELOAD", ""):
+    os.environ["LD_PRELOAD"] = f"{PRELOAD}:{os.environ.get('LD_PRELOAD', '')}".rstrip(":")
+    os.execv(sys.executable, [sys.executable, *sys.argv])
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+gi.require_version("Gtk4LayerShell", "1.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
+from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
+
+FALLBACK = {
+    "crust": "0c1315", "base": "141c1e", "surface0": "20282a",
+    "surface1": "2f3739", "surface2": "41494c", "overlay0": "778184",
+    "text": "cfdadc", "subtext1": "b6c0c2", "sapphire": "3daab0",
+}
+
+
+def palette():
+    colors = dict(FALLBACK)
+    try:
+        with open(PALETTE) as fh:
+            for line in fh:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    colors[key.strip()] = val.strip()
+    except OSError:
+        pass
+    return {k: f"#{v}" for k, v in colors.items()}
+
+
+CSS = """
+window.display {{ background: transparent; }}
+
+.sheet {{
+  background: alpha({crust}, 0.985);
+  border: 1px solid {surface1};
+  border-radius: 16px;
+  padding: 18px 20px 14px 20px;
+}}
+
+.heading {{
+  font-family: "Adwaita Sans", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: {overlay0};
+  margin: 4px 2px 0 2px;
+}}
+
+button.layout, button.card {{
+  font-family: "Adwaita Sans", sans-serif;
+  color: {subtext1};
+  background: {base};
+  border: 1px solid {surface0};
+  border-radius: 12px;
+  box-shadow: none;
+  min-height: 0;
+  min-width: 0;
+}}
+button.layout {{ padding: 8px 4px; }}
+button.card {{ padding: 10px 12px; }}
+
+button.layout:hover, button.card:hover {{
+  background: {surface0};
+  border-color: {surface2};
+}}
+button.layout:focus-visible, button.card:focus-visible {{
+  border-color: {text};
+  outline: 2px solid {sapphire};
+  outline-offset: 1px;
+}}
+
+.icon {{
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 17px;
+  color: {text};
+}}
+.name {{ font-size: 13px; color: {text}; }}
+.state {{ font-size: 11px; color: {overlay0}; }}
+
+button.on {{
+  background: alpha({sapphire}, 0.18);
+  border-color: alpha({sapphire}, 0.55);
+}}
+button.on .icon, button.on .state {{ color: {sapphire}; }}
+
+button.card.off .icon, button.card.off .name {{ color: {overlay0}; }}
+"""
+
+POLL_MS = 1000
+TABLET_EVERY = 3  # polls between tablet-display checks; it asks adb
+
+LAYOUTS = [
+    ("extend", "\U000F037A", "Extend"),
+    ("mirror", "\U000F0191", "Mirror"),
+    ("external", "\U000F0379", "External only"),
+    ("laptop", "\U000F0322", "Laptop only"),
+    ("blank", "\U000F0D90", "Blank"),
+]
+
+VIM = {Gdk.KEY_h: Gtk.DirectionType.LEFT, Gdk.KEY_j: Gtk.DirectionType.DOWN,
+       Gdk.KEY_k: Gtk.DirectionType.UP, Gdk.KEY_l: Gtk.DirectionType.RIGHT}
+
+
+class Menu(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="dev.jaeho.display",
+                         flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.window = None
+        self.tablet = tablet_output()
+        self.screens = []
+        self.layout = "extend"
+        self.layout_buttons = {}
+        self.cards = {}
+        self.grid = None
+        self.tablet_card = None
+        self.tablet_state = ("off", "")
+        self.polls = 0
+        self.busy = False
+
+    def do_activate(self):
+        # The bind reaches the running instance, so the key also closes.
+        if self.window:
+            self.window.close()
+            return
+
+        provider = Gtk.CssProvider()
+        provider.load_from_string(CSS.format(**palette()))
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        self.window = Gtk.ApplicationWindow(application=self)
+        self.window.add_css_class("display")
+        self.window.connect("close-request", self.on_close)
+        LayerShell.init_for_window(self.window)
+        LayerShell.set_namespace(self.window, "display")
+        LayerShell.set_layer(self.window, LayerShell.Layer.OVERLAY)
+        LayerShell.set_keyboard_mode(self.window, LayerShell.KeyboardMode.EXCLUSIVE)
+
+        self.window.set_child(self.build())
+
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.on_key)
+        self.window.add_controller(keys)
+        # Clicking anywhere else hands focus away; a menu left open is clutter.
+        self.window.connect("notify::is-active", self.on_active)
+        self.window.present()
+
+        self.poll(first=True)
+        GLib.timeout_add(POLL_MS, self.poll)
+
+    def on_close(self, _window):
+        self.window = None
+        self.quit()
+        return False
+
+    def on_active(self, window, _pspec):
+        if not window.is_active() and window.get_mapped():
+            GLib.timeout_add(150, lambda: self.window and not self.window.is_active()
+                             and self.window.close())
+
+    def on_key(self, _controller, keyval, _code, state):
+        super_held = state & Gdk.ModifierType.SUPER_MASK
+        if keyval in (Gdk.KEY_Escape, Gdk.KEY_q) or (keyval == Gdk.KEY_p and super_held):
+            self.window.close()
+            return True
+        if keyval in VIM and not state & Gdk.ModifierType.CONTROL_MASK:
+            self.window.child_focus(VIM[keyval])
+            return True
+        return False
+
+    # ── layout ──
+
+    @staticmethod
+    def heading(text):
+        label = Gtk.Label(label=text.upper(), xalign=0)
+        label.add_css_class("heading")
+        return label
+
+    def build(self):
+        sheet = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        sheet.add_css_class("sheet")
+        sheet.set_size_request(520, -1)
+
+        sheet.append(self.heading("Layout"))
+        row = Gtk.Grid(column_spacing=8, column_homogeneous=True)
+        for n, (key, icon, label) in enumerate(LAYOUTS):
+            button = self.layout_button(icon, label)
+            button.connect("clicked", self.on_layout, key)
+            self.layout_buttons[key] = button
+            row.attach(button, n, 0, 1, 1)
+        sheet.append(row)
+
+        sheet.append(self.heading("Screens"))
+        self.grid = Gtk.Grid(column_spacing=8, row_spacing=8, column_homogeneous=True)
+        sheet.append(self.grid)
+
+        # Extend is the common action, so it takes focus: F1 then Enter.
+        # A callback that returns True is re-queued, and grab_focus does.
+        first = self.layout_buttons["extend"]
+        GLib.idle_add(lambda: first.grab_focus() and False)
+        return sheet
+
+    @staticmethod
+    def layout_button(icon, label):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        glyph = Gtk.Label(label=icon)
+        glyph.add_css_class("icon")
+        text = Gtk.Label(label=label)
+        text.add_css_class("state")
+        box.append(glyph)
+        box.append(text)
+        button = Gtk.Button(child=box)
+        button.add_css_class("layout")
+        return button
+
+    def card(self, icon, title):
+        glyph = Gtk.Label(label=icon, xalign=0)
+        glyph.add_css_class("icon")
+        name = Gtk.Label(label=title, xalign=0, hexpand=True)
+        name.add_css_class("name")
+        name.set_ellipsize(Pango.EllipsizeMode.END)
+        state = Gtk.Label(label="", xalign=1)
+        state.add_css_class("state")
+        head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        for w in (glyph, name, state):
+            head.append(w)
+        sub = Gtk.Label(label="", xalign=0)
+        sub.add_css_class("state")
+        sub.set_ellipsize(Pango.EllipsizeMode.END)
+        sub.set_max_width_chars(32)
+        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        body.append(head)
+        body.append(sub)
+        button = Gtk.Button(child=body)
+        button.add_css_class("card")
+        return dict(button=button, glyph=glyph, name=name, state=state, sub=sub)
+
+    # ── refresh ──
+
+    def poll(self, first=False):
+        if not self.window:
+            return False
+        if not self.busy:
+            self.busy = True
+            self.polls += 1
+            with_tablet = first or self.polls % TABLET_EVERY == 0
+            threading.Thread(target=self.probe, args=(with_tablet,), daemon=True).start()
+        return True
+
+    def probe(self, with_tablet):
+        screens = read_screens(self.tablet)
+        tablet = read_tablet() if with_tablet else None
+        GLib.idle_add(self.show, screens, tablet)
+
+    def show(self, screens, tablet):
+        self.busy = False
+        if not self.window:
+            return False
+        if tablet:
+            self.tablet_state = tablet
+        self.screens = screens
+        self.layout = current_layout(screens)
+
+        for key, button in self.layout_buttons.items():
+            (button.add_css_class if key == self.layout else button.remove_css_class)("on")
+        # Extend stays pressable as the way back from any state.
+        externals = any(s["kind"] != "laptop" for s in screens)
+        for key in ("mirror", "external", "laptop"):
+            self.layout_buttons[key].set_sensitive(externals)
+
+        self.show_screens()
+        return False
+
+    def show_screens(self):
+        names = [s["name"] for s in self.screens]
+        if names + ["+tablet"] != list(self.cards):
+            focus = next((n for n, c in self.cards.items() if c["button"].has_focus()), None)
+            while (child := self.grid.get_first_child()):
+                self.grid.remove(child)
+            self.cards = {}
+            cards = [(s["name"], self.card(ICONS[s["kind"]], s["title"]), s) for s in self.screens]
+            tablet = self.card(ICONS["tablet"], "Tablet stream")
+            tablet["button"].connect("clicked", self.on_tablet)
+            cards.append(("+tablet", tablet, None))
+            for n, (name, card, screen) in enumerate(cards):
+                if screen:
+                    card["button"].connect("clicked", self.on_screen, name)
+                self.cards[name] = card
+                self.grid.attach(card["button"], n % 2, n // 2, 1, 1)
+            if focus in self.cards:
+                GLib.idle_add(lambda: self.cards[focus]["button"].grab_focus() and False)
+
+        enabled = [s for s in self.screens if s["on"]]
+        for s in self.screens:
+            card = self.cards[s["name"]]
+            button = card["button"]
+            size = f"{s['size'][0]}×{s['size'][1]}" if s["size"] else ""
+            ws = f"ws {' '.join(map(str, s['workspaces']))}" if s["on"] and s["workspaces"] else ""
+            detail = " · ".join(p for p in (s["name"], size, ws) if p)
+            card["sub"].set_label(detail)
+            card["sub"].set_tooltip_text(detail)
+            card["state"].set_label("Mirroring" if s["mirrored"] else "On" if s["on"] else "Off")
+            icon = s["kind"]
+            if not s["on"] and icon in ("laptop", "monitor"):
+                icon += "_off"
+            card["glyph"].set_label(ICONS[icon])
+            # Blue is "you are here": the screen that has focus.
+            (button.add_css_class if s["focused"] else button.remove_css_class)("on")
+            (button.remove_css_class if s["on"] else button.add_css_class)("off")
+            # The last enabled screen cannot be turned off; a mirrored one follows the laptop.
+            button.set_sensitive(not s["mirrored"] and not (s["on"] and len(enabled) == 1))
+
+        self.show_tablet()
+
+    def show_tablet(self):
+        card = self.cards.get("+tablet")
+        if not card:
+            return
+        state, reason = self.tablet_state
+        button = card["button"]
+        card["state"].set_label({"on": "On", "starting": "Starting…"}.get(state, "Off"))
+        detail = {"on": "Streaming to the Galaxy Tab over USB",
+                  "starting": "Connecting…"}.get(state, reason or "Ready: tablet is connected")
+        card["sub"].set_label(detail)
+        card["sub"].set_tooltip_text(detail)
+        (button.add_css_class if state == "on" else button.remove_css_class)("on")
+        (button.add_css_class if state == "off" and reason else button.remove_css_class)("off")
+        button.set_sensitive(state != "starting")
+
+    # ── actions ──
+
+    def on_layout(self, _button, key):
+        if key == "blank":
+            self.window.close()
+            # Detached and delayed, so the menu is gone and the key released first.
+            spawn(f"sleep {BLANK_DELAY}; hyprctl dispatch 'hl.dsp.dpms({{ action = \"off\" }})'")
+            return
+        if key != self.layout:
+            threading.Thread(target=monitors_lua, args=(f'set_layout("{key}")',), daemon=True).start()
+        self.window.close()
+
+    def on_screen(self, _button, name):
+        def act():
+            monitors_lua(f'toggle_output("{name}")')
+            GLib.idle_add(self.refresh_now)
+        threading.Thread(target=act, daemon=True).start()
+
+    def on_tablet(self, _button):
+        self.tablet_state = ("starting", "")
+        self.show_tablet()
+        spawn(f"{TABLET} toggle")
+        self.polls = TABLET_EVERY - 1  # check again on the next poll
+
+    def refresh_now(self):
+        self.polls = TABLET_EVERY - 1
+        return False
+
+
+if __name__ == "__main__":
+    sys.exit(Menu().run([sys.argv[0]]))

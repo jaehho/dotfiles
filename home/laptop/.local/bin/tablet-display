@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tablet-display on|off|toggle|status: use the Galaxy Tab as a second screen.
+# tablet-display on|off|toggle|status|state: use the Galaxy Tab as a second screen.
 #
 # `on` creates a headless Hyprland output, starts Sunshine against it, and
 # opens the stream in Moonlight on the tablet. monitors.lua treats the output
@@ -29,7 +29,9 @@
 # first waits for an unlock does nothing), reports through notifications when
 # there is no terminal, checks the tablet before creating anything, and undoes
 # what it created if a later step fails. `toggle` turns it off whenever either
-# half is up, so a stale output is one keypress from gone.
+# half is up, so a stale output is one keypress from gone. `state` is for the
+# display menu: on, off, or starting while another run holds the lock; when off,
+# a second line says why the tablet cannot be reached, if it cannot.
 
 set -uo pipefail
 
@@ -61,8 +63,11 @@ die() { say "$*"; exit 1; }
 # A failure after something was created: undo it so no invisible output keeps workspaces.
 fail() { rollback; die "$*"; }
 
-exec 9>"${XDG_RUNTIME_DIR:-/tmp}/tablet-display.lock"
-flock -n 9 || die "already running"
+LOCK="${XDG_RUNTIME_DIR:-/tmp}/tablet-display.lock"
+lock() {
+    exec 9>"$LOCK"
+    flock -n 9 || die "already running"
+}
 
 OUTPUT=$(awk -F'[[:space:]]*=[[:space:]]*' '$1 == "output_name" { print $2 }' "$SUNSHINE_CONF" 2>/dev/null)
 [ -n "$OUTPUT" ] || die "no output_name in $SUNSHINE_CONF"
@@ -173,6 +178,12 @@ report_address() {
     fi
 }
 
+# monitors.lua hears of a headless output only from here (it fires no event).
+# Its layout then covers the tablet, and a turned-off state cannot outlive it.
+sync_layout() {
+    hyprctl eval "require(\"monitors\").forget(\"$OUTPUT\")" >/dev/null 2>&1
+}
+
 cmd_on() {
     local adb_ok=0 problem
     hyprctl version >/dev/null 2>&1 || die "Hyprland is not running"
@@ -188,6 +199,7 @@ cmd_on() {
         hyprctl output create headless "$OUTPUT" >/dev/null || die "could not create output $OUTPUT"
         CREATED=1
         wait_for "output $OUTPUT" output_exists
+        sync_layout
     fi
     hyprctl eval "hl.monitor({ output = \"$OUTPUT\", mode = \"$MODE\", position = \"auto\", scale = \"$SCALE\" })" >/dev/null ||
         fail "could not set $OUTPUT to $MODE"
@@ -212,6 +224,7 @@ cmd_off() {
     sunshine_active && systemctl --user stop "$UNIT"
     if output_exists; then
         hyprctl output remove "$OUTPUT" >/dev/null || die "could not remove output $OUTPUT"
+        sync_layout
     fi
     say off
 }
@@ -231,10 +244,23 @@ cmd_status() {
     report_address
 }
 
+cmd_state() {
+    exec 8>"$LOCK"
+    if ! flock -n 8; then echo starting; return; fi
+    if output_exists || sunshine_active; then
+        echo on
+    else
+        echo off
+        tablet_problem
+    fi
+    return 0
+}
+
 case "${1:-status}" in
-    on) cmd_on ;;
-    off) cmd_off ;;
-    toggle) cmd_toggle ;;
+    on) lock; cmd_on ;;
+    off) lock; cmd_off ;;
+    toggle) lock; cmd_toggle ;;
     status) cmd_status ;;
-    *) die "usage: tablet-display on|off|toggle|status" ;;
+    state) cmd_state ;;
+    *) die "usage: tablet-display on|off|toggle|status|state" ;;
 esac

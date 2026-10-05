@@ -336,7 +336,6 @@ hl.bind(mainMod .. " + space",     hl.dsp.exec_cmd(menu)) -- app launcher
 hl.bind(mainMod .. " + D",         hl.dsp.exec_cmd("dash toggle")) -- idle dashboard on/off
 hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/hypr-pin-toggle")) -- pin window on top
 hl.bind(mainMod .. " + T",         hl.dsp.layout("togglesplit"))                    -- toggle split direction (dwindle)
-hl.bind(mainMod .. " + SHIFT + T", hl.dsp.exec_cmd("~/.local/bin/tablet-display toggle")) -- tablet second screen on/off
 
 -- Screenshots — see ~/.local/bin/screenshot.
 -- Modifiers: (none)=full, SHIFT=region, SUPER=window, SUPER+SHIFT=focused monitor;
@@ -465,53 +464,9 @@ hl.bind("CTRL + ALT + SHIFT + SUPER + space", hl.dsp.exec_cmd("hypr-confetti")) 
 -- Re-apply monitor layout + workspace assignments (fixes stranded workspaces)
 hl.bind(mainMod .. " + CTRL + R", function() monitors.apply() end) -- re-apply monitor layout
 
--- Display key (F1), which the firmware sends as Super+P. With an external:
--- tap flips extend/mirror, double tap turns the laptop panel off or back on.
--- Alone: double tap blanks the screen (any key wakes it). A tap waits out the
--- double-tap window, since a display change cannot be taken back quietly.
--- A fired oneshot timer cannot be re-armed, so each tap gets a new one.
-local display_tap
-local display_blank_pending = false
-local function display_blank()
-    if display_blank_pending then
-        display_blank_pending = false
-        hl.dispatch(hl.dsp.dpms({ action = "off" }))
-    end
-end
-local function display_single()
-    if not monitors.has_external() then
-        hl.notification.create({ text = "No external display", timeout = 1500, icon = "info" })
-    elseif monitors.mode() == "mirror" then
-        monitors.set_mode("extend")
-    else
-        monitors.set_mode("mirror")
-    end
-end
-
-hl.bind(mainMod .. " + P", function() -- display key: tap mirror, double tap laptop panel off
-    if display_tap and display_tap:is_enabled() then
-        display_tap:set_enabled(false)
-        if not monitors.has_external() then
-            -- Blank only once Super is back up: key_press_enables_dpms counts
-            -- a release as input, and on the second tap the firmware holds
-            -- Super for about a second after P. The timer covers a release
-            -- that never reaches the bind below.
-            display_blank_pending = true
-            hl.timer(display_blank, { timeout = 1500, type = "oneshot" })
-        elseif monitors.mode() == "external" then
-            monitors.set_mode("extend")
-        else
-            monitors.set_mode("external")
-        end
-    else
-        display_tap = hl.timer(display_single, { timeout = 300, type = "oneshot" })
-    end
-end)
-hl.bind(mainMod .. " + Super_L", function() -- display key: blank once Super is released
-    if display_blank_pending then
-        hl.timer(display_blank, { timeout = 150, type = "oneshot" })
-    end
-end, { release = true, non_consuming = true })
+-- Display key (F1), which the firmware sends as Super+P: the display menu
+-- (layout, per-screen on/off, tablet). Super+; reaches it through the settings menu.
+hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("~/.local/bin/hypr-display-menu")) -- display menu (F1)
 
 -- Scratchpad. Native dispatchers, not `hyprctl dispatch` — under a Lua config the
 -- legacy string form is rejected outright. No waybar nudge needed: the special
