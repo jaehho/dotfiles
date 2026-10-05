@@ -17,7 +17,6 @@ HOME = os.path.expanduser("~")
 PALETTE = os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config") + "/theme/palette"
 TABLET = f"{HOME}/.local/bin/tablet-display"
 SUNSHINE_CONF = f"{HOME}/.config/sunshine/sunshine.conf"
-BLANK_DELAY = 1.2  # seconds; a key release counts as input and would wake the screen
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -76,7 +75,7 @@ def read_screens(tablet):
         name = m["name"]
         kind = "laptop" if name.startswith("eDP-") else "tablet" if name == tablet else "monitor"
         mirrored = m.get("mirrorOf") not in (None, "none", "")
-        title = {"laptop": "Laptop panel", "tablet": "Tablet screen"}.get(kind) \
+        title = {"laptop": "Laptop panel", "tablet": "Tablet"}.get(kind) \
             or " ".join(p for p in (m.get("make"), m.get("model")) if p and p != "0x0000") \
             or m.get("description") or name
         screens.append(dict(
@@ -212,7 +211,6 @@ LAYOUTS = [
     ("mirror", "\U000F0191", "Mirror"),
     ("external", "\U000F0379", "External only"),
     ("laptop", "\U000F0322", "Laptop only"),
-    ("blank", "\U000F0D90", "Blank"),
 ]
 
 VIM = {Gdk.KEY_h: Gtk.DirectionType.LEFT, Gdk.KEY_j: Gtk.DirectionType.DOWN,
@@ -386,18 +384,19 @@ class Menu(Gtk.Application):
         for key in ("mirror", "external", "laptop"):
             self.layout_buttons[key].set_sensitive(externals)
 
-        self.show_screens()
+        # The tablet's virtual output is not listed: its card is the stream.
+        self.show_screens([s for s in screens if s["kind"] != "tablet"])
         return False
 
-    def show_screens(self):
-        names = [s["name"] for s in self.screens]
+    def show_screens(self, shown):
+        names = [s["name"] for s in shown]
         if names + ["+tablet"] != list(self.cards):
             focus = next((n for n, c in self.cards.items() if c["button"].has_focus()), None)
             while (child := self.grid.get_first_child()):
                 self.grid.remove(child)
             self.cards = {}
-            cards = [(s["name"], self.card(ICONS[s["kind"]], s["title"]), s) for s in self.screens]
-            tablet = self.card(ICONS["tablet"], "Tablet stream")
+            cards = [(s["name"], self.card(ICONS[s["kind"]], s["title"]), s) for s in shown]
+            tablet = self.card(ICONS["tablet"], "Tablet")
             tablet["button"].connect("clicked", self.on_tablet)
             stop = Gtk.GestureClick(button=3)
             stop.connect("pressed", lambda *_: self.on_tablet(None, "off"))
@@ -412,7 +411,7 @@ class Menu(Gtk.Application):
                 GLib.idle_add(lambda: self.cards[focus]["button"].grab_focus() and False)
 
         enabled = [s for s in self.screens if s["on"]]
-        for s in self.screens:
+        for s in shown:
             card = self.cards[s["name"]]
             button = card["button"]
             size = f"{s['size'][0]}×{s['size'][1]}" if s["size"] else ""
@@ -420,7 +419,7 @@ class Menu(Gtk.Application):
             detail = " · ".join(p for p in (s["name"], size, ws) if p)
             card["sub"].set_label(detail)
             card["sub"].set_tooltip_text(detail)
-            card["state"].set_label("Mirroring" if s["mirrored"] else "On" if s["on"] else "Off")
+            card["state"].set_label("Mirroring" if s["mirrored"] else "" if s["on"] else "Off")
             icon = s["kind"]
             if not s["on"] and icon in ("laptop", "monitor"):
                 icon += "_off"
@@ -439,7 +438,7 @@ class Menu(Gtk.Application):
             return
         state, reason = self.tablet_state
         button = card["button"]
-        card["state"].set_label({"on": "On", "ready": "Ready", "starting": "Starting…"}.get(state, "Off"))
+        card["state"].set_label({"on": "", "ready": "Ready", "starting": "Starting…"}.get(state, "Off"))
         detail = {"on": "Streaming to the Galaxy Tab. Click to stop",
                   "ready": "Host is up, tablet not streaming. Click to reconnect, right-click to stop",
                   "starting": "Connecting…"}.get(state, reason or "Tablet is connected. Click to start")
@@ -452,11 +451,6 @@ class Menu(Gtk.Application):
     # ── actions ──
 
     def on_layout(self, _button, key):
-        if key == "blank":
-            self.window.close()
-            # Detached and delayed, so the menu is gone and the key released first.
-            spawn(f"sleep {BLANK_DELAY}; hyprctl dispatch 'hl.dsp.dpms({{ action = \"off\" }})'")
-            return
         if key != self.layout:
             threading.Thread(target=monitors_lua, args=(f'set_layout("{key}")',), daemon=True).start()
         self.window.close()
