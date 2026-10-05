@@ -1,14 +1,24 @@
 #!/usr/bin/env bash
 # tablet-display on|off|toggle|status|state: use the Galaxy Tab as a second screen.
 #
-# `on` creates a headless Hyprland output, starts Sunshine against it, and
-# opens the stream in Moonlight on the tablet. monitors.lua treats the output
-# as any other external, so it sits right of the laptop and takes workspaces 2,
-# 4, and so on. `off` stops Sunshine and removes the output, and the workspaces
-# fall back to the laptop.
+# `on` starts Sunshine and opens the stream in Moonlight on the tablet. The
+# headless Hyprland output exists only while a stream does: Sunshine runs
+# `create` before it starts capturing (the Desktop app's prep command) and
+# `remove` when the app ends. monitors.lua treats the output as any other
+# external, so it sits right of the laptop and takes workspaces 2, 4, and so
+# on; when it goes, the workspaces fall back to the laptop.
 #
-# The output must exist before Sunshine starts: it resolves output_name once at
-# startup and would capture the wrong display otherwise. The name is read from
+# The app's own command is `hold`, which exits when the client disconnects.
+# Sunshine treats that as the app ending and runs `remove`, so pausing the
+# stream closes the display and the next connect is a fresh launch (a resume
+# would skip `create`, and capture would silently fall back to the laptop).
+# `create` sizes the output from the client's request (Moonlight's resolution)
+# through the SUNSHINE_CLIENT_WIDTH/HEIGHT variables Sunshine passes to prep
+# commands. The refresh stays 60 whatever FPS the client asks for: Sunshine
+# drops frames to the stream rate, and a 30 Hz desktop feels worse.
+#
+# Sunshine resolves output_name when capture starts, by name, and falls back
+# to the first monitor if the name is missing. The name is read from
 # sunshine.conf so the two cannot drift.
 #
 # Stream over USB tethering, not Tailscale. On a Wi-Fi that isolates clients,
@@ -27,12 +37,12 @@
 #
 # Meant to run from a keybind, so it takes a lock (a second press while the
 # first waits for an unlock does nothing), reports through notifications when
-# there is no terminal, checks the tablet before creating anything, and undoes
-# what it created if a later step fails. `toggle` turns it off whenever either
-# half is up, so a stale output is one keypress from gone. `state` is for the
-# display menu: on (streaming), ready (host up, Moonlight not showing), off, or
-# starting while another run holds the lock; when off,
-# a second line says why the tablet cannot be reached, if it cannot.
+# there is no terminal, checks the tablet before starting anything, and undoes
+# what it started if a later step fails. `toggle` turns it off whenever either
+# half is up. `state` is for the display menu: on (streaming), ready (host up,
+# Moonlight not showing), off, or starting while another run holds the lock;
+# when off, a second line says why the tablet cannot be reached, if it cannot.
+# `create`, `remove` and `hold` are Sunshine's, not for typing.
 
 set -uo pipefail
 
@@ -41,8 +51,8 @@ APPS_JSON="$HOME/.config/sunshine/apps.json"
 UNIT=app-dev.lizardbyte.app.Sunshine.service
 WEB_UI=https://localhost:47990
 MOONLIGHT=com.limelight
-MODE=1920x1080@60   # Moonlight's 1080p, so Sunshine does not rescale the capture
-SCALE=1
+DEFAULT_SIZE=1920x1080   # when a client sends no size (running `create` by hand)
+REFRESH=60
 READY_TIMEOUT=30    # seconds; the unit sleeps 5 before it starts Sunshine
 UNLOCK_TIMEOUT=60   # seconds to wait for the tablet to be unlocked
 
@@ -51,17 +61,15 @@ say() {
     if [ -t 2 ]; then echo "tablet-display: $*" >&2; else notify-send -a tablet-display "Tablet display" "$*"; fi
 }
 
-CREATED=0   # this run created the output
 STARTED=0   # this run started Sunshine
 
 rollback() {
     [ "$STARTED" = 1 ] && systemctl --user stop "$UNIT"
-    [ "$CREATED" = 1 ] && hyprctl output remove "$OUTPUT" >/dev/null 2>&1
-    CREATED=0 STARTED=0
+    STARTED=0
 }
 
 die() { say "$*"; exit 1; }
-# A failure after something was created: undo it so no invisible output keeps workspaces.
+# A failure after something was started: undo it.
 fail() { rollback; die "$*"; }
 
 LOCK="${XDG_RUNTIME_DIR:-/tmp}/tablet-display.lock"
@@ -200,19 +208,7 @@ cmd_on() {
         tether_up || enable_tether
     fi
 
-    if ! output_exists; then
-        hyprctl output create headless "$OUTPUT" >/dev/null || die "could not create output $OUTPUT"
-        CREATED=1
-        wait_for "output $OUTPUT" output_exists
-        sync_layout
-    fi
-    hyprctl eval "hl.monitor({ output = \"$OUTPUT\", mode = \"$MODE\", position = \"auto\", scale = \"$SCALE\" })" >/dev/null ||
-        fail "could not set $OUTPUT to $MODE"
-
-    # Sunshine already running from before the output existed has the wrong one cached.
-    if sunshine_active; then
-        [ "$CREATED" = 1 ] && { systemctl --user restart "$UNIT" || fail "could not restart $UNIT"; }
-    else
+    if ! sunshine_active; then
         STARTED=1
         systemctl --user start "$UNIT" || fail "could not start $UNIT (is another Sunshine running?)"
     fi
@@ -222,7 +218,46 @@ cmd_on() {
         wait_for "USB tether link" tether_up
         launch_moonlight
     fi
-    say "on: $OUTPUT $MODE, $(report_address)"
+    say "on: $(report_address)"
+}
+
+# Sunshine's prep `do`: runs before capture starts, so the output must exist
+# and have its mode when this returns.
+cmd_create() {
+    local size="${SUNSHINE_CLIENT_WIDTH:-}x${SUNSHINE_CLIENT_HEIGHT:-}"
+    [ "$size" = x ] && size=$DEFAULT_SIZE
+    output_exists && hyprctl output remove "$OUTPUT" >/dev/null 2>&1
+    hyprctl output create headless "$OUTPUT" >/dev/null || die "could not create output $OUTPUT"
+    wait_for "output $OUTPUT" output_exists
+    hyprctl eval "hl.monitor({ output = \"$OUTPUT\", mode = \"$size@$REFRESH\", position = \"auto\", scale = \"auto\" })" >/dev/null ||
+        die "could not set $OUTPUT to $size@$REFRESH"
+    sync_layout
+}
+
+# Sunshine's prep `undo`, also run when Sunshine stops.
+cmd_remove() {
+    if output_exists; then
+        hyprctl output remove "$OUTPUT" >/dev/null 2>&1
+        sync_layout
+    fi
+}
+
+# Sunshine's app command. It exits when the client disconnects, which Sunshine
+# takes as the app ending. Exiting within 5 s with status 0 would make
+# Sunshine treat the app as detached and keep it, so it never exits that early.
+# It also closes the display itself, since Sunshine only reaps the app lazily.
+cmd_hold() {
+    local start=$SECONDS line fd jpid
+    exec {fd}< <(exec journalctl --user -u "$UNIT" -f -n 0 -o cat)
+    jpid=$!
+    while read -r line <&"$fd"; do
+        [[ $line == *"CLIENT DISCONNECTED"* ]] && break
+    done
+    kill "$jpid" 2>/dev/null
+    while ((SECONDS - start < 6)); do sleep 1; done
+    # Sunshine notices the exit only when something next asks it (a client
+    # connecting), so it would run `remove` late. Remove now; `remove` is idempotent.
+    cmd_remove
 }
 
 cmd_off() {
@@ -265,6 +300,9 @@ cmd_state() {
 
 case "${1:-status}" in
     on) lock; cmd_on ;;
+    create) cmd_create ;;
+    remove) cmd_remove ;;
+    hold) cmd_hold ;;
     off) lock; cmd_off ;;
     toggle) lock; cmd_toggle ;;
     status) cmd_status ;;

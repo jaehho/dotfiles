@@ -5,7 +5,14 @@
   "apps": [
     {
       "name": "Desktop",
-      "image-path": "desktop.png"
+      "image-path": "desktop.png",
+      "cmd": "tablet-display hold",
+      "prep-cmd": [
+        {
+          "do": "tablet-display create",
+          "undo": "tablet-display remove"
+        }
+      ]
     }
   ]
 }
