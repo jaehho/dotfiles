@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# hypr-failed-units — the failed-units surface, both entry points:
+#   hypr-failed-units          the rofi picker (the settings panel's row)
+#   hypr-failed-units fix      Claude on every failed unit, both scopes
+#   hypr-failed-units log      status and journal for every failed unit, in a pane
+# The waybar 󰀨 module's native click-menu calls fix/log; the picker keeps the
+# per-unit drill-down, which a static menu file cannot offer.
+set -euo pipefail
+
+DOTFILES="$HOME/dotfiles"
+PANE="$HOME/.local/bin/hypr-pane"
+
+# Single-quote argv for `fish -c`. In fish '', only \\ and \' are escapes.
+# (Same helper as the dotfiles dispatcher.)
+fish_cmd() {
+    local out=() a
+    for a in "$@"; do
+        a=${a//\\/\\\\}
+        a=${a//\'/\\\'}
+        out+=("'$a'")
+    done
+    printf '%s' "${out[*]}"
+}
+
+BRIEF=$(cat <<'EOF'
+This session was opened from the failed-units indicator (waybar or the settings panel): systemd reports failed units in the system and/or user scope. Diagnose each one yourself from status and journals; never ask the owner to paste output.
+
+Usual resolutions:
+- a broken unit: journalctl [--user] -e -u <unit> shows the failure; fix the unit or its config, restart it, verify with systemctl [--user] --failed.
+- a not-found unit: something still references a unit file that no longer exists (Wants=/Requires=, an enablement symlink, a timer left in memory). Remove the reference at the source; reset-failed only hides it until the next trigger.
+- a unit stowed from ~/dotfiles (home/*/.config/systemd/user): fix it there, small WIP commits.
+- a unit owned by an app under ~/projects: the app owns the fix; work there.
+Anything needing root: write a reviewed script to /tmp/<name>.sh for the owner to run with sudo; never run sudo yourself. The waybar indicator clears when both scopes list no failed units.
+EOF
+)
+
+# The `dotfiles decide` launch: a Claude window in the most recently used tmux
+# session, its terminal focused; a fresh kitty+tmux when no client is attached.
+# Through fish so config.fish env applies; tmux execs a multi-arg command
+# directly, which skips fish.
+open_claude() {
+    local cmd=(claude-open --dangerously-skip-permissions
+        --append-system-prompt "$BRIEF" "$1")
+    local fcmd=(fish -c "$(fish_cmd "${cmd[@]}")")
+    local client addr
+    client=$({ tmux list-clients -F '#{client_activity} #{client_pid}' 2>/dev/null || true; } |
+        sort -rn | head -1 | cut -d' ' -f2)
+    if [ -z "$client" ]; then
+        exec kitty tmux new-session -c "$DOTFILES" "${fcmd[@]}"
+    fi
+    tmux new-window -c "$DOTFILES" -n failed-units "${fcmd[@]}"
+    addr=$(hyprctl clients -j | jq -r --argjson pid "$(ps -o ppid= -p "$client")" \
+        '.[] | select(.pid == $pid) | .address')
+    [ -z "$addr" ] ||
+        hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null
+}
+
+# specs[i] is "scope unit"; lines[i] is its rofi row.
+specs=() lines=()
+gather() {
+    while IFS=$'\t' read -r scope unit load desc; do
+        specs+=("$scope $unit")
+        if [ "$load" = "not-found" ]; then desc="unit file missing, still referenced"; fi
+        lines+=("$scope · $unit — $desc")
+    done < <(
+        systemctl --failed --no-pager -o json 2>/dev/null | jq -r '.[] | ["system", .unit, .load, .description] | @tsv'
+        systemctl --user --failed --no-pager -o json 2>/dev/null | jq -r '.[] | ["user", .unit, .load, .description] | @tsv'
+    )
+}
+
+none_failed() {
+    notify-send -u low 'Failed units' 'Nothing failed in either scope.'
+}
+
+# A floating pane over the failure — both scopes' lists, then status and a
+# journal tail per unit — with a shell at the end to poke at it.
+log_pane() {  # $1: "scope unit" entries, one per line
+    exec "$PANE" --float floating-tui -- env LIST="$1" bash -c '
+        flag() { [ "$1" = user ] && printf -- --user; }
+        systemctl --failed --no-pager
+        systemctl --user --failed --no-pager
+        echo
+        while read -r scope unit; do
+            echo "── $scope · $unit"
+            systemctl $(flag "$scope") status "$unit" --no-pager -l
+            journalctl $(flag "$scope") -u "$unit" -n 40 --no-pager
+            echo
+        done <<<"$LIST"
+        echo "a shell follows — exit closes this pane"
+        exec fish'
+}
+
+fix_all() {
+    open_claude "systemd reports ${#specs[@]} failed unit(s) across the system and user scopes. List them with systemctl --failed and systemctl --user --failed, diagnose each, and fix them."
+}
+
+fix_one() {  # $1: "scope unit"
+    local scope unit
+    read -r scope unit <<<"$1"
+    open_claude "The $scope-scope unit $unit is failing. Diagnose it and fix it."
+}
+
+# The rofi picker: fix everything (top row), or drill into one unit.
+menu() {
+    # -format i prints the picked row's index; row 0 is the hand-it-all-over row.
+    local choice scope_unit action
+    choice=$(printf '%s\n' "Fix with Claude (${#specs[@]} failed)" "${lines[@]}" |
+        rofi -dmenu -i -format i -p 'Failed units') || exit 0
+    [ -n "$choice" ] || exit 0
+    if [ "$choice" -eq 0 ]; then
+        fix_all
+    else
+        scope_unit=${specs[$((choice - 1))]}
+        action=$(printf '%s\n' 'Fix with Claude' 'Status & journal' |
+            rofi -dmenu -i -p "$scope_unit") || exit 0
+        case $action in
+            'Fix with Claude') fix_one "$scope_unit" ;;
+            'Status & journal')
+                flag=""
+                if [[ $scope_unit == user* ]]; then flag="--user"; fi
+                exec "$PANE" --float floating-tui -- env FLAG="$flag" UNIT="${scope_unit#* }" sh -c '
+                    set -- $FLAG
+                    systemctl "$@" status "$UNIT" --no-pager -l
+                    echo
+                    journalctl "$@" -u "$UNIT" -n 100 --no-pager
+                    echo
+                    echo "a shell follows — exit closes this pane"
+                    exec fish' ;;
+        esac
+    fi
+}
+
+gather
+[ ${#specs[@]} -gt 0 ] || { none_failed; exit 0; }
+
+case "${1:-menu}" in
+    menu) menu ;;
+    fix) fix_all ;;
+    log) log_pane "$(printf '%s\n' "${specs[@]}")" ;;
+    *) echo "usage: hypr-failed-units [menu|fix|log]" >&2; exit 2 ;;
+esac

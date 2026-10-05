@@ -158,7 +158,7 @@ ITEMS = [
     dict(id="monitor", kind="open", icon="󰍛", label="System monitor",
          run=tui("btop", cls="floating-btop"), needs=["kitty", "btop"]),
     dict(id="failed-units", kind="open", icon="󰒏", label="Failed units",
-         run=f"{BIN}/hypr-failed-units-menu", needs=["rofi", "systemctl"]),
+         run=f"{BIN}/hypr-failed-units", needs=["rofi", "systemctl"]),
     dict(id="battery", kind="open", icon="󰁹", label="Battery history",
          run="battery-log", needs=["battery-log"]),
 

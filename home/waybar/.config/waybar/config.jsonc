@@ -81,9 +81,16 @@
         ]
     },
     // Hidden while nothing has failed. Counts system and user units alike.
+    // The menu is anchored in the bar (no extra picker surface); the commands
+    // live in hypr-failed-units, shared with the settings panel's row.
     "systemd-failed-units": {
         "format": "󰀨 {nr_failed}",
-        "on-click": "~/.local/bin/hypr-settings-menu failed-units"
+        "menu": "on-click",
+        "menu-file": "~/.config/waybar/failed_units_menu.xml",
+        "menu-actions": {
+            "fix": "~/.local/bin/hypr-failed-units fix",
+            "log": "~/.local/bin/hypr-failed-units log"
+        }
     },
     // Glyphs only; numbers and details drop down in the tooltip on hover
     "group/load": {
