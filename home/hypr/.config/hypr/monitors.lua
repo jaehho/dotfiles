@@ -23,7 +23,7 @@ local DEBOUNCE_MS    = 500
 -- toggle_output(). `mirror`: every external shows the laptop. `off`: outputs the
 -- user turned off. A disabled or mirrored output drops out of hl.get_monitors(),
 -- so the names needed to bring them back are remembered in `seen`.
-local state = { mirror = false, off = {} }
+local state = { mirror = false, off = {}, scale = {} }
 local seen = { laptop = nil, externals = {} }
 
 -- Format a number the way the old Rust writer did: 60.0 -> "60", not "60.0".
@@ -39,8 +39,18 @@ local function mode_string(m)
     return string.format("%dx%d@%sHz", m.width, m.height, num(math.floor(m.refresh_rate * 100) / 100))
 end
 
+-- Scale for an output: what the display menu set, else "auto". Scale survives
+-- layout changes (reset_state leaves it alone).
+local function scale_for(name)
+    return state.scale[name] or "auto"
+end
+
+-- Width in layout pixels. A requested number wins over the live scale, which
+-- lags until the rule is applied; "auto" has to use the live one.
 local function logical_width(m)
-    return math.floor(m.width / m.scale)
+    local scale = scale_for(m.name)
+    if type(scale) ~= "number" then scale = m.scale end
+    return math.floor(m.width / scale)
 end
 
 local function is_laptop(m)
@@ -113,12 +123,12 @@ end
 local function release()
     if seen.laptop then
         -- disabled = false because a plain rule leaves a disabled output disabled.
-        hl.monitor({ output = seen.laptop, mode = "preferred", position = "auto", scale = "auto", disabled = false })
+        hl.monitor({ output = seen.laptop, mode = "preferred", position = "auto", scale = scale_for(seen.laptop), disabled = false })
     end
     for name in pairs(seen.externals) do
         -- mirror = "" because a headless output never fires monitor.added, so
         -- nothing else would clear its mirror rule.
-        hl.monitor({ output = name, mode = "preferred", position = "auto", scale = "auto", mirror = "", disabled = false })
+        hl.monitor({ output = name, mode = "preferred", position = "auto", scale = scale_for(name), mirror = "", disabled = false })
     end
 end
 
@@ -183,7 +193,7 @@ local function apply()
     end
 
     for _, m in ipairs(to_mirror or {}) do
-        hl.monitor({ output = m.name, mode = "preferred", position = "auto", scale = "auto", mirror = laptop.name })
+        hl.monitor({ output = m.name, mode = "preferred", position = "auto", scale = scale_for(m.name), mirror = laptop.name })
     end
 
     local x = 0
@@ -192,7 +202,7 @@ local function apply()
             output   = m.name,
             mode     = mode_string(m),
             position = string.format("%dx0", x),
-            scale    = num(m.scale),
+            scale    = scale_for(m.name),
         })
         x = x + logical_width(m)
     end
@@ -359,6 +369,14 @@ local function toggle_output(name)
     return true
 end
 
+-- Set one output's scale (a number, or nil for auto) and re-apply. "auto" is
+-- only resolved once the rule lands, so a second pass lays out on the real one.
+local function set_scale(name, scale)
+    state.scale[name] = scale
+    apply()
+    schedule()
+end
+
 -- An output is leaving or arriving by a path that fires no event (a headless
 -- one): forget that it was ever turned off, and re-apply.
 local function forget(name)
@@ -378,6 +396,7 @@ return {
     schedule = schedule,
     set_layout = set_layout,
     toggle_output = toggle_output,
+    set_scale = set_scale,
     reset = reset,
     forget = forget,
     slots_by_monitor = slots_by_monitor,

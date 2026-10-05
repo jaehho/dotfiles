@@ -79,7 +79,7 @@ def read_screens(tablet):
             or " ".join(p for p in (m.get("make"), m.get("model")) if p and p != "0x0000") \
             or m.get("description") or name
         screens.append(dict(
-            name=name, kind=kind, title=title, on=not m.get("disabled") and not mirrored,
+            name=name, kind=kind, scale=m.get("scale", 1), title=title, on=not m.get("disabled") and not mirrored,
             mirrored=mirrored, focused=bool(m.get("focused")), x=m.get("x", 0),
             size=(m["width"], m["height"]) if m.get("width") else None,
             workspaces=sorted(by_mon.get(name, []))))
@@ -206,6 +206,8 @@ button.card.off .icon, button.card.off .name {{ color: {overlay0}; }}
 POLL_MS = 1000
 TABLET_EVERY = 3  # polls between tablet-display checks; it asks adb
 
+SCALES = [(None, "Auto"), (1, "1×"), (1.25, "1.25×"), (1.5, "1.5×"), (2, "2×")]
+
 LAYOUTS = [
     ("extend", "\U000F037A", "Extend"),
     ("mirror", "\U000F0191", "Mirror"),
@@ -227,6 +229,8 @@ class Menu(Gtk.Application):
         self.layout = "extend"
         self.layout_buttons = {}
         self.cards = {}
+        self.scale_buttons = {}
+        self.scale_heading = None
         self.grid = None
         self.tablet_card = None
         self.tablet_state = ("off", "")
@@ -310,6 +314,17 @@ class Menu(Gtk.Application):
         self.grid = Gtk.Grid(column_spacing=8, row_spacing=8, column_homogeneous=True)
         sheet.append(self.grid)
 
+        self.scale_heading = self.heading("Scale")
+        sheet.append(self.scale_heading)
+        scales = Gtk.Grid(column_spacing=8, column_homogeneous=True)
+        for n, (value, label) in enumerate(SCALES):
+            button = Gtk.Button(label=label)
+            button.add_css_class("layout")
+            button.connect("clicked", self.on_scale, value)
+            self.scale_buttons[value] = button
+            scales.attach(button, n, 0, 1, 1)
+        sheet.append(scales)
+
         # Extend is the common action, so it takes focus: F1 then Enter.
         # A callback that returns True is re-queued, and grab_focus does.
         first = self.layout_buttons["extend"]
@@ -386,7 +401,18 @@ class Menu(Gtk.Application):
 
         # The tablet's virtual output is not listed: its card is the stream.
         self.show_screens([s for s in screens if s["kind"] != "tablet"])
+
+        # Scale applies to the focused screen, the one with the blue card.
+        target = self.scale_target()
+        self.scale_heading.set_label(f"SCALE · {target['title'].upper()}" if target else "SCALE")
+        for value, button in self.scale_buttons.items():
+            button.set_sensitive(bool(target))
+            on = bool(target) and value is not None and abs(target["scale"] - value) < 0.01
+            (button.add_css_class if on else button.remove_css_class)("on")
         return False
+
+    def scale_target(self):
+        return next((s for s in self.screens if s["focused"] and s["on"]), None)
 
     def show_screens(self, shown):
         names = [s["name"] for s in shown]
@@ -460,6 +486,14 @@ class Menu(Gtk.Application):
             monitors_lua(f'toggle_output("{name}")')
             GLib.idle_add(self.refresh_now)
         threading.Thread(target=act, daemon=True).start()
+
+    def on_scale(self, _button, value):
+        target = self.scale_target()
+        if target:
+            arg = "nil" if value is None else value
+            threading.Thread(target=monitors_lua,
+                             args=(f'set_scale("{target["name"]}", {arg})',), daemon=True).start()
+            GLib.timeout_add(700, self.refresh_now)
 
     def on_tablet(self, _button, action=None):
         # Left click: stop when streaming, otherwise start or reconnect.
