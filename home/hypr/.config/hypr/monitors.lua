@@ -96,7 +96,9 @@ local function release()
         hl.monitor({ output = seen.laptop, mode = "preferred", position = "auto", scale = "auto" })
     end
     for name in pairs(seen.externals) do
-        hl.monitor({ output = name, mode = "preferred", position = "auto", scale = "auto" })
+        -- mirror = "" because a headless output never fires monitor.added, so
+        -- nothing else would clear its mirror rule.
+        hl.monitor({ output = name, mode = "preferred", position = "auto", scale = "auto", mirror = "" })
     end
 end
 
