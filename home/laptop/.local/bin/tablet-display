@@ -30,7 +30,8 @@
 # there is no terminal, checks the tablet before creating anything, and undoes
 # what it created if a later step fails. `toggle` turns it off whenever either
 # half is up, so a stale output is one keypress from gone. `state` is for the
-# display menu: on, off, or starting while another run holds the lock; when off,
+# display menu: on (streaming), ready (host up, Moonlight not showing), off, or
+# starting while another run holds the lock; when off,
 # a second line says why the tablet cannot be reached, if it cannot.
 
 set -uo pipefail
@@ -150,6 +151,10 @@ keyguard_showing() {
     timeout 10 adb shell dumpsys window 2>/dev/null | grep -q 'isKeyguardShowing=true'
 }
 
+moonlight_foreground() {
+    timeout 10 adb shell dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity | grep -q "$MOONLIGHT"
+}
+
 launch_moonlight() {
     local i
     timeout "$READY_TIMEOUT" adb wait-for-device || { say "tablet did not come back on adb"; return 1; }
@@ -248,7 +253,9 @@ cmd_state() {
     exec 8>"$LOCK"
     if ! flock -n 8; then echo starting; return; fi
     if output_exists || sunshine_active; then
-        echo on
+        # The host being up is not the stream being on: Moonlight has to be
+        # in front on the tablet, which only adb can see.
+        if have_tablet && moonlight_foreground; then echo on; else echo ready; fi
     else
         echo off
         tablet_problem

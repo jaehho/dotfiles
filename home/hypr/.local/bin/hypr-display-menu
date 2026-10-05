@@ -104,7 +104,7 @@ def current_layout(screens):
 
 
 def read_tablet():
-    """(state, reason) from `tablet-display state`: on, off, or starting."""
+    """(state, reason) from `tablet-display state`: on, ready, off, or starting."""
     lines = output([TABLET, "state"], timeout=15).splitlines()
     return (lines[0] if lines else "off"), (lines[1] if len(lines) > 1 else "")
 
@@ -399,6 +399,9 @@ class Menu(Gtk.Application):
             cards = [(s["name"], self.card(ICONS[s["kind"]], s["title"]), s) for s in self.screens]
             tablet = self.card(ICONS["tablet"], "Tablet stream")
             tablet["button"].connect("clicked", self.on_tablet)
+            stop = Gtk.GestureClick(button=3)
+            stop.connect("pressed", lambda *_: self.on_tablet(None, "off"))
+            tablet["button"].add_controller(stop)
             cards.append(("+tablet", tablet, None))
             for n, (name, card, screen) in enumerate(cards):
                 if screen:
@@ -436,9 +439,10 @@ class Menu(Gtk.Application):
             return
         state, reason = self.tablet_state
         button = card["button"]
-        card["state"].set_label({"on": "On", "starting": "Starting…"}.get(state, "Off"))
-        detail = {"on": "Streaming to the Galaxy Tab over USB",
-                  "starting": "Connecting…"}.get(state, reason or "Ready: tablet is connected")
+        card["state"].set_label({"on": "On", "ready": "Ready", "starting": "Starting…"}.get(state, "Off"))
+        detail = {"on": "Streaming to the Galaxy Tab. Click to stop",
+                  "ready": "Host is up, tablet not streaming. Click to reconnect, right-click to stop",
+                  "starting": "Connecting…"}.get(state, reason or "Tablet is connected. Click to start")
         card["sub"].set_label(detail)
         card["sub"].set_tooltip_text(detail)
         (button.add_css_class if state == "on" else button.remove_css_class)("on")
@@ -463,10 +467,12 @@ class Menu(Gtk.Application):
             GLib.idle_add(self.refresh_now)
         threading.Thread(target=act, daemon=True).start()
 
-    def on_tablet(self, _button):
+    def on_tablet(self, _button, action=None):
+        # Left click: stop when streaming, otherwise start or reconnect.
+        action = action or ("off" if self.tablet_state[0] == "on" else "on")
         self.tablet_state = ("starting", "")
         self.show_tablet()
-        spawn(f"{TABLET} toggle")
+        spawn(f"{TABLET} {action}")
         self.polls = TABLET_EVERY - 1  # check again on the next poll
 
     def refresh_now(self):
