@@ -38,8 +38,8 @@ def running(name):
     return output(["pgrep", "-x", name]) != ""
 
 
-def tui(cmd, cls="floating-tui", hold=False):
-    return f"kitty --class {cls}{' --hold' if hold else ''} -e {cmd}"
+def tui(cmd, cls="floating-tui"):
+    return f"kitty --class {cls} -e {cmd}"
 
 
 # ── state probes ─────────────────────────────────────────────────────────────
@@ -158,8 +158,7 @@ ITEMS = [
     dict(id="monitor", kind="open", icon="󰍛", label="System monitor",
          run=tui("btop", cls="floating-btop"), needs=["kitty", "btop"]),
     dict(id="failed-units", kind="open", icon="󰒏", label="Failed units",
-         run=tui("sh -c 'systemctl --no-pager --failed; echo; systemctl --no-pager --user --failed'", hold=True),
-         needs=["kitty", "systemctl"]),
+         run=f"{BIN}/hypr-failed-units-menu", needs=["rofi", "systemctl"]),
     dict(id="battery", kind="open", icon="󰁹", label="Battery history",
          run="battery-log", needs=["battery-log"]),
 
