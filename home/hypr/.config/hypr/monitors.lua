@@ -93,7 +93,9 @@ end
 -- one that comes back fires monitor.added, which re-applies the layout.
 local function release()
     if seen.laptop then
-        hl.monitor({ output = seen.laptop, mode = "preferred", position = "auto", scale = "auto" })
+        -- disabled = false because "external" turned this one off, and a
+        -- plain rule leaves a disabled output disabled.
+        hl.monitor({ output = seen.laptop, mode = "preferred", position = "auto", scale = "auto", disabled = false })
     end
     for name in pairs(seen.externals) do
         -- mirror = "" because a headless output never fires monitor.added, so
