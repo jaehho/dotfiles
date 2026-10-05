@@ -336,6 +336,7 @@ hl.bind(mainMod .. " + space",     hl.dsp.exec_cmd(menu)) -- app launcher
 hl.bind(mainMod .. " + D",         hl.dsp.exec_cmd("dash toggle")) -- idle dashboard on/off
 hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/hypr-pin-toggle")) -- pin window on top
 hl.bind(mainMod .. " + T",         hl.dsp.layout("togglesplit"))                    -- toggle split direction (dwindle)
+hl.bind(mainMod .. " + SHIFT + T", hl.dsp.exec_cmd("~/.local/bin/tablet-display toggle")) -- tablet second screen on/off
 
 -- Screenshots — see ~/.local/bin/screenshot.
 -- Modifiers: (none)=full, SHIFT=region, SUPER=window, SUPER+SHIFT=focused monitor;
