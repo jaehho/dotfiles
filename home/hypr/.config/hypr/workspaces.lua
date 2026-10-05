@@ -13,7 +13,7 @@
 -- Each change_id is followed by a same-name rename so waybar hears the name
 -- (see the comment in pack_now; hyprland renames silently). Quickshell (dash)
 -- has no changeworkspaceid handler either; dash's shell.qml confirms
--- emptiness with hyprctl so a stale toplevels list cannot hide waybar.
+-- emptiness with hyprctl so a stale toplevels list cannot draw over windows.
 
 local M = {}
 

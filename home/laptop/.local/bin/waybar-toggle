@@ -1,0 +1,49 @@
+#!/bin/bash
+# waybar-toggle [show|hide|toggle|status]: Super+B, show or hide the bar.
+#
+# Set-semantics: waybar's config maps SIGUSR1 to hide and SIGUSR2 to show
+# ("on-sigusr1"/"on-sigusr2"), so a send is idempotent and never flips state
+# from a stale guess. Visibility is read from the compositor: hide switches the
+# bar to waybar's "invisible" mode (opacity 0, passthrough, demoted from layer 2
+# to layer 1), which `hyprctl layers -j` shows. No state file, nothing to drift.
+# The signals reach every output's bar; waybar has no per-output control.
+set -euo pipefail
+
+usage() { echo "usage: waybar-toggle [show|hide|toggle|status]" >&2; exit 2; }
+alive() { pgrep -x waybar >/dev/null; }
+start_bar() {
+    (cd "$HOME/.config/waybar" && waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP') &
+}
+
+# visible: some bar sits at the top layer with nonzero alpha
+visible() {
+    hyprctl layers -j | jq -e '
+        [.[] | .levels? | .["2"]? // [] | .[]
+             | select(.namespace? == "waybar" and (.alpha // 0) > 0)]
+        | length > 0' >/dev/null
+}
+
+want=${1:-toggle}
+case $want in
+    show|hide|toggle|status) ;;
+    *) usage ;;
+esac
+
+if [[ $want == status ]]; then
+    if alive && visible; then echo visible; else echo hidden; fi
+    exit 0
+fi
+
+# A dead bar is revived by show/toggle (a fresh bar starts visible); hide
+# leaves it dead.
+if ! alive; then
+    [[ $want == hide ]] && exit 0
+    start_bar
+    exit 0
+fi
+
+case $want in
+    show)   visible || pkill -USR2 -x waybar || true ;;
+    hide)   visible && pkill -USR1 -x waybar || true ;;
+    toggle) if visible; then pkill -USR1 -x waybar; else pkill -USR2 -x waybar; fi ;;
+esac

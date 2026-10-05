@@ -365,13 +365,11 @@ hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.float({ action = "toggle" })) -
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("firefox-developer-edition"))
 hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("~/.local/bin/hypr-spotify-toggle")) -- spotify: show / hide to tray
 
--- Toggle waybar. dash-bar reads the bar's real visibility from the
--- compositor (`hyprctl layers`) and sends the matching set-semantics signal
--- (USR1 hide / USR2 show, per on-sigusr1/2 in waybar's config), so a stale
--- guess can never flip the state. Killing the bar instead of signaling left
--- each custom module's child (steno bar) orphaned to PID 1, one more per
--- press; a missing bar is started by the script.
-hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("~/.local/bin/dash-bar toggle")) -- show/hide bar
+-- Toggle waybar: waybar-toggle reads the bar's real visibility from the
+-- compositor and sends the matching signal (see its header). Killing the bar
+-- instead left each custom module's child orphaned to PID 1, one more per
+-- press.
+hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("~/.local/bin/waybar-toggle toggle")) -- show/hide bar
 
 -- Notifications
 hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("swaync-client -t"))
