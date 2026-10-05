@@ -8,9 +8,9 @@ timeout = "10s"
 [[handler]]
 on = "monitoradded"
 when = "(.*)"
-then = "notify-send -u low 'Monitor connected' '${REGEX_GROUP_1}'"
+then = "notify-send -u low 'Monitor connected' \"$REGEX_GROUP_1\""
 
 [[handler]]
 on = "monitorremoved"
 when = "(.*)"
-then = "notify-send -u low 'Monitor disconnected' '${REGEX_GROUP_1}'"
+then = "notify-send -u low 'Monitor disconnected' \"$REGEX_GROUP_1\""
