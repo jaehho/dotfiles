@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
 # tablet-display on|off|status: use the Galaxy Tab as a second screen.
 #
-# `on` creates a headless Hyprland output and starts Sunshine against it; the
-# Moonlight app on the tablet then shows that output. monitors.lua treats it as
-# any other external, so it sits right of the laptop and takes workspaces 2, 4,
-# and so on. `off` stops Sunshine and removes the output, and the workspaces
+# `on` creates a headless Hyprland output, starts Sunshine against it, and
+# opens the stream in Moonlight on the tablet. monitors.lua treats the output
+# as any other external, so it sits right of the laptop and takes workspaces 2,
+# 4, and so on. `off` stops Sunshine and removes the output, and the workspaces
 # fall back to the laptop.
 #
 # The output must exist before Sunshine starts: it resolves output_name once at
 # startup and would capture the wrong display otherwise. The name is read from
 # sunshine.conf so the two cannot drift.
 #
-# Stream over USB tethering (plug in, then Settings > Connections > Mobile
-# Hotspot and Tethering > USB tethering), not Tailscale. On a Wi-Fi that isolates
-# clients, Tailscale falls back to a DERP relay, and a relayed stream glitches as
-# soon as anything on screen moves. The USB link is direct and about 2 ms.
+# Stream over USB tethering, not Tailscale. On a Wi-Fi that isolates clients,
+# Tailscale falls back to a DERP relay, and a relayed stream glitches as soon as
+# anything on screen moves. The USB link is direct and about 2 ms. Android drops
+# tethering whenever the cable is replugged, so with USB debugging on and the
+# laptop authorized, this turns it back on over adb (`svc usb setFunctions
+# rndis`) and launches Moonlight's shortcut activity by PC and app name. Without
+# adb it still works if tethering is already on; it then only warns.
+#
+# The tablet must be unlocked: a secure lock screen holds Moonlight behind it,
+# so `on` wakes the screen and waits for the unlock instead of bypassing it.
 #
 # Sunshine is not enabled at login: it listens on every interface, so it runs
 # only while this is on.
@@ -22,16 +28,24 @@
 set -uo pipefail
 
 SUNSHINE_CONF="$HOME/.config/sunshine/sunshine.conf"
+APPS_JSON="$HOME/.config/sunshine/apps.json"
 UNIT=app-dev.lizardbyte.app.Sunshine.service
 WEB_UI=https://localhost:47990
+MOONLIGHT=com.limelight
 MODE=1920x1080@60   # Moonlight's 1080p, so Sunshine does not rescale the capture
 SCALE=1
 READY_TIMEOUT=30    # seconds; the unit sleeps 5 before it starts Sunshine
+UNLOCK_TIMEOUT=60   # seconds to wait for the tablet to be unlocked
 
 die() { echo "tablet-display: $*" >&2; exit 1; }
 
 OUTPUT=$(awk -F'[[:space:]]*=[[:space:]]*' '$1 == "output_name" { print $2 }' "$SUNSHINE_CONF" 2>/dev/null)
 [ -n "$OUTPUT" ] || die "no output_name in $SUNSHINE_CONF"
+# Moonlight lists the host under Sunshine's name (the hostname unless set) and
+# the first app Sunshine offers.
+PC_NAME=$(uname -n)
+APP_NAME=$(jq -r '.apps[0].name' "$APPS_JSON" 2>/dev/null)
+[ -n "$APP_NAME" ] && [ "$APP_NAME" != null ] || die "no app in $APPS_JSON"
 
 output_exists() {
     hyprctl monitors -j 2>/dev/null | jq -e --arg n "$OUTPUT" 'any(.[]; .name == $n)' >/dev/null
@@ -51,6 +65,15 @@ usb_addrs() {
     done
 }
 
+tether_up() {
+    [ -n "$(usb_addrs)" ]
+}
+
+# True when exactly one authorized tablet is attached over adb.
+have_tablet() {
+    command -v adb >/dev/null && [ "$(adb get-state 2>/dev/null)" = device ]
+}
+
 wait_for() {
     local what="$1" i
     shift
@@ -65,6 +88,32 @@ sunshine_ready() {
     curl -ks -o /dev/null --max-time 1 "$WEB_UI"
 }
 
+# adb drops while the USB function changes, so the command's exit status says
+# nothing; the link coming up is the check.
+enable_tether() {
+    adb shell svc usb setFunctions rndis >/dev/null 2>&1
+}
+
+keyguard_showing() {
+    adb shell dumpsys window 2>/dev/null | grep -q 'isKeyguardShowing=true'
+}
+
+launch_moonlight() {
+    local i
+    timeout "$READY_TIMEOUT" adb wait-for-device || die "tablet did not come back on adb"
+    adb shell input keyevent KEYCODE_WAKEUP
+    for ((i = 0; i < UNLOCK_TIMEOUT; i++)); do
+        keyguard_showing || break
+        [ "$i" = 0 ] && echo "unlock the tablet"
+        sleep 1
+    done
+    if keyguard_showing; then
+        echo "tablet still locked; open $APP_NAME on $PC_NAME in Moonlight yourself" >&2
+        return 1
+    fi
+    adb shell am start -n "$MOONLIGHT/.ShortcutTrampoline" --es Name "$PC_NAME" --es AppName "$APP_NAME" >/dev/null
+}
+
 report_address() {
     local addrs
     addrs=$(usb_addrs)
@@ -77,7 +126,13 @@ report_address() {
 }
 
 cmd_on() {
-    local created=0
+    local created=0 adb_ok=0
+    # Start the tether switch first; it takes about as long as Sunshine does.
+    if have_tablet; then
+        adb_ok=1
+        tether_up || enable_tether
+    fi
+
     if ! output_exists; then
         hyprctl output create headless "$OUTPUT" >/dev/null || die "could not create output $OUTPUT"
         wait_for "output $OUTPUT" output_exists
@@ -94,6 +149,11 @@ cmd_on() {
     fi
     wait_for Sunshine sunshine_ready
     echo "on: $OUTPUT $MODE"
+
+    if [ "$adb_ok" = 1 ]; then
+        wait_for "USB tether link" tether_up
+        launch_moonlight
+    fi
     report_address
 }
 
@@ -112,6 +172,7 @@ cmd_status() {
         echo "output: none"
     fi
     if sunshine_active; then echo "sunshine: running"; else echo "sunshine: stopped"; fi
+    if have_tablet; then echo "tablet: adb ready"; else echo "tablet: no adb"; fi
     report_address
 }
 
