@@ -308,6 +308,8 @@ hl.config({
             natural_scroll       = true,
             disable_while_typing = true,
             tap_to_click         = true,
+            -- Elan 012C two-finger scroll is hot at the stock 1.0 scale
+            scroll_factor        = 0.5,
         },
     },
 })
@@ -408,18 +410,9 @@ hl.bind(mainMod .. " + SHIFT + k", hl.dsp.window.swap({ direction = "up" }))
 hl.bind(mainMod .. " + SHIFT + j", hl.dsp.window.swap({ direction = "down" }))
 
 -- Switch workspaces / move active window with mainMod (+ SHIFT) + [1-9]
--- Super+N is workspace id N (holes allowed). A missing id is created on the
--- focused monitor; pin that id's rule first so creation is not redirected to
--- its round-robin output. monitors.apply() still snaps ids back to the
--- round-robin on the next hotplug / Super+Ctrl+R.
+-- Super+N is workspace id N (holes allowed). Each id is locked to its
+-- round-robin monitor by monitors.lua, so Super+N moves focus to that monitor.
 local function focus_workspace(n)
-    if hl.get_workspace(n) == nil then
-        local mon = hl.get_active_monitor()
-        local name = mon and mon.name
-        if name then
-            hl.workspace_rule({ workspace = tostring(n), monitor = name })
-        end
-    end
     hl.dispatch(hl.dsp.focus({ workspace = n }))
 end
 for i = 1, 9 do
