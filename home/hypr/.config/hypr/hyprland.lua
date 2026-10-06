@@ -422,15 +422,12 @@ for i = 1, 9 do
     hl.bind(mainMod .. " + SHIFT + " .. i, hl.dsp.window.move({ workspace = i })) -- send window to workspace
 end
 
--- Super+D: dash toggle, which lands on an empty workspace of this display
--- (dash's go_empty_ws walks the same round-robin slots). Super+Shift+D sends
--- the window to that empty workspace. Free means an id in this monitor's
--- slots (monitors.lua) with no windows (a missing id counts). With two
--- displays the slots are 1/3/5… on display 1 and 2/4/6… on display 2, so from
--- display 1 holding 1 and 3 the target is 5, not a global scan. Super+Shift+D
--- focus follows the window, matching Super+Shift+N.
-hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("dash toggle")) -- idle dashboard on/off
-
+-- Super+D / Super+Shift+D: empty workspace on the focused display.
+-- Free means an id in this monitor's round-robin slots (monitors.lua) with no
+-- windows (a missing id counts). slots_by_monitor is the same left-to-right
+-- plan apply() locks ids to, so with one external it is laptop 1/3/5… and
+-- tablet 2/4/6… — not "externals first". Super+D hops there and shows dash;
+-- Super+Shift+D sends the window, focus following, matching Super+Shift+N.
 local function focused_monitor_name()
     for _, m in ipairs(hl.get_monitors() or {}) do
         if m.focused then
@@ -450,6 +447,39 @@ local function first_free_workspace()
         end
     end
 end
+
+-- Windows on the focused workspace. Unknown counts as busy so Super+D does
+-- not treat a half-queried session as "already on empty".
+local function focused_workspace_windows()
+    for _, m in ipairs(hl.get_monitors() or {}) do
+        if m.focused then
+            local aw = m.active_workspace
+            local id = type(aw) == "table" and aw.id or aw
+            if id then
+                local ws = hl.get_workspace(id)
+                return (ws and ws.windows) or 0
+            end
+        end
+    end
+    return 1
+end
+
+hl.bind(mainMod .. " + D", function() -- empty workspace on this display, dash on it
+    -- Already empty: dash's off switch (and the show, if hidden).
+    if focused_workspace_windows() == 0 then
+        hl.dispatch(hl.dsp.exec_cmd("dash toggle"))
+        return
+    end
+    local target = first_free_workspace()
+    if target == nil then
+        hl.notification.create({ text = "No free workspace on this display", timeout = 1500, icon = "info" })
+        return
+    end
+    hl.dispatch(hl.dsp.focus({ workspace = target }))
+    -- show, not toggle: after the hop this workspace is empty, so toggle would
+    -- read it as "landed on dash" and stop instead of keeping the dashboard up.
+    hl.dispatch(hl.dsp.exec_cmd("dash show"))
+end)
 
 hl.bind(mainMod .. " + SHIFT + D", function() -- send window to empty workspace on this display
     local target = first_free_workspace()
