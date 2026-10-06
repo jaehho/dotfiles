@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tablet-display on|off|toggle|status|state: use the Galaxy Tab as a second screen.
+# tablet-display on|off|toggle|status|state|audio: use the Galaxy Tab as a second screen.
 #
 # `on` starts Sunshine and opens the stream in Moonlight on the tablet. The
 # headless Hyprland output exists only while a stream does: Sunshine runs
@@ -44,7 +44,11 @@
 # half is up. `state` is for the display menu: on (streaming), ready (host up,
 # Moonlight not showing), off, or starting while another run holds the lock;
 # when off, a second line says why the tablet cannot be reached, if it cannot.
-# `create`, `remove` and `hold` are Sunshine's, not for typing.
+# `audio on|off|toggle|status` is whether Moonlight also plays the PC's sound
+# (Sunshine `stream_audio`). Default off: the tablet is a display, not a second
+# pair of speakers. The setting lives in sunshine.conf, which Sunshine reads
+# only at startup, so changing it restarts the unit and drops any live stream;
+# reconnect after. `create`, `remove` and `hold` are Sunshine's, not for typing.
 
 set -uo pipefail
 
@@ -80,7 +84,26 @@ lock() {
     flock -n 9 || die "already running"
 }
 
-OUTPUT=$(awk -F'[[:space:]]*=[[:space:]]*' '$1 == "output_name" { print $2 }' "$SUNSHINE_CONF" 2>/dev/null)
+# Read one key from sunshine.conf. Comments are skipped so the prose above
+# cannot be mistaken for a setting.
+conf_get() {
+    awk -F'[[:space:]]*=[[:space:]]*' -v key="$1" \
+        '$1 !~ /^#/ && $1 == key { print $2 }' "$SUNSHINE_CONF" 2>/dev/null | tail -1
+}
+
+# Write one key. Stow made the conf a symlink into the repo; edit the target
+# so sed does not replace the link with a regular file.
+conf_set() {
+    local key=$1 value=$2 target
+    target=$(readlink -f "$SUNSHINE_CONF") || die "cannot resolve $SUNSHINE_CONF"
+    if grep -q "^${key} *=" "$target"; then
+        sed -i "s|^${key} *=.*|${key} = ${value}|" "$target"
+    else
+        printf '%s = %s\n' "$key" "$value" >>"$target"
+    fi
+}
+
+OUTPUT=$(conf_get output_name)
 [ -n "$OUTPUT" ] || die "no output_name in $SUNSHINE_CONF"
 # Moonlight lists the host under Sunshine's name (the hostname unless set) and
 # the first app Sunshine offers.
@@ -294,6 +317,12 @@ cmd_toggle() {
     if output_exists || sunshine_active; then cmd_off; else cmd_on; fi
 }
 
+# Sunshine defaults stream_audio to on when the key is missing; the conf
+# spells it out. "on" means the tablet plays the PC's sound.
+stream_audio_on() {
+    [ "$(conf_get stream_audio)" != "disabled" ]
+}
+
 cmd_status() {
     if output_exists; then
         hyprctl monitors all -j | jq -r --arg n "$OUTPUT" '.[] | select(.name == $n) | "output: \(.name) \(.width)x\(.height)@\(.refreshRate | floor)"'
@@ -302,6 +331,7 @@ cmd_status() {
     fi
     if sunshine_active; then echo "sunshine: running"; else echo "sunshine: stopped"; fi
     if have_tablet; then echo "tablet: adb ready"; else echo "tablet: no adb"; fi
+    if stream_audio_on; then echo "stream-audio: on"; else echo "stream-audio: off"; fi
     report_address
 }
 
@@ -319,6 +349,41 @@ cmd_state() {
     return 0
 }
 
+# `audio` is a preference, not a stream control, so it does not take the
+# flock: reading `status` while `on` waits for an unlock must not die.
+cmd_audio() {
+    local want=$1 current
+    if stream_audio_on; then current=on; else current=off; fi
+    case "$want" in
+        status)
+            echo "$current"
+            return 0
+            ;;
+        toggle)
+            if [ "$current" = on ]; then want=off; else want=on; fi
+            ;;
+        on|off) ;;
+        *) die "usage: tablet-display audio on|off|toggle|status" ;;
+    esac
+    [ "$want" = "$current" ] && { say "stream audio already $want"; return 0; }
+
+    if [ "$want" = on ]; then
+        conf_set stream_audio enabled
+    else
+        conf_set stream_audio disabled
+    fi
+
+    # Sunshine reads sunshine.conf only at startup. Restarting is the only way
+    # to make the new value real before the next client connects; a live stream
+    # does not survive it (prep `undo` tears the output down).
+    if sunshine_active; then
+        systemctl --user restart "$UNIT" || die "could not restart $UNIT"
+        say "stream audio $want; reconnect the stream"
+    else
+        say "stream audio $want"
+    fi
+}
+
 case "${1:-status}" in
     on) lock; cmd_on ;;
     create) cmd_create ;;
@@ -328,5 +393,6 @@ case "${1:-status}" in
     toggle) lock; cmd_toggle ;;
     status) cmd_status ;;
     state) cmd_state ;;
-    *) die "usage: tablet-display on|off|toggle|status|state" ;;
+    audio) cmd_audio "${2:-status}" ;;
+    *) die "usage: tablet-display on|off|toggle|status|state|audio on|off|toggle|status" ;;
 esac

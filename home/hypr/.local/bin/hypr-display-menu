@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""hypr-display-menu — display layout, per-screen on/off, and the tablet (F1, Super + P).
+"""hypr-display-menu — display layout, per-screen on/off, tablet audio, and the tablet (F1, Super + P).
 
 Reads what Hyprland reports (`hyprctl monitors all`) and refreshes while open, so
 the cards follow plugging, unplugging, and the tablet coming up. Changes go to
 monitors.lua through `hyprctl eval`, which owns the layout; the tablet goes
-through `tablet-display`. The F1 key opens this with Extend focused.
+through `tablet-display`, including whether Moonlight also plays the PC's sound
+(`tablet-display audio`). The F1 key opens this with Extend focused.
 """
 
 import json
@@ -39,17 +40,29 @@ def monitors_lua(code):
     subprocess.run(["hyprctl", "eval", f'require("monitors").{code}'], capture_output=True)
 
 
-def tablet_output():
-    """The headless output tablet-display creates; it reads the same line."""
+def sun_conf(key, default=None):
+    """One key from sunshine.conf, or default. Comments are skipped."""
     try:
         with open(SUNSHINE_CONF) as fh:
             for line in fh:
-                key, _, value = line.partition("=")
-                if key.strip() == "output_name":
+                line = line.split("#", 1)[0]
+                k, _, value = line.partition("=")
+                if k.strip() == key:
                     return value.strip()
     except OSError:
         pass
-    return "tablet"
+    return default
+
+
+def tablet_output():
+    """The headless output tablet-display creates; it reads the same line."""
+    return sun_conf("output_name", "tablet")
+
+
+def stream_audio_on():
+    """Whether Moonlight also plays the PC's sound. Sunshine defaults to on
+    when the key is missing; the conf spells it out as disabled."""
+    return sun_conf("stream_audio", "enabled") != "disabled"
 
 
 # ── state ────────────────────────────────────────────────────────────────────
@@ -207,6 +220,8 @@ POLL_MS = 1000
 TABLET_EVERY = 3  # polls between tablet-display checks; it asks adb
 
 SCALES = [(None, "Auto"), (1, "1×"), (1.25, "1.25×"), (1.5, "1.5×"), (2, "2×")]
+# stream_audio in sunshine.conf: does the tablet also play the PC's sound?
+AUDIO = [(False, "Off"), (True, "On")]
 
 LAYOUTS = [
     ("extend", "\U000F037A", "Extend"),
@@ -231,9 +246,11 @@ class Menu(Gtk.Application):
         self.cards = {}
         self.scale_buttons = {}
         self.scale_heading = None
+        self.audio_buttons = {}
         self.grid = None
         self.tablet_card = None
         self.tablet_state = ("off", "")
+        self.stream_audio = False
         self.polls = 0
         self.busy = False
 
@@ -314,6 +331,18 @@ class Menu(Gtk.Application):
         self.grid = Gtk.Grid(column_spacing=8, row_spacing=8, column_homogeneous=True)
         sheet.append(self.grid)
 
+        sheet.append(self.heading("Tablet audio"))
+        audio = Gtk.Grid(column_spacing=8, column_homogeneous=True)
+        for n, (value, label) in enumerate(AUDIO):
+            button = Gtk.Button(label=label)
+            button.add_css_class("layout")
+            button.set_tooltip_text(
+                "Let Moonlight play the PC's sound on the tablet, or keep the tablet silent")
+            button.connect("clicked", self.on_audio, value)
+            self.audio_buttons[value] = button
+            audio.attach(button, n, 0, 1, 1)
+        sheet.append(audio)
+
         self.scale_heading = self.heading("Scale")
         sheet.append(self.scale_heading)
         scales = Gtk.Grid(column_spacing=8, column_homogeneous=True)
@@ -391,6 +420,7 @@ class Menu(Gtk.Application):
             self.tablet_state = tablet
         self.screens = screens
         self.layout = current_layout(screens)
+        self.stream_audio = stream_audio_on()
 
         for key, button in self.layout_buttons.items():
             (button.add_css_class if key == self.layout else button.remove_css_class)("on")
@@ -401,6 +431,9 @@ class Menu(Gtk.Application):
 
         # The tablet's virtual output is not listed: its card is the stream.
         self.show_screens([s for s in screens if s["kind"] != "tablet"])
+
+        for value, button in self.audio_buttons.items():
+            (button.add_css_class if value == self.stream_audio else button.remove_css_class)("on")
 
         # Scale applies to the focused screen, the one with the blue card.
         target = self.scale_target()
@@ -493,6 +526,11 @@ class Menu(Gtk.Application):
             arg = "nil" if value is None else value
             threading.Thread(target=monitors_lua,
                              args=(f'set_scale("{target["name"]}", {arg})',), daemon=True).start()
+            GLib.timeout_add(700, self.refresh_now)
+
+    def on_audio(self, _button, value):
+        if value != self.stream_audio:
+            spawn(f"{TABLET} audio {'on' if value else 'off'}")
             GLib.timeout_add(700, self.refresh_now)
 
     def on_tablet(self, _button, action=None):
