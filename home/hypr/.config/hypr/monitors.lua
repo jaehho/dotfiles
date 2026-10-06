@@ -220,10 +220,10 @@ local function apply()
             defaults[idx] = ws
         end
         assigned[ws] = name
-        -- persistent: empty 1-9 stay alive so waybar always shows the slots and
-        -- Super+N / Super+D always have a landing. Strays outside 1-9 are not
-        -- persistent and get reclaimed by workspaces.lua.
-        hl.workspace_rule({ workspace = tostring(ws), monitor = name, default = is_default, persistent = true })
+        -- Not persistent: an empty workspace must die when you leave it so
+        -- workspace.removed fires and workspaces.lua ripples the holes closed
+        -- (tmux renumber-windows). Super+N creates id N if it is missing.
+        hl.workspace_rule({ workspace = tostring(ws), monitor = name, default = is_default })
     end
 
     -- Rules only bind workspaces at creation time, so existing ones have to be
