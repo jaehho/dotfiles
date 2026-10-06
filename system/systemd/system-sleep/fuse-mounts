@@ -7,6 +7,14 @@
 # can stall in D-state (fuse_dentry_revalidate → request_wait_answer) and
 # refuse to freeze, which hangs suspend-then-hibernate entirely.
 #
+# sshfs lives in systemd units (MOUNTS). rclone mounts are spawned by app
+# workers with no unit (flamenco-worker -remote-keep-mounted); those are
+# aborted and lazy-unmounted here. The owner remounts after resume.
+#
+# Abort comes first and is what unsticks a task already sitting in
+# fuse_readdir_uncached/request_wait_answer. fusermount3 -uz alone detaches
+# the path but leaves that D-state task, and freeze still fails.
+#
 # ExecStop on each unit uses `fusermount3 -uz` (lazy unmount) so stopping
 # cannot itself hang even if the backend is stalled.
 
@@ -27,11 +35,34 @@ run_user() { "${USER_ENV[@]}" "$@"; }
 # stop never happens. Apply the timeout to the whole runuser tree instead.
 run_user_t() { local secs=$1; shift; timeout -k 2 "$secs" "${USER_ENV[@]}" "$@"; }
 
+# fuse connection id is the minor of the mount's major:minor.
+fuse_abort() {
+    local target=$1 id
+    id=$(awk -v t="$target" '$5==t {split($3, a, ":"); print a[2]; exit}' \
+        /proc/self/mountinfo)
+    [[ -n ${id:-} && -e /sys/fs/fuse/connections/$id/abort ]] || return 0
+    echo 1 > "/sys/fs/fuse/connections/$id/abort" || true
+}
+
 case "$1" in
     pre)
+        # Wake sshfs/rclone waiters before anything else so freeze can proceed.
+        # /proc/self/mounts fields: source target fstype ...
+        while read -r fstype target; do
+            case $fstype in
+                fuse.sshfs | fuse.rclone) fuse_abort "$target" ;;
+            esac
+        done < <(awk '$3 ~ /^fuse\.(sshfs|rclone)$/ {print $3, $2}' /proc/self/mounts)
+
         for svc in "${MOUNTS[@]}"; do
             run_user_t 10 systemctl --user stop "$svc" || true
         done
+
+        # Unit-less rclone mounts: drop the mount point. No post start; the
+        # owner remounts when it sees the mount is gone.
+        while read -r target; do
+            run_user_t 5 fusermount3 -uz "$target" || true
+        done < <(awk '$3 == "fuse.rclone" {print $2}' /proc/self/mounts)
         ;;
     post)
         for svc in "${MOUNTS[@]}"; do
