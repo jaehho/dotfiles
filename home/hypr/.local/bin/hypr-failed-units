@@ -137,8 +137,7 @@ open_index() {  # $1: map row number
     for a in "${cmd[@]}"; do inner+=$(sh_quote "$a")' '; done
     inner+=$'\n'
     inner+="echo"$'\n'
-    inner+="echo \"journal: journalctl${flag:+ $flag} -u $(sh_quote "$unit") -n 150 --no-pager\""$'\n'
-    inner+="echo \"a shell follows — exit closes this pane\""$'\n'
+    inner+="echo \"journal: journalctl${flag:+ $flag} -u $(sh_quote "$unit")\""$'\n'
     inner+="exec fish"
     exec "$PANE" -- sh -c "$inner"
 }
