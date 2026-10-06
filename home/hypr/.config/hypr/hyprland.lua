@@ -338,7 +338,6 @@ hl.bind(mainMod .. " + Q",         hl.dsp.window.close()) -- quit: close the foc
 -- asst's add-task popup: a layer surface, so no window rule; pressing again closes it
 hl.bind(mainMod .. " + A",         hl.dsp.exec_cmd("asst-gtk quick-add")) -- quick add task
 hl.bind(mainMod .. " + space",     hl.dsp.exec_cmd(menu)) -- app launcher
-hl.bind(mainMod .. " + D",         hl.dsp.exec_cmd("dash toggle")) -- idle dashboard on/off
 hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/hypr-pin-toggle")) -- pin window on top
 hl.bind(mainMod .. " + T",         hl.dsp.layout("togglesplit"))                    -- toggle split direction (dwindle)
 
@@ -423,25 +422,43 @@ for i = 1, 9 do
     hl.bind(mainMod .. " + SHIFT + " .. i, hl.dsp.window.move({ workspace = i })) -- send window to workspace
 end
 
--- Super+Shift+D: send window to the first free workspace. Free means id 1-9
--- with no windows (a missing id counts). Focus follows the window, matching
--- Super+Shift+N.
+-- Super+D: dash toggle, which lands on an empty workspace of this display
+-- (dash's go_empty_ws walks the same round-robin slots). Super+Shift+D sends
+-- the window to that empty workspace. Free means an id in this monitor's
+-- slots (monitors.lua) with no windows (a missing id counts). With two
+-- displays the slots are 1/3/5… on display 1 and 2/4/6… on display 2, so from
+-- display 1 holding 1 and 3 the target is 5, not a global scan. Super+Shift+D
+-- focus follows the window, matching Super+Shift+N.
+hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("dash toggle")) -- idle dashboard on/off
+
+local function focused_monitor_name()
+    for _, m in ipairs(hl.get_monitors() or {}) do
+        if m.focused then
+            return m.name
+        end
+    end
+end
+
 local function first_free_workspace()
-    for i = 1, 9 do
+    local mon = focused_monitor_name()
+    if mon == nil then return end
+    local by_mon = monitors.slots_by_monitor and monitors.slots_by_monitor() or {}
+    for _, i in ipairs(by_mon[mon] or {}) do
         local ws = hl.get_workspace(i)
         if ws == nil or (ws.windows or 0) == 0 then
             return i
         end
     end
 end
-hl.bind(mainMod .. " + SHIFT + D", function()
+
+hl.bind(mainMod .. " + SHIFT + D", function() -- send window to empty workspace on this display
     local target = first_free_workspace()
     if target == nil then
-        hl.notification.create({ text = "No free workspace", timeout = 1500, icon = "info" })
+        hl.notification.create({ text = "No free workspace on this display", timeout = 1500, icon = "info" })
         return
     end
     hl.dispatch(hl.dsp.window.move({ workspace = target }))
-end) -- send window to first free workspace
+end)
 
 -- Move all windows in active workspace to target workspace with mainMod + CTRL + [1-9]
 -- (0 is the scratchpad's row)
