@@ -137,8 +137,8 @@
         // No "on-click": the workspace button's own handler switches, and needs
         // waybar-git (0.15.0 sends legacy dispatch strings the Lua config
         // rejects, so only the window icons would respond).
-        "on-scroll-up": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"e-1\" })'",
-        "on-scroll-down": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"e+1\" })'",
+        "on-scroll-up": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"m-1\" })'",
+        "on-scroll-down": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"m+1\" })'",
         "smooth-scrolling-threshold": 6,
         // Real app icons resolved from the window class -> .desktop file -> icon
         // theme, so every app gets its own icon with nothing hardcoded here.

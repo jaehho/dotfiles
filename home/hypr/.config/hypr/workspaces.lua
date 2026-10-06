@@ -17,8 +17,15 @@
 
 local M = {}
 
+-- Two-phase change_id temps. Must sit outside 1..9 so a leak is visible as a
+-- stray (reclaim_strays eats id > 9). 9003 on Spotify was a leftover temp from
+-- an interrupted pack.
 local TEMP_BASE = 9000
 local DEBOUNCE_MS = 300
+
+-- The closed set Super+N and Super+0 (scratchpad) address. Anything else with
+-- id > 0 is a stray and gets packed in or destroyed.
+local MAX_SLOT = 9
 
 -- Pure planner. live: {{id=n, monitor=name}, ...}. slots_by_mon:
 -- { [monitor_name] = {slot_id, ...} }. Returns ordered {from=, to=} pairs
@@ -42,7 +49,7 @@ function M.plan_pack(live, slots_by_mon)
         local slots = slots_by_mon[mon]
         if slots and #slots > 0 then
             for k, from in ipairs(ids) do
-                local to = slots[k] or from -- extras past the slot list keep their id
+                local to = slots[k] or from -- extras past the slot list keep their id (reclaim_strays merges those)
                 if to ~= from then
                     finals[#finals + 1] = { from = from, to = to }
                 end
@@ -66,6 +73,68 @@ end
 
 local packing = false
 
+-- Ids outside 1..9 (including leftover TEMP_BASE temps). Merge their windows
+-- onto a real slot on the same monitor, then leave — the empty non-persistent
+-- workspace is destroyed when unfocused. Keeps Super+N / Super+Tab / waybar on
+-- the closed set.
+local function reclaim_strays()
+    local monitors = package.loaded["monitors"]
+    local slots_by_mon = monitors and monitors.slots_by_monitor and monitors.slots_by_monitor() or {}
+    if not next(slots_by_mon) then return end
+
+    local valid = {}
+    for _, slots in pairs(slots_by_mon) do
+        for _, id in ipairs(slots) do valid[id] = true end
+    end
+
+    local strays = {}
+    for _, ws in ipairs(hl.get_workspaces() or {}) do
+        if not ws.special and type(ws.id) == "number" and ws.id > 0 and (ws.id > MAX_SLOT or not valid[ws.id]) then
+            strays[#strays + 1] = ws
+        end
+    end
+
+    -- Windows already claimed by a live slot, so a stray folds into the first
+    -- empty slot when there is one and only piles onto 1 when the monitor is full.
+    local occupied = {}
+    for _, ws in ipairs(hl.get_workspaces() or {}) do
+        if type(ws.id) == "number" then occupied[ws.id] = (ws.windows or 0) > 0 end
+    end
+
+    for _, ws in ipairs(strays) do
+        local mon = ws.monitor
+        local name = type(mon) == "string" and mon or (mon and mon.name)
+        local slots = name and slots_by_mon[name] or nil
+        local target = nil
+        for _, id in ipairs(slots or {}) do
+            if not occupied[id] then target = id; break end
+        end
+        if target == nil then target = slots and slots[1] end
+        if target == nil then
+            for _, s in pairs(slots_by_mon) do
+                if s[1] then target = s[1]; break end
+            end
+        end
+        if target and target ~= ws.id then
+            for _, win in ipairs(hl.get_workspace_windows(ws.id) or {}) do
+                hl.dispatch(hl.dsp.window.move({
+                    workspace = target,
+                    window    = "address:" .. win.address,
+                    follow    = false,
+                }))
+            end
+            -- If the stray is on screen, hop to its replacement so Hyprland
+            -- reaps the empty one.
+            local live = name and hl.get_monitor(name)
+            local active = live and live.active_workspace
+            local id = active and (type(active) == "table" and active.id or active)
+            if id == ws.id then
+                live:set_workspace({ workspace = tostring(target) })
+            end
+        end
+    end
+end
+
 local function pack_now()
     if packing then return end
 
@@ -85,19 +154,20 @@ local function pack_now()
     end
 
     local steps = M.plan_pack(live, slots_by_mon)
-    if #steps == 0 then return end
-
-    packing = true
-    for _, mv in ipairs(steps) do
-        hl.dispatch(hl.dsp.workspace.change_id({ workspace = mv.from, id = mv.to }))
-        -- Hyprland renames numeric workspaces to tostring(new id) but does not
-        -- emit renameworkspace, and waybar's changeworkspaceid handler only
-        -- setId — so {name} labels and active-by-name go stale (double-active
-        -- pills, missing numbers). A same-name rename is a no-op for us and
-        -- still emits renameworkspace>>id,name, which waybar does handle.
-        hl.dispatch(hl.dsp.workspace.rename({ workspace = mv.to, name = tostring(mv.to) }))
+    if #steps > 0 then
+        packing = true
+        for _, mv in ipairs(steps) do
+            hl.dispatch(hl.dsp.workspace.change_id({ workspace = mv.from, id = mv.to }))
+            -- Hyprland renames numeric workspaces to tostring(new id) but does not
+            -- emit renameworkspace, and waybar's changeworkspaceid handler only
+            -- setId — so {name} labels and active-by-name go stale (double-active
+            -- pills, missing numbers). A same-name rename is a no-op for us and
+            -- still emits renameworkspace>>id,name, which waybar does handle.
+            hl.dispatch(hl.dsp.workspace.rename({ workspace = mv.to, name = tostring(mv.to) }))
+        end
+        packing = false
     end
-    packing = false
+    reclaim_strays()
 end
 
 -- Trailing-edge debounce: workspace.removed and the events change_id itself
@@ -121,5 +191,6 @@ end
 hl.on("workspace.removed", schedule)
 
 M.pack = pack_now
+M.reclaim = reclaim_strays
 M.schedule = schedule
 return M

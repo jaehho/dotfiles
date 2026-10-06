@@ -27,7 +27,7 @@ mapfile -t occupied < <(hyprctl clients -j | jq '[.[].workspace.id] | unique | .
 
 # Build slots for this monitor, keeping only non-empty ones
 slots=()
-for slot in $(seq 1 10); do
+for slot in $(seq 1 9); do
     (( (slot - 1) % mon_count == mon_idx )) || continue
     ws_id=$slot
     for occ in "${occupied[@]}"; do

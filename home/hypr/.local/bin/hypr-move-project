@@ -72,7 +72,7 @@ get_monitor_workspaces() {
     ((target_idx < 0)) && return 1
 
     # Round-robin: slot N belongs to monitor (N-1) % count
-    for slot in $(seq 1 10); do
+    for slot in $(seq 1 9); do
         if (( (slot - 1) % count == target_idx )); then
             echo "$slot"
         fi

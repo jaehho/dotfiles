@@ -283,6 +283,12 @@ hl.config({
         workspace_back_and_forth = true,
         allow_workspace_cycles   = true,
     },
+
+    gestures = {
+        -- Swipe past the last workspace must not mint 10+. Super+D is the
+        -- only "give me empty" path; the closed set is 1-9 + special on 0.
+        workspace_swipe_create_new = false,
+    },
 })
 
 -- Scratchpad: semi-transparent overlay
@@ -412,8 +418,9 @@ hl.bind(mainMod .. " + SHIFT + k", hl.dsp.window.swap({ direction = "up" }))
 hl.bind(mainMod .. " + SHIFT + j", hl.dsp.window.swap({ direction = "down" }))
 
 -- Switch workspaces / move active window with mainMod (+ SHIFT) + [1-9]
--- Super+N is workspace id N (holes allowed). Each id is locked to its
--- round-robin monitor by monitors.lua, so Super+N moves focus to that monitor.
+-- Super+N is workspace id N (holes allowed; the closed set is 1-9, Super+0 is
+-- the scratchpad). Each id is locked to its round-robin monitor by
+-- monitors.lua, so Super+N moves focus to that monitor.
 local function focus_workspace(n)
     hl.dispatch(hl.dsp.focus({ workspace = n }))
 end
@@ -423,10 +430,10 @@ for i = 1, 9 do
 end
 
 -- Super+D / Super+Shift+D: empty workspace on the focused display.
--- Free means an id in this monitor's round-robin slots (monitors.lua) with no
--- windows (a missing id counts). slots_by_monitor is the same left-to-right
--- plan apply() locks ids to, so with one external it is laptop 1/3/5… and
--- tablet 2/4/6… — not "externals first". Super+D hops there and shows dash;
+-- Free means an id in this monitor's round-robin slots (monitors.lua, closed
+-- set 1-9) with no windows (a missing id counts). slots_by_monitor is the same
+-- left-to-right plan apply() locks ids to, so with one external it is laptop
+-- 1/3/5/7/9 and tablet 2/4/6/8. Super+D hops there and shows dash;
 -- Super+Shift+D sends the window, focus following, matching Super+Shift+N.
 local function focused_monitor_name()
     for _, m in ipairs(hl.get_monitors() or {}) do
@@ -517,9 +524,11 @@ hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("~/.local/bin/hypr-display-menu")) --
 hl.bind(mainMod .. " + 0", hl.dsp.workspace.toggle_special("󰏫")) -- scratchpad
 hl.bind(mainMod .. " + SHIFT + 0", hl.dsp.window.move({ workspace = "special:󰏫" })) -- send to scratchpad
 
--- Scroll through existing workspaces with mainMod + scroll
-hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" })) -- next workspace
-hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" })) -- previous workspace
+-- Scroll through existing workspaces on this monitor with mainMod + scroll.
+-- m+1/m-1, not e+1/e-1: e walks all monitors and empty/missing ids can mint
+-- workspaces outside the closed 1-9 set.
+hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "m+1" })) -- next workspace on this display
+hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "m-1" })) -- previous workspace on this display
 
 -- Move/resize windows with mainMod + LMB/RMB and dragging
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })

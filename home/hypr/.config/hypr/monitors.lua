@@ -11,12 +11,13 @@
 --   1 external    [laptop, external]      external to the right
 --   2+ externals  [externals..., laptop]  laptop rightmost
 -- Externals sort by EXTERNAL_ORDER preference (substring of description or
--- serial), then alphabetically by connector name. Workspaces 1-10 are assigned
--- round-robin, leftmost monitor getting workspace 1.
+-- serial), then alphabetically by connector name. Workspaces 1-9 are assigned
+-- round-robin, leftmost monitor getting workspace 1. Super+0 is the scratchpad
+-- (special), so the closed set is 1-9 — never 10. Minting past 9 is a bug.
 
 local LAPTOP_PATTERN = "eDP-"
 local EXTERNAL_ORDER = { "FT36ZS2", "B946ZS2" }
-local MAX_WORKSPACES = 10
+local MAX_WORKSPACES = 9
 local DEBOUNCE_MS    = 500
 
 -- Display state, set from the display menu (F1) through set_layout() and
@@ -219,7 +220,10 @@ local function apply()
             defaults[idx] = ws
         end
         assigned[ws] = name
-        hl.workspace_rule({ workspace = tostring(ws), monitor = name, default = is_default })
+        -- persistent: empty 1-9 stay alive so waybar always shows the slots and
+        -- Super+N / Super+D always have a landing. Strays outside 1-9 are not
+        -- persistent and get reclaimed by workspaces.lua.
+        hl.workspace_rule({ workspace = tostring(ws), monitor = name, default = is_default, persistent = true })
     end
 
     -- Rules only bind workspaces at creation time, so existing ones have to be
@@ -259,6 +263,13 @@ local function apply()
 
     if swept and focused then
         hl.dispatch(hl.dsp.focus({ monitor = focused }))
+    end
+
+    -- Closed set 1-9: fold any stray (temp leak, Super+scroll mint, 9003) back
+    -- into the slots so waybar and Super+N only ever see 1-9.
+    local ws_mod = package.loaded["workspaces"]
+    if ws_mod and ws_mod.reclaim then
+        ws_mod.reclaim()
     end
 end
 
