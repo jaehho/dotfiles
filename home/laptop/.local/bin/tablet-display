@@ -12,12 +12,15 @@
 # Sunshine treats that as the app ending and runs `remove`, so pausing the
 # stream closes the display and the next connect is a fresh launch (a resume
 # would skip `create`, and capture would silently fall back to the laptop).
-# `create` sizes the output from the client's request (Moonlight's resolution)
-# through the SUNSHINE_CLIENT_WIDTH/HEIGHT variables Sunshine passes to prep
-# commands. The refresh stays 60 whatever FPS the client asks for: Sunshine
-# drops frames to the stream rate, and a 30 Hz desktop feels worse. After the
-# mode lands it restarts hyprpaper: it paints on output add, will not repaint
-# when the size changes, and an IPC set leaves that first surface up.
+# `create` sizes the output at 1920x1080@60 scale 1, not Moonlight's requested
+# resolution. A client-native headless output (the Tab is 2960x1848) makes
+# Intel VAAPI's RGB dmabuf import lose the EGL context (0x300C); Sunshine then
+# rebuilds the encoder every frame and the stream glitches. Capture at 1080p
+# and let the encoder scale to the client. The refresh stays 60 whatever FPS
+# the client asks for: Sunshine drops frames to the stream rate, and a 30 Hz
+# desktop feels worse. After the mode lands it restarts hyprpaper: it paints on
+# output add, will not repaint when the size changes, and an IPC set leaves
+# that first surface up.
 #
 # Sunshine resolves output_name when capture starts, by name, and falls back
 # to the first monitor if the name is missing. The name is read from
@@ -57,7 +60,9 @@ APPS_JSON="$HOME/.config/sunshine/apps.json"
 UNIT=app-dev.lizardbyte.app.Sunshine.service
 WEB_UI=https://localhost:47990
 MOONLIGHT=com.limelight
-DEFAULT_SIZE=1920x1080   # when a client sends no size (running `create` by hand)
+# Capture mode, not the client's. 1080p is what Intel VAAPI can import without
+# losing the EGL context on this headless output.
+MODE=1920x1080
 REFRESH=60
 READY_TIMEOUT=30    # seconds; the unit sleeps 5 before it starts Sunshine
 UNLOCK_TIMEOUT=60   # seconds to wait for the tablet to be unlocked
@@ -260,24 +265,23 @@ apply_wallpaper() {
 }
 
 # Sunshine's prep `do`: runs before capture starts, so the output must exist
-# and have its mode when this returns.
+# and have its mode when this returns. SUNSHINE_CLIENT_WIDTH/HEIGHT are ignored
+# on purpose; see MODE.
 cmd_create() {
-    local size="${SUNSHINE_CLIENT_WIDTH:-}x${SUNSHINE_CLIENT_HEIGHT:-}"
-    [ "$size" = x ] && size=$DEFAULT_SIZE
     output_exists && hyprctl output remove "$OUTPUT" >/dev/null 2>&1
     hyprctl output create headless "$OUTPUT" >/dev/null || die "could not create output $OUTPUT"
     wait_for "output $OUTPUT" output_exists
-    hyprctl eval "hl.monitor({ output = \"$OUTPUT\", mode = \"$size@$REFRESH\", position = \"auto\", scale = \"auto\" })" >/dev/null ||
-        die "could not set $OUTPUT to $size@$REFRESH"
-    # Wait for the mode to land so hyprpaper paints at the client size.
-    wait_for "output $OUTPUT at $size" size_ready
+    hyprctl eval "hl.monitor({ output = \"$OUTPUT\", mode = \"$MODE@$REFRESH\", position = \"auto\", scale = 1 })" >/dev/null ||
+        die "could not set $OUTPUT to $MODE@$REFRESH"
+    # Wait for the mode to land so hyprpaper paints at the capture size.
+    wait_for "output $OUTPUT at $MODE" size_ready
     sync_layout
     apply_wallpaper
 }
 
-# True when the output has the client mode's physical size.
+# True when the output has the capture mode's physical size.
 size_ready() {
-    local w=${size%x*} h=${size#*x}
+    local w=${MODE%x*} h=${MODE#*x}
     hyprctl monitors -j 2>/dev/null | jq -e --arg n "$OUTPUT" --argjson w "$w" --argjson h "$h" \
         'any(.[]; .name == $n and .width == $w and .height == $h)' >/dev/null
 }
