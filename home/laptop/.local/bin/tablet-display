@@ -16,8 +16,8 @@
 # through the SUNSHINE_CLIENT_WIDTH/HEIGHT variables Sunshine passes to prep
 # commands. The refresh stays 60 whatever FPS the client asks for: Sunshine
 # drops frames to the stream rate, and a 30 Hz desktop feels worse. After the
-# mode lands it re-applies the wallpaper: hyprpaper paints on output add and
-# will not repaint when the size changes.
+# mode lands it restarts hyprpaper: it paints on output add, will not repaint
+# when the size changes, and an IPC set leaves that first surface up.
 #
 # Sunshine resolves output_name when capture starts, by name, and falls back
 # to the first monitor if the name is missing. The name is read from
@@ -248,19 +248,14 @@ cmd_on() {
 
 # Wallpaper at the final mode. hyprpaper paints when the output appears, before
 # `mode`/`scale` land, and does not repaint on a mode change, so the image stays
-# at the create-time size in the top-left. Re-apply once the output is at its
-# client size; that also replaces any stale per-output path an earlier session
-# left in hyprpaper (a removed output keeps its IPC setting).
+# at the create-time size in the top-left. An IPC set draws a full cover but
+# leaves that first surface up. Restart hyprpaper once the output is at its
+# client size; the next paint is a single cover at that size. Cosmetic, so a
+# restart failure must not fail the stream.
 apply_wallpaper() {
-    local wp i
-    wp=$(readlink -f "$HOME/Media/wallpapers/.current" 2>/dev/null) || return 0
-    [ -f "$wp" ] || return 0
-    # hyprpaper may not have registered the output yet; retry briefly. Wallpaper
-    # is cosmetic, so a miss must not fail the stream.
-    for ((i = 0; i < 20; i++)); do
-        hyprctl hyprpaper wallpaper "$OUTPUT,$wp" >/dev/null 2>&1 && return 0
-        sleep 0.1
-    done
+    pkill -x hyprpaper 2>/dev/null
+    sleep 0.2
+    setsid hyprpaper >/dev/null 2>&1 </dev/null &
     return 0
 }
 
@@ -274,8 +269,17 @@ cmd_create() {
     wait_for "output $OUTPUT" output_exists
     hyprctl eval "hl.monitor({ output = \"$OUTPUT\", mode = \"$size@$REFRESH\", position = \"auto\", scale = \"auto\" })" >/dev/null ||
         die "could not set $OUTPUT to $size@$REFRESH"
+    # Wait for the mode to land so hyprpaper paints at the client size.
+    wait_for "output $OUTPUT at $size" size_ready
     sync_layout
     apply_wallpaper
+}
+
+# True when the output has the client mode's physical size.
+size_ready() {
+    local w=${size%x*} h=${size#*x}
+    hyprctl monitors -j 2>/dev/null | jq -e --arg n "$OUTPUT" --argjson w "$w" --argjson h "$h" \
+        'any(.[]; .name == $n and .width == $w and .height == $h)' >/dev/null
 }
 
 # Sunshine's prep `undo`, also run when Sunshine stops.
