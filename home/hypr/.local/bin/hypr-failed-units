@@ -137,9 +137,14 @@ open_index() {  # $1: map row number
             cmd=(systemctl status "$unit" --no-pager -l)
         fi
     fi
+    # Build the pane script with real newlines. A single-quoted '\n' is a
+    # literal backslash-n and leaves `echo\necho` as one command name.
     local inner="" a
-    for a in "${cmd[@]}"; do inner+=$(sh_quote "$a")" "; done
-    inner+=$'\n''echo''\n''echo "a shell follows — exit closes this pane"''\n''exec fish'
+    for a in "${cmd[@]}"; do inner+=$(sh_quote "$a")' '; done
+    inner+=$'\n'
+    inner+="echo"$'\n'
+    inner+="echo \"a shell follows — exit closes this pane\""$'\n'
+    inner+="exec fish"
     exec "$PANE" -- sh -c "$inner"
 }
 

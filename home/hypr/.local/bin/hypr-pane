@@ -22,6 +22,18 @@ done
 [ $# -gt 0 ] || { echo "usage: hypr-pane [--float CLASS] [--cwd DIR] -- CMD..." >&2; exit 2; }
 cmd=("$@")
 
+# tmux takes one shell-command string and space-joins extra args, then runs
+# that string with default-shell -c (fish here). Re-parsing a bash-quoted
+# script under fish drops words (`sh -c 'a b'` → `sh -c a`) and the pane
+# exits immediately. Ship argv as base64 inside a single-quoted bash -c
+# wrapper: fish only sees one word, bash does the exec. kitty -e execs argv
+# directly and must not get the wrapped form.
+tmux_cmd() {
+    local script
+    script=$(printf 'exec'; printf ' %q' "$@"; printf '\n')
+    printf "bash -c 'eval \"\$(echo %s | base64 -d)\"'" "$(printf '%s' "$script" | base64 -w0)"
+}
+
 fallback() {
     if [ -n "$float_class" ]; then
         local addr
@@ -32,7 +44,7 @@ fallback() {
         fi
         exec kitty --class "$float_class" -e "${cmd[@]}"
     fi
-    exec kitty ${cwd:+--directory "$cwd"} -e tmux new-session ${cwd:+-c "$cwd"} "${cmd[@]}"
+    exec kitty ${cwd:+--directory "$cwd"} -e tmux new-session ${cwd:+-c "$cwd"} "$(tmux_cmd "${cmd[@]}")"
 }
 
 active=$(hyprctl activewindow -j 2>/dev/null || echo '{}')
@@ -80,7 +92,7 @@ if [ -n "$tmux_tty" ]; then
         else
             split_flag="-v"   # stacked below
         fi
-        exec tmux split-window "$split_flag" -t "$pane_id" -c "$dir" "${cmd[@]}"
+        exec tmux split-window "$split_flag" -t "$pane_id" -c "$dir" "$(tmux_cmd "${cmd[@]}")"
     fi
 fi
 
