@@ -55,9 +55,10 @@ The notebook is the log. A question notebook covers one question, two at most, i
 ```
 # Title
 ## Introduction
-### Question        what is asked
-### Background      only what bears on this question: what is known, why it matters, the reasoning behind the expected answer, and the design; expectations that could fail
-(methods, no header: data, definitions, diagrams, reused functions, each under its own ## section when it needs one)
+### Question        what is asked, in one sentence, with no definitions or notation
+### Background      only what bears on this question: what is known, why it matters, the reasoning behind the expected answer, and the design; expectations that could fail; a #### subheading per topic (a data quirk, a standard, why a threshold) so it scans
+## Load data       the tables the analysis reads, named as in the code
+(other methods, no header: definitions, diagrams, reused functions, each under its own ## section when it needs one)
 ## <one section per question the analyses answer, named for what it shows>
 ## Discussion        what the sections say, expectation by expectation
 ### Limitations      what else could produce the result and what it does not show
@@ -71,6 +72,7 @@ The notebook is the log. A question notebook covers one question, two at most, i
 - Write in any order. The cell graph does not depend on cell order, so jump between sections while developing, and reread the notebook top to bottom at each commit and reorder it for the reader.
 - Background does not need a quote for every claim. Quote where a passage carries the claim, paraphrase with a link where none does, and leave out a general introduction to the system. A claim the notebook cannot fully test gets an open question.
 - Each exclusion or data quirk the analysis handles gets one sentence in the Background saying where it comes from, with a source quote when the literature has one.
+- Phrase expectations and plans plainly ("should give a smooth curve"), not as stacked hedges.
 - An expectation says what the data would look like without the effect, and why. Do not assume a distribution family (power law, normal) without a reason.
 - The expectations come before the methods and the analysis sections and are stated as they were posed. They are reasoning that warrants the experiments, not labeled hypotheses. Do not dress a post-hoc finding as an expectation; report it as found.
 - Do not bake an exclusion into the definition of what is analyzed. Define the objects of study as broadly as the question allows, apply an exclusion after the first result, and show its effect beside the unfiltered version.
@@ -220,7 +222,7 @@ GitHub issues hold tasks, gotchas, decisions, and how a bug was found.
 - marimo regenerates the file whenever it saves, so comments between cells and trailing comments on lines of `with app.setup:` and `@app.function` bodies are lost. Put a comment on its own line inside a cell, function, or setup block.
 - Explanatory text is a markdown cell in complete sentences with transitions, not a comment at the top of a code cell. Introduce each definition, function, and figure with a markdown cell that says what it is for and what to look at. Comments stay for a choice at its site (a constant, a threshold) and stay short.
 - Provenance lives in names, docstrings, and constants; let the dependency graph show data flow.
-- Choice comments are short prose at the site of the choice: the real options and why this one; for open-ended knobs, what question the knob answers and a couple of concrete values; "arbitrary" when it is. No hard-wrapped comment lines.
+- A comment on a setup constant is one short line naming its role ("Colors by role.", "Standard cutoff for a strong partner, in synapses."). The options considered, the reasoning, and the concrete values go in the markdown where the reader meets the choice, not in the setup block. A choice comment at a call site is short prose: why this one; "arbitrary" when it is. No hard-wrapped comment lines.
 
 ```python
 # Minimum count for a pair to be ranked. Twenty keeps the long tail from drowning the figure; raise it toward 50 if you only want strong pairs, or use a quantile if the distribution shifts.
