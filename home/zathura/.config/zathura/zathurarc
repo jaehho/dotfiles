@@ -1,1 +1,3 @@
 set selection-clipboard clipboard
+# Official Catppuccin Mocha port (catppuccin/zathura)
+include catppuccin-mocha

@@ -27,7 +27,7 @@ default_table_max_columns = 50
 default_table_page_size = 10
 default_width = "medium"
 reference_highlighting = true
-theme = "light"
+theme = "dark"
 
 [formatting]
 line_length = 79
@@ -56,7 +56,7 @@ manager = "uv"
 
 [runtime]
 auto_instantiate = true
-auto_reload = "off"
+auto_reload = "autorun"
 default_csv_encoding = "utf-8"
 default_sql_output = "auto"
 on_cell_change = "autorun"

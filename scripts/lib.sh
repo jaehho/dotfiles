@@ -41,7 +41,7 @@ HOST_NO_AAAA="${HOST_NO_AAAA:-0}"
 
 # --- stow packages --------------------------------------------------------
 COMMON_STOW=(fish git tmux nvim claude codex sshfs bin laptop kitty ssh mime restic zathura
-             visidata tridactyl tailscale audio marimo)
+             visidata tridactyl tailscale audio marimo theme)
 ARCH_STOW=(hypr swaync rofi waybar sunshine)
 
 STOW_PACKAGES=()

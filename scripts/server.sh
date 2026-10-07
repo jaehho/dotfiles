@@ -5,8 +5,9 @@
 #   ~/dotfiles/scripts/server.sh    on the server itself
 #
 # First run sets up, every run updates: pulls the repo, links fish, tmux, nvim,
-# claude, theme, git and bin with stow (theme: the tmux bar's colors; git's
-# pager needs bin's diff-highlight), keeps Neovim and the tree-sitter CLI at
+# claude, theme, git and bin with stow (theme: official Catppuccin Mocha port
+# files for bat/btop/starship/etc.; git's pager needs bin's diff-highlight),
+# keeps Neovim and the tree-sitter CLI at
 # their latest upstream release in ~/.local (Ubuntu's are too old for the nvim
 # config), and brings plugins to the laptop's lazy-lock.json. sudo only when an
 # apt package is missing. No timers: the server changes only when someone runs
