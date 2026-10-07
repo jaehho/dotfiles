@@ -92,7 +92,7 @@ The notebook is the log. A question notebook covers one question, two at most, i
 When a definition compares two quantities or describes a structure (an aggregation, a graph motif, a pipeline), put a small schematic in the Methods next to it.
 
 - Choose the tool by what the picture must get right. Use **mermaid** (`mo.mermaid`) for flow and process: pipelines, decision logic, data lineage, where automatic layout is fine and the text source is the point. Use **manim** when the schematic should look designed and geometry carries meaning: nodes, arrows as wide as their weight, LaTeX labels, a legend. Use **matplotlib** when the picture is a plot with computed geometry. mermaid reorders nodes and routes edges on its own. Render once and look before keeping any of them.
-- manim draws a still: render the scene inside `mn.tempconfig({... "save_last_frame": True, "output_file": "<name>", "media_dir": <temp dir>})` and show the PNG with `mo.image`. The scene class is an `@app.class_definition` that takes its data as constructor arguments and reads colors from the setup (a class defined inside a cell breaks the rule that cells define no functions), and needs a demo cell like any definition. It needs system LaTeX, cairo, and pango, and a cold render takes seconds. Use manim directly; video-oriented manim skills (scripts, `final.mp4`) are more than a still needs.
+- manim draws a still. Build the mobjects in the cell from the notebook's own data and show them through a shared helper that renders a PNG for `mo.image`; a scene class is needed only when mobjects must be built inside `construct`. manim compiles LaTeX when a mobject is made, so set `manim.config.media_dir` once at import; a `tempconfig` around the render is too late and writes `media/` into the working directory. Keep the helpers (render, node, arrow, label, fade) in one module with a demo per helper. Dim with a helper that touches only the strokes and fills that exist, because `set_opacity` fills an open arc into a D. It needs system LaTeX, cairo, and pango, and a cold render takes seconds. Use manim directly; video-oriented manim skills (scripts, `final.mp4`) are more than a still needs.
 - Build the toy input in the cell and compute the labels with the notebook's own functions, so the picture cannot disagree with the code. A single-use diagram is drawn inline in its cell, not in a function.
 - Pick toy values that make the distinction visible: the case where two definitions disagree, or where excluded context would change the answer.
 - One color per role, gray for context the definition excludes. Colors are setup constants with their roles in a comment.
@@ -129,8 +129,6 @@ def lab_theme() -> alt.theme.ThemeConfig:
         }
     )
 
-
-mn.Text.set_default(font="DejaVu Sans")  # only when the notebook uses manim
 ```
 
 Move it to a shared module next to `config` when a second notebook needs it.
