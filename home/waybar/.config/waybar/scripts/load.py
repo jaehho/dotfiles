@@ -6,7 +6,7 @@ busy, pegged) rather than by metric; hovering drops a panel with bars and
 details, labeled in each metric's own hue. One process samples everything, so each GPU is queried
 once per tick.
 
-Colors are stock greys and primaries (theme-apply retired, issue #38).
+Colors are Catppuccin Mocha role hues (official palette).
 
 Intel (xe) has no busy-percent file, but each GT reports how long it has been
 idle; busy = 1 - idle delta / wall delta, from the render GT (gt*-rc). NVIDIA
@@ -33,9 +33,10 @@ def read(path):
 
 
 def colors():
-    return {"calm": "#cccccc", "warn": "#d8a000", "alert": "#cc0403",
-            "cpu": "#767676", "ram": "#0dcdcd", "gpu": "#0d73cc",
-            "track": "#222222", "dim": "#777777"}
+    # Catppuccin Mocha (matches waybar/themes/mocha.css role hues).
+    return {"calm": "#cdd6f4", "warn": "#fab387", "alert": "#f38ba8",
+            "cpu": "#a6adc8", "ram": "#89dceb", "gpu": "#89b4fa",
+            "track": "#313244", "dim": "#6c7086"}
 
 
 def cpu_times():

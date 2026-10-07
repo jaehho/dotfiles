@@ -1,10 +1,7 @@
-/* swaync style — official Catppuccin Mocha (catppuccin/swaync release CSS).
-   Font and corner radii snapped to this repo's scale (JetBrainsMono, 12/8/pill).
-   config.json and hypr-swaync-keys are unchanged. */
 * {
   all: unset;
   font-size: 14px;
-  font-family: "JetBrainsMono Nerd Font";
+  font-family: "Ubuntu Nerd Font";
   transition: 200ms;
 }
 
@@ -20,12 +17,12 @@ scale trough {
   margin: 0rem 1rem;
   min-height: 8px;
   min-width: 70px;
-  border-radius: 12px;
+  border-radius: 12.6px;
 }
 
 trough slider {
   margin: -10px;
-  border-radius: 12px;
+  border-radius: 12.6px;
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
   transition: all 0.2s ease;
   background-color: #89b4fa;
@@ -42,7 +39,7 @@ trough {
 /* notifications */
 .notification-background {
   box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.8), inset 0 0 0 1px #45475a;
-  border-radius: 12px;
+  border-radius: 12.6px;
   margin: 18px;
   background: #181825;
   color: #cdd6f4;
@@ -51,7 +48,7 @@ trough {
 
 .notification-background .notification {
   padding: 7px;
-  border-radius: 12px;
+  border-radius: 12.6px;
 }
 
 .notification-background .notification.critical {
@@ -86,7 +83,7 @@ trough {
 .notification-background .close-button {
   margin: 7px;
   padding: 2px;
-  border-radius: 8px;
+  border-radius: 6.3px;
   color: #1e1e2e;
   background-color: #f38ba8;
 }
@@ -100,7 +97,7 @@ trough {
 }
 
 .notification .notification-action {
-  border-radius: 8px;
+  border-radius: 7px;
   color: #cdd6f4;
   box-shadow: inset 0 0 0 1px #45475a;
   margin: 4px;
@@ -132,27 +129,27 @@ trough {
 .notification progress,
 .notification trough,
 .notification progressbar {
-  border-radius: 12px;
+  border-radius: 12.6px;
   padding: 3px 0;
 }
 
 /* control center */
 .control-center {
   box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.8), inset 0 0 0 1px #313244;
-  border-radius: 12px;
+  border-radius: 12.6px;
   background-color: #1e1e2e;
   color: #cdd6f4;
   padding: 14px;
 }
 
 .control-center .notification-background {
-  border-radius: 8px;
+  border-radius: 7px;
   box-shadow: inset 0 0 0 1px #45475a;
   margin: 4px 10px;
 }
 
 .control-center .notification-background .notification {
-  border-radius: 8px;
+  border-radius: 7px;
 }
 
 .control-center .notification-background .notification.low {
@@ -165,7 +162,7 @@ trough {
 }
 
 .control-center .widget-title button {
-  border-radius: 8px;
+  border-radius: 7px;
   color: #cdd6f4;
   background-color: #313244;
   box-shadow: inset 0 0 0 1px #45475a;
@@ -223,7 +220,7 @@ scrollbar trough {
 /* mpris */
 .widget-mpris-player {
   background: #313244;
-  border-radius: 12px;
+  border-radius: 12.6px;
   color: #cdd6f4;
 }
 
@@ -235,7 +232,7 @@ scrollbar trough {
 
 .widget-mpris-album-art {
   -gtk-icon-size: 100px;
-  border-radius: 12px;
+  border-radius: 12.6px;
   margin: 0 10px;
 }
 
@@ -250,7 +247,7 @@ scrollbar trough {
 }
 
 .widget-mpris button {
-  border-radius: 12px;
+  border-radius: 12.6px;
   color: #cdd6f4;
   margin: 0 5px;
   padding: 2px;

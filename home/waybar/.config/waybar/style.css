@@ -1,33 +1,25 @@
 /* ── Minimal floating islands ────────────────────────────────────────────────
    Layout : transparent bar; modules-left / -center / -right float as 3 islands.
-   Colour : grey means fine; a hue means a state, and each hue has one job.
+   Colour : Catppuccin Mocha (official catppuccin/waybar palette include).
               text / subtext0 / overlay0  primary / resting / off
               blue    you are here: active workspace, hover pills
               pink    special workspace
-              amber   on, worth a glance: stay awake, mic, low battery,
+              peach   on, worth a glance: stay awake, mic, low battery,
                       notifications, busy load
               red     act now: screenshare, failures, critical battery,
                       urgent workspace, pegged CPU/RAM, DND
-              green   charging, and nothing else
-   Theme  : stock colors inlined below (theme-apply retired, issue #38). */
+              green   charging, and nothing else */
 
-/* Stock waybar greys + primaries (theme-apply retired, issue #38). */
-@define-color base #232323;
-@define-color text #e8e8e8;
-@define-color subtext0 #b0b0b0;
-@define-color overlay0 #777777;
-@define-color overlay1 #888888;
-@define-color blue #268bd2;
-@define-color green #5faf5f;
-@define-color yellow #d8a000;
-@define-color red #d54e53;
-@define-color pink #c678dd;
-@define-color base-88 rgba(35,35,35,0.88);
-@define-color blue-14 rgba(38,139,210,0.14);
-@define-color blue-18 rgba(38,139,210,0.18);
-@define-color blue-28 rgba(38,139,210,0.28);
-@define-color red-14 rgba(213,78,83,0.14);
-@define-color pink-14 rgba(198,120,221,0.14);
+@import "themes/mocha.css";
+
+/* Role aliases and alpha tints on top of the official palette. */
+@define-color base-88 rgba(30,30,46,0.88);
+@define-color blue-14 rgba(137,180,250,0.14);
+@define-color blue-18 rgba(137,180,250,0.18);
+@define-color blue-28 rgba(137,180,250,0.28);
+@define-color red-14 rgba(243,139,168,0.14);
+@define-color pink-14 rgba(245,194,231,0.14);
+@define-color yellow @peach;
 
 * {
     font-family: "JetBrainsMono Nerd Font", "Noto Sans", monospace;
@@ -290,7 +282,7 @@ window#waybar {
 }
 @keyframes blink {
     to {
-        color: #ffffff;
+        color: @text;
     }
 }
 
