@@ -8,20 +8,20 @@ function M.apply()
     vim.api.nvim_set_hl(0, name, opts)
   end
 
-  -- Solid word marks (read these). tokyonight-ish, readable on a dark fill.
-  hl('GitSignsAddInline', { fg = '#000000', bg = '#9ece6a', bold = true })
-  hl('GitSignsChangeInline', { fg = '#000000', bg = '#e0af68', bold = true })
-  hl('GitSignsDeleteInline', { fg = '#000000', bg = '#f7768e', bold = true })
+  -- Solid word marks (read these). Catppuccin Mocha, readable on a dark fill.
+  hl('GitSignsAddInline', { fg = '#1e1e2e', bg = '#a6e3a1', bold = true })
+  hl('GitSignsChangeInline', { fg = '#1e1e2e', bg = '#f9e2af', bold = true })
+  hl('GitSignsDeleteInline', { fg = '#1e1e2e', bg = '#f38ba8', bold = true })
   hl('GitSignsAddLnInline', { link = 'GitSignsAddInline' })
   hl('GitSignsChangeLnInline', { link = 'GitSignsChangeInline' })
   hl('GitSignsDeleteLnInline', { link = 'GitSignsDeleteInline' })
   hl('GitSignsDeleteVirtLnInLine', { link = 'GitSignsDeleteInline' })
 
   -- Quiet line fills (context, not the diff).
-  hl('GitSignsAddPreview', { fg = '#a9b1d6', bg = '#292e42' })
-  hl('GitSignsDeletePreview', { fg = '#a9b1d6', bg = '#292e42' })
-  hl('GitSignsDeleteVirtLn', { fg = '#a9b1d6', bg = '#292e42' })
-  hl('GitSignsVirtLnum', { fg = '#f7768e', bg = '#292e42' })
+  hl('GitSignsAddPreview', { fg = '#cdd6f4', bg = '#313244' })
+  hl('GitSignsDeletePreview', { fg = '#cdd6f4', bg = '#313244' })
+  hl('GitSignsDeleteVirtLn', { fg = '#cdd6f4', bg = '#313244' })
+  hl('GitSignsVirtLnum', { fg = '#f38ba8', bg = '#313244' })
 end
 
 --- Re-apply after a colorscheme change (Colorscheme autocmd).

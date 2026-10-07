@@ -86,9 +86,12 @@ return {
   },
 
   { -- Drop ai/ii (scope textobjects) for the same a/i nest. Jumps [i/]i stay.
+    -- Scroll animation off: races noice's search_count virt_text (folke/noice.nvim#395)
+    -- and the first C-d/u often skips the tween entirely.
     'folke/snacks.nvim',
     optional = true,
     opts = {
+      scroll = { enabled = false },
       scope = {
         keys = {
           textobject = {

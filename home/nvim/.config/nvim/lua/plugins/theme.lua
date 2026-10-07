@@ -1,13 +1,23 @@
--- Colorscheme: LazyVim default (tokyonight). theme-apply retired (issue #38);
--- no generated palette. config.diff_hl still splits word-diff preview colors.
+-- Colorscheme: official Catppuccin Mocha (catppuccin/nvim).
 return {
+  {
+    'catppuccin/nvim',
+    name = 'catppuccin',
+    priority = 1000,
+    opts = {
+      flavour = 'mocha',
+    },
+  },
   {
     'LazyVim/LazyVim',
     opts = {
-      colorscheme = 'tokyonight',
+      colorscheme = 'catppuccin-mocha',
     },
-    config = function()
-      -- LazyVim applies opts.colorscheme; then lock the word-diff split.
+    config = function(_, opts)
+      -- A custom config replaces lazy.nvim's require('lazyvim').setup(opts).
+      -- Without that call, clipboard stays empty after LazyVim's defer and
+      -- config/keymaps.lua never loads. Call setup, then lock the word-diff split.
+      require('lazyvim').setup(opts)
       require('config.diff_hl').hook()
     end,
   },
