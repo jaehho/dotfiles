@@ -1,6 +1,13 @@
 -- Pick a Zotero PDF annotation and insert it as a markdown blockquote.
 -- Reads Zotero's stock local API on :23119. citationKey/DOI on the parent
 -- item come from the item payload (BBT injects the key). No Obsidian, no ZotLit.
+--
+-- Search (snacks.picker / fzf syntax):
+--   word        fuzzy subsequence, ranked by score
+--   a few words exact phrase (whitespace-normalized), the way a quote is typed
+--   'word       exact substring   ^word  prefix   word$  suffix   !word  exclude
+--   title:foo   field search (text, quote, title, author, ...)
+-- <C-o> toggles open-reader-tabs vs the whole library.
 
 local M = {}
 
@@ -257,6 +264,13 @@ local function clean(s)
   return (s:gsub('[%z\1-\8\11\12\14-\31\127-\255]', ''))
 end
 
+---Collapse whitespace so a typed phrase matches across line breaks in the PDF.
+---@param s string?
+---@return string
+local function flatten(s)
+  return (clean(s):gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', ''))
+end
+
 ---@param s string?
 ---@return string[]
 local function wrap_quote(s)
@@ -376,6 +390,7 @@ local function load_items()
     local author = parent and authors_short(parent.creators) or 'Anon'
     local year = parent and year_of(parent.date) or 'n.d.'
     local title = parent and parent.title or (att and att.title) or '?'
+    local quote = flatten(text ~= '' and text or comment)
     local doi = parent and parent.DOI or nil
     if doi then
       doi = doi:gsub('^https?://doi%.org/', '')
@@ -401,9 +416,10 @@ local function load_items()
     local page = a.annotationPageLabel
     items[#items + 1] = {
       -- Fuzzy-matched haystack: quote, comment, paper, people, collections.
+      -- Whitespace-flattened so a typed phrase matches across PDF line breaks.
       text = table.concat({
         page and ('p' .. page) or 'p?',
-        text ~= '' and text or comment,
+        quote,
         author,
         year,
         title,
@@ -411,6 +427,8 @@ local function load_items()
         table.concat(cols, ' '),
         doi or '',
       }, ' '),
+      -- Field search targets (quote:left lamina, title:..., author:...)
+      quote = quote,
       preview = {
         text = table.concat(M.format_markdown {
           annotationText = text,
@@ -463,6 +481,31 @@ end
 
 M.load_items = load_items
 
+---True when the query is plain words (no fzf modifiers). Those are treated as
+---an exact phrase so a direct quote does not fuzzy-match half the library.
+---@param pattern string
+---@return boolean
+local function is_plain_phrase(pattern)
+  pattern = vim.trim(pattern)
+  return pattern:find '%s' ~= nil
+    and pattern:match '^%w' ~= nil
+    and pattern:match "[\'!^$|:%\"%*]" == nil
+end
+
+---@param open_only boolean
+---@return string
+local function title_for(open_only)
+  return open_only and 'Zotero quotes · open tabs' or 'Zotero quotes · all'
+end
+
+---@param p table snacks.Picker
+local function toggle_open_only(p)
+  p.opts.open_only = not p.opts.open_only
+  p.title = title_for(p.opts.open_only)
+  p.list:set_target()
+  p:find()
+end
+
 ---@param opts { open_only?: boolean }?
 function M.pick(opts)
   opts = opts or {}
@@ -500,14 +543,34 @@ function M.pick(opts)
   end
 
   picker.pick {
-    title = 'Zotero quotes',
+    title = title_for(open_only),
     items = items,
     -- item.preview table, not the file previewer (avoids "Item has no `file`")
     preview = 'preview',
     open_only = open_only,
-    -- Title flag when open-tabs mode is on (snacks `{flags}` in the input bar).
+    -- Flag in the input title when open-tabs mode is on.
     toggles = {
-      open_only = { icon = 'open', value = true },
+      open_only = { icon = 'open tabs', value = true },
+    },
+    -- Named action so keys receive the picker (raw fn keys get snacks.win).
+    -- Distinct from auto `toggle_open_only`, which snacks overwrites from `toggles`.
+    actions = {
+      zq_toggle_mode = toggle_open_only,
+    },
+    -- Multi-word plain queries become one literal phrase (see is_plain_phrase).
+    -- Single tokens stay fuzzy and rank by score.
+    filter = {
+      transform = function(p, filter)
+        local pattern = filter.pattern
+        if is_plain_phrase(pattern) then
+          p.matcher.opts.regex = true
+          -- \V = very nomagic (literal), \c = ignorecase when the query is lowercase
+          filter.pattern = (pattern:lower() == pattern and '\\c\\V' or '\\V') .. pattern:gsub('\\', '\\\\')
+        else
+          p.matcher.opts.regex = false
+        end
+        return false
+      end,
     },
     finder = function(fopts, ctx)
       local list = items
@@ -518,15 +581,15 @@ function M.pick(opts)
       end
       return ctx.filter:filter(list)
     end,
-    sort = function(a, b)
-      return a.paper < b.paper or (a.paper == b.paper and a.page_n < b.page_n)
-    end,
+    -- Rank by match score. Empty query keeps load_items order (paper, page).
+    sort = { fields = { 'score:desc', 'idx' } },
     format = function(item)
       local excerpt = (item.annotationText ~= '' and item.annotationText or item.annotationComment):gsub('%s+', ' ')
       if #excerpt > 60 then
         excerpt = excerpt:sub(1, 57) .. '…'
       end
       return {
+        { item.open and '●' or ' ', item.open and 'Special' or 'Comment' },
         { item.annotationPageLabel and ('p.' .. item.annotationPageLabel) or 'p.?', 'Number' },
         { ' ' },
         { excerpt, 'String' },
@@ -556,13 +619,16 @@ function M.pick(opts)
         },
       },
       input = {
+        -- Show the mode switch without opening help.
+        footer_keys = { '<c-o>' },
         keys = {
-          ['<c-o>'] = { 'toggle_open_only', mode = { 'n', 'i' } },
+          ['<c-o>'] = { 'zq_toggle_mode', mode = { 'n', 'i' }, desc = 'Toggle open tabs / all' },
         },
       },
       list = {
+        footer_keys = { '<c-o>' },
         keys = {
-          ['<c-o>'] = 'toggle_open_only',
+          ['<c-o>'] = { 'zq_toggle_mode', desc = 'Toggle open tabs / all' },
         },
       },
     },
