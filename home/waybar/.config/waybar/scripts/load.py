@@ -33,10 +33,26 @@ def read(path):
 
 
 def colors():
-    # Catppuccin Mocha (matches waybar/themes/mocha.css role hues).
-    return {"calm": "#cdd6f4", "warn": "#fab387", "alert": "#f38ba8",
-            "cpu": "#a6adc8", "ram": "#89dceb", "gpu": "#89b4fa",
-            "track": "#313244", "dim": "#6c7086"}
+    """Role hues from the official Mocha tokens (hyprlock mocha.conf)."""
+    from pathlib import Path as _P
+    hexes = {}
+    try:
+        for line in (_P.home() / ".config/hypr/themes/hyprlock-mocha.conf").read_text().splitlines():
+            line = line.strip()
+            if line.startswith("$") and "=" in line:
+                name, _, val = line.partition("=")
+                name = name.strip().lstrip("$")
+                val = val.strip()
+                if not name.endswith("Alpha") and val.startswith("rgb(") and val.endswith(")"):
+                    hexes[name] = val[4:-1]
+    except OSError:
+        pass
+    def n(name, fallback):
+        return f"#{hexes.get(name, fallback)}"
+    return {"calm": n("text", "cdd6f4"), "warn": n("peach", "fab387"),
+            "alert": n("red", "f38ba8"), "cpu": n("subtext0", "a6adc8"),
+            "ram": n("sky", "89dceb"), "gpu": n("blue", "89b4fa"),
+            "track": n("surface0", "313244"), "dim": n("overlay0", "6c7086")}
 
 
 def cpu_times():

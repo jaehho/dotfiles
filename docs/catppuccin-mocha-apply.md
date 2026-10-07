@@ -26,10 +26,13 @@ Profiles are not in this repo; Firefox Color writes into the live profile.
 
 ## Spotify (spicetify)
 
-1. Install [Spicetify](https://spicetify.app) if needed.
-2. Copy `spicetify-catppuccin-user.css` into the Spicetify theme as `user.css`
-   (official [catppuccin/spicetify](https://github.com/catppuccin/spicetify) theme).
-3. `spicetify config current_theme catppuccin` then `spicetify apply`.
+Done on this machine: theme `catppuccin`, scheme `mocha` (official
+[catppuccin/spicetify](https://github.com/catppuccin/spicetify) under
+`~/.config/spicetify/Themes/catppuccin`).
+
+Update Spicetify with the package manager (`paru -Syu spicetify-bin`), never
+`spicetify update` (it tries to write `/opt/spicetify` and fails). Re-apply with
+`spicetify apply` after a theme change.
 
 ## Google Chrome
 

@@ -295,19 +295,32 @@ class Link:
 
 
 # --- drawing ----------------------------------------------------------------
-# Catppuccin Mocha (official palette). No generated theme file.
-FALLBACK = {
-    "base": "1e1e2e", "mantle": "181825", "crust": "11111b", "text": "cdd6f4",
-    "subtext0": "a6adc8", "subtext1": "bac2de", "surface0": "313244",
-    "surface1": "45475a", "surface2": "585b70", "overlay0": "6c7086",
-    "overlay1": "7f849c", "blue": "89b4fa", "sapphire": "74c7ec",
-    "green": "a6e3a1", "peach": "fab387", "yellow": "f9e2af", "red": "f38ba8",
-}
+# Catppuccin Mocha via the official hyprlock theme (catppuccin/Hyprlock).
+# Token names match the port. Do not restate hexes here.
+def _mocha_hex():
+    """name -> bare rrggbb, from ~/.config/hypr/themes/hyprlock-mocha.conf."""
+    path = Path.home() / ".config/hypr/themes/hyprlock-mocha.conf"
+    colors = {}
+    try:
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line.startswith("$") or "=" not in line:
+                continue
+            name, _, val = line.partition("=")
+            name = name.strip().lstrip("$")
+            val = val.strip()
+            if name.endswith("Alpha"):
+                continue
+            if val.startswith("rgb(") and val.endswith(")"):
+                colors[name] = val[4:-1]
+    except OSError:
+        pass
+    return colors
 
 
 def palette():
-    """Catppuccin Mocha hexes (no generated theme file)."""
-    return dict(FALLBACK)
+    """Bare rrggbb tokens from the official Mocha theme."""
+    return _mocha_hex()
 
 
 def rgb(hex_color):

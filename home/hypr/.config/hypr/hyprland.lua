@@ -38,15 +38,13 @@ end
 if not ok_ws then
     hl.notification.create({ text = "workspaces.lua failed: " .. tostring(workspaces), timeout = 10000, icon = "error" })
 end
--- Catppuccin Mocha (official port). Active border is fixed lavender; it is
--- the one accent the wallpaper no longer owns (hypr-accent retired with Mocha).
+-- Colors only from the official Catppuccin Mocha module (catppuccin/hyprland).
+-- Active border is fixed lavender (see docs/color-preferences.md).
+package.loaded["themes.catppuccin_mocha"] = nil
 local ok_theme, mocha = pcall(require, "themes.catppuccin_mocha")
 if not ok_theme or type(mocha) ~= "table" or mocha.lavenderAlpha == nil then
-    mocha = {
-        lavenderAlpha = "b4befe",
-        overlay1Alpha = "7f849c",
-        crustAlpha    = "11111b",
-    }
+    hl.notification.create({ text = "catppuccin_mocha.lua failed to load", timeout = 10000, icon = "error" })
+    mocha = { lavenderAlpha = "b4befe", overlay1Alpha = "7f849c", crustAlpha = "11111b" }
 end
 local clr = {
     active   = "rgba(" .. mocha.lavenderAlpha .. "ee)",

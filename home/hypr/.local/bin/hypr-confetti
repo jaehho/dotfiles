@@ -17,6 +17,7 @@ import array
 import json
 import math
 import os
+from pathlib import Path
 import random
 import subprocess
 import sys
@@ -41,13 +42,29 @@ from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
 
 CONFIG = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
 CACHE = os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")) + "/hypr-confetti"
-# Catppuccin Mocha (official palette). No generated theme file.
 ACCENTS = ["blue", "lavender", "sapphire", "teal", "green", "yellow", "peach", "maroon", "mauve", "pink", "rosewater"]
-FALLBACK = {
-    "yellow": "f9e2af", "base": "1e1e2e", "blue": "89b4fa", "teal": "94e2d5",
-    "peach": "fab387", "pink": "f5c2e7", "lavender": "b4befe", "sapphire": "74c7ec",
-    "green": "a6e3a1", "maroon": "eba0ac", "mauve": "cba6f7", "rosewater": "f5e0dc",
-}
+# Catppuccin Mocha via the official hyprlock theme (catppuccin/Hyprlock).
+# Token names match the port. Do not restate hexes here.
+def _mocha_hex():
+    """name -> bare rrggbb, from ~/.config/hypr/themes/hyprlock-mocha.conf."""
+    path = Path.home() / ".config/hypr/themes/hyprlock-mocha.conf"
+    colors = {}
+    try:
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line.startswith("$") or "=" not in line:
+                continue
+            name, _, val = line.partition("=")
+            name = name.strip().lstrip("$")
+            val = val.strip()
+            if name.endswith("Alpha"):
+                continue
+            if val.startswith("rgb(") and val.endswith(")"):
+                colors[name] = val[4:-1]
+    except OSError:
+        pass
+    return colors
+
 WORDS = ["yay!", "woo!", "nice!", "hooray!", "you did it!", "party!", "wheee!"]
 
 GRAVITY = 900.0   # px/s²
@@ -60,14 +77,14 @@ RATE = 44100
 # ── setup ────────────────────────────────────────────────────────────────────
 
 def palette():
-    found = dict(FALLBACK)
+    found = _mocha_hex()
 
     def rgb(h, lift=1.0):
         return tuple(min(1.0, int(h[i:i + 2], 16) / 255 * lift) for i in (0, 2, 4))
 
     # The palette is tuned for text contrast, so lift it a little for paper.
-    accents = [rgb(found[k], 1.18) for k in ACCENTS if k in found] or [rgb(v, 1.18) for v in FALLBACK.values()]
-    return accents, rgb(found.get("yellow", FALLBACK["yellow"]), 1.35), rgb(found.get("base", FALLBACK["base"]))
+    accents = [rgb(found[k], 1.18) for k in ACCENTS if k in found]
+    return accents, rgb(found.get("yellow", "f9e2af"), 1.35), rgb(found.get("base", "1e1e2e"))
 
 
 def hypr(*args):

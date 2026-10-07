@@ -10,28 +10,29 @@ Default is grey. A hue is a state, and each hue has one job. If one hue means tw
 
 Desktop chrome and terminal/CLI surfaces use **Catppuccin Mocha**. Official ports are vendored under `home/theme` (residual tools) and each app's stow package (kitty, fish, hypr, waybar, rofi, swaync, tmux, nvim, zathura). There is no palette compiler.
 
-Mocha greys (replacing the old hand-tuned ramp):
+Named tokens (official Catppuccin Mocha). Prefer the port's include and these
+names. Do not restate hexes in app configs; parse or source the official file.
 
-| token | hex | job |
-|---|---|---|
-| text | `#cdd6f4` | primary |
-| subtext0 | `#a6adc8` | resting |
-| overlay0 | `#6c7086` | off / dim |
-| base | `#1e1e2e` | bar / island fill |
-| mantle | `#181825` | notification and panel cards (opaque) |
-| crust | `#11111b` | deeper fill / shadow |
+| token | job |
+|---|---|
+| text | primary |
+| subtext0 | resting |
+| overlay0 | off / dim |
+| base | bar / island fill |
+| mantle | notification and panel cards (opaque) |
+| crust | deeper fill / shadow |
 
 ## Roles
 
-| role | job | Mocha hue | use for |
+| role | job | Mocha token | use for |
 |---|---|---|---|
 | grey | rest, fine, off | text / subtext / overlay / surface | default chrome, muted, inactive |
-| blue | you are here | `#89b4fa` | focus, active, hover, selection |
-| lavender | active window | `#b4befe` | Hyprland active border (fixed; not a state) |
-| pink | overlay / special | `#f5c2e7` | scratchpad, special workspace, secondary selection |
-| peach | worth a glance | `#fab387` | warning, low battery, mic on, busy, pending |
-| red | act now | `#f38ba8` | critical, urgent, destructive, failure, DND |
-| green | good / charging | `#a6e3a1` | charging on desktop; success in charts |
+| blue | you are here | `blue` | focus, active, hover, selection |
+| lavender | active window | `lavender` | Hyprland active border (fixed; not a state) |
+| pink | overlay / special | `pink` | scratchpad, special workspace, secondary selection |
+| peach | worth a glance | `peach` | warning, low battery, mic on, busy, pending |
+| red | act now | `red` | critical, urgent, destructive, failure, DND |
+| green | good / charging | `green` | charging on desktop; success in charts |
 
 Never spend red on a steady state. Green is not decoration.
 

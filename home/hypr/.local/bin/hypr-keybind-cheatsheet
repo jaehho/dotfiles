@@ -15,6 +15,7 @@ then the dispatcher itself. A bind that ends up with no label lands in
 """
 
 import os
+from pathlib import Path
 import re
 import subprocess
 import sys
@@ -45,16 +46,31 @@ COLUMNS = 4
 
 # ── palette ──────────────────────────────────────────────────────────────────
 
-# Catppuccin Mocha (official palette). No generated theme file.
-FALLBACK = {
-    "crust": "11111b", "base": "1e1e2e", "surface0": "313244",
-    "surface1": "45475a", "surface2": "585b70", "overlay0": "6c7086",
-    "text": "cdd6f4", "subtext1": "bac2de", "sapphire": "74c7ec",
-}
+# Catppuccin Mocha via the official hyprlock theme (catppuccin/Hyprlock).
+# Token names match the port. Do not restate hexes here.
+def _mocha_hex():
+    """name -> bare rrggbb, from ~/.config/hypr/themes/hyprlock-mocha.conf."""
+    path = Path.home() / ".config/hypr/themes/hyprlock-mocha.conf"
+    colors = {}
+    try:
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line.startswith("$") or "=" not in line:
+                continue
+            name, _, val = line.partition("=")
+            name = name.strip().lstrip("$")
+            val = val.strip()
+            if name.endswith("Alpha"):
+                continue
+            if val.startswith("rgb(") and val.endswith(")"):
+                colors[name] = val[4:-1]
+    except OSError:
+        pass
+    return colors
 
 
 def palette():
-    return {k: f"#{v}" for k, v in FALLBACK.items()}
+    return {k: f"#{v}" for k, v in _mocha_hex().items()}
 
 
 # ── key names ────────────────────────────────────────────────────────────────

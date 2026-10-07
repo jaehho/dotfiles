@@ -1,27 +1,38 @@
 -- Word-diff previews: line fill quiet, actual add/change/delete words solid.
--- gitsigns defaults link *Inline to TermCursor; mini.base16 used to collapse
--- word and line marks. Without a base16 palette we set the split directly.
+-- Colors come from the catppuccin.nvim palette (official port), not literals.
 local M = {}
 
+local function mocha()
+  local ok, pal = pcall(require, 'catppuccin.palettes')
+  if ok and pal.get_palette then
+    return pal.get_palette('mocha')
+  end
+  return nil
+end
+
 function M.apply()
+  local p = mocha()
+  if not p then
+    return
+  end
   local function hl(name, opts)
     vim.api.nvim_set_hl(0, name, opts)
   end
 
-  -- Solid word marks (read these). Catppuccin Mocha, readable on a dark fill.
-  hl('GitSignsAddInline', { fg = '#1e1e2e', bg = '#a6e3a1', bold = true })
-  hl('GitSignsChangeInline', { fg = '#1e1e2e', bg = '#f9e2af', bold = true })
-  hl('GitSignsDeleteInline', { fg = '#1e1e2e', bg = '#f38ba8', bold = true })
+  -- Solid word marks (read these).
+  hl('GitSignsAddInline', { fg = p.base, bg = p.green, bold = true })
+  hl('GitSignsChangeInline', { fg = p.base, bg = p.yellow, bold = true })
+  hl('GitSignsDeleteInline', { fg = p.base, bg = p.red, bold = true })
   hl('GitSignsAddLnInline', { link = 'GitSignsAddInline' })
   hl('GitSignsChangeLnInline', { link = 'GitSignsChangeInline' })
   hl('GitSignsDeleteLnInline', { link = 'GitSignsDeleteInline' })
   hl('GitSignsDeleteVirtLnInLine', { link = 'GitSignsDeleteInline' })
 
   -- Quiet line fills (context, not the diff).
-  hl('GitSignsAddPreview', { fg = '#cdd6f4', bg = '#313244' })
-  hl('GitSignsDeletePreview', { fg = '#cdd6f4', bg = '#313244' })
-  hl('GitSignsDeleteVirtLn', { fg = '#cdd6f4', bg = '#313244' })
-  hl('GitSignsVirtLnum', { fg = '#f38ba8', bg = '#313244' })
+  hl('GitSignsAddPreview', { fg = p.text, bg = p.surface0 })
+  hl('GitSignsDeletePreview', { fg = p.text, bg = p.surface0 })
+  hl('GitSignsDeleteVirtLn', { fg = p.text, bg = p.surface0 })
+  hl('GitSignsVirtLnum', { fg = p.red, bg = p.surface0 })
 end
 
 --- Re-apply after a colorscheme change (Colorscheme autocmd).
