@@ -273,6 +273,39 @@ local function flatten(s)
   return (clean(s):gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', ''))
 end
 
+---Inserted lines stay within PEP 8 docstring limits (ruff W505, 72 cols)
+---so a paste into a Python comment or markdown cell lints clean.
+local WIDTH = 72
+
+---Greedy word-wrap so each result is `#prefix + text` <= WIDTH.
+---A single long token (a URL) is left whole; ruff exempts those lines.
+---@param text string
+---@param prefix string
+---@return string[]
+local function wrap_prefix(text, prefix)
+  local out = {}
+  if text == '' then
+    out[1] = prefix
+    return out
+  end
+  local limit = math.max(WIDTH - #prefix, 1)
+  local cur ---@type string?
+  for word in text:gmatch '%S+' do
+    if not cur then
+      cur = word
+    elseif #cur + 1 + #word <= limit then
+      cur = cur .. ' ' .. word
+    else
+      out[#out + 1] = prefix .. cur
+      cur = word
+    end
+  end
+  if cur then
+    out[#out + 1] = prefix .. cur
+  end
+  return out
+end
+
 ---@param s string?
 ---@return string[]
 local function wrap_quote(s)
@@ -282,7 +315,7 @@ local function wrap_quote(s)
   end
   local lines = {}
   for line in (text .. '\n'):gmatch '(.-)\n' do
-    lines[#lines + 1] = line == '' and '>' or ('> ' .. line)
+    vim.list_extend(lines, wrap_prefix(line, '> '))
   end
   return lines
 end
@@ -332,11 +365,11 @@ function M.format_markdown(a)
     lines[#lines + 1] = '> · ' .. link
   end
 
-  -- User's own comment stays outside the quotation.
+  -- User's own comment stays outside the quotation, same width limit.
   if a.annotationText ~= '' and (a.annotationComment or '') ~= '' then
     lines[#lines + 1] = ''
     for line in (a.annotationComment .. '\n'):gmatch '(.-)\n' do
-      lines[#lines + 1] = line
+      vim.list_extend(lines, wrap_prefix(line, ''))
     end
   end
   return lines
