@@ -19,6 +19,8 @@ Default is grey. A hue is a state, and each hue has one job. If one hue means tw
 
 Never spend red on a steady state. Green is not decoration.
 
+One exception: the active-window border takes its hue from the wallpaper (`hypr-accent`; saturation and lightness stay fixed, blue when the wallpaper is monochrome). It is the only color the wallpaper owns, and it never signals a state.
+
 ## Grey ramp
 
 Current desktop values. Named tool colors (fish `blue`, `brblack`, `yellow`, `green`, `red`) beat invented hexes.

@@ -38,10 +38,16 @@ end
 if not ok_ws then
     hl.notification.create({ text = "workspaces.lua failed: " .. tostring(workspaces), timeout = 10000, icon = "error" })
 end
--- Stock Hyprland sample borders (theme-apply retired, issue #38).
+-- The active border takes its hue from the wallpaper: hypr-accent writes the
+-- cache (and applies it live when the wallpaper changes); a reload re-reads it.
+local accent = "0080ff"
+local f = io.open(os.getenv("HOME") .. "/.cache/hypr-accent")
+if f then
+    accent = f:read("*l"):match("^%x%x%x%x%x%x$") or accent
+    f:close()
+end
 local clr = {
-    active_1 = "rgba(33ccffee)",
-    active_2 = "rgba(00ff99ee)",
+    active   = "rgba(" .. accent .. "ee)",
     inactive = "rgba(595959aa)",
     shadow   = "rgba(000000ee)",
 }
@@ -162,7 +168,7 @@ hl.config({
         border_size = 2,
 
         col = {
-            active_border   = { colors = { clr.active_1, clr.active_2 }, angle = 45 },
+            active_border   = clr.active,
             inactive_border = clr.inactive,
         },
 
@@ -232,7 +238,6 @@ hl.animation({ leaf = "workspaces",    enabled = true, speed = 1.94, bezier = "a
 hl.animation({ leaf = "workspacesIn",  enabled = true, speed = 1.21, bezier = "almostLinear", style = "fade" })
 hl.animation({ leaf = "workspacesOut", enabled = true, speed = 1.94, bezier = "almostLinear", style = "fade" })
 hl.animation({ leaf = "zoomFactor",    enabled = true, speed = 7,    bezier = "quick" })
-hl.animation({ leaf = "borderangle",   enabled = true, speed = 100,  bezier = "linear",       style = "loop" })
 
 -- "Smart gaps" / "No gaps when only" — uncomment all if you wish to use that.
 -- hl.workspace_rule({ workspace = "w[tv1]", gaps_out = 0, gaps_in = 0 })

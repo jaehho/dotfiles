@@ -1,0 +1,10 @@
+[Unit]
+Description=Recolor the window border when the wallpaper changes
+
+[Path]
+# wallhelper repoints .current for every new wallpaper (fetch, set, gui). systemd
+# does not report a replaced symlink on its own, so watch the directory.
+PathChanged=%h/Media/wallpapers
+
+[Install]
+WantedBy=default.target
