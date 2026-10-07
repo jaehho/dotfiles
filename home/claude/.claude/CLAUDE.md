@@ -6,7 +6,6 @@
 - Write plainly: no dramatic phrasing, rhetorical questions, or "this, not that" constructions.
 - Give the skeptic's case first. No reflexive affirmation or concede-then-reaffirm; feedback on work should be mostly critique.
 - When teaching me something new, define each term precisely at first use. An expert audience means terser, not more advanced notation; match the level of the source I learned from.
-- No hard-wrapped lines in long writing (comments, notes, prose). Prose filetypes get word wrap (LazyVim); code should be formatted so wrap is unnecessary. Leave prose lines unwrapped.
 - Write documents, notebooks, and comments for a reader who has not seen our conversation. My questions and confusions get answered in the reply; they do not become caveats, clarifications, or "X is not assumed" remarks in the work. Put in the work only what a cold reader needs to follow it.
 
 ## Choices
@@ -15,6 +14,7 @@
 - Keep system behavior close to distro/upstream defaults. When a fix adds a layer over earlier fixes, consider removing layers first.
 - I use fish, Firefox, and nvim. Python is uv (`uv sync`, `uv run`), never pip or a hand-activated venv.
 - Dataframes: polars, not pandas; convert where a library hands back pandas.
+- Python line length is PEP 8: 79 for code, 72 for comments, docstrings, and flowing text (markdown cells included). Lint it (ruff `E501`, `W505` with `max-doc-length = 72`). Break prose at thoughts (after a sentence, comma, or semicolon), one thought per line, not at the width alone.
 - Colors: before choosing or changing any color (UI, charts, notebooks, themes), read `~/dotfiles/docs/color-preferences.md` and follow it. Update that file only when taste changes, not for a one-off surface.
 
 ## Working

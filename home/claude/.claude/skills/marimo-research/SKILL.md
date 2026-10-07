@@ -199,6 +199,7 @@ Bad: $S(R) = \{\, s : s.\mathrm{src} \in R \,\}$. Good: each record $s$ has a so
 Claims from the literature come from the user's Zotero library, not from memory (Zotero before web search).
 
 - Find the item with `zotero_search_items`, its highlights with `zotero_get_annotations`, and an unmarked passage with `zotero_read_pdf_pages`. Quote exactly; never paraphrase inside quotation marks.
+- Keep a citation line under the limit by giving the PDF link its own line (ruff exempts a line that ends in a URL): `> — Author year, p. N`, then `> · [PDF p. N](zotero://...)`, then `> · [doi](https://doi.org/...)`.
 - Quote a source the way the user's `<leader>zq` does: a blockquote of the highlight, then `> — Author year, p. N · [PDF p. N](zotero://open-pdf/library/items/<attachment key>?page=N&annotation=<annotation key>) · [<doi>](https://doi.org/<doi>)`, then the user's annotation comment outside the quote, rewritten as complete sentences. No citekeys (Better BibTeX can rewrite them).
 - A passage with no highlight gets the same block with `?page=N` and no `annotation=`; offer to highlight it in Zotero. Creating or changing annotations is a write to the user's library: ask first, and tag them `claude`.
 - In running text cite as `[Author et al. year](https://doi.org/<doi>)`. Put each quote beside the one claim it supports, in the Background.
@@ -222,7 +223,7 @@ GitHub issues hold tasks, gotchas, decisions, and how a bug was found.
 - marimo regenerates the file whenever it saves, so comments between cells and trailing comments on lines of `with app.setup:` and `@app.function` bodies are lost. Put a comment on its own line inside a cell, function, or setup block.
 - Explanatory text is a markdown cell in complete sentences with transitions, not a comment at the top of a code cell. Introduce each definition, function, and figure with a markdown cell that says what it is for and what to look at. Comments stay for a choice at its site (a constant, a threshold) and stay short.
 - Provenance lives in names, docstrings, and constants; let the dependency graph show data flow.
-- A comment on a setup constant is one short line naming its role ("Colors by role.", "Standard cutoff for a strong partner, in synapses."). The options considered, the reasoning, and the concrete values go in the markdown where the reader meets the choice, not in the setup block. A choice comment at a call site is short prose: why this one; "arbitrary" when it is. No hard-wrapped comment lines.
+- A comment on a setup constant is one short line naming its role ("Colors by role.", "Standard cutoff for a strong partner, in synapses."). The options considered, the reasoning, and the concrete values go in the markdown where the reader meets the choice, not in the setup block. A choice comment at a call site is short prose: why this one; "arbitrary" when it is. Comments, docstrings, and markdown cells wrap at 72 characters (PEP 8), one thought per line.
 
 ```python
 # Minimum count for a pair to be ranked. Twenty keeps the long tail from drowning the figure; raise it toward 50 if you only want strong pairs, or use a quantile if the distribution shifts.
