@@ -1,6 +1,10 @@
 # Official Catppuccin Mocha palette (catppuccin/starship).
 palette = "catppuccin_mocha"
 
+# Two lines: context line, then the prompt character. Any module not
+# listed here (package, python, gcloud, nodejs, ...) never renders.
+format = '$username$hostname$directory$git_branch$git_status$cmd_duration$line_break$character'
+
 [palettes.catppuccin_mocha]
 rosewater = "#f5e0dc"
 flamingo = "#f2cdcd"
@@ -28,3 +32,28 @@ surface0 = "#313244"
 base = "#1e1e2e"
 mantle = "#181825"
 crust = "#11111b"
+
+# jaeho@omnibook, one segment, only over a real SSH connection.
+[username]
+format = '[$user]($style)@'
+
+[hostname]
+ssh_only = true
+format = '[$hostname]($style) '
+
+# blue = you are here (color-preferences.md roles).
+[directory]
+style = 'bold blue'
+truncation_length = 3
+
+# Branch is resting context; status symbols are worth a glance (peach).
+[git_branch]
+format = 'on [$branch]($style) '
+style = 'overlay0'
+
+[git_status]
+style = 'peach'
+
+[cmd_duration]
+format = '[$duration]($style) '
+style = 'overlay0'
