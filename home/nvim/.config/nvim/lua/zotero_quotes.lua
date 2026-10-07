@@ -2,10 +2,12 @@
 -- Reads Zotero's stock local API on :23119. citationKey/DOI on the parent
 -- item come from the item payload (BBT injects the key). No Obsidian, no ZotLit.
 --
--- Search (snacks.picker / fzf syntax):
---   word        fuzzy subsequence, ranked by score
---   a few words exact phrase (whitespace-normalized), the way a quote is typed
---   'word       exact substring   ^word  prefix   word$  suffix   !word  exclude
+-- Search is grep-like (literal substring, smartcase), not fuzzy. A short
+-- fuzzy token matches almost every annotation; a quote lookup wants the text
+-- as typed.
+--   word        literal substring
+--   a few words literal phrase (whitespace-normalized), the way a quote is typed
+--   !word       exclude   ^word  prefix   word$  suffix
 --   title:foo   field search (text, quote, title, author, ...)
 -- <C-o> toggles open-reader-tabs vs the whole library.
 
@@ -285,7 +287,9 @@ local function wrap_quote(s)
   return lines
 end
 
----Stable attribution: author-year-page plus two links when possible.
+---Stable attribution: author-year-page, then one citation link per line.
+---Each link sits on its own `> · …` line so ruff's URL line-length exemption
+---covers it when this block is pasted into a docstring or markdown cell.
 ---Citekeys are omitted on purpose — Better BibTeX can rewrite them.
 ---1. Zotero deep link to *this annotation* (jumps to the highlight)
 ---2. DOI (or item URL) as a paper-level backup that outlives deletion
@@ -323,7 +327,10 @@ function M.format_markdown(a)
     links[#links + 1] = ('[%s](%s)'):format(label, a.url)
   end
   lines[#lines + 1] = '>'
-  lines[#lines + 1] = #links > 0 and ('> %s · %s'):format(base, table.concat(links, ' · ')) or ('> ' .. base)
+  lines[#lines + 1] = '> ' .. base
+  for _, link in ipairs(links) do
+    lines[#lines + 1] = '> · ' .. link
+  end
 
   -- User's own comment stays outside the quotation.
   if a.annotationText ~= '' and (a.annotationComment or '') ~= '' then
@@ -492,16 +499,9 @@ local function is_plain_phrase(pattern)
     and pattern:match "[\'!^$|:%\"%*]" == nil
 end
 
----@param open_only boolean
----@return string
-local function title_for(open_only)
-  return open_only and 'Zotero quotes · open tabs' or 'Zotero quotes · all'
-end
-
 ---@param p table snacks.Picker
 local function toggle_open_only(p)
   p.opts.open_only = not p.opts.open_only
-  p.title = title_for(p.opts.open_only)
   p.list:set_target()
   p:find()
 end
@@ -543,7 +543,7 @@ function M.pick(opts)
   end
 
   picker.pick {
-    title = title_for(open_only),
+    title = 'Zotero quotes',
     items = items,
     -- item.preview table, not the file previewer (avoids "Item has no `file`")
     preview = 'preview',
@@ -557,8 +557,9 @@ function M.pick(opts)
     actions = {
       zq_toggle_mode = toggle_open_only,
     },
-    -- Multi-word plain queries become one literal phrase (see is_plain_phrase).
-    -- Single tokens stay fuzzy and rank by score.
+    -- Grep-like: literal substring, not fuzzy. Multi-word plain queries become
+    -- one literal phrase (see is_plain_phrase).
+    matcher = { fuzzy = false },
     filter = {
       transform = function(p, filter)
         local pattern = filter.pattern
@@ -589,7 +590,6 @@ function M.pick(opts)
         excerpt = excerpt:sub(1, 57) .. '…'
       end
       return {
-        { item.open and '●' or ' ', item.open and 'Special' or 'Comment' },
         { item.annotationPageLabel and ('p.' .. item.annotationPageLabel) or 'p.?', 'Number' },
         { ' ' },
         { excerpt, 'String' },
