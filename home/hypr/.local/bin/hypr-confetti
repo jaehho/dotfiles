@@ -41,9 +41,13 @@ from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
 
 CONFIG = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
 CACHE = os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")) + "/hypr-confetti"
-PALETTE = f"{CONFIG}/theme/palette"
+# Catppuccin Mocha (official palette). No generated theme file.
 ACCENTS = ["blue", "lavender", "sapphire", "teal", "green", "yellow", "peach", "maroon", "mauve", "pink", "rosewater"]
-FALLBACK = {"yellow": "b0954a", "base": "141c1e", "blue": "609fd2", "teal": "43ac9b", "peach": "ca865e", "pink": "b883bb"}
+FALLBACK = {
+    "yellow": "f9e2af", "base": "1e1e2e", "blue": "89b4fa", "teal": "94e2d5",
+    "peach": "fab387", "pink": "f5c2e7", "lavender": "b4befe", "sapphire": "74c7ec",
+    "green": "a6e3a1", "maroon": "eba0ac", "mauve": "cba6f7", "rosewater": "f5e0dc",
+}
 WORDS = ["yay!", "woo!", "nice!", "hooray!", "you did it!", "party!", "wheee!"]
 
 GRAVITY = 900.0   # px/s²
@@ -56,16 +60,7 @@ RATE = 44100
 # ── setup ────────────────────────────────────────────────────────────────────
 
 def palette():
-    found = {}
-    try:
-        with open(PALETTE) as f:
-            for line in f:
-                key, _, value = line.strip().partition("=")
-                if len(value) == 6:
-                    found[key] = value
-    except OSError:
-        pass
-    found = found or FALLBACK
+    found = dict(FALLBACK)
 
     def rgb(h, lift=1.0):
         return tuple(min(1.0, int(h[i:i + 2], 16) / 255 * lift) for i in (0, 2, 4))

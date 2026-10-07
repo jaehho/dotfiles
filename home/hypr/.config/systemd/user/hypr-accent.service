@@ -1,6 +1,0 @@
-[Unit]
-Description=Active-window border color from the wallpaper
-
-[Service]
-Type=oneshot
-ExecStart=%h/.local/bin/hypr-accent

@@ -40,34 +40,21 @@ from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
 
 HOME = os.path.expanduser("~")
 HYPR_CONFIG = f"{HOME}/.config/hypr/hyprland.lua"
-PALETTE = os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config") + "/theme/palette"
 COLUMNS = 4
 
 
 # ── palette ──────────────────────────────────────────────────────────────────
 
-# Read live rather than through a theme-apply include: the palette is already a
-# plain key=value file, so generating a CSS copy of it would only add a step
-# that can go stale.
+# Catppuccin Mocha (official palette). No generated theme file.
 FALLBACK = {
-    "crust": "0c1315", "base": "141c1e", "surface0": "20282a",
-    "surface1": "2f3739", "surface2": "41494c", "overlay0": "778184",
-    "text": "cfdadc", "subtext1": "b6c0c2", "sapphire": "3daab0",
+    "crust": "11111b", "base": "1e1e2e", "surface0": "313244",
+    "surface1": "45475a", "surface2": "585b70", "overlay0": "6c7086",
+    "text": "cdd6f4", "subtext1": "bac2de", "sapphire": "74c7ec",
 }
 
 
 def palette():
-    colors = dict(FALLBACK)
-    try:
-        with open(PALETTE) as fh:
-            for line in fh:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    colors[key.strip()] = val.strip()
-    except OSError:
-        pass
-    return {k: f"#{v}" for k, v in colors.items()}
+    return {k: f"#{v}" for k, v in FALLBACK.items()}
 
 
 # ── key names ────────────────────────────────────────────────────────────────

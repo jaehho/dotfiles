@@ -38,18 +38,20 @@ end
 if not ok_ws then
     hl.notification.create({ text = "workspaces.lua failed: " .. tostring(workspaces), timeout = 10000, icon = "error" })
 end
--- The active border takes its hue from the wallpaper: hypr-accent writes the
--- cache (and applies it live when the wallpaper changes); a reload re-reads it.
-local accent = "0080ff"
-local f = io.open(os.getenv("HOME") .. "/.cache/hypr-accent")
-if f then
-    accent = f:read("*l"):match("^%x%x%x%x%x%x$") or accent
-    f:close()
+-- Catppuccin Mocha (official port). Active border is fixed lavender; it is
+-- the one accent the wallpaper no longer owns (hypr-accent retired with Mocha).
+local ok_theme, mocha = pcall(require, "themes.catppuccin_mocha")
+if not ok_theme or type(mocha) ~= "table" or mocha.lavenderAlpha == nil then
+    mocha = {
+        lavenderAlpha = "b4befe",
+        overlay1Alpha = "7f849c",
+        crustAlpha    = "11111b",
+    }
 end
 local clr = {
-    active   = "rgba(" .. accent .. "ee)",
-    inactive = "rgba(595959aa)",
-    shadow   = "rgba(000000ee)",
+    active   = "rgba(" .. mocha.lavenderAlpha .. "ee)",
+    inactive = "rgba(" .. mocha.overlay1Alpha .. "aa)",
+    shadow   = "rgba(" .. mocha.crustAlpha .. "ee)",
 }
 
 ---------------------

@@ -68,7 +68,6 @@ KINDS = ("PK", "LSC", "HSC")
 KIND_LABEL = {"PK": "Bell", "LSC": "Low shelf", "HSC": "High shelf"}
 GRID = np.geomspace(*FREQ, 480)
 Z1 = np.exp(-1j * 2 * np.pi * GRID / sm.FS)
-PALETTE = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "theme/palette"
 
 
 # --- the EQ ---------------------------------------------------------------
@@ -296,24 +295,19 @@ class Link:
 
 
 # --- drawing ----------------------------------------------------------------
+# Catppuccin Mocha (official palette). No generated theme file.
 FALLBACK = {
-    "base": "141c1e", "mantle": "101719", "crust": "0c1315", "text": "cfdadc",
-    "subtext0": "9da7a9", "subtext1": "b6c0c2", "surface0": "20282a",
-    "surface1": "2f3739", "surface2": "41494c", "overlay0": "778184",
-    "overlay1": "858f92", "blue": "609fd2", "sapphire": "3daab0",
-    "green": "70a971", "peach": "ca865e", "yellow": "b0954a", "red": "cf7f79",
+    "base": "1e1e2e", "mantle": "181825", "crust": "11111b", "text": "cdd6f4",
+    "subtext0": "a6adc8", "subtext1": "bac2de", "surface0": "313244",
+    "surface1": "45475a", "surface2": "585b70", "overlay0": "6c7086",
+    "overlay1": "7f849c", "blue": "89b4fa", "sapphire": "74c7ec",
+    "green": "a6e3a1", "peach": "fab387", "yellow": "f9e2af", "red": "f38ba8",
 }
 
 
 def palette():
-    """The desktop theme's colors, as theme-apply writes them."""
-    colors = dict(FALLBACK)
-    with contextlib.suppress(OSError):
-        for line in PALETTE.read_text().splitlines():
-            key, sep, val = line.strip().partition("=")
-            if sep and not key.startswith("#"):
-                colors[key.strip()] = val.strip()
-    return colors
+    """Catppuccin Mocha hexes (no generated theme file)."""
+    return dict(FALLBACK)
 
 
 def rgb(hex_color):

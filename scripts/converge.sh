@@ -381,13 +381,17 @@ step_stow() {
   [ -d "$HOME/.tmux/plugins/tpm" ] ||
     git clone -q https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm" ||
     echo "  tpm: clone failed (offline?), next run retries"
+  # catppuccin/tmux is a manual clone (TPM name conflicts); pin the release tag.
+  [ -d "$HOME/.config/tmux/plugins/catppuccin/tmux" ] ||
+    git clone -q -b v2.3.1 --depth 1 https://github.com/catppuccin/tmux.git \
+      "$HOME/.config/tmux/plugins/catppuccin/tmux" ||
+    echo "  catppuccin/tmux: clone failed (offline?), next run retries"
 
   # Small user units whose files are stowed above. Enabled here rather than in
   # their own step: one unit apiece does not earn one.
   #   dotfiles-converge  this script's user half, at login and daily
   #   dotfiles-digest    runs `dotfiles notify` when either half records a new decision
   #   wallhelper-fetch   the day's photo (arch only -- ships with the hypr package)
-  #   hypr-accent        recolors the window border when wallhelper repoints .current
   #   notification-log   the searchable notification history
   #   battery-logd       the battery sampler (packaged with the app, enabled here)
   #   swayosd-server     the volume/brightness OSD (WantedBy pipewire-pulse, so
@@ -402,7 +406,7 @@ step_stow() {
   local unit
   if systemctl --user daemon-reload 2>/dev/null; then
     for unit in dotfiles-converge.timer dotfiles-digest.path \
-                wallhelper-fetch.timer hypr-accent.path \
+                wallhelper-fetch.timer \
                 dash-collect.timer dash-llm.timer \
                 notification-log.service battery-logd.service \
                 swayosd-server.service kokoro-tts.socket awatcher.service \
@@ -431,6 +435,8 @@ step_stow() {
 
 step_tools() {
   bash "$DOTFILES/scripts/packages.sh" user
+  # bat needs its theme cache rebuilt after the theme package is stowed.
+  command -v bat >/dev/null 2>&1 && bat cache --build >/dev/null 2>&1 || true
 }
 
 # --- user: sshfs ----------------------------------------------------------
