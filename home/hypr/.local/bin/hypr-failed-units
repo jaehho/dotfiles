@@ -97,18 +97,12 @@ map_sig() {
 restart_waybar() {
     pkill -x waybar 2>/dev/null || true
     sleep 0.3
-    (exec 9>&-  # spawn outlives this run; drop the sync lock fd
-        cd "$HOME/.config/waybar" && setsid waybar 2>&1 |
-            grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' >/dev/null) &
+    (cd "$HOME/.config/waybar" && setsid waybar 2>&1 |
+        grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' >/dev/null) &
 }
 
 sync_menu() {
     local before after
-    # Autostart and the bar's own on-update race at login: both saw the
-    # map change and both restarted, leaving two bars. Serialize writers.
-    mkdir -p "$STATE"
-    exec 9>"$STATE/hypr-failed-units.lock"
-    flock 9
     before=$(map_sig || true)
     write_map
     write_menu
@@ -116,7 +110,6 @@ sync_menu() {
     if [ "$before" != "$after" ] && pgrep -x waybar >/dev/null; then
         restart_waybar
     fi
-    exec 9>&-
 }
 
 # ── open one view in a tmux pane ─────────────────────────────────────────────
