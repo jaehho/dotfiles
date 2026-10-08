@@ -97,12 +97,29 @@ map_sig() {
 restart_waybar() {
     pkill -x waybar 2>/dev/null || true
     sleep 0.3
-    (cd "$HOME/.config/waybar" && setsid waybar 2>&1 |
-        grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' >/dev/null) &
+    # Straight to /dev/null, no `| grep` pipeline: waybar's long-lived
+    # on-update children (the custom/swaync exec stream) inherit the pipe's
+    # write end, so grep never sees EOF and this subshell waits forever.
+    # The pipeline's output went to /dev/null anyway. The spawn outlives this
+    # sync, so drop the lock fd before exec.
+    (exec 9>&-
+        cd "$HOME/.config/waybar" && setsid waybar >/dev/null 2>&1) &
 }
 
 sync_menu() {
     local before after
+    # Serialize the read-decide-restart. Two on-update syncs can be in flight
+    # at once: waybar runs the module's on-update twice at bar startup (the
+    # module constructor's updateData emits on the dispatcher before bar setup
+    # connects it, and glibmm queues that emit), and once per failed-units
+    # change per bar. Both read the map before either writes, so both see a
+    # change and both restart; restart_waybar's pkill/sleep/spawn cannot
+    # dedupe a caller that lands in its sleep window, so both spawns survive
+    # and the double feeds itself at the next change. Held through the
+    # restart so the second run finds the map current and skips it.
+    mkdir -p "$STATE"
+    exec 9>"$STATE/hypr-failed-units.lock"
+    flock 9
     before=$(map_sig || true)
     write_map
     write_menu
@@ -110,6 +127,7 @@ sync_menu() {
     if [ "$before" != "$after" ] && pgrep -x waybar >/dev/null; then
         restart_waybar
     fi
+    exec 9>&-
 }
 
 # ── open one view in a tmux pane ─────────────────────────────────────────────
