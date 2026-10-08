@@ -1,9 +1,12 @@
 #!/bin/sh
+# Copy the short hash to the clipboard. Detach the holder: wl-copy and
+# xclip fork a server that keeps the clipboard, and if it inherits this
+# hook's stdout, lazygit waits on pipe EOF and stays on "committing".
 commit_hash=$(git rev-parse --short HEAD)
 if command -v wl-copy >/dev/null 2>&1; then
-    echo -n "$commit_hash" | wl-copy
+    echo -n "$commit_hash" | wl-copy >/dev/null 2>&1 &
 elif command -v xclip >/dev/null 2>&1; then
-    echo -n "$commit_hash" | xclip -selection clipboard
+    echo -n "$commit_hash" | xclip -selection clipboard >/dev/null 2>&1 &
 else
     echo "No clipboard tool found; skipping copy"
 fi
