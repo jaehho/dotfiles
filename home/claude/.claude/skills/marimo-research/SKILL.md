@@ -109,7 +109,6 @@ The notebook is the log. A question notebook covers one question, two at most, i
 - An expectation says what the data would look like without the effect, and why. Do not assume a distribution family (power law, normal) without a reason.
 - The expectations come before the methods and the analysis sections and are stated as they were posed. They are reasoning that warrants the experiments, not labeled hypotheses. Do not dress a post-hoc finding as an expectation; report it as found.
 - Do not bake an exclusion into the definition of what is analyzed. Define the objects of study as broadly as the question allows, apply an exclusion after the first result, and show its effect beside the unfiltered version.
-- A cutoff or parameter taken from a convention is named and commented as a standard the notebook tests. When the data could set it, add a section that derives it (a fitted breakpoint, marks spaced on a log scale) instead of marks picked by hand.
 - When a filter decides which records count (quality, completeness, a validated flag), run the main analysis on the records the question is about and show the unfiltered version beside it in the figures where it changes the conclusion.
 - Headings are plain and undated. No "Hypothesis", "Skeptic's case", "Decision", or "Next".
 - What follows the Introduction is methods, with no header. When one analysis maps to one expectation, interleave method and result.
