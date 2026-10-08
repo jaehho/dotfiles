@@ -226,10 +226,10 @@ If nothing there supports a claim, say so and do not cite it.
   The user's annotation comment goes outside the quote, as complete
   sentences.
   No citekeys.
-- A passage with no highlight gets the same block with `?page=N` and no
-  `annotation=`; offer to highlight it.
-  Creating or changing an annotation writes to the user's library:
-  ask first, tag it `claude`, and do not recolor.
+- A passage with no highlight gets one when you cite it:
+  create the highlight (`zotero_create_annotation`, tag `claude`, no
+  recoloring) and put its key in `annotation=`.
+  No `annotation=` is left in a notebook.
 - In running text, cite `[Author et al. year](https://doi.org/<doi>)`.
 
 ## Tests
