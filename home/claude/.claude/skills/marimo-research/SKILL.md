@@ -14,8 +14,7 @@ Where a project's `CLAUDE.md` sets a layout, follow it.
 ## Layout
 
 One flat `notebooks/`, files named by role so they import by name
-(`from load import load_measurements`).
-Without stage numbers, since a module name cannot start with a digit.
+(`from load import load_measurements`), without stage numbers.
 The roles: a `config` module for constants shared by more than one
 notebook; a `collect` notebook that makes every fetch and is the only
 writer of `data/`; a `load` module of pure readers; one notebook per
@@ -28,9 +27,6 @@ question; `fig_*` notebooks that write `figures/`; `tool_*` for debugging.
   secrets come from the environment.
 - Every role except the question notebooks is a reference:
   present tense, no discussion of results.
-  A question notebook is the research record.
-- Tests import notebooks through pytest `pythonpath = ["notebooks"]`.
-  Batch entry is `if __name__ == "__main__": app.run()`.
 
 ## Functions or cells
 
@@ -39,14 +35,13 @@ Make it an `@app.function` only when it is used from more than one place:
 two cells, another function, another notebook, or a test that guards it.
 Loop over cases inside one cell rather than writing a function to call once
 per case, and inline a function that stops being reused.
+Reusable code lives in the notebook that owns the concept; others import it.
 
-- Reusable code lives in the notebook that owns the concept;
-  others import it.
-- Each `@app.function` is followed at once by a cell that calls it and
-  displays the return, so the reader sees what it does before the next
-  definition.
-  A small sample is fine as input.
-  A function that fetches runs on one small input behind a run button.
+Each `@app.function` is followed at once by a cell that calls it and
+displays the return, so the reader sees what it does before the next
+definition.
+A small sample is fine as input.
+A function that fetches runs on one small input behind a run button.
 
 ### Writing a function
 
@@ -58,7 +53,7 @@ of the code (after Logan Smith, "How to write the perfect function").
   a seed, the current time.
   A default is fine (`cutoff: int = MIN_COUNT`);
   reading a setup constant, `Cfg`, a global, or the clock in the body is not.
-  Files, the network, and writes to `figures/` belong to the shell
+  Files, the network, and writes belong to the shell
   (`load`, `collect`, `fig_*`, a notebook's top cells), which calls honest
   functions.
   If a test would need a mock or a fixture file, look for what the body reads
@@ -69,24 +64,19 @@ of the code (after Logan Smith, "How to write the perfect function").
   phrase for what it does (`add_legend`), reads well at the call site
   (`rows_between(table, start, stop)`), and promises neither less nor more
   than the function does.
-  Avoid words that fit anything (`output`, `process`, `get`, `data`).
-  Name a parameter for its role (`window_size`, not `n`).
-  Options are keyword-only, so no call has a bare `True`.
-  Ask for no more than the body uses (a sequence of numbers, not one
-  library's Series).
-  Return a `NamedTuple`, a dataclass, or a frame whose columns the docstring
-  lists, not a dict with string keys, and never `None` or a sentinel for
-  failure.
-  A precondition the types cannot state is checked and raises a `ValueError`
-  that says which.
+  No catch-all words (`output`, `process`, `get`, `data`).
+  Parameters are named for their role (`window_size`, not `n`), options are
+  keyword-only, and a function asks for no more than its body uses.
+  It returns a `NamedTuple`, a dataclass, or a frame whose columns the
+  docstring lists, not a dict with string keys, and never `None` or a
+  sentinel for failure.
+  A precondition the types cannot state raises a `ValueError` that says which.
 - **One level of abstraction.**
-  A body calls smaller named functions instead of mixing levels.
-  A comment that labels a section of the body, or an index trick
-  (`x[::-1].cumsum()[::-1]`), marks a piece to name.
-  Look first for the piece the notebook already computes (a CCDF, an overlap
-  index); a second copy drifts.
+  A body calls smaller named functions instead of mixing levels;
+  a comment that labels a section of the body marks a piece to name.
+  Reuse what the notebook already computes (a CCDF, an overlap index);
+  a second copy drifts.
   Producing data and acting on it (plotting, writing) are two functions.
-  Stop where a piece has no name in the domain; it is then a line.
 
 ## marimo mechanics
 
@@ -101,11 +91,9 @@ of the code (after Logan Smith, "How to write the perfect function").
   trailing comments in `with app.setup:` and `@app.function` bodies are lost.
   Put a comment on its own line inside a cell or function.
 - Load each table in one cell and pass the variable on.
-- Show each fact as itself: a DataFrame as the last expression, a figure, or
-  `mo.md` with numbers interpolated.
-  Do not pack results into `mo.vstack` or dicts.
-  Do not cut a DataFrame with `.head()`; marimo pages it and adds column
-  summaries.
+- Show each fact as itself: a DataFrame as the last expression (not
+  `.head()`; marimo pages it), a figure, or `mo.md` with numbers
+  interpolated.
 - A cell with a display equation has braces, so keep it a raw
   `mo.md(r"...")` and put interpolated sentences in their own
   `mo.md(rf"...")` cell.
@@ -119,12 +107,9 @@ Limitations and Open questions), Terms.
 
 - **Question**: one sentence, no definitions or notation.
 - **Background**: only what bears on the question.
-  What is known, why it matters, the reasoning behind the expected answer,
-  and the design.
   Each exclusion or data quirk the analysis handles gets one sentence
   saying where it comes from.
-  Quote where a passage carries the claim, link where none does, and skip a
-  general introduction to the system.
+  Quote where a passage carries the claim, link where none does.
   A claim the notebook cannot test becomes an open question.
 - **Expectations** come before the methods and are stated as posed.
   An expectation says what the data would look like without the effect, and
@@ -139,9 +124,8 @@ Limitations and Open questions), Terms.
   about, and show the unfiltered version beside it where it changes the
   conclusion.
 - **Analysis sections** are named for what they show ("Which runs
-  disagree"), not "Results", and each gets its own `##`.
-  Headings are plain: no dates, "Hypothesis", "Next", or planned/exploratory
-  labels.
+  disagree"), not "Results", and headings are plain: no dates, "Hypothesis",
+  or planned/exploratory labels.
   An exploration that changed a decision gets its own section before the
   method it motivated.
 - **Discussion** goes expectation by expectation.
@@ -153,21 +137,20 @@ Limitations and Open questions), Terms.
   **Limitations** say once what else could produce the result and what it
   does not show.
   **Open questions** each carry a test and the outcome that would refute it.
-- **Terms** is a glossary of words a reader may need a reminder of or that
-  are niche in the field.
+- **Terms** is a glossary of words a reader may need a reminder of.
   Each is also defined in the prose where it first appears.
 - A new question is a new notebook.
   Earlier conclusions are not rewritten; a later notebook corrects an earlier
   one and says so in both.
-  Link across notebooks by name.
 - Write in any order while developing; reread top to bottom at each commit
   and reorder for the reader.
 
 ## Prose and names
 
-- Prose does not type a number the code defines or computes.
+- Prose does not type a number the code defines or computes, the Discussion
+  included.
   Name the constant (`MIN_COUNT`) or interpolate it with `mo.md(f"...")`, so
-  the text follows the data; this holds for the Discussion too.
+  the text follows the data.
   A count of items ("four groups"), an adjective that carries a number
   ("thousands"), and a verdict that depends on counts are numbers.
   A sentence that gives a value per group, or the smallest and largest,
@@ -184,36 +167,35 @@ Limitations and Open questions), Terms.
   in the code.
 - Explanatory text is a markdown cell in complete sentences, not a comment
   at the top of a code cell.
-  Introduce each definition, function, and figure with a cell that says what
-  it is for and what to look at.
   Comments stay for a choice at its site and stay short; a setup constant's
   comment is one line naming its role, and the options considered go in the
   markdown where the reader meets the choice.
 - Say each thing once, where it is used.
   A figure's intro says what is drawn and what to look at, not what the
   legend and axis labels already say.
-- Explicit step-by-step code, no clever one-liners or deep helper chains.
-  Names say what they hold (`measurements`, `label_of`).
+- Scientific history (what was expected, found, and now thought) belongs in
+  the notebook.
+  Code and debugging history goes in GitHub issues, and a notebook never
+  cites an issue number.
+  Where there is a real choice, state the options and why this one, in
+  present tense; a comment that reads like a postmortem is cut or moved to
+  an issue.
 
 ## Figures
 
 - Keep aesthetics at the defaults.
-  Set one base look in the setup cell (a shared module once a second
-  notebook needs it); a plot states a size, color, marker, or line width
-  only when the data or the reader needs it, with a short comment why.
+  Set one base look in the setup cell; a plot states a size, color, marker,
+  or line width only when the data or the reader needs it, with a short
+  comment why.
   One color per category, the same in every figure.
 - Draw distributions, comparisons, and fits on the data;
   keep tables for exact values a reader will look up.
-- Axis limits follow the data: no empty decade because another panel reaches
-  it, unless panels share an axis on purpose.
+- Axis limits follow the data.
   Show groups side by side; a dropdown that shows one group at a time hides
   the comparison.
-- Pick the library by scenario.
-  altair for charts that map columns to encodings, up to a few thousand
-  marks (aggregate first beyond that).
-  matplotlib for figures placed mark by mark, large point clouds, and files
-  in `figures/`.
-  plotly for 3D and WebGL.
+- altair for charts that map columns to encodings, up to a few thousand marks
+  (aggregate first beyond that); matplotlib for figures placed mark by mark,
+  large point clouds, and files in `figures/`; plotly for 3D and WebGL.
   polars for every table; pandas only where a library demands it.
 - A selectable figure, a schematic diagram, or the base-look code:
   read `references/figures.md`.
@@ -221,15 +203,10 @@ Limitations and Open questions), Terms.
 ## Math
 
 Display math is a definition or a claim, never decoration.
-
-- Introduce every symbol with its domain before the display.
-- Mark a definition as one ("define", "write ... for").
-  A bare equation is a claim: give its hypotheses and a justification, or
-  drop it.
-- No program notation in math (`s.pre`, `df.col`).
-  One meaning per symbol across the project.
-  A set-builder display gets a left-hand side.
-- If the display only restates a line of dataframe code, use prose.
+Define every symbol, with its domain, before the display.
+A bare equation gets its hypotheses and a justification, or is dropped.
+No program notation (`s.pre`) and one meaning per symbol across the project.
+If a display only restates a line of dataframe code, use prose.
 
 ## Citations
 
@@ -243,8 +220,7 @@ If nothing there supports a claim, say so and do not cite it.
   Quote exactly; never paraphrase inside quotation marks.
 - Quote as a blockquote of the highlight, then
   `> — Author year, p. N · [PDF p. N](zotero://open-pdf/library/items/<attachment key>?page=N&annotation=<annotation key>) · [<doi>](https://doi.org/<doi>)`,
-  split at the `·` so no line passes the limit (a line ending in a URL is
-  exempt).
+  split at the `·` so no line passes the limit.
   N is the page label Zotero stores on the annotation (`page` in
   `zotero_get_annotations`, often the journal page), not the PDF index.
   The user's annotation comment goes outside the quote, as complete
@@ -255,29 +231,14 @@ If nothing there supports a claim, say so and do not cite it.
   Creating or changing an annotation writes to the user's library:
   ask first, tag it `claude`, and do not recolor.
 - In running text, cite `[Author et al. year](https://doi.org/<doi>)`.
-  Put each quote beside the one claim it supports.
-
-## History
-
-Scientific history (what was expected, found, and now thought) belongs in
-the notebook.
-Code and debugging history goes in GitHub issues, which hold tasks,
-gotchas, and decisions.
-
-- Never cite an issue number in a notebook.
-- Never narrate past wrong code.
-  State the rule the code enforces and, where there is a real choice, the
-  options and why this one.
-  A choice comment is present-tense rationale; if it reads like a
-  postmortem, cut it or move it to an issue.
 
 ## Tests
 
-Test what breaks silently and is cheap to check: the fetch boundary (only
-`collect.py` and `tool_*` import anything that opens a connection), no
-`data/` paths or remote ids outside `config.py` and `collect.py`, no issue
-numbers in notebooks, and functions other notebooks import.
-Do not test prose, section order, or single-use cells.
+Worth a test: the fetch boundary (only `collect.py` and `tool_*` import
+anything that opens a connection), no `data/` paths or remote ids outside
+`config.py` and `collect.py`, no issue numbers in notebooks, and functions
+other notebooks import.
+Not prose or section order.
 Add a test for a rule after it has been broken in practice.
 
 ## Before calling it done
