@@ -24,16 +24,6 @@ Profiles are not in this repo; Firefox Color writes into the live profile.
    in the QuickCSS / custom CSS editor.
 3. Enable **Catppuccin Mocha**.
 
-## Spotify (spicetify)
-
-Done on this machine: theme `catppuccin`, scheme `mocha` (official
-[catppuccin/spicetify](https://github.com/catppuccin/spicetify) under
-`~/.config/spicetify/Themes/catppuccin`).
-
-Update Spicetify with the package manager (`paru -Syu spicetify-bin`), never
-`spicetify update` (it tries to write `/opt/spicetify` and fails). Re-apply with
-`spicetify apply` after a theme change.
-
 ## Google Chrome
 
 Web Store theme: search **Catppuccin Mocha** (or install from [catppuccin/chrome](https://github.com/catppuccin/chrome)).
@@ -52,3 +42,4 @@ Web Store theme: search **Catppuccin Mocha** (or install from [catppuccin/chrome
 ## Not themed
 
 visidata, thunar, qalculate, hyprpaper have no official port and keep defaults.
+Spotify keeps its stock dark client; spicetify was removed 2026-10-07.
