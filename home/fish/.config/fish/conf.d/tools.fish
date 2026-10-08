@@ -40,8 +40,8 @@ if command -q fzf; and fzf --fish &>/dev/null
     fzf --fish | source
 end
 
-# ── direnv (skip in vscode to avoid conflicts) ──────────────────────────────
-if test -z "$VSCODE_INJECTION"; and command -q direnv
+# ── direnv ──────────────────────────────────────────────────────────────────
+if command -q direnv
     direnv hook fish | source
 end
 
