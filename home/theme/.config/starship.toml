@@ -3,6 +3,10 @@ palette = "catppuccin_mocha"
 
 # Two lines: context line, then the prompt character. Any module not
 # listed here (package, python, gcloud, nodejs, ...) never renders.
+# The blank separator line comes from fish_prompt in conf.d/theme.fish,
+# which rides it with an OSC 133;A mark for tmux copy-mode; keep that
+# pair together.
+add_newline = false
 format = '$directory$git_branch$git_status$cmd_duration$line_break$character'
 
 [palettes.catppuccin_mocha]

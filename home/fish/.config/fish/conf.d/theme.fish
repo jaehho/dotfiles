@@ -18,4 +18,17 @@ set -q FZF_DEFAULT_OPTS; or set -gx FZF_DEFAULT_OPTS "\
 # starship (package) reads ~/.config/starship.toml (theme package).
 if status is-interactive; and command -q starship
     starship init fish | source
+
+    # fish 4.9 paints its OSC 133;A prompt mark before an erase-display
+    # (CSI 0 J at column 0), and tmux (3.7c, see tmux#3856, closed as the
+    # shell's fault) clears line flags on that erase, so every mark dies and
+    # copy-mode previous-prompt finds nothing. Re-emit a mark inside the
+    # prompt string: it is painted after the erase and lands on the blank
+    # separator line, so the tmux prefix C-y binding steps down twice.
+    # starship.toml sets add_newline = false; the separator comes from here.
+    functions -c fish_prompt __starship_prompt
+    function fish_prompt
+        printf '\n\033]133;A\033\\'
+        __starship_prompt
+    end
 end
