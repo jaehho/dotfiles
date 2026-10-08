@@ -42,7 +42,7 @@ A function lets a reader, and a test, reason about its body without the rest of 
 
 **Honest.** A function reads and changes only what its signature gives it.
 
-- Everything the result depends on is a parameter: a cutoff, a column name, a seed or random generator, the current time. A default is fine (`cutoff: int = STRONG_COUNT`) because the signature shows it. Reading a setup constant, `Cfg`, a global, or the clock inside the body is not.
+- Everything the result depends on is a parameter: a cutoff, a column name, a seed or random generator, the current time. A default is fine (`cutoff: int = STRONG_COUNT`) because the signature shows it. Reading a setup constant, `Cfg`, a global, or the clock inside the body is not. A figure function may read the base look (colors and markers set once in setup).
 - Files, the network, the clock, and files written to `figures/` belong to the shell: `load`, `collect`, `fig_*`, and the top cells of a notebook. The shell reads, calls honest functions, and writes. A function that calls a dishonest one is dishonest, so dishonest functions stay at the top of the call tree.
 - Changing an argument in place is honest when that is the function's purpose and its name says so. Changing module state is not.
 - If a test would need a mock or a fixture file, look for what the body reads that is not a parameter.
