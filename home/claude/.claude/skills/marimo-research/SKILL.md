@@ -27,7 +27,7 @@ Flat `notebooks/`, files named by role so they stay importable (`from load impor
 
 ## Functions or cells
 
-A step used once is a cell. Make it an `@app.function` only when it is used from more than one place: two or more cells, another notebook, or a test that guards it. Turning every step into a function hides the analysis behind names and adds a demo for each.
+A step used once is a cell. Make it an `@app.function` only when it is used from more than one place: two or more cells, another function, another notebook, or a test that guards it. Turning every step into a function hides the analysis behind names and adds a demo for each.
 
 - Loop over cases inside one cell (`for _t in types:`) instead of writing a function to call once per case.
 - Reusable code lives in the notebook that owns the concept; others import it. A plain `.py` module is only for code no notebook explains (vendored helpers).
@@ -35,6 +35,39 @@ A step used once is a cell. Make it an `@app.function` only when it is used from
 - The demo displays the return. It does not display or describe the input; the call shows what goes in, and when an input needs inspecting, probe the notebook with a cell that displays it.
 - Demo on real project data when that is clearest; a small sample is fine, and often clearer, for a pure transform or a metric. A function that fetches remote data runs on one small input behind a run button.
 - When a function stops being reused, inline it.
+
+## Writing functions
+
+A function lets a reader, and a test, reason about its body without the rest of the code. Three rules keep that true.
+
+**Honest.** A function reads and changes only what its signature gives it.
+
+- Everything the result depends on is a parameter: a cutoff, a column name, a seed or random generator, the current time. A default is fine (`cutoff: int = STRONG_COUNT`) because the signature shows it. Reading a setup constant, `Cfg`, a global, or the clock inside the body is not.
+- Files, the network, the clock, and files written to `figures/` belong to the shell: `load`, `collect`, `fig_*`, and the top cells of a notebook. The shell reads, calls honest functions, and writes. A function that calls a dishonest one is dishonest, so dishonest functions stay at the top of the call tree.
+- Changing an argument in place is honest when that is the function's purpose and its name says so. Changing module state is not.
+- If a test would need a mock or a fixture file, look for what the body reads that is not a parameter.
+
+**Clear to the caller.** The signature is read first, and the call site reads the name and the arguments together.
+
+- The name says what the function returns (a noun phrase: `partner_strengths`) or does (a verb phrase: `add_legend`), and reads as a phrase at the call site: `connections_from(connections, senders)`. Avoid words that fit anything (`output`, `process`, `get`, `data`, `info`, `handle`). A name must not promise less or more than the function returns: a function that returns a whole fit is not named after one field of it.
+- A parameter is named for its role, not its type: `senders`, not `ids`; `excluding_receivers`, not `exclude`. A collection is plural.
+- Options are keyword-only (`*, draws=200`), so no call has a bare `True` or `3`.
+- Ask for no more than the body uses: a sequence of numbers (`ArrayLike`) rather than one library's Series, a list of ids rather than the whole table of cells.
+- Return something the caller can read: a `NamedTuple` or dataclass with named fields for several values, or a frame whose columns the docstring lists. Not a dict with string keys, and never `None` or a sentinel for failure.
+- A precondition the types cannot state (at least 20 values, one type's cells only) is checked and raises `ValueError` that says which, and the docstring states it. A stop is better than silent garbage.
+- The first line of the docstring says what the caller gets, in the notebook's terms.
+
+**One level of abstraction.** Every line of a body sits at one level. A function stacks bricks: calls to smaller named functions, which already exist or deserve to.
+
+- Extract a brick when a body has a comment that labels a section, a loop with more than a line in it, an index trick (`x[::-1].cumsum()[::-1]`), or an expression it already wrote once. Look for the brick first: the notebook may already compute it (a CCDF, an overlap index), and a second copy drifts.
+- A function that calls a fit does not also carry a step of the fit.
+- A line may be arithmetic or a call that assembles the result; it need not be a bare call.
+- Producing data and acting on it (plotting, writing) are two functions.
+- The rule holds for cells: a cell that loops over cases to build a table is a function that returns the table, and the cell calls it.
+- Stop where the piece has no name in the domain; it is then a line.
+- A brick used by one function passes Functions or cells, since that function uses it. It gets a demo like any function.
+
+These rules follow Logan Smith's talk "How to write the perfect function" (honest functions, empathy for the caller, one level of abstraction).
 
 ## Structure of a notebook
 
@@ -243,7 +276,7 @@ Tests guard what breaks silently and is cheap to check. They do not police style
 1. `marimo check --strict notebooks/` is clean and the project's tests pass.
 2. `python notebooks/<file>.py` runs headless without fetching. Open it in `marimo edit` and look at the rendered cells, or say you only ran it headless.
 3. Each literal you touched (paths, ids, thresholds) has one definition.
-4. Functions exist only where reused; single-use steps are cells.
+4. Functions exist only where reused; single-use steps are cells. Each function is honest (every input is a parameter), named for what it returns or does, with typed results and keyword-only options, and stays at one level of abstraction (Writing functions).
 5. Question notebook: introduction (question, background with expectations), methods, one section per analysis named for what it shows (no `## Results` wrapper), discussion (limitations, open questions), terms, in that order; each term is defined where it first appears; the discussion matches the rendered outputs; nothing is said twice.
 6. Each `$$...$$` is research-grade; each definition that compares quantities or describes a structure has a diagram you have looked at.
 7. No issue numbers and no code or debugging history in the notebook.
