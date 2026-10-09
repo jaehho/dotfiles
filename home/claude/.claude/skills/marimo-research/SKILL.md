@@ -183,7 +183,7 @@ a test already checks needs only a pointer to the test.
 ## Before calling it done
 
 1. `marimo check --strict notebooks/` is clean and the project's tests pass.
-2. `python notebooks/<file>.py` runs headless without fetching.
+2. `uv run python notebooks/<file>.py` runs headless without fetching.
    Look at the rendered cells (`marimo edit`, or `marimo export html`), or
    say you only ran it headless.
 3. The Discussion matches the rendered outputs and types no number the code
