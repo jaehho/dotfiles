@@ -33,7 +33,8 @@ theme = "dark"
 line_length = 79
 
 [keymap]
-preset = "default"
+preset = "vim"
+vimrc = "/home/jaeho/.config/marimo/marimo.vimrc"
 
 [keymap.overrides]
 
