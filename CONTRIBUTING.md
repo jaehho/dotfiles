@@ -1,53 +1,35 @@
 # Contributing
 
-## Before Making Changes
+## Before making changes
 
-1. Read [README.md](README.md) to understand the system
-2. Search [`gotcha` issues](https://github.com/jaehho/dotfiles/issues?q=label%3Agotcha), open and closed, for known traps
-3. Understand the architecture (see above)
+1. Read [README.md](README.md)
+2. Search [`gotcha`](https://github.com/jaehho/dotfiles/issues?q=label%3Agotcha)
+   issues, open and closed
+3. Design choices are [`decision`](https://github.com/jaehho/dotfiles/issues?q=label%3Adecision)
+   issues
 
-## Making Changes
+## Where things go
 
-### Adding a New Step
+| Path | What |
+|---|---|
+| `home/` | stow package -> `~` |
+| `system/` | root file -> `/etc` (or a link, if the reader can follow one) |
+| `scripts/` | apply, status, bootstrap |
+| `packages/bootstrap.txt` | bare necessities for a new machine |
+| `hosts/` | per-host choices written by bootstrap |
 
-1. Add to `scripts/converge.sh` step array
-2. Create `step_<name>()` function
-3. Add error handling (decide)
-4. Test with `./scripts/converge.sh system` or `user`
-
-### Modifying Existing Steps
-
-- **System steps**: require root, run at boot
-- **User steps**: run as owner, at login + daily
-- Check `state/decisions.json` for previous decisions
-
-### Adding New Config Files
-
-- System configs → `system/`
-- User configs → `home/`
-- Scripts → `scripts/`
+Adding a config is a file under `home/` or `system/` plus, for `/etc`,
+an entry in `SYSTEM_LINKS`, `SYSTEM_INSTALLS`, or `SYSTEM_COPIES` in
+`scripts/lib.sh`.
 
 ## Testing
 
 ```bash
-# Test a specific step
-sudo ./scripts/converge.sh system boot
-./scripts/converge.sh user stow
-
-# Full run (follows output)
-./scripts/converge.sh now
+dotfiles status
+dotfiles apply
+sudo scripts/apply.sh system
 ```
 
-## Git Workflow
+## Git
 
-1. Make changes
-2. Commit with clear message
-3. Push and let converge run on machines
-4. Check `state/decisions.json` for errors
-
-## Best Practices
-
-- Keep it simple
-- One file, one purpose
-- Document decisions in comments
-- Test before committing
+Small WIP commits. Never discard uncommitted work; stowed files are live.

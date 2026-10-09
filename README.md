@@ -1,80 +1,48 @@
-# Dotfiles System
+# Dotfiles
 
-A converged dotfiles management system that syncs configuration from a Git repo to multiple machines via systemd timers.
+Configs and root files for Arch + Hyprland and Ubuntu/Debian. Stow for
+`~`, a small apply script for `/etc`. You run upgrades and apply when you
+want; nothing runs on a timer.
 
-## Architecture
+## Layout
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     dotfiles repo                            │
-│                                                              │
-│  ├── system/         (root-owned, boot-critical)            │
-│  │   ├── converge/    systemd units for auto-sync           │
-│  │   ├── keyd/        keyboard config                       │
-│  │   ├── NetworkManager/ dispatcher scripts                 │
-│  │   ├── reflector/   mirror ranking                        │
-│  │   └── ...          boot configs, PAM, etc.               │
-│                                                              │
-│  ├── home/           (user-owned, daily sync)               │
-│   └── hypr/          Hyprland WM config                      │
-│                                                              │
-│  ├── scripts/        converge.sh + helpers                   │
-│  │   ├── converge.sh   main sync orchestration              │
-│  │   ├── lib.sh        shared functions                      │
-│  │   └── packages.sh   package management                    │
-│                                                              │
-│  ├── system/         system-level configs                    │
-│  │   ├── boot/        kernel, initramfs, grub                │
-│  │   ├── PAM/         login security                        │
-│  │   └── ...          udev, NetworkManager, etc.            │
-│                                                              │
-│  └── state/          runtime state (decisions, logs)        │
-└─────────────────────────────────────────────────────────────┘
+home/       stow packages -> ~ (fish, hypr, nvim, kitty, …)
+system/     root-owned files -> /etc (grub, PAM, udev, NM, keyd, …)
+packages/   bootstrap.txt is the bare necessities; the rest is inventory
+scripts/    apply, status, bootstrap, claude-reconcile, server
+hosts/      per-host choices (stow drops, no-aaaa)
 ```
 
-## How It Works
-
-### System Half (login + daily)
-- **Boot configs** → copied to `/etc` on first run, regenerated on change
-- **PAM/shell** → applied once at login
-- **NetworkManager** → DNS, tailscale, udev rules
-- **systemd-resolved** → takes over DNS from plain resolv.conf
-- **keyd** → keyboard config (remap, hotkeys)
-- **paccache** → keeps 3 newest versions
-- **linux-modules-cleanup** → cleans dead kernel modules
-
-### User Half (login + daily)
-- **stow** → dotfiles from repo to `~`
-- **tools** → user packages
-- **sshfs** → remote filesystem mounts
-- **restic** → backups (if configured)
-- **claude** → plugin reconciliation
-- **wallpaper** → waypaper config
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `scripts/converge.sh` | Main sync script (system + user halves) |
-| `scripts/lib.sh` | Shared utilities (decide, digest_of, etc.) |
-| `scripts/packages.sh` | Package management |
-| `system/converge/` | systemd service + timer units |
-| `home/hypr/` | Hyprland WM config |
-| `state/` | Runtime state (decisions.json, logs) |
-
-## Quick Start
+## Day to day
 
 ```bash
-# First time on a new machine
-sudo ./scripts/bootstrap.sh   # asks host-specific questions
-
-# Then run converge
-sudo ./scripts/converge.sh system
-./scripts/converge.sh user
-
-# Or use the systemd units directly
-sudo systemctl --user enable --now dotfiles-converge.timer
+dotfiles              # status: what would apply change?
+dotfiles apply        # stow + user units (after adding a file under home/)
+sudo scripts/apply.sh system   # /etc + boot copies (after editing system/)
+paru -Syu             # packages are yours
 ```
+
+Linked files are already live: edit `home/...` or `system/...` and the
+running tool sees it. `apply` picks up new files, replaces lost links, and
+installs the root-owned copies that cannot be symlinks into `/home`
+(boot, PAM, udev, sandboxed readers). Guide: `docs/config-drift.html`.
+
+## New machine
+
+```bash
+git clone https://github.com/jaehho/dotfiles.git ~/dotfiles
+sudo ~/dotfiles/scripts/bootstrap.sh
+```
+
+Installs `packages/bootstrap.txt`, asks the per-host questions, applies
+configs. After that, install the rest with `paru` as you need it.
+
+## Claude
+
+Plugin/skill/MCP state is declarative under `home/claude/.claude/reconcile/`.
+Run `scripts/claude-reconcile.sh` (see `--help`) when that set changes.
+It is not part of `apply`.
 
 ## Server (wonlab)
 
@@ -82,27 +50,14 @@ sudo systemctl --user enable --now dotfiles-converge.timer
 dotfiles server          # from the laptop; or: dotfiles server HOST
 ```
 
-One command sets up and updates the homelab server. It SSHes in, clones or
-fast-forwards `~/dotfiles` from GitHub, and runs `scripts/server.sh`: stow links
-fish, git, tmux, nvim, claude, theme (official Catppuccin Mocha port files) and bin (server
-tools: `claude-open`, `diff-highlight` for git's pager). Neovim and the
-tree-sitter CLI track their latest upstream release in `~/.local` (noble's nvim
-is 0.9.5); plugins follow the laptop's `lazy-lock.json`. sudo is asked for only
-when an apt package is missing. The first run moves wonlab's own
-`~/.claude/settings.json` to `.bak`.
-
-Nothing runs on a timer and nothing runs as root: the server changes only when
-you run this, and only to what is pushed. `home/laptop` (desktop scripts,
-notify, converge timers) stays off the server. Provider keys for `claude-open`
-(`~/.config/{zai,mimo,openrouter}.env`) are never synced — copy them by hand.
+SSHes in, clones or fast-forwards `~/dotfiles` from GitHub, and runs
+`scripts/server.sh`: stow for the server set (fish, git, tmux, nvim, claude,
+theme, bin). Nothing runs on a timer and nothing runs as root there either.
+`home/laptop` stays off the server. Provider keys for `claude-open`
+(`~/.config/{zai,mimo,openrouter}.env`) are never synced; copy them by hand.
 
 ## Troubleshooting
 
-Known traps and their recovery are GitHub issues labeled [`gotcha`](https://github.com/jaehho/dotfiles/issues?q=label%3Agotcha): open ones are not yet believed fixed, closed ones are fixed until they recur.
-
-## Notes
-
-- All decisions are logged to `state/decisions.json`
-- Failed steps are recorded and retried on next run
-- System half runs as root, user half as owner
-- Hyprland config is managed separately (not part of converge)
+Known traps are GitHub issues labeled [`gotcha`](https://github.com/jaehho/dotfiles/issues?q=label%3Agotcha).
+Design choices are `decision` issues. Search both before changing broken
+behavior.

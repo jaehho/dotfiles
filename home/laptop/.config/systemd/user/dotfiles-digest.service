@@ -1,7 +1,0 @@
-[Unit]
-Description=Notify about new dotfiles converge decisions
-After=graphical-session.target
-
-[Service]
-Type=oneshot
-ExecStart=%h/.local/bin/dotfiles notify

@@ -1,0 +1,57 @@
+# Bare necessities for a new machine. You install the rest yourself (`paru`).
+# One package per line. Names for Arch (pacman/AUR via paru).
+
+# system
+base
+base-devel
+linux
+linux-firmware
+linux-headers
+grub
+efibootmgr
+sudo
+openssh
+reflector
+pacman-contrib
+kernel-modules-hook
+fwupd
+
+# repo + AUR
+git
+stow
+paru
+
+# shell + editor
+fish
+starship
+neovim
+tmux
+ripgrep
+fd
+fzf
+bat
+eza
+zoxide
+jq
+man-db
+less
+
+# desktop (Hyprland)
+hyprland
+hyprlock
+hypridle
+hyprpaper
+waybar
+rofi
+kitty
+wl-clipboard
+grim
+slurp
+brightnessctl
+polkit-gnome
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+sddm
+
+# apps
+firefox-developer-edition

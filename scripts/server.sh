@@ -107,7 +107,7 @@ command -v claude >/dev/null || curl -fsSL https://claude.ai/install.sh | bash
 # --- stow -----------------------------------------------------------------------
 
 # stow refuses to replace a file it does not own. Move each one it names aside
-# (settings.json the first time), exactly as converge does on the laptop.
+# (settings.json the first time), the same way apply does on the laptop.
 { stow -n -d "$STOW_DIR" -t "$HOME" --no-folding -R "${PKGS[@]}" 2>&1 || true; } |
   sed -n 's/.*existing target is [^:]*: //p' | sort -u | while IFS= read -r rel; do
     mv "$HOME/$rel" "$HOME/$rel.bak"
