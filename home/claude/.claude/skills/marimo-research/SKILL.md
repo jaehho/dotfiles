@@ -54,9 +54,10 @@ its signature says what it does.
 A function written for one notebook stays in it and calls the package.
 
 A package docstring has the content that PEP 257 and numpydoc define:
-a summary line, an extended summary of behavior, `Parameters`, `Returns`,
-`Raises`, `See Also`, `Notes`, and `Examples`.
+an imperative summary line, an extended summary of behavior,
+`Parameters`, `Returns`, `Raises`, `See Also`, `Notes`, and `Examples`.
 Go no further than those standards do.
+Ruff's pydocstyle rules (`D`, numpy convention) check the form.
 An example is a doctest on a small input, with generic names and values;
 it uses the project's column names only when the function needs them.
 
