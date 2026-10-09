@@ -1,0 +1,42 @@
+#!/bin/bash
+# Log battery energy change across each sleep leg to the journal.
+# Invoked by systemd-sleep with (pre <op>) before sleep, (post <op>) after.
+# Suspend-then-hibernate runs the hook once per leg, so the s2idle and
+# hibernate drains are logged separately.
+#
+# Read: journalctl -b -g 'batenergy:'
+#
+# After equaeghe/batenergy, with state in /run instead of /tmp and no bc.
+
+set -u
+
+STATE=/run/batenergy.state
+BAT=/sys/class/power_supply/BAT0
+
+[[ -r $BAT/energy_now ]] || exit 0
+
+read -r now < "$BAT/energy_now"          # uWh
+read -r full < "$BAT/energy_full"        # uWh
+online=$(cat /sys/class/power_supply/A*/online 2>/dev/null | head -n1)
+t=$(date +%s)
+
+case "${1:-}" in
+    pre)
+        echo "$t $now" > "$STATE"
+        ;;
+    post)
+        [[ -r $STATE ]] || exit 0
+        read -r t0 e0 < "$STATE"
+        rm -f "$STATE"
+        dt=$((t - t0))
+        ((dt > 0)) || exit 0
+        de=$(((now - e0) / 1000))        # mWh
+        awk -v op="${2:-?}" -v dt="$dt" -v de="$de" -v full="$((full / 1000))" \
+            -v ac="${online:-?}" 'BEGIN {
+                printf "batenergy: %s %dh%02dm, %+d mWh (%+.1f%%), %+.0f mW (%+.2f%%/h), ac=%s\n",
+                    op, dt / 3600, dt % 3600 / 60, de, de * 100 / full,
+                    de * 3600 / dt, de * 3600 / dt * 100 / full, ac }'
+        ;;
+esac
+
+exit 0

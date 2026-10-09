@@ -99,6 +99,7 @@ SYSTEM_LINKS=(
   "security/limits.d/10-rtprio.conf:/etc/security/limits.d/10-rtprio.conf"
   "sysctl/99-sysrq.conf:/etc/sysctl.d/99-sysrq.conf"
   "systemd/system-sleep/fuse-mounts:/usr/lib/systemd/system-sleep/fuse-mounts"
+  "systemd/system-sleep/batenergy:/usr/lib/systemd/system-sleep/batenergy"
   "/usr/share/alsa/alsa.conf.d/99-pipewire-default.conf:/etc/alsa/conf.d/99-pipewire-default.conf"
 )
 
