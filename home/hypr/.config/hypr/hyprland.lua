@@ -69,9 +69,6 @@ hl.on("hyprland.start", function()
     -- *relative* target (../../dotfiles/...) against its working directory, not
     -- the link's. From anywhere else it watches a path that does not exist and
     -- CSS edits never apply live. Same in the Super+B bind below.
-    -- Failed-units menu is generated (waybar loads menu-file once); write it
-    -- before the bar starts so the first click is already populated.
-    hl.exec_cmd("~/.local/bin/hypr-failed-units sync")
     hl.exec_cmd([[cd ~/.config/waybar && waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' &]])
     hl.exec_cmd("hyprpaper")
     hl.exec_cmd("swaync")
