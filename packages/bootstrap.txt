@@ -1,57 +1,32 @@
-# Bare necessities for a new machine. You install the rest yourself (`paru`).
-# One package per line. Names for Arch (pacman/AUR via paru).
+# What I want on any machine. The installer already has base, kernel, sudo,
+# openssh, and a network stack. Install with the distro's package manager
+# (paru/pacman on Arch, apt on Debian). Names below are the Arch ones;
+# Debian renames a few (fd -> fd-find, and firefox is usually just firefox).
 
-# system
-base
-base-devel
-linux
-linux-firmware
-linux-headers
-grub
-efibootmgr
-sudo
-openssh
-reflector
-pacman-contrib
-kernel-modules-hook
-fwupd
-
-# repo + AUR
 git
 stow
-paru
-
-# shell + editor
-fish
-starship
 neovim
 tmux
+fish
+starship
+curl
+wget
+jq
 ripgrep
 fd
 fzf
 bat
 eza
 zoxide
-jq
-man-db
 less
+man-db
+unzip
+rsync
+openssh
+firefox
 
-# desktop (Hyprland)
-hyprland
-hyprlock
-hypridle
-hyprpaper
-waybar
-rofi
-kitty
-wl-clipboard
-grim
-slurp
-brightnessctl
-polkit-gnome
-xdg-desktop-portal-hyprland
-xdg-desktop-portal-gtk
-sddm
-
-# apps
-firefox-developer-edition
+# Hyprland laptop (Arch) adds this stack; leave it off a server:
+# hyprland hyprlock hypridle hyprpaper waybar rofi kitty wl-clipboard
+# grim slurp brightnessctl polkit-gnome
+# xdg-desktop-portal-hyprland xdg-desktop-portal-gtk sddm
+# paru reflector pacman-contrib kernel-modules-hook   # AUR + mirror/cleanup

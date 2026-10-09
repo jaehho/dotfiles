@@ -4,8 +4,8 @@ GNU Stow dotfiles for Arch + Hyprland and Ubuntu/Debian. Gate distro-specific wo
 
 ## Operating model
 
-- You run the machine: `dotfiles` reports status; `dotfiles apply` stows; `sudo scripts/apply.sh system` installs root files. No timers, no unattended upgrades. `paru -Syu` is the owner's.
-- `packages/bootstrap.txt` is the bare necessities for a new machine. The other files under `packages/` are inventory, not policy. Nothing installs or polices them day to day.
+- You run the machine: `scripts/apply.sh` stows and enables user units; `sudo scripts/apply.sh system` installs root files. No timers, no unattended upgrades, no `dotfiles` wrapper. `stow -d home -t ~ <pkg>` is enough for one package.
+- `packages/bootstrap.txt` is portable tools for a new machine. Nothing installs or polices packages day to day.
 - Bootstrap is `sudo scripts/bootstrap.sh` (interactive, once). Host choices belong in `hosts/<hostname>.sh`; shared lists and install destinations belong in `scripts/lib.sh`.
 - The dispatcher stays thin; implementation belongs in `scripts/`.
 

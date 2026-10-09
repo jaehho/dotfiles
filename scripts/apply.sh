@@ -302,9 +302,25 @@ as_owner() {
 
 # --- main ------------------------------------------------------------------
 
-case "${1:-user}" in
-  user)   run_user ;;
+# Never stow as root: that would write into /root and follow $HOME there.
+run_user_as_owner() {
+  if [ "$(id -u)" = 0 ]; then
+    runuser -u "$OWNER" -- env HOME="$OWNER_HOME" USER="$OWNER" \
+      XDG_RUNTIME_DIR="/run/user/$(id -u "$OWNER")" \
+      DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$OWNER")/bus" \
+      bash "$SELF" user
+  else
+    run_user
+  fi
+}
+
+case "${1:-}" in
+  "") [ "$(id -u)" = 0 ] && set -- system || set -- user ;;
+esac
+
+case "$1" in
+  user)   run_user_as_owner ;;
   system) run_system ;;
-  all)    run_system; as_owner bash "$SELF" user ;;
+  all)    run_system; run_user_as_owner ;;
   *) echo "usage: apply.sh [user|system|all]" >&2; exit 2 ;;
 esac

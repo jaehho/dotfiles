@@ -25,8 +25,8 @@ an entry in `SYSTEM_LINKS`, `SYSTEM_INSTALLS`, or `SYSTEM_COPIES` in
 ## Testing
 
 ```bash
-dotfiles status
-dotfiles apply
+stow --no-folding -n -v -d home -t ~ <pkg>
+scripts/apply.sh
 sudo scripts/apply.sh system
 ```
 
