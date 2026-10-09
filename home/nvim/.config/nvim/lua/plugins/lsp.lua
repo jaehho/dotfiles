@@ -8,20 +8,7 @@ return {
         marksman = {},
         rust_analyzer = {},
         tinymist = {},
-        pyright = {
-          root_markers = { 'pyproject.toml', 'pyrightconfig.json', 'setup.py', 'setup.cfg' },
-          on_init = function(client)
-            local root = client.workspace_folders and client.workspace_folders[1] and client.workspace_folders[1].name
-            if root then
-              local venv_python = root .. '/.venv/bin/python'
-              if vim.uv.fs_stat(venv_python) then
-                client.config.settings.python = { pythonPath = venv_python }
-                client:notify('workspace/didChangeConfiguration', { settings = client.config.settings })
-              end
-            end
-          end,
-          settings = { python = {} },
-        },
+        ty = {},
       },
     },
   },
@@ -102,7 +89,7 @@ return {
         'copilot-language-server',
         'lua-language-server',
         'marksman',
-        'pyright',
+        'ty',
         'rust-analyzer',
         'tinymist',
         'debugpy',

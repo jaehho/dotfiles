@@ -5,6 +5,9 @@ vim.g.mapleader = ' '
 vim.g.maplocalleader = ' '
 vim.g.have_nerd_font = true
 
+-- LazyVim's lang.python extra runs this server (default: pyright).
+vim.g.lazyvim_python_lsp = 'ty'
+
 -- Provider configuration
 vim.g.node_host_prog = vim.fn.expand '~/.npm-global/bin/neovim-node-host'
 vim.g.loaded_perl_provider = 0
