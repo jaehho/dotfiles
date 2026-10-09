@@ -261,9 +261,14 @@ If nothing there supports a claim, say so and do not cite it.
 Worth a test: the fetch boundary (only `fetch.py` and `tool_*` import
 anything that opens a connection), no `data/` paths or remote ids outside
 `config.py` and `fetch.py`, no issue numbers in notebooks, and package
-functions (a test for each, and the example in its docstring run as a
-doctest).
-Not prose or section order.
+functions.
+A package function's example in its docstring runs as a doctest and is
+its main test.
+A unit test is added only for what the doctest leaves out: an edge, a
+refusal, or a relation between functions.
+Not prose, section order, or layout conventions.
+A rule that scans files is one test that lists every offender, not one
+test per file.
 Add a test for a rule after it has been broken in practice.
 
 ## Before calling it done
