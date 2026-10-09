@@ -69,7 +69,7 @@ of the code (after Logan Smith, "How to write the perfect function").
   Everything the result depends on is a parameter: a cutoff, a column name,
   a seed, the current time.
   A default is fine (`cutoff: int = MIN_COUNT`);
-  reading a setup constant, `Cfg`, a global, or the clock in the body is not.
+  reading a setup constant, the config module, a global, or the clock in the body is not.
   Files, the network, and writes belong to the shell
   (`load`, `collect`, `fig_*`, a notebook's top cells), which calls honest
   functions.
