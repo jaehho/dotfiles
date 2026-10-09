@@ -1,37 +1,34 @@
 ---
 name: marimo-research
-description: Rules for writing or editing marimo notebooks used for scientific or data-science research (data collection, analysis, figures), where the notebooks are the lab record. Use whenever creating, restructuring, or editing a research marimo notebook or a project's notebooks/ folder. Not for driving a live kernel (that is marimo-pair).
+description: Rules for writing or editing marimo notebooks used for scientific or data-science research (data collection, analysis, figures), where the notebooks are the lab record. Use whenever creating, restructuring, or editing a research marimo notebook, a project's notebooks/ folder, or a function in a package that notebooks import. Not for driving a live kernel (that is marimo-pair).
 ---
 
 # Research marimo notebooks
 
 Notebooks are the lab record.
 Every number traces to code, a data file, and a stated choice.
-Project-specific constants (datasets, ids, thresholds) belong in the
-project's `CLAUDE.md` and shared config, not here.
-Where a project's `CLAUDE.md` sets a layout, follow it.
+Project facts (layout, datasets, ids, thresholds, palette) belong to the
+project. Read its `CLAUDE.md` and `.claude/rules/` first. Where they differ
+from this skill, follow the project.
 
 ## Layout
 
-Shared code is an installable package of regular Python modules
-(`src/<name>/`), one module per concern and named for it, never a
-catch-all `helpers`.
+Shared code is an installable package of regular Python modules, one per
+concern and named for it, never a catch-all `helpers`.
 Notebooks import the package and never each other.
-The notebooks sit flat in `notebooks/`, named by role, without stage
-numbers.
-The package holds a `config` module for constants shared by more than
-one notebook, a `fetch` module that makes every network fetch and is the only
-writer of `data/`, and a `load` module of pure readers.
-The notebooks are one per question, `fig_*` notebooks that write
-`figures/`, and `tool_*` for debugging.
+Name notebooks by role, one per question, without stage numbers. A prefix
+per role is fine (`fig_` for notebooks that write figures, `tool_` for
+debugging).
+Keep every network fetch in one module, the only writer of data files, and
+keep the loaders in another module as pure readers.
 
 - A constant is defined once; reference the symbol, never restate a path,
   id, or threshold. A knob used by one notebook stays in that notebook.
 - Opening or batch-running a notebook never fetches.
   A cell that fetches sits behind `mo.ui.run_button`;
   secrets come from the environment.
-- Every role except the question notebooks is a reference:
-  present tense, no discussion of results.
+- Every role except the question notebooks is a reference: present tense,
+  no discussion of results.
 
 ## Functions or cells
 
@@ -41,25 +38,12 @@ two cells, another function, another notebook, or a test that guards it.
 Loop over cases inside one cell rather than writing a function to call once
 per case, and inline a function that stops being reused.
 
-Where a function lives:
-
-1. If a similar function exists anywhere in the project, generalize it
-   into a package module.
-2. Otherwise, if another current notebook can use it, make it a package
-   module.
-3. Otherwise it stays in its notebook.
-
-A package function takes columns, thresholds, and labels as arguments, so
-its signature says what it does.
-A function written for one notebook stays in it and calls the package.
-
-A package docstring has the content that PEP 257 and numpydoc define:
-an imperative summary line, an extended summary of behavior,
-`Parameters`, `Returns`, `Raises`, `See Also`, `Notes`, and `Examples`.
-Go no further than those standards do.
-Ruff's pydocstyle rules (`D`, numpy convention) check the form.
-An example is a doctest on a small input, with generic names and values;
-it uses the project's column names only when the function needs them.
+Before writing a function, look for a similar one in the project and extend
+it. Where a shared function lives follows the project's rules. A function
+written for one notebook stays in it and calls the package.
+A package function takes columns, thresholds, and labels as arguments,
+so its signature says what it does.
+Docstrings and doctests follow the project's rules.
 
 Each `@app.function` defined in a notebook is followed at once by a cell
 that calls it and displays the return, so the reader sees what it does
@@ -76,9 +60,9 @@ of the code (after Logan Smith, "How to write the perfect function").
   Everything the result depends on is a parameter: a cutoff, a column name,
   a seed, the current time.
   A default is fine (`cutoff: int = MIN_COUNT`);
-  reading a setup constant, the config module, a global, or the clock in the body is not.
+  reading a setup constant, the project's config module, a global, or the clock in the body is not.
   Files, the network, and writes belong to the shell
-  (`load`, `fetch`, `fig_*`, a notebook's top cells), which calls honest
+  (the loaders, the fetch code, a notebook's top cells), which calls honest
   functions.
   If a test would need a mock or a fixture file, look for what the body reads
   that is not a parameter.
@@ -121,53 +105,11 @@ of the code (after Logan Smith, "How to write the perfect function").
 - A cell with a display equation has braces, so keep it a raw
   `mo.md(r"...")` and put interpolated sentences in their own
   `mo.md(rf"...")` cell.
-
 ## Question notebooks
 
-A question notebook is the log of one question, two at most.
-The usual order: Introduction (the question, then the background with the
-expectations), Load data, one section per analysis, Discussion (with
-Limitations and Open questions), Terms.
-
-- **Question**: one sentence, no definitions or notation.
-- **Background**: only what bears on the question.
-  Each exclusion or data quirk the analysis handles gets one sentence
-  saying where it comes from.
-  Quote where a passage carries the claim, link where none does.
-  A claim the notebook cannot test becomes an open question.
-- **Expectations** come before the methods and are stated as posed.
-  An expectation says what the data would look like without the effect, and
-  why; do not assume a distribution family without a reason.
-  A post-hoc finding is reported as found, not dressed as an expectation.
-- **Exclusions.**
-  Define the objects of study as broadly as the question allows.
-  Apply an exclusion after the first result and show its effect beside the
-  unfiltered version.
-  Where a filter decides which records count (quality, completeness, a
-  validated flag), run the main analysis on the records the question is
-  about, and show the unfiltered version beside it where it changes the
-  conclusion.
-- **Analysis sections** are named for what they show ("Which runs
-  disagree"), not "Results", and headings are plain: no dates, "Hypothesis",
-  or planned/exploratory labels.
-  An exploration that changed a decision gets its own section before the
-  method it motivated.
-- **Discussion** goes expectation by expectation.
-  It states each pattern qualitatively and links to the section that shows it
-  (`[Section title](#section-title)`; the slug is the heading lowercased
-  with hyphens).
-  Check each claim against the rendered output: a table or figure you did
-  not look at is not evidence.
-  **Limitations** say once what else could produce the result and what it
-  does not show.
-  **Open questions** each carry a test and the outcome that would refute it.
-- **Terms** is a glossary of words a reader may need a reminder of.
-  Each is also defined in the prose where it first appears.
-- A new question is a new notebook.
-  Earlier conclusions are not rewritten; a later notebook corrects an earlier
-  one and says so in both.
-- Write in any order while developing; reread top to bottom at each commit
-  and reorder for the reader.
+For a question notebook (its question, background, expectations, analysis
+sections, discussion, and terms), read `references/question-notebook.md`
+before you write or restructure it.
 
 ## Prose and names
 
@@ -217,11 +159,7 @@ Limitations and Open questions), Terms.
 - Axis limits follow the data.
   Show groups side by side; a dropdown that shows one group at a time hides
   the comparison.
-- altair for charts that map columns to encodings, up to a few thousand marks
-  (aggregate first beyond that); matplotlib for figures placed mark by mark,
-  large point clouds, and files in `figures/`; plotly for 3D and WebGL.
-  polars for every table; pandas only where a library demands it.
-- A selectable figure, a schematic diagram, or the base-look code:
+- The chart library, selectable figures, schematics, and the base-look code:
   read `references/figures.md`.
 
 ## Math
@@ -234,42 +172,13 @@ If a display only restates a line of dataframe code, use prose.
 
 ## Citations
 
-Claims from the literature come from the user's Zotero library, checked
-before any web search.
-If nothing there supports a claim, say so and do not cite it.
-
-- Find the item with `zotero_search_items`, its highlights with
-  `zotero_get_annotations`, an unmarked passage with
-  `zotero_read_pdf_pages`.
-  Quote exactly; never paraphrase inside quotation marks.
-- Quote as a blockquote of the highlight, then
-  `> — Author year, p. N · [PDF p. N](zotero://open-pdf/library/items/<attachment key>?page=N&annotation=<annotation key>) · [<doi>](https://doi.org/<doi>)`,
-  split at the `·` so no line passes the limit.
-  N is the page label Zotero stores on the annotation (`page` in
-  `zotero_get_annotations`, often the journal page), not the PDF index.
-  The user's annotation comment goes outside the quote, as complete
-  sentences.
-  No citekeys.
-- A passage with no highlight gets one when you cite it:
-  create the highlight (`zotero_create_annotation`, tag `claude`, no
-  recoloring) and put its key in `annotation=`.
-  No `annotation=` is left in a notebook.
-- In running text, cite `[Author et al. year](https://doi.org/<doi>)`.
+Before you cite a claim from the literature, read `references/citations.md`.
 
 ## Tests
 
-Worth a test: the fetch boundary (only `fetch.py` and `tool_*` import
-anything that opens a connection), no `data/` paths or remote ids outside
-`config.py` and `fetch.py`, no issue numbers in notebooks, and package
-functions.
-A package function's example in its docstring runs as a doctest and is
-its main test.
-A unit test is added only for what the doctest leaves out: an edge, a
-refusal, or a relation between functions.
-Not prose, section order, or layout conventions.
-A rule that scans files is one test that lists every offender, not one
-test per file.
-Add a test for a rule after it has been broken in practice.
+Doctests on package functions are the main test; pytest runs them.
+Before you write a rule in prose, check the project's test file. A rule that
+a test already checks needs only a pointer to the test.
 
 ## Before calling it done
 
@@ -279,26 +188,3 @@ Add a test for a rule after it has been broken in practice.
    say you only ran it headless.
 3. The Discussion matches the rendered outputs and types no number the code
    computes.
-
-## Improving this skill
-
-A rule earns a place here only if a research notebook on any topic is
-better for it, not merely different.
-A one-off preference, a data-specific fix, a tool or palette choice, and a
-shape (a heading, a file name, a size) stay in the notebook or the
-project's `CLAUDE.md`.
-Before adding a rule, look for one to merge it into, or to remove.
-
-- When the user leaves a comment inside a notebook, treat it as an
-  instruction: address it, apply the same fix to the rest of the notebook
-  past the last comment, and delete the comment.
-- When the user suggests a change to one notebook, make it, then decide
-  whether it passes the test above.
-  If it does, end the reply by offering the skill change as exact text,
-  naming the section.
-  Do not edit the skill until the user agrees, unless they asked for the
-  skill change directly.
-- Keep the skill domain-neutral: examples use generic data.
-- Edit the stow target `~/dotfiles/home/claude/.claude/skills/marimo-research/`
-  (not the `~/.claude` symlink) and commit in `~/dotfiles` with only the
-  skill's files staged.
