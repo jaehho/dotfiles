@@ -20,7 +20,7 @@ Notebooks import the package and never each other.
 The notebooks sit flat in `notebooks/`, named by role, without stage
 numbers.
 The package holds a `config` module for constants shared by more than
-one notebook, a `collect` module that makes every fetch and is the only
+one notebook, a `fetch` module that makes every network fetch and is the only
 writer of `data/`, and a `load` module of pure readers.
 The notebooks are one per question, `fig_*` notebooks that write
 `figures/`, and `tool_*` for debugging.
@@ -71,7 +71,7 @@ of the code (after Logan Smith, "How to write the perfect function").
   A default is fine (`cutoff: int = MIN_COUNT`);
   reading a setup constant, the config module, a global, or the clock in the body is not.
   Files, the network, and writes belong to the shell
-  (`load`, `collect`, `fig_*`, a notebook's top cells), which calls honest
+  (`load`, `fetch`, `fig_*`, a notebook's top cells), which calls honest
   functions.
   If a test would need a mock or a fixture file, look for what the body reads
   that is not a parameter.
@@ -251,9 +251,9 @@ If nothing there supports a claim, say so and do not cite it.
 
 ## Tests
 
-Worth a test: the fetch boundary (only `collect.py` and `tool_*` import
+Worth a test: the fetch boundary (only `fetch.py` and `tool_*` import
 anything that opens a connection), no `data/` paths or remote ids outside
-`config.py` and `collect.py`, no issue numbers in notebooks, and package
+`config.py` and `fetch.py`, no issue numbers in notebooks, and package
 functions (a test for each, and the example in its docstring run as a
 doctest).
 Not prose or section order.
