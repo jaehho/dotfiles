@@ -98,7 +98,6 @@ SYSTEM_LINKS=(
   "libinput/local-overrides.quirks:/etc/libinput/local-overrides.quirks"
   "security/limits.d/10-rtprio.conf:/etc/security/limits.d/10-rtprio.conf"
   "sysctl/99-sysrq.conf:/etc/sysctl.d/99-sysrq.conf"
-  "systemd/sleep.conf:/etc/systemd/sleep.conf"
   "systemd/system-sleep/fuse-mounts:/usr/lib/systemd/system-sleep/fuse-mounts"
   "/usr/share/alsa/alsa.conf.d/99-pipewire-default.conf:/etc/alsa/conf.d/99-pipewire-default.conf"
 )

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hypridle condition_cmd for the idle-suspend listener. Exit 0 allows
-# `systemctl suspend-then-hibernate`; non-zero defers it.
+# `systemctl suspend`; non-zero defers it.
 #
 # Defer only while a Claude session is mid-turn (status "busy") and the lid
 # is open, so a long turn is not cut by the idle timer. A session sitting
