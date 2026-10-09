@@ -20,10 +20,10 @@ Notebooks import the package and never each other.
 The notebooks sit flat in `notebooks/`, named by role, without stage
 numbers.
 The package holds a `config` module for constants shared by more than
-one notebook and a `load` module of pure readers.
-The notebooks are a `collect` notebook that makes every fetch and is the
-only writer of `data/`, one notebook per question, `fig_*` notebooks that
-write `figures/`, and `tool_*` for debugging.
+one notebook, a `collect` module that makes every fetch and is the only
+writer of `data/`, and a `load` module of pure readers.
+The notebooks are one per question, `fig_*` notebooks that write
+`figures/`, and `tool_*` for debugging.
 
 - A constant is defined once; reference the symbol, never restate a path,
   id, or threshold. A knob used by one notebook stays in that notebook.
