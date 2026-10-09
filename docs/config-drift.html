@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Config drift — what can diverge, and what fixes it</title>
+<style>
+  /* Catppuccin Mocha. Grey is rest; hue is a state. color-preferences.md */
+  :root {
+    --text: #cdd6f4;
+    --subtext0: #a6adc8;
+    --overlay0: #6c7086;
+    --surface0: #313244;
+    --surface1: #45475a;
+    --base: #1e1e2e;
+    --mantle: #181825;
+    --crust: #11111b;
+    --blue: #89b4fa;      /* you are here / source */
+    --peach: #fab387;     /* worth a glance / pending */
+    --red: #f38ba8;       /* act now / lost */
+    --green: #a6e3a1;     /* in sync / fixed */
+    --lavender: #b4befe;  /* live form accent (not a state) */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--crust);
+    color: var(--text);
+    font: 15px/1.55 "Iosevka", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    padding: 2rem 1.25rem 4rem;
+  }
+  main { max-width: 920px; margin: 0 auto; }
+  h1 {
+    font-size: 1.65rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.35rem;
+  }
+  .lede { color: var(--subtext0); margin: 0 0 1.5rem; max-width: 46em; }
+  h2 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 2.25rem 0 0.75rem;
+    color: var(--text);
+    border-bottom: 1px solid var(--surface0);
+    padding-bottom: 0.4rem;
+  }
+  h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem;
+  }
+  p { margin: 0.55rem 0; color: var(--subtext0); }
+  p strong, li strong { color: var(--text); font-weight: 600; }
+  code {
+    font: 0.86em/1.4 "Iosevka", ui-monospace, monospace;
+    background: var(--surface0);
+    color: var(--text);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+  .path { font-family: "Iosevka", ui-monospace, monospace; font-size: 0.84em; }
+
+  /* current-state strip */
+  .now {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    background: var(--mantle);
+    border: 1px solid var(--surface0);
+    border-radius: 12px;
+    padding: 0.85rem 1.1rem;
+    margin-bottom: 1.75rem;
+    align-items: center;
+  }
+  .now .label {
+    color: var(--subtext0);
+    font-size: 0.85rem;
+    margin-right: 0.25rem;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: var(--surface0);
+    color: var(--subtext0);
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--overlay0);
+    flex: none;
+  }
+  .dot.ok { background: var(--green); }
+  .dot.warn { background: var(--peach); }
+  .dot.bad { background: var(--red); }
+  .dot.here { background: var(--blue); }
+
+  /* layer diagram */
+  .stack {
+    display: grid;
+    gap: 0.65rem;
+    margin: 1rem 0 1.25rem;
+  }
+  .layer {
+    display: grid;
+    grid-template-columns: 110px 1fr auto;
+    gap: 0.75rem 1rem;
+    align-items: center;
+    background: var(--mantle);
+    border: 1px solid var(--surface0);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+  }
+  .layer .who {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--overlay0);
+    font-weight: 600;
+  }
+  .layer .flow {
+    color: var(--subtext0);
+    font-size: 0.92rem;
+    min-width: 0;
+  }
+  .layer .flow .from { color: var(--blue); }
+  .layer .flow .to { color: var(--lavender); }
+  .layer .live {
+    font-size: 0.78rem;
+    color: var(--overlay0);
+    white-space: nowrap;
+    text-align: right;
+  }
+  .layer .live b {
+    display: block;
+    color: var(--subtext0);
+    font-weight: 500;
+    font-size: 0.82rem;
+  }
+
+  /* drift cards */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0.75rem;
+    margin: 0.85rem 0 1.25rem;
+  }
+  .card {
+    background: var(--mantle);
+    border: 1px solid var(--surface0);
+    border-radius: 12px;
+    padding: 0.9rem 1rem 1rem;
+  }
+  .card.warn { border-color: color-mix(in srgb, var(--peach) 35%, var(--surface0)); }
+  .card.bad  { border-color: color-mix(in srgb, var(--red) 35%, var(--surface0)); }
+  .card.ok   { border-color: color-mix(in srgb, var(--green) 30%, var(--surface0)); }
+  .card h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .card ol {
+    margin: 0.45rem 0 0.65rem;
+    padding-left: 1.15rem;
+    color: var(--subtext0);
+  }
+  .card li { margin: 0.3rem 0; }
+  .fix {
+    margin: 0.35rem 0 0;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--surface0);
+    font-size: 0.86rem;
+    color: var(--subtext0);
+  }
+  .fix b { color: var(--text); font-weight: 600; }
+
+  /* table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0 1.25rem;
+    font-size: 0.9rem;
+    background: var(--mantle);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--surface0);
+  }
+  th, td {
+    text-align: left;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--surface0);
+    vertical-align: top;
+  }
+  th {
+    color: var(--overlay0);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    background: var(--base);
+  }
+  tr:last-child td { border-bottom: none; }
+  td.yes { color: var(--green); }
+  td.no  { color: var(--overlay0); }
+  td.part { color: var(--peach); }
+
+  .note {
+    background: var(--base);
+    border-left: 3px solid var(--blue);
+    border-radius: 0 8px 8px 0;
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    color: var(--subtext0);
+  }
+  .note.warn { border-left-color: var(--peach); }
+  .note.bad  { border-left-color: var(--red); }
+  .note p { margin: 0.35rem 0; }
+
+  footer {
+    margin-top: 2.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--surface0);
+    color: var(--overlay0);
+    font-size: 0.82rem;
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Config drift</h1>
+<p class="lede">
+  What the repo owns, what is actually on this machine, how those two
+  can come apart, and what puts them back. Inventoried on the laptop,
+  2026-10-09. Right now nothing has drifted; the cards below are the
+  modes that can.
+</p>
+
+<div class="now">
+  <span class="label">Right now</span>
+  <span class="pill"><span class="dot ok"></span>25 stow packages linked</span>
+  <span class="pill"><span class="dot ok"></span>10 system links</span>
+  <span class="pill"><span class="dot ok"></span>6 copies + 3 NM dispatchers synced</span>
+  <span class="pill"><span class="dot ok"></span>0 .pacnew</span>
+  <span class="pill"><span class="dot ok"></span>packages in sync</span>
+</div>
+
+<h2>Three layers, three live forms</h2>
+<p>
+  The repo is always the source of truth. The live form is what a running
+  process actually reads. Those are not the same kind of object, so they
+  drift differently.
+</p>
+
+<div class="stack">
+  <div class="layer">
+    <div class="who">Stow</div>
+    <div class="flow">
+      <span class="from">home/&lt;pkg&gt;/…</span>
+      &nbsp;→&nbsp;
+      <span class="to">~/…</span>
+      &nbsp;&nbsp;<span class="path">e.g. ~/.config/hypr/hyprland.lua</span>
+    </div>
+    <div class="live"><b>symlink</b>per file</div>
+  </div>
+  <div class="layer">
+    <div class="who">System links</div>
+    <div class="flow">
+      <span class="from">system/…</span>
+      &nbsp;→&nbsp;
+      <span class="to">/etc/…</span>
+      &nbsp;&nbsp;<span class="path">e.g. /etc/keyd/default.conf</span>
+    </div>
+    <div class="live"><b>symlink</b>runtime readers</div>
+  </div>
+  <div class="layer">
+    <div class="who">System copies</div>
+    <div class="flow">
+      <span class="from">system/…</span>
+      &nbsp;→&nbsp;
+      <span class="to">/etc/…</span>
+      &nbsp;&nbsp;<span class="path">e.g. /etc/default/grub</span>
+    </div>
+    <div class="live"><b>real root file</b>boot / sandbox / PAM</div>
+  </div>
+</div>
+
+<div class="note">
+  <p>
+    <strong>Why copies exist.</strong> Some readers cannot follow a link
+    into <code>/home</code>: systemd-logind (<code>ProtectHome=yes</code>),
+    udev (private mounts, also runs from initramfs), PAM (login must work
+    with a broken <code>/home</code>), grub/mkinitcpio (before
+    <code>/home</code> is mounted), reflector (<code>ProtectHome=true</code>).
+    NetworkManager dispatcher scripts are copies too: NM refuses a symlink
+    or a non-root script.
+  </p>
+</div>
+
+<h2>Stow: <span class="path">home/*</span> → <span class="path">~/</span></h2>
+<p>
+  Once a package is stowed, each file is a relative symlink into the repo.
+  Editing the repo file is editing the live file. Drift is about
+  <em>structure</em> (new, deleted, or overwritten links), not content.
+</p>
+
+<div class="grid">
+  <div class="card ok">
+    <h3><span class="dot ok"></span>Edit a linked file</h3>
+    <p>
+      You change
+      <span class="path">home/fish/.config/fish/config.fish</span>.
+      The live file is the same inode path via symlink.
+    </p>
+    <p class="fix"><b>Drift:</b> none. Already live.</p>
+    <p class="fix"><b>Fix:</b> nothing.</p>
+  </div>
+
+  <div class="card warn">
+    <h3><span class="dot warn"></span>Add a new file to a package</h3>
+    <p>
+      You create
+      <span class="path">home/fish/.config/fish/conf.d/foo.fish</span>.
+      Nothing puts it in
+      <span class="path">~/.config/fish/conf.d/</span> until stow runs.
+    </p>
+    <p class="fix"><b>Drift:</b> live tree missing a file. Invisible to the program.</p>
+    <p class="fix"><b>Fix:</b> <code>stow</code> / <code>dotfiles apply</code>.</p>
+  </div>
+
+  <div class="card warn">
+    <h3><span class="dot warn"></span>Delete a file from the repo</h3>
+    <p>
+      The symlink in <code>~</code> stays behind and now dangles. Nothing
+      unlinks it: the stow step only walks files still in the package.
+    </p>
+    <p class="fix"><b>Drift:</b> orphan link. Some tools error on a dangling path.</p>
+    <p class="fix"><b>Fix:</b> remove the orphan by hand, or restow after a
+      cleanup pass. Today converge does not catch this.</p>
+  </div>
+
+  <div class="card bad">
+    <h3><span class="dot bad"></span>Something writes a real file over a link</h3>
+    <p>
+      A GUI or installer replaces
+      <span class="path">~/.config/kitty/kitty.conf</span> with a regular
+      file. The repo is now ignored for that path.
+    </p>
+    <p class="fix"><b>Drift:</b> two sources of truth. Edits to the repo do nothing.</p>
+    <p class="fix"><b>Fix:</b> apply backs the real file up to
+      <code>*.bak</code> and recreates the symlink. The
+      <code>.bak</code> is the discarded live copy.</p>
+  </div>
+
+  <div class="card warn">
+    <h3><span class="dot warn"></span>New package in the repo</h3>
+    <p>
+      You add <span class="path">home/foo/</span>. Until stow runs it is
+      not in the live tree at all.
+    </p>
+    <p class="fix"><b>Drift:</b> whole package absent.</p>
+    <p class="fix"><b>Fix:</b> <code>dotfiles apply</code>.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="dot"></span>Generated files (not drift)</h3>
+    <p>
+      <span class="path">mimeapps.list</span> and waypaper's
+      <span class="path">config.ini</span> are written at runtime by
+      other processes. The repo holds a seed, not the source of truth.
+    </p>
+    <p class="fix"><b>Fix:</b> nothing, by design. They are skipped on purpose.</p>
+  </div>
+</div>
+
+<h2>System links: <span class="path">system/</span> → <span class="path">/etc</span></h2>
+<p>
+  Same as stow: the live path is a symlink into the repo, so content
+  cannot drift. Structure can.
+</p>
+
+<div class="grid">
+  <div class="card ok">
+    <h3><span class="dot ok"></span>Edit a linked system file</h3>
+    <p>
+      Change
+      <span class="path">system/keyd/default.conf</span>. keyd reads
+      <span class="path">/etc/keyd/default.conf</span>, which is the link.
+    </p>
+    <p class="fix"><b>Drift:</b> none in the file. A running service may still
+      hold the old bytes until restart (keyd, sysctl).</p>
+    <p class="fix"><b>Fix:</b> reload the service. Converge does this when
+      the file hash changes.</p>
+  </div>
+
+  <div class="card warn">
+    <h3><span class="dot warn"></span>Link missing or replaced</h3>
+    <p>
+      A package or a hand command replaces
+      <span class="path">/etc/sysctl.d/99-sysrq.conf</span> with a regular
+      file, or the link is never made on a new machine.
+    </p>
+    <p class="fix"><b>Drift:</b> repo change no longer reaches the live path.</p>
+    <p class="fix"><b>Fix:</b> apply relinks with
+      <code>ln -sfn</code>.</p>
+  </div>
+</div>
+
+<h2>System copies: <span class="path">system/</span> ⇉ <span class="path">/etc</span></h2>
+<p>
+  This is the only layer where <em>content</em> can drift. The live file is
+  a real root-owned copy. The repo is not watched.
+</p>
+
+<div class="grid">
+  <div class="card warn">
+    <h3><span class="dot warn"></span>Edit the repo copy</h3>
+    <p>
+      You change
+      <span class="path">system/grub/grub</span>.
+      <span class="path">/etc/default/grub</span> keeps the old bytes until
+      someone copies it over.
+    </p>
+    <p class="fix"><b>Drift:</b> running system does not match the repo.
+      Silent.</p>
+    <p class="fix"><b>Fix:</b> apply, then rebuild grub/mkinitcpio for the
+      boot ones. Status shows <em>out of sync</em>.</p>
+  </div>
+
+  <div class="card bad">
+    <h3><span class="dot bad"></span>Edit the live <code>/etc</code> copy</h3>
+    <p>
+      You tweak
+      <span class="path">/etc/default/grub</span> in place and do not push
+      the change back into the repo.
+    </p>
+    <p class="fix"><b>Drift:</b> two sources of truth. <strong>Apply overwrites
+      the live file with the repo and saves the old one under
+      <code>/var/lib/dotfiles/backup</code>.</strong> Your tweak is gone
+      from <code>/etc</code>.</p>
+    <p class="fix"><b>Fix:</b> either commit the tweak into
+      <span class="path">system/</span> first, or accept the repo wins.
+      This is the sharpest edge in the system.</p>
+  </div>
+
+  <div class="card bad">
+    <h3><span class="dot bad"></span>Package update leaves a <code>.pacnew</code></h3>
+    <p>
+      pacman updates a file we also own (PAM is the usual one) and drops
+      <span class="path">/etc/pam.d/login.pacnew</span>. The live file may
+      be the new package version, the old ours, or a merge.
+    </p>
+    <p class="fix"><b>Drift:</b> unknown until you look. Upstream change is
+      not in the repo.</p>
+    <p class="fix"><b>Fix:</b> merge by hand into
+      <span class="path">system/pam/login</span>, then apply. Status lists
+      <code>.pacnew</code>; apply does not merge for you.</p>
+  </div>
+
+  <div class="card warn">
+    <h3><span class="dot warn"></span>Boot rebuild fails</h3>
+    <p>
+      A grub or mkinitcpio change does not build. The previous working file
+      is rolled back; the bad hash is remembered so it is not retried until
+      the repo file changes.
+    </p>
+    <p class="fix"><b>Drift:</b> repo and live disagree on purpose. Safe, but
+      the repo is wrong until you fix it.</p>
+    <p class="fix"><b>Fix:</b> fix
+      <span class="path">system/mkinitcpio</span> /
+      <span class="path">system/grub/grub</span>, change the file, apply again.</p>
+  </div>
+</div>
+
+<div class="note warn">
+  <p>
+    <strong>What a daily timer would actually buy.</strong> Only the
+    copy layer: it would notice a stale
+    <span class="path">/etc/default/grub</span> and install the repo over
+    it. Stow and system links are already live for content the moment you
+    edit the repo; a timer only picks up new files and replaced links
+    earlier than you would. It would also be the thing that overwrites a
+    live <code>/etc</code> tweak while you are away.
+  </p>
+</div>
+
+<h2>Matrix</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Drift</th>
+      <th>Layer</th>
+      <th>Caught by status</th>
+      <th>Fixed by apply</th>
+      <th>Needs a timer?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Edited a linked file</td>
+      <td>stow / links</td>
+      <td class="no">n/a (already live)</td>
+      <td class="no">n/a</td>
+      <td class="no">no</td>
+    </tr>
+    <tr>
+      <td>New file / new package</td>
+      <td>stow</td>
+      <td class="yes">yes (stow dry-run)</td>
+      <td class="yes">yes</td>
+      <td class="no">no — run apply when you add files</td>
+    </tr>
+    <tr>
+      <td>Orphan symlink after delete</td>
+      <td>stow</td>
+      <td class="part">not today</td>
+      <td class="part">not today</td>
+      <td class="no">no — needs a cleanup, not a timer</td>
+    </tr>
+    <tr>
+      <td>Real file over a link</td>
+      <td>stow / links</td>
+      <td class="yes">yes (conflict)</td>
+      <td class="yes">yes (backup + relink)</td>
+      <td class="no">optional</td>
+    </tr>
+    <tr>
+      <td>Edited repo copy</td>
+      <td>copies</td>
+      <td class="yes">yes (out of sync)</td>
+      <td class="yes">yes (install + boot rebuild)</td>
+      <td class="part">only here a timer helps</td>
+    </tr>
+    <tr>
+      <td>Edited live <code>/etc</code> copy</td>
+      <td>copies</td>
+      <td class="yes">yes (out of sync)</td>
+      <td class="part">yes, but <em>destroys</em> the live edit</td>
+      <td class="no">timer makes this worse</td>
+    </tr>
+    <tr>
+      <td><code>.pacnew</code> from a package</td>
+      <td>copies</td>
+      <td class="yes">yes</td>
+      <td class="no">no — merge by hand</td>
+      <td class="no">no</td>
+    </tr>
+    <tr>
+      <td>Boot rebuild rejected</td>
+      <td>copies</td>
+      <td class="yes">yes</td>
+      <td class="part">after you fix the repo</td>
+      <td class="no">no</td>
+    </tr>
+    <tr>
+      <td>Service still running old bytes</td>
+      <td>links</td>
+      <td class="part">sometimes</td>
+      <td class="part">reload on hash change</td>
+      <td class="no">no</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>What puts it back</h2>
+
+<div class="grid">
+  <div class="card">
+    <h3><span class="dot here"></span><code>dotfiles status</code></h3>
+    <p>
+      Read-only. Compares repo lists to the live tree: stow dry-run,
+      link targets, copy <code>cmp</code>, <code>.pacnew</code>.
+      Answers “would apply change anything?”
+    </p>
+    <p class="fix"><b>Does not:</b> fix, merge, or upgrade packages.</p>
+  </div>
+  <div class="card">
+    <h3><span class="dot here"></span><code>dotfiles apply</code></h3>
+    <p>
+      Stow, relink, install copies, rebuild boot when a copy changed,
+      enable the user units that ship with packages.
+    </p>
+    <p class="fix"><b>Does not:</b> upgrade packages, merge
+      <code>.pacnew</code>, or undo an orphan symlink you deleted from the
+      repo.</p>
+  </div>
+  <div class="card">
+    <h3><span class="dot here"></span>you + <code>paru</code></h3>
+    <p>
+      Package upgrades, orphans, cache. Manifests stay a shopping list for
+      bootstrap only (bare necessities), not a drift police.
+    </p>
+    <p class="fix"><b>Does not:</b> touch the three config layers.</p>
+  </div>
+</div>
+
+<div class="note">
+  <p>
+    <strong>Reading the edge.</strong> The one real footgun is the copy
+    layer: apply always prefers the repo, so a live
+    <span class="path">/etc</span> edit is never safe unless you also write
+    it back to <span class="path">system/</span>. Everything else is either
+    already live (symlinks) or missing until you run apply (new files).
+  </p>
+</div>
+
+<footer>
+  Paths inventories: <code>scripts/lib.sh</code>
+  (<code>STOW_PACKAGES</code>, <code>SYSTEM_LINKS</code>,
+  <code>SYSTEM_INSTALLS</code>, <code>SYSTEM_COPIES</code>) and the
+  NM dispatcher block in <code>scripts/converge.sh</code>.
+  Colour roles follow <code>docs/color-preferences.md</code>.
+</footer>
+
+</main>
+</body>
+</html>
