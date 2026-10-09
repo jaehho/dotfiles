@@ -17,6 +17,9 @@ vim.opt.rtp:prepend(lazypath)
 require('lazy').setup {
   spec = {
     { 'LazyVim/LazyVim', import = 'lazyvim.plugins' },
+    -- Snippet engine. friendly-snippets via LuaSnip's vscode loader; blink
+    -- gets snippets.preset = 'luasnip'. No personal snippets yet.
+    { import = 'lazyvim.plugins.extras.coding.luasnip' },
     { import = 'lazyvim.plugins.extras.coding.mini-surround' },
     { import = 'lazyvim.plugins.extras.dap.core' },
     { import = 'lazyvim.plugins.extras.lang.python' },
