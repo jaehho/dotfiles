@@ -22,4 +22,4 @@ Apps with their own stow package (kitty, fish, hypr, waybar, rofi, swaync, tmux,
 
 ## Palette
 
-Official Mocha. Accent choice is **lavender** (`#b4befe`) where a port ships per-accent variants. See `docs/color-preferences.md`.
+Official Mocha. Accent choice is **lavender** (`#b4befe`) where a port ships per-accent variants.

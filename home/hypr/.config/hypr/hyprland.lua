@@ -39,7 +39,7 @@ if not ok_ws then
     hl.notification.create({ text = "workspaces.lua failed: " .. tostring(workspaces), timeout = 10000, icon = "error" })
 end
 -- Colors only from the official Catppuccin Mocha module (catppuccin/hyprland).
--- Active border is fixed lavender (see docs/color-preferences.md).
+-- Active border is fixed lavender.
 package.loaded["themes.catppuccin_mocha"] = nil
 local ok_theme, mocha = pcall(require, "themes.catppuccin_mocha")
 if not ok_theme or type(mocha) ~= "table" or mocha.lavenderAlpha == nil then

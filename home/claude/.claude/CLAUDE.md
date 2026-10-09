@@ -15,7 +15,6 @@
 - I use fish, Firefox, and nvim. Python is uv (`uv sync`, `uv run`), never pip or a hand-activated venv.
 - Dataframes: polars, not pandas; convert where a library hands back pandas.
 - Python line length is PEP 8: 79 for code, 72 for comments, docstrings, and flowing text (markdown cells included). Lint it (ruff `E501`, `W505` with `max-doc-length = 72`). Break prose at thoughts (after a sentence, comma, or semicolon), one thought per line, not at the width alone.
-- Colors: before choosing or changing any color (UI, charts, notebooks, themes), read `~/dotfiles/docs/color-preferences.md` and follow it. Update that file only when taste changes, not for a one-off surface.
 
 ## Working
 

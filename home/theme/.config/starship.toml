@@ -37,7 +37,7 @@ base = "#1e1e2e"
 mantle = "#181825"
 crust = "#11111b"
 
-# blue = you are here (color-preferences.md roles).
+# blue = you are here.
 [directory]
 style = 'bold blue'
 truncation_length = 3
