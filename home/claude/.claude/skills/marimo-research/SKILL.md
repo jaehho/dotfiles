@@ -13,12 +13,17 @@ Where a project's `CLAUDE.md` sets a layout, follow it.
 
 ## Layout
 
-One flat `notebooks/`, files named by role so they import by name
-(`from load import load_measurements`), without stage numbers.
-The roles: a `config` module for constants shared by more than one
-notebook; a `collect` notebook that makes every fetch and is the only
-writer of `data/`; a `load` module of pure readers; one notebook per
-question; `fig_*` notebooks that write `figures/`; `tool_*` for debugging.
+Shared code is an installable package of regular Python modules
+(`src/<name>/`), one module per concern and named for it, never a
+catch-all `helpers`.
+Notebooks import the package and never each other.
+The notebooks sit flat in `notebooks/`, named by role, without stage
+numbers.
+The package holds a `config` module for constants shared by more than
+one notebook and a `load` module of pure readers.
+The notebooks are a `collect` notebook that makes every fetch and is the
+only writer of `data/`, one notebook per question, `fig_*` notebooks that
+write `figures/`, and `tool_*` for debugging.
 
 - A constant is defined once; reference the symbol, never restate a path,
   id, or threshold. A knob used by one notebook stays in that notebook.
@@ -35,11 +40,23 @@ Make it an `@app.function` only when it is used from more than one place:
 two cells, another function, another notebook, or a test that guards it.
 Loop over cases inside one cell rather than writing a function to call once
 per case, and inline a function that stops being reused.
-Reusable code lives in the notebook that owns the concept; others import it.
 
-Each `@app.function` is followed at once by a cell that calls it and
-displays the return, so the reader sees what it does before the next
-definition.
+Where a function lives:
+
+1. If a similar function exists anywhere in the project, generalize it
+   into a package module.
+2. Otherwise, if another current notebook can use it, make it a package
+   module.
+3. Otherwise it stays in its notebook.
+
+A package function takes columns, thresholds, and labels as arguments, so
+its signature says what it does, and shows itself in its docstring with a
+short example on a toy input.
+A function written for one notebook stays in it and calls the package.
+
+Each `@app.function` defined in a notebook is followed at once by a cell
+that calls it and displays the return, so the reader sees what it does
+before the next definition.
 A small sample is fine as input.
 A function that fetches runs on one small input behind a run button.
 
@@ -80,8 +97,8 @@ of the code (after Logan Smith, "How to write the perfect function").
 
 ## marimo mechanics
 
-- Imports, including cross-notebook imports, go in `with app.setup:`, which
-  may not reference any other cell's variables.
+- Imports go in `with app.setup:`, which may not reference any other
+  cell's variables.
 - Cell-local temporaries, loop variables included, are `_`-prefixed.
   Never define the same public name in two cells.
 - Never mutate an object another cell defined; marimo does not rerun
@@ -236,8 +253,9 @@ If nothing there supports a claim, say so and do not cite it.
 
 Worth a test: the fetch boundary (only `collect.py` and `tool_*` import
 anything that opens a connection), no `data/` paths or remote ids outside
-`config.py` and `collect.py`, no issue numbers in notebooks, and functions
-other notebooks import.
+`config.py` and `collect.py`, no issue numbers in notebooks, and package
+functions (a test for each, and the example in its docstring run as a
+doctest).
 Not prose or section order.
 Add a test for a rule after it has been broken in practice.
 
