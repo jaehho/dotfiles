@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
-# hypr-failed-units — the waybar 󰀨 click menu (and the settings panel row).
+# hypr-failed-units — the waybar 󰀨 click handler (and the settings panel row).
 #
-# The menu lists each failed unit once. Picking a row opens its status in a
-# tmux pane and prints the journalctl command to copy. The map is rebuilt on
-# each open; waybar is never restarted for this (its menu-file is read once
-# at startup, and a restart drops the SNI tray host, which pops tray-hidden
-# apps such as Spotify).
+# Opens the failed unit(s) in a tmux pane: status first, then the journalctl
+# line to copy, then a shell. No picker. If nothing has failed, a notify.
+# Waybar is never restarted for this (a bar load drops the SNI tray host and
+# pops tray-hidden apps such as Spotify).
 #
-#   hypr-failed-units          same as menu (settings panel)
-#   hypr-failed-units menu     rofi picker at the pointer
-#   hypr-failed-units open N   open map row N's status in a tmux pane
+#   hypr-failed-units          open the failed unit(s) in a tmux pane
+#   hypr-failed-units open N   open map row N only
 set -euo pipefail
 
 PANE="$HOME/.local/bin/hypr-pane"
@@ -18,7 +16,7 @@ MAP="$STATE/failed-units.map"
 MAX_UNITS=12
 
 # ── gather ───────────────────────────────────────────────────────────────────
-# Map lines: "scope<TAB>unit". Menu rows follow the same order.
+# Map lines: "scope<TAB>unit". Pane content follows the same order.
 write_map() {
     mkdir -p "$STATE"
     local tmp scope flag unit
@@ -38,59 +36,51 @@ write_map() {
     mv "$tmp" "$MAP"
 }
 
-# ── open one view in a tmux pane ─────────────────────────────────────────────
+# ── pane script ──────────────────────────────────────────────────────────────
 sh_quote() {
     local s=$1
     printf "'%s'" "${s//\'/\'\\\'\'}"
 }
 
-open_index() {  # $1: map row number
-    local n=$1 scope unit
-    local -a cmd
-    [ -f "$MAP" ] || { echo "hypr-failed-units: no map at $MAP" >&2; exit 1; }
-    IFS=$'\t' read -r scope unit < <(sed -n "$((n + 1))p" "$MAP")
-    [ -n "${scope:-}" ] || { echo "hypr-failed-units: map row $n missing" >&2; exit 1; }
-    local flag=""
-    [ "$scope" = user ] && flag="--user"
-    if [ -n "$flag" ]; then
-        cmd=(systemctl --user status "$unit" --no-pager -l)
+# Build the pane script with real newlines. A single-quoted '\n' is a
+# literal backslash-n and leaves `echo\necho` as one command name.
+pane_open() {  # "$@" = map row numbers (default: every row)
+    local scope unit flag a inner=""
+    local -a rows=() cmd
+    if [ "$#" -gt 0 ]; then
+        rows=("$@")
     else
-        cmd=(systemctl status "$unit" --no-pager -l)
+        local n=0
+        while IFS= read -r _; do rows+=("$n"); n=$((n + 1)); done <"$MAP"
     fi
-    # Build the pane script with real newlines. A single-quoted '\n' is a
-    # literal backslash-n and leaves `echo\necho` as one command name.
-    local inner="" a
-    for a in "${cmd[@]}"; do inner+=$(sh_quote "$a")' '; done
-    inner+=$'\n'
-    inner+="echo"$'\n'
-    inner+="echo \"journal: journalctl${flag:+ $flag} -u $(sh_quote "$unit")\""$'\n'
+    [ "${#rows[@]}" -gt 0 ] || {
+        notify-send -u low 'Failed units' 'Nothing failed in either scope.'
+        return 0
+    }
+    for n in "${rows[@]}"; do
+        IFS=$'\t' read -r scope unit < <(sed -n "$((n + 1))p" "$MAP")
+        [ -n "${scope:-}" ] || continue
+        flag=""
+        [ "$scope" = user ] && flag="--user"
+        if [ -n "$flag" ]; then
+            cmd=(systemctl --user status "$unit" --no-pager -l)
+        else
+            cmd=(systemctl status "$unit" --no-pager -l)
+        fi
+        for a in "${cmd[@]}"; do inner+=$(sh_quote "$a")' '; done
+        inner+=$'\n'
+        inner+="echo"$'\n'
+        inner+="echo \"journal: journalctl${flag:+ $flag} -u $(sh_quote "$unit")\""$'\n'
+        inner+="echo"$'\n'
+    done
     inner+="exec fish"
     exec "$PANE" -- sh -c "$inner"
 }
 
-# ── picker (waybar on-click and the settings panel) ──────────────────────────
-# rofi, same as hypr-cliphist / hypr-share-menu. Kept over waybar's menu-file
-# (needs a bar load) and a custom Gtk popup (more code than it is worth).
-menu_pick() {
-    local labels=() scope unit pick
-    [ -s "$MAP" ] || {
-        notify-send -u low 'Failed units' 'Nothing failed in either scope.'
-        return 0
-    }
-    while IFS=$'\t' read -r scope unit; do
-        labels+=("$scope · $unit")
-    done <"$MAP"
-    pick=$(printf '%s\n' "${labels[@]}" |
-        rofi -dmenu -i -p "Failed units" -format i) || exit 0
-    [ -n "$pick" ] || exit 0
-    open_index "$pick"
-}
-
-case "${1:-menu}" in
-    open) shift; open_index "${1:?open needs a row index}" ;;
-    menu)
-        write_map
-        menu_pick
-        ;;
-    *) echo "usage: hypr-failed-units [menu|open N]" >&2; exit 2 ;;
-esac
+write_map
+if [ "${1:-}" = "open" ]; then
+    shift
+    pane_open "${1:?open needs a row index}"
+else
+    pane_open
+fi

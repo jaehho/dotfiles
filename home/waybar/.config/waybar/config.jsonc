@@ -81,13 +81,12 @@
         ]
     },
     // Hidden while nothing has failed. Counts system and user units alike.
-    // Click opens hypr-failed-units' own Gtk menu at the pointer (same look
-    // as power/reboot). Not waybar's menu-file: that is read once per bar
-    // load, and any load (pkill or SIGUSR2 reload) drops the SNI tray host
+    // Click opens the failed unit(s) in a tmux pane (status + journal line).
+    // No picker, and never a bar load for this: that drops the SNI tray host
     // and pops tray-hidden Spotify.
     "systemd-failed-units": {
         "format": "󰀨 {nr_failed}",
-        "on-click": "~/.local/bin/hypr-failed-units menu"
+        "on-click": "~/.local/bin/hypr-failed-units"
     },
     // Glyphs only; numbers and details drop down in the tooltip on hover
     "group/load": {
