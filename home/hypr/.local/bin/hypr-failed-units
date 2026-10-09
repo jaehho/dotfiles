@@ -3,12 +3,12 @@
 #
 # The menu lists each failed unit once. Picking a row opens its status in a
 # tmux pane and prints the journalctl command to copy. The map is rebuilt on
-# each open. The popup is our own layer-shell Gtk menu, styled like waybar's
-# power/reboot menus. Waybar is never restarted or reloaded for this: both
-# drop the SNI tray host and pop tray-hidden apps such as Spotify.
+# each open; waybar is never restarted for this (its menu-file is read once
+# at startup, and a restart drops the SNI tray host, which pops tray-hidden
+# apps such as Spotify).
 #
 #   hypr-failed-units          same as menu (settings panel)
-#   hypr-failed-units menu     Gtk menu at the pointer
+#   hypr-failed-units menu     rofi picker at the pointer
 #   hypr-failed-units open N   open map row N's status in a tmux pane
 set -euo pipefail
 
@@ -68,127 +68,29 @@ open_index() {  # $1: map row number
     exec "$PANE" -- sh -c "$inner"
 }
 
-# ── popup: same Gtk look as waybar's power menu ──────────────────────────────
-# waybar's menu-file is read once per bar load, and any load (pkill or
-# SIGUSR2 reload) drops the SNI tray host. A layer-shell window can pop at
-# the cursor without touching the bar. Styled from waybar style.css's menu
-# block (Catppuccin Mocha, 12px window / 8px item radii).
-menu_popup() {
-    STATE="$STATE" python3 - <<'PY'
-import os, sys, subprocess
-import gi
-gi.require_version("Gtk", "3.0")
-gi.require_version("Gdk", "3.0")
-gi.require_version("GtkLayerShell", "0.1")
-from gi.repository import Gdk, GLib, Gtk, GtkLayerShell
-
-state = os.environ["STATE"]
-path = os.path.join(state, "failed-units.map")
-rows = []
-if os.path.isfile(path):
-    with open(path) as fh:
-        for i, line in enumerate(fh):
-            if not line.strip():
-                continue
-            scope, unit = line.rstrip("\n").split("\t", 1)
-            rows.append((i, f"{scope} · {unit}"))
-
-if not rows:
-    subprocess.run(["notify-send", "-u", "low", "Failed units",
-                    "Nothing failed in either scope."], check=False)
-    sys.exit(0)
-
-try:
-    out = subprocess.check_output(["hyprctl", "cursorpos"], text=True)
-    x, y = (int(p) for p in out.strip().split(",", 1))
-except Exception:
-    x, y = 400, 300
-
-# Menu chrome, matching waybar's menu / menuitem rules.
-css = b"""
-window { background: transparent; }
-.menu {
-    background-color: #1e1e2e;
-    color: #cdd6f4;
-    border: 1px solid rgba(137, 180, 250, 0.18);
-    border-radius: 12px;
-    padding: 4px;
-    font: 11px "Inter", "Cantarell", sans-serif;
-}
-.row {
-    border-radius: 8px;
-    padding: 4px 12px;
-}
-.row:hover { background-color: rgba(137, 180, 250, 0.14); }
-"""
-provider = Gtk.CssProvider()
-provider.load_from_data(css)
-screen = Gdk.Screen.get_default()
-if screen is not None:
-    Gtk.StyleContext.add_provider_for_screen(
-        screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-
-# Full-output catcher: a click anywhere else dismisses, like a real menu.
-win = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
-win.set_title("failed-units")
-GtkLayerShell.init_for_window(win)
-GtkLayerShell.set_layer(win, GtkLayerShell.Layer.OVERLAY)
-for edge in (GtkLayerShell.Edge.TOP, GtkLayerShell.Edge.LEFT,
-             GtkLayerShell.Edge.RIGHT, GtkLayerShell.Edge.BOTTOM):
-    GtkLayerShell.set_anchor(win, edge, True)
-GtkLayerShell.set_namespace(win, "failed-units-menu")
-GtkLayerShell.set_keyboard_mode(win, GtkLayerShell.KeyboardMode.ON_DEMAND)
-
-overlay = Gtk.EventBox()
-overlay.set_visible_window(False)
-outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-outer.set_halign(Gtk.Align.START)
-outer.set_valign(Gtk.Align.START)
-outer.set_margin_top(max(0, y))
-outer.set_margin_start(max(0, x))
-overlay.add(outer)
-win.add(overlay)
-
-box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-box.get_style_context().add_class("menu")
-outer.pack_start(box, False, False, 0)
-
-def close(*_args):
-    win.destroy()
-    return False
-
-def on_pick(_row, n):
-    win.destroy()
-    # Same argv shape as the old menu-actions "itemN" commands.
-    os.execv(os.path.expanduser("~/.local/bin/hypr-failed-units"),
-             ["hypr-failed-units", "open", str(n)])
-
-for i, label in rows:
-    row = Gtk.EventBox()
-    row.get_style_context().add_class("row")
-    lab = Gtk.Label(label=label, xalign=0)
-    lab.set_margin_top(2)
-    lab.set_margin_bottom(2)
-    lab.set_margin_start(8)
-    lab.set_margin_end(8)
-    row.add(lab)
-    row.connect("button-press-event", lambda _w, _e, n=i: on_pick(None, n))
-    box.pack_start(row, False, False, 0)
-
-overlay.connect("button-press-event", lambda *_: close())
-win.connect("key-press-event", lambda _w, ev: close() if ev.keyval == Gdk.KEY_Escape else False)
-win.connect("destroy", Gtk.main_quit)
-win.show_all()
-win.present()
-Gtk.main()
-PY
+# ── picker (waybar on-click and the settings panel) ──────────────────────────
+# rofi, same as hypr-cliphist / hypr-share-menu. Kept over waybar's menu-file
+# (needs a bar load) and a custom Gtk popup (more code than it is worth).
+menu_pick() {
+    local labels=() scope unit pick
+    [ -s "$MAP" ] || {
+        notify-send -u low 'Failed units' 'Nothing failed in either scope.'
+        return 0
+    }
+    while IFS=$'\t' read -r scope unit; do
+        labels+=("$scope · $unit")
+    done <"$MAP"
+    pick=$(printf '%s\n' "${labels[@]}" |
+        rofi -dmenu -i -p "Failed units" -format i) || exit 0
+    [ -n "$pick" ] || exit 0
+    open_index "$pick"
 }
 
 case "${1:-menu}" in
     open) shift; open_index "${1:?open needs a row index}" ;;
     menu)
         write_map
-        menu_popup
+        menu_pick
         ;;
     *) echo "usage: hypr-failed-units [menu|open N]" >&2; exit 2 ;;
 esac
