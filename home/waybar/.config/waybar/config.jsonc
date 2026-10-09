@@ -127,6 +127,9 @@
         // "default" sorts normal workspaces by id then specials last. "number"
         // would throw on the specials' glyph names and fall back to string order.
         "sort-by": "default",
+        // The asst GUI test harness parks its dev window on a silent workspace
+        // by this name; it is machinery, not a place to work.
+        "ignore-workspaces": ["^asstdev$"],
         // No "on-click": the workspace button's own handler switches, and needs
         // waybar-git (0.15.0 sends legacy dispatch strings the Lua config
         // rejects, so only the window icons would respond).
