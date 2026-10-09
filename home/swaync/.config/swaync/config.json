@@ -64,5 +64,14 @@
       "state": "ignored",
       "app-name": "(?i)spotify"
     }
+  },
+
+  "scripts": {
+    "screenshot-open": {
+      "exec": "screenshot open",
+      "run-on": "action",
+      "app-name": "^screenshot$",
+      "summary": "^Screenshot saved$"
+    }
   }
 }

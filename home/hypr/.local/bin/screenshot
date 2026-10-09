@@ -2,6 +2,7 @@
 # Capture screenshot via grim/slurp with notification feedback.
 #
 # Usage: screenshot <full|region|window|monitor> <copy|clip>
+#        screenshot open
 #
 # Modes:
 #   full     — all outputs
@@ -12,7 +13,16 @@
 # Actions:
 #   copy     — save to $SCREENSHOT_DIR + clipboard + notification
 #   clip     — clipboard only, no disk persistence
+#
+# `screenshot open` is the swaync ACTION script (config.json). It opens
+# $SWAYNC_BODY, the absolute path the saved notification carries. No
+# notify-send --wait helper: the daemon invokes this on click, in the
+# popup or later in the panel, for as long as the notification exists.
 set -euo pipefail
+
+if [ "${1:-}" = open ]; then
+    exec xdg-open "${SWAYNC_BODY:?swaync did not pass a path}"
+fi
 
 dir=${SCREENSHOT_DIR:-$HOME/Media/screenshots}
 mkdir -p "$dir"
@@ -30,24 +40,10 @@ notify() {
     fi
 }
 
-# notify-send with a default action that opens the file. -A implies
-# --wait, so detach and let the helper outlive the script — clicking
-# the notification fires xdg-open against $file.
-#
-# Do not pass -t: libnotify uses expire-time as the *maximum wait*, so
-# -t 5000 killed the helper when the popup hid. The panel copy stays
-# clickable after that, but nothing was left to receive ActionInvoked.
-# Popup lifetime is swaync's timeout (config.json).
-notify_open() {
-    local file=$1
-    (
-        action=$(notify-send -A "default=Open" -i "$file" \
-            "Screenshot saved" "$(basename "$file")" 2>/dev/null) || true
-        if [ "$action" = "default" ]; then
-            xdg-open "$file" >/dev/null 2>&1 || true
-        fi
-    ) </dev/null >/dev/null 2>&1 &
-    disown
+# Fire-and-forget. Body is the absolute path so `screenshot open` (see
+# swaync scripts) can open it without this process staying alive.
+notify_saved() {
+    notify-send -a screenshot -i "$1" "Screenshot saved" "$1"
 }
 
 tmp=$(mktemp --suffix=.png)
@@ -81,7 +77,7 @@ case "$action" in
     copy)
         cp "$tmp" "$file"
         wl-copy --type image/png < "$file"
-        notify_open "$file"
+        notify_saved "$file"
         ;;
     clip)
         wl-copy --type image/png < "$tmp"
