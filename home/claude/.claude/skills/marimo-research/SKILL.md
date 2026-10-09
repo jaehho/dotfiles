@@ -50,9 +50,15 @@ Where a function lives:
 3. Otherwise it stays in its notebook.
 
 A package function takes columns, thresholds, and labels as arguments, so
-its signature says what it does, and shows itself in its docstring with a
-short example on a toy input.
+its signature says what it does.
 A function written for one notebook stays in it and calls the package.
+
+A package docstring has the content that PEP 257 and numpydoc define:
+a summary line, an extended summary of behavior, `Parameters`, `Returns`,
+`Raises`, `See Also`, `Notes`, and `Examples`.
+Go no further than those standards do.
+An example is a doctest on a small input, with generic names and values;
+it uses the project's column names only when the function needs them.
 
 Each `@app.function` defined in a notebook is followed at once by a cell
 that calls it and displays the return, so the reader sees what it does
