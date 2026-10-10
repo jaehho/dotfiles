@@ -58,6 +58,7 @@
       "manim": "on",
       "cetz": "off",
       "orcaslicer-presets": "off",
+      "pptx": "off",
       "touying-author": "off",
       "typst-packages": "off"
     }

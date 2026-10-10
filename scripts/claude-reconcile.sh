@@ -342,13 +342,15 @@ fi
 # typable as /name). settings.json -> skillOverrides is derived, so a newly
 # added skill is opted out without touching settings by hand. Plugin-provided
 # skills ignore skillOverrides entirely; gate those via enabledPlugins.
+# A name in listing.overrides that we do not install (a skill in the synced
+# bucket, say) is written as well, so it can be turned off from here.
 
 step "Skill listing overrides"
 listing_default=$(jq -r '.listing.default // "user-invocable-only"' "$RECONCILE_DIR/skills-sources.json")
 desired_overrides=$(printf '%s\n' "$desired_skills" | jq -R . | jq -s \
   --arg def "$listing_default" \
   --argjson ov "$(jq -c '.listing.overrides // {}' "$RECONCILE_DIR/skills-sources.json")" \
-  'map({key: ., value: ($ov[.] // $def)}) | from_entries | with_entries(select(.value != "on"))')
+  '(. + ($ov | keys)) | unique | map({key: ., value: ($ov[.] // $def)}) | from_entries | with_entries(select(.value != "on"))')
 current_overrides=$(jq -cS '.skillOverrides // {}' "$SETTINGS_JSON")
 
 if [ "$current_overrides" = "$(printf '%s' "$desired_overrides" | jq -cS .)" ]; then

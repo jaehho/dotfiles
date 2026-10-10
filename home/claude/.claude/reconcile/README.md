@@ -20,7 +20,11 @@ removals. See the script's `--help` for the manual removal flow.
   `../skills/`) gets `listing.default`, unless named in `listing.overrides`.
   Its `managed` list names entries in `~/.claude/skills/` that Claude Code
   itself owns (today `synced`, the claude.ai skill-sync bucket): kept, never
-  pruned, never a listing override.
+  pruned, never a listing override. A name in `listing.overrides` that the
+  reconcile does not install is still written to `skillOverrides`; that is how
+  a synced skill is turned off (`pptx`). The Claude Code docs are silent on
+  this for synced skills; a fresh `claude -p` skill listing confirmed it on
+  2026-10-09, and a `Skill(...)` deny rule did not hide the skill.
 
 The plugin set lives in the parent `settings.json` under `enabledPlugins` (a
 plugin is "kept" iff its key is `true`; `false` keeps it installed but disabled;
