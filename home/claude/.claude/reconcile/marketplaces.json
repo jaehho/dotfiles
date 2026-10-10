@@ -3,12 +3,12 @@
     "source": "github",
     "repo": "anthropics/claude-plugins-official"
   },
-  "zai-coding-plugins": {
-    "source": "github",
-    "repo": "zai-org/zai-coding-plugins"
-  },
   "marimo-pair": {
     "source": "github",
     "repo": "marimo-team/marimo-pair"
+  },
+  "cloudflare": {
+    "source": "github",
+    "repo": "cloudflare/skills"
   }
 }

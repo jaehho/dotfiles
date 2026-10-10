@@ -23,6 +23,7 @@
 - `!` commands have no TTY, so anything that prompts (sudo, `ssh -t`, pickers) needs a separate terminal.
 - Unfamiliar or possibly-new names are lookup prompts, not inference prompts; assume anything may postdate training data. Check docs or source before asserting, and say what remains unverified. This includes the defaults and behavior of tools I already know (a linter's default rule set, a flag's default): read the docs or run the tool's own CLI, not memory. For cited works, check Zotero before web search.
 - Exercise the path I will hear, see, or click, or say which narrower thing you checked.
+- Before running a sync, reconcile, or apply script, read all of its dry-run output and apply only the changes I asked for.
 
 ## Projects
 

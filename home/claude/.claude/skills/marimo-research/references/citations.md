@@ -6,6 +6,10 @@ SKILL.md has the rules that always apply.
 Claims from the literature come from the user's Zotero library, checked
 before any web search.
 If nothing there supports a claim, say so and do not cite it.
+A claim that rests on a conversation is attributed to the person by
+name as personal communication.
+A claim with no source is computed from the data in the notebook or
+left out.
 
 - Find the item with `zotero_search_items`, its highlights with
   `zotero_get_annotations`, an unmarked passage with

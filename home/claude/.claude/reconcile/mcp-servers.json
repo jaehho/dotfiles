@@ -7,12 +7,5 @@
       "ZOTERO_LIBRARY_ID": "${ZOTERO_LIBRARY_ID}",
       "ZOTERO_LIBRARY_TYPE": "user"
     }
-  },
-  "obsidian": {
-    "type": "http",
-    "url": "http://127.0.0.1:27123/mcp/",
-    "headers": {
-      "Authorization": "Bearer ${OBSIDIAN_API_KEY}"
-    }
   }
 }

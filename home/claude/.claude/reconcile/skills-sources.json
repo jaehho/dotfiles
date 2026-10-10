@@ -1,50 +1,14 @@
 {
   "sources": {
-    "apcamargo": {
-      "url": "https://github.com/apcamargo/typst-skills.git",
-      "ref": "2855d089f420ee7677ef2f504f4277e00535b9a3"
-    },
-    "edoardob90": {
-      "url": "https://github.com/edoardob90/typst-cetz-skills.git",
-      "ref": "0dc263403a9eea83f79c7e75b48d4b00206630a0"
-    },
-    "lucifer1004": {
-      "url": "https://github.com/lucifer1004/claude-skill-typst.git",
-      "ref": "2afb9a3ac5dd45f682acd61bd57621fe23b4d627"
-    },
     "pbakaus": {
       "url": "https://github.com/pbakaus/impeccable.git",
       "ref": "cb56ed6c19a07329a9fa0cd4e657bee040156593"
-    },
-    "WH-2099": {
-      "url": "https://github.com/WH-2099/mermaid-skill.git",
-      "ref": "982d9035231312c527197501a882cf6c8f4394cc"
     }
   },
   "skills": {
-    "touying-author": {
-      "source": "apcamargo",
-      "path": "touying-author"
-    },
-    "typst-author": {
-      "source": "apcamargo",
-      "path": "typst-author"
-    },
-    "cetz": {
-      "source": "edoardob90",
-      "path": "cetz"
-    },
-    "typst-packages": {
-      "source": "lucifer1004",
-      "path": "skills/typst"
-    },
     "impeccable": {
       "source": "pbakaus",
       "path": "plugin/skills/impeccable"
-    },
-    "mermaid": {
-      "source": "WH-2099",
-      "path": ".claude/skills/mermaid"
     }
   },
   "managed": ["synced"],
@@ -54,13 +18,20 @@
       "gui-testing": "on",
       "marimo-research": "on",
       "read-article": "on",
-      "mermaid": "on",
       "manim": "on",
-      "cetz": "off",
       "orcaslicer-presets": "off",
       "pptx": "off",
-      "touying-author": "off",
-      "typst-packages": "off"
+      "built-in-browser": "off",
+      "chrome-browser": "off",
+      "computer-use": "off",
+      "docs": "off",
+      "docx": "off",
+      "google-workspace": "off",
+      "import-memory": "off",
+      "morning": "off",
+      "pdf": "off",
+      "skill-creator": "off",
+      "xlsx": "off"
     }
   }
 }
