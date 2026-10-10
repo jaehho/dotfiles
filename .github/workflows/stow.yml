@@ -1,0 +1,14 @@
+# Every package must stow into an empty home without conflicts. Two
+# packages claiming one path, or a file that cannot link, fail here
+# instead of at the next restow.
+name: stow
+
+on: [push, pull_request]
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y stow
+      - run: stow --no-folding -n -v -d home -t "$(mktemp -d)" $(ls home)
