@@ -1,62 +1,71 @@
 # Dotfiles
 
-Configs and root files for Arch + Hyprland and Ubuntu/Debian. Stow for
-`~`, a small apply script for `/etc`. You run upgrades and apply when you
-want; nothing runs on a timer.
+Config files for my machines. Stow for `~`, a short recipe for `/etc`. No
+timers, no package list, no wrapper commands.
 
 ## Layout
 
 ```
-home/       stow packages -> ~ (fish, hypr, nvim, kitty, …)
-system/     root-owned files -> /etc (grub, PAM, udev, NM, keyd, …)
-packages/   bootstrap.txt: portable tools for a new machine
-scripts/    apply, bootstrap, claude-reconcile, server
-hosts/      per-host choices (stow drops, no-aaaa)
+home/     stow packages (fish, hypr, nvim, kitty, …)
+system/   root files and the commands to install them (see system/README.md)
+docs/     color taste, config-drift guide, writing rules for CLAUDE.md
 ```
 
 ## Day to day
 
-```bash
-stow -d home -t ~ <pkg>       # one package, after adding a file to it
-scripts/apply.sh              # all stow packages + user units
-sudo scripts/apply.sh system  # /etc + boot copies, after editing system/
+Linked files are already live. Edit under `home/` or `system/` and the
+running tool sees the change. After you **add** a file to a stow package:
+
+```sh
+stow --no-folding -d home -t ~ <pkg>
 ```
 
-Linked files are already live: edit `home/...` or `system/...` and the
-running tool sees it. Stow and apply pick up new files and replace lost
-links. Root copies cannot be symlinks into `/home`; apply installs those
-and rebuilds grub/initramfs when they change. Guide: `docs/config-drift.html`.
+After you edit something under `system/`, run the matching commands in
+`system/README.md` (links or copies; grub/initramfs rebuild when those
+change). Guide to what drifts and why: `docs/config-drift.html`.
 
 ## New machine
 
-```bash
+```sh
 git clone https://github.com/jaehho/dotfiles.git ~/dotfiles
-sudo ~/dotfiles/scripts/bootstrap.sh
+cd ~/dotfiles
+stow --no-folding -d home -t ~ <pkgs>
+sudo sh system/README.md   # read it first; it is a list of commands, not a script
 ```
 
-Installs `packages/bootstrap.txt`, asks the per-host questions, applies
-configs. Hyprland and the desktop stack are commented in that file; uncomment
-them on a laptop.
+Install tools with the distro package manager. I do not track them here.
+On a Hyprland laptop that means the usual stack (hyprland, waybar, rofi,
+kitty, …) plus whatever I installed on the old machine
+(`pacman -Qqe` / `apt-mark showmanual` is the inventory).
 
-## Claude
+A few stow packages have one-off notes:
 
-Plugin/skill/MCP state can be kept declarative under
-`home/claude/.claude/reconcile/`; run `scripts/claude-reconcile.sh` (see
-`--help`) when that set changes. It is not part of apply.
+- `mime` — `mimeapps.list` is an absolute symlink (GLib safe-write).
+- `tmux` — TPM and catppuccin/tmux are git clones under `~/.tmux` and
+  `~/.config/tmux/plugins`.
+- `theme` — run `bat cache --build` after it lands.
+- `hypr` — user units (wallhelper-fetch, swayosd, awatcher, …) are
+  `systemctl --user enable --now` the first time.
+- `laptop` — desktop helpers; keep this package off servers.
 
 ## Server (wonlab)
 
-```bash
-scripts/server.sh             # or from the laptop: ssh wonlab '~/dotfiles/scripts/server.sh'
+```sh
+ssh wonlab
+cd ~/dotfiles && git pull
+stow --no-folding -d home -t ~ fish git tmux nvim claude theme bin
 ```
 
-Stows the server set (fish, git, tmux, nvim, claude, theme, bin). Nothing
-runs on a timer there either. `home/laptop` stays off the server. Provider
-keys for `claude-open` (`~/.config/{zai,mimo,openrouter}.env`) are never
-synced; copy them by hand.
+`home/laptop` stays off the server. Provider keys for `claude-open`
+(`~/.config/{zai,mimo,openrouter}.env`) are never in the repo.
+
+## Claude
+
+`home/claude/` stows settings, hooks, and skills. Manage plugins and MCP
+servers in `~/.claude` by hand (or with `/plugin`, `/mcp`); this repo does
+not reconcile them.
 
 ## Troubleshooting
 
 Known traps are GitHub issues labeled [`gotcha`](https://github.com/jaehho/dotfiles/issues?q=label%3Agotcha).
-Design choices are `decision` issues. Search both before changing broken
-behavior.
+Design choices are [`decision`](https://github.com/jaehho/dotfiles/issues?q=label%3Adecision).

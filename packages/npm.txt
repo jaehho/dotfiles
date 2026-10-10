@@ -1,6 +1,0 @@
-@mermaid-js/mermaid-cli
-mermaid-filter
-ccusage
-neovim
-typescript
-typescript-language-server

@@ -11,16 +11,33 @@
   },
   "model": "sonnet",
   "skillOverrides": {
-    "cetz": "off",
+    "built-in-browser": "off",
+    "chrome-browser": "off",
+    "computer-use": "off",
+    "docs": "off",
+    "docx": "off",
+    "google-workspace": "off",
     "impeccable": "user-invocable-only",
+    "import-memory": "off",
+    "morning": "off",
     "orcaslicer-presets": "off",
-    "touying-author": "off",
-    "typst-author": "user-invocable-only",
-    "typst-packages": "off"
+    "pdf": "off",
+    "pptx": "off",
+    "skill-creator": "off",
+    "xlsx": "off"
   },
   "deniedMcpServers": [
     {
       "serverUrl": "https://gmailmcp.googleapis.com/mcp/v1"
+    },
+    {
+      "serverUrl": "https://drivemcp.googleapis.com/mcp/v1"
+    },
+    {
+      "serverUrl": "https://api.anthropic.com/v1/pages/mcp"
+    },
+    {
+      "serverUrl": "https://api.ibkr.com/v1/api/mcp"
     }
   ],
   "hooks": {
@@ -68,22 +85,10 @@
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
-    "claude-md-management@claude-plugins-official": false,
-    "pyright-lsp@claude-plugins-official": true,
-    "rust-analyzer-lsp@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": false,
-    "lua-lsp@claude-plugins-official": true,
-    "glm-plan-usage@zai-coding-plugins": false,
-    "cowork-plugin-management@synced": false,
-    "marimo-pair@marimo-pair": true
+    "marimo-pair@marimo-pair": true,
+    "skill-creator@anthropic-plugin-directory": true
   },
   "extraKnownMarketplaces": {
-    "zai-coding-plugins": {
-      "source": {
-        "source": "github",
-        "repo": "zai-org/zai-coding-plugins"
-      }
-    },
     "marimo-pair": {
       "source": {
         "source": "github",
@@ -100,7 +105,10 @@
       "effortLevel": "high"
     },
     "claude-sonnet-5-5": {
-      "effortLevel": "medium"
+      "effortLevel": "high"
+    },
+    "claude-haiku-5-5": {
+      "effortLevel": "xhigh"
     }
   },
   "tui": "fullscreen",
@@ -110,7 +118,7 @@
   "autoMode": {
     "soft_deny": [
       "$defaults",
-      "Bash(sudo pacman:*) — privileged package operations in this repo's converge flow; CLAUDE.md states sudo should never be run directly by the agent, prefer flagging for owner-run script instead",
+      "Bash(sudo pacman:*) — privileged package operations; CLAUDE.md states sudo should never be run directly by the agent, prefer flagging for owner-run script instead",
       "Bash(rm:* system/*) — deletions under boot-critical system/ paths in ~/dotfiles warrant confirmation given boot-critical nature noted in README/CLAUDE.md"
     ],
     "environment": [
@@ -138,7 +146,7 @@
       "**Primary use of Claude Code**: personal dotfiles / systems management (Arch + Hyprland, Ubuntu/Debian) — hobby/personal posture",
       "**Trusted repo**: ~/dotfiles (github.com/jaehho/dotfiles) — PUBLIC repo; only this repo's own work belongs here, confidential/personal material should not be committed regardless of visibility",
       "**Org-specific CLIs**: None configured (repo-specific tools observed: `dotfiles`, `stow`, `hyprctl`, `asst`, `claude-open`, `reel` — personal project tooling, not org CLIs)",
-      "routine under ~/dotfiles/ prefix: converge/sync operations (`./scripts/converge.sh`, `dotfiles sync`), stow operations, and edits under `home/`, `system/`, `scripts/` are routine project work"
+      "routine under ~/dotfiles/ prefix: stow operations and edits under `home/` and `system/` are routine project work"
     ]
   }
 }
