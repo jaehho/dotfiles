@@ -31,8 +31,6 @@ apply scripts, no `/etc` installer. Current work is GitHub issues.
 
 ## Docs
 
-- Colors: read `docs/color-preferences.md` before choosing or changing any
-  color.
 - Writing `CLAUDE.md`, rules, skills, or READMEs: read
   `docs/writing-claude-files.md`.
 - Known traps: issues labeled `gotcha` (open = not believed fixed). Search

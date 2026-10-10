@@ -128,7 +128,7 @@
       "**Repository visibility**: PUBLIC — github.com/jaehho/dotfiles (default branch: master)",
       "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
       "**Secrets management**: None configured",
-      "**Default / protected branches**: Default branch is `master`; no branch protection rules or rulesets listed via gh (treat as unprotected)",
+      "**Default / protected branches**: Default branch is `main`; no branch protection rules or rulesets listed via gh (treat as unprotected)",
       "**CI/CD deploy targets**: None configured",
       "**Network posture**: None configured",
       "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine with open internet",
@@ -145,8 +145,8 @@
       "### User-specific",
       "**Primary use of Claude Code**: personal dotfiles / systems management (Arch + Hyprland, Ubuntu/Debian) — hobby/personal posture",
       "**Trusted repo**: ~/dotfiles (github.com/jaehho/dotfiles) — PUBLIC repo; only this repo's own work belongs here, confidential/personal material should not be committed regardless of visibility",
-      "**Org-specific CLIs**: None configured (repo-specific tools observed: `dotfiles`, `stow`, `hyprctl`, `asst`, `claude-open`, `reel` — personal project tooling, not org CLIs)",
-      "routine under ~/dotfiles/ prefix: stow operations and edits under `home/` and `system/` are routine project work"
+      "**Org-specific CLIs**: None configured (repo-specific tools observed: `stow`, `hyprctl`, `asst`, `claude-open`, `reel` — personal project tooling, not org CLIs)",
+      "routine under ~/dotfiles/ prefix: stow operations and edits under `home/` are routine project work"
     ]
   }
 }
