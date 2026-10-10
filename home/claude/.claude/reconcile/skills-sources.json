@@ -19,10 +19,6 @@
     "WH-2099": {
       "url": "https://github.com/WH-2099/mermaid-skill.git",
       "ref": "982d9035231312c527197501a882cf6c8f4394cc"
-    },
-    "Yusuke710": {
-      "url": "https://github.com/Yusuke710/manim-skill.git",
-      "ref": "efb82d224201ce7f6f8d72f7ad972c8cd1b0a6ae"
     }
   },
   "skills": {
@@ -49,10 +45,6 @@
     "mermaid": {
       "source": "WH-2099",
       "path": ".claude/skills/mermaid"
-    },
-    "manim": {
-      "source": "Yusuke710",
-      "path": "skills/manim-skill"
     }
   },
   "managed": ["synced"],
