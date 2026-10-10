@@ -1,9 +1,17 @@
 -- Editor extras: tmux-aware splits, git diff viewer, activity watcher.
 return {
   { -- Smart split navigation + directional resizing (works across tmux panes)
+    -- v3 core has no multiplexer code. backend-tmux sets tmux's @pane-is-vim
+    -- and walks panes past the last Neovim split. Do not lazy load: until the
+    -- plugin runs, tmux treats the pane as a shell and swallows C-hjkl.
     'mrjones2014/smart-splits.nvim',
     lazy = false,
-    opts = {},
+    dependencies = {
+      { 'smart-splits-nvim/backend-tmux', main = 'smart-splits-backend-tmux' },
+    },
+    opts = {
+      mux = { backend = 'smart-splits-backend-tmux' },
+    },
     keys = {
       { '<C-h>', function() require('smart-splits').move_cursor_left() end, desc = 'Move to left split' },
       { '<C-j>', function() require('smart-splits').move_cursor_down() end, desc = 'Move to below split' },
