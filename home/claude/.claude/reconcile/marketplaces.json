@@ -6,9 +6,5 @@
   "marimo-pair": {
     "source": "github",
     "repo": "marimo-team/marimo-pair"
-  },
-  "cloudflare": {
-    "source": "github",
-    "repo": "cloudflare/skills"
   }
 }
