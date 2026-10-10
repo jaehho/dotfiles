@@ -77,9 +77,9 @@ return {
     end,
   },
 
-  { -- scripts/server.sh runs :MasonToolsUpdateSync from this plugin.
-    -- run_on_start off: headless `+qa` in that script would otherwise abort
-    -- whatever the startup install had open, and the log grep reads as failure.
+  { -- Install or update with :MasonToolsUpdateSync.
+    -- run_on_start off: a startup install would run on every nvim launch,
+    -- headless `+qa` included.
     'WhoIsSethDaniel/mason-tool-installer.nvim',
     dependencies = { 'mason-org/mason.nvim' },
     opts = {

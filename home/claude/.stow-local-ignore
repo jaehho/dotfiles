@@ -32,10 +32,7 @@
 ^/\.claude/ide
 ^/\.claude/\.ide
 
-# Installed by the plugin system or the reconcile
+# Installed by the plugin system
 ^/\.claude/plugins
 ^/\.claude/commands
 ^/\.claude/skills
-
-# Reconcile manifests — read by scripts/claude-reconcile.sh, not by Claude Code
-^/\.claude/reconcile

@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Dotfiles status
-Comment=What would dotfiles apply change?
-Exec=dotfiles status
-Icon=emblem-synchronizing-symbolic
-Terminal=true
-Categories=System;Settings;

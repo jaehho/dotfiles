@@ -31,7 +31,7 @@ vim.opt.inccommand = 'split'
 -- Session options: include localoptions so filetype/highlighting restore correctly
 vim.opt.sessionoptions = 'blank,buffers,curdir,folds,help,tabpages,winsize,winpos,localoptions'
 
--- scripts/server.sh installs treesitter parsers from this list
+-- Treesitter parsers nvim-treesitter installs (plugins/lsp.lua)
 vim.g.ts_parsers = {
   'bash', 'c', 'css', 'diff', 'html', 'javascript', 'json', 'lua', 'luadoc',
   'markdown', 'markdown_inline', 'python', 'query', 'regex', 'rust', 'toml',

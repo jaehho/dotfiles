@@ -89,24 +89,31 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("playerctld daemon")
 
     -- Tray apps: all started here, none from ~/.config/autostart (this session
-    -- runs no XDG autostart) or a user unit. Each starts with no window; the
-    -- flag or pref that does that is noted beside it.
+    -- runs no XDG autostart) or a user unit. Each starts with no window, with
+    -- the flag or pref that does that noted beside it, except Zotero and
+    -- Spotify. Zotero has no windowless start (-silent exits at once) and
+    -- Spotify maps its window under --minimized on both Wayland and XWayland,
+    -- so both open a window at login.
     hl.exec_cmd("udiskie --smart-tray")
     hl.exec_cmd("tailscale systray --theme dark")  -- dark: white dots on a black tile, like the bar
     hl.exec_cmd("steno gui --background")          -- meeting listener
     hl.exec_cmd("asst-gtk --background")           -- tasks (~/projects/asst)
     hl.exec_cmd("nextcloud --background")
     hl.exec_cmd("betterbird")                      -- prefs.js: mail.startupMinimized
-    hl.exec_cmd("ZOTERO_TRAY_START_HIDDEN=1 zotero") -- hide until tray click
+    hl.exec_cmd("zotero")
     -- spotify-launcher passes a URI but no flags, so update through it, then run
     -- the client it installed. Tray needs ui.minimize_to_tray in spotify/prefs.
     -- Wayland, because under XWayland a raised window takes no keys until the
     -- pointer enters it (same flags in hypr-spotify-toggle).
-    hl.exec_cmd("spotify-launcher --no-exec && ~/.local/share/spotify-launcher/install/usr/share/spotify/spotify --enable-features=UseOzonePlatform --ozone-platform=wayland --minimized")
+    hl.exec_cmd("spotify-launcher --no-exec && ~/.local/share/spotify-launcher/install/usr/share/spotify/spotify --enable-features=UseOzonePlatform --ozone-platform=wayland")
 
     -- Workspace management daemons
     hl.exec_cmd("hyprscratch init")
     hl.exec_cmd("hyprwhenthen run")
+
+    -- Desktop dashboard (bottom layer; lands on an empty workspace). Last, so
+    -- the daemons above are up before it switches workspace.
+    hl.exec_cmd("dash show")
 end)
 
 -------------------------------
