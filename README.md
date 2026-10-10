@@ -1,7 +1,8 @@
 # Dotfiles
 
-Stow packages under `home/`. Nothing else. No timers, no package list,
-no `/etc` installer, no wrapper commands.
+Git tracking for the dotfiles of one machine (Arch, Hyprland). Stow
+packages under `home/`; nothing else. No timers, no package list, no
+`/etc` installer, no wrapper commands.
 
 ## Layout
 
@@ -9,16 +10,6 @@ no `/etc` installer, no wrapper commands.
 home/   stow packages (fish, hypr, nvim, kitty, …)
 docs/   writing rules for CLAUDE.md, Catppuccin apply notes, history/
 ```
-
-## Packages by machine
-
-| Stowed | Packages |
-|---|---|
-| Laptop and wonlab | `bin` `claude` `fish` `git` `nvim` `theme` `tmux` |
-| wonlab only | `server` |
-| Laptop only | `audio` `codex` `hypr` `kitty` `laptop` `marimo` `mime` `restic` `rofi` `ssh` `sshfs` `sunshine` `swaync` `tailscale` `tridactyl` `visidata` `waybar` `zathura` |
-
-`laptop` is desktop helpers; keep it off servers.
 
 ## Day to day
 
@@ -38,17 +29,16 @@ All commands run from `~/dotfiles`. `$P` below is a package name, or
 Do not use `stow --adopt` for the last one: it overwrites the repo copy
 with the live file.
 
-## New machine
+## Restore after a reinstall
 
 ```sh
 git clone https://github.com/jaehho/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-stow --no-folding -d home -t ~ <pkgs>
+stow --no-folding -d home -t ~ $(ls home)
 ```
 
-Install tools with the distro package manager. They are not tracked
-here (`pacman -Qqe` / `apt-mark showmanual` on the old machine is the
-inventory).
+Install tools with `pacman`. They are not tracked here (`pacman -Qqe` is
+the inventory).
 
 One-offs inside packages:
 
@@ -61,17 +51,6 @@ One-offs inside packages:
 - `ssh` — `~/.ssh/jump_pass` is a real file, not in the repo
   (`chmod 600`); the config comment says how to create it.
 
-## Server (wonlab)
-
-```sh
-ssh wonlab
-cd ~/dotfiles && git pull
-stow --no-folding -d home -t ~ bin claude fish git nvim server theme tmux
-```
-
-Provider keys for `claude-open` (`~/.config/{zai,mimo,openrouter}.env`)
-are never in the repo.
-
 ## Claude
 
 `home/claude/` stows settings, hooks, and `CLAUDE.md`. The package's
@@ -83,6 +62,8 @@ ln -s ~/dotfiles/home/claude/.claude/skills/<name> ~/.claude/skills/<name>
 ```
 
 Manage plugins and MCP servers in `~/.claude` with `/plugin` and `/mcp`.
+Provider keys for `claude-open` (`~/.config/{zai,mimo,openrouter}.env`)
+are never in the repo.
 
 ## Machine /etc tweaks
 

@@ -16,8 +16,9 @@ apply scripts, no `/etc` installer. Current work is GitHub issues.
 
 ## Ownership
 
-- `home/bin` is server tools; `home/laptop` is desktop-only. New scripts go
-  in one or the other.
+- One machine (omnibook, Arch). No per-host or per-distro branches.
+- Scripts: `home/bin` for terminal tools, `home/laptop` for desktop
+  helpers, `home/hypr` for compositor glue.
 - Apps under `~/projects/` own their implementation. This repo owns their
   integration (hyprland.lua, Neovim lazy specs, stowed configs).
 - swaync is the jaehho fork in `~/projects/forks/swaync`. Native arrows and

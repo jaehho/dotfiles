@@ -16,8 +16,8 @@ end
 
 # ── Puppeteer (mermaid-cli / mermaid-filter) ─────────────────────────────────
 # Use the system Chromium-based browser instead of puppeteer's bundled ~150MB
-# Chrome download. First match wins; arch uses chrome, debian/ubuntu chromium.
-for _c in /usr/bin/google-chrome-stable /usr/bin/chromium /usr/bin/chromium-browser
+# Chrome download. First match wins.
+for _c in /usr/bin/google-chrome-stable /usr/bin/chromium
     if test -x $_c
         set -gx PUPPETEER_SKIP_DOWNLOAD 1
         set -gx PUPPETEER_EXECUTABLE_PATH $_c

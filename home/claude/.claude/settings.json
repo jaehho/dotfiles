@@ -143,7 +143,7 @@
       "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
       "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
       "### User-specific",
-      "**Primary use of Claude Code**: personal dotfiles / systems management (Arch + Hyprland, Ubuntu/Debian) — hobby/personal posture",
+      "**Primary use of Claude Code**: personal dotfiles / systems management (Arch + Hyprland) — hobby/personal posture",
       "**Trusted repo**: ~/dotfiles (github.com/jaehho/dotfiles) — PUBLIC repo; only this repo's own work belongs here, confidential/personal material should not be committed regardless of visibility",
       "**Org-specific CLIs**: None configured (repo-specific tools observed: `stow`, `hyprctl`, `asst`, `claude-open`, `reel` — personal project tooling, not org CLIs)",
       "routine under ~/dotfiles/ prefix: stow operations and edits under `home/` are routine project work"
