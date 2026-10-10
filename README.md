@@ -1,28 +1,23 @@
 # Dotfiles
 
-Config files for my machines. Stow for `~`, a short recipe for `/etc`. No
-timers, no package list, no wrapper commands.
+Stow packages under `home/`. Nothing else. No timers, no package list,
+no `/etc` installer, no wrapper commands.
 
 ## Layout
 
 ```
-home/     stow packages (fish, hypr, nvim, kitty, …)
-system/   root files and the commands to install them (see system/README.md)
-docs/     color taste, config-drift guide, writing rules for CLAUDE.md
+home/   stow packages (fish, hypr, nvim, kitty, …)
+docs/   color taste, config-drift guide, writing rules for CLAUDE.md
 ```
 
 ## Day to day
 
-Linked files are already live. Edit under `home/` or `system/` and the
-running tool sees the change. After you **add** a file to a stow package:
+Linked files are already live. Edit under `home/` and the running tool
+sees the change. After you **add** a file to a stow package:
 
 ```sh
 stow --no-folding -d home -t ~ <pkg>
 ```
-
-After you edit something under `system/`, run the matching commands in
-`system/README.md` (links or copies; grub/initramfs rebuild when those
-change). Guide to what drifts and why: `docs/config-drift.html`.
 
 ## New machine
 
@@ -30,15 +25,12 @@ change). Guide to what drifts and why: `docs/config-drift.html`.
 git clone https://github.com/jaehho/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 stow --no-folding -d home -t ~ <pkgs>
-sudo sh system/README.md   # read it first; it is a list of commands, not a script
 ```
 
-Install tools with the distro package manager. I do not track them here.
-On a Hyprland laptop that means the usual stack (hyprland, waybar, rofi,
-kitty, …) plus whatever I installed on the old machine
-(`pacman -Qqe` / `apt-mark showmanual` is the inventory).
+Install tools with the distro package manager. I do not track them here
+(`pacman -Qqe` / `apt-mark showmanual` on the old machine is the inventory).
 
-A few stow packages have one-off notes:
+One-offs inside packages:
 
 - `mime` — `mimeapps.list` is an absolute symlink (GLib safe-write).
 - `tmux` — TPM and catppuccin/tmux are git clones under `~/.tmux` and
@@ -62,8 +54,13 @@ stow --no-folding -d home -t ~ fish git tmux nvim claude theme bin
 ## Claude
 
 `home/claude/` stows settings, hooks, and skills. Manage plugins and MCP
-servers in `~/.claude` by hand (or with `/plugin`, `/mcp`); this repo does
-not reconcile them.
+servers in `~/.claude` by hand (or with `/plugin`, `/mcp`).
+
+## Machine /etc tweaks
+
+Not in this repo. They live in git history and the `gotcha` issues
+(keyd, DNS/resolved, nvidia, lid, udev wake). Rebuild them on a new
+machine from those.
 
 ## Troubleshooting
 

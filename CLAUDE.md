@@ -1,7 +1,7 @@
 # Dotfiles
 
-Stow packages under `home/`, root files under `system/`. No timers, no
-package manifests, no apply scripts. Current work is GitHub issues.
+Stow packages under `home/` only. No timers, no package manifests, no
+apply scripts, no `/etc` installer. Current work is GitHub issues.
 
 ## Working here
 
@@ -9,11 +9,8 @@ package manifests, no apply scripts. Current work is GitHub issues.
   work (`git checkout`/`restore` on a file reverts the running system).
 - Stow uses `--no-folding`. After adding a file to a package:
   `stow --no-folding -d home -t ~ <pkg>`.
-- Some `/etc` files must be real root copies, not symlinks into `/home`
-  (boot, udev, PAM, sandboxed readers, NM dispatchers). The commands are in
-  `system/README.md`. Do not invent another installer.
-- DNS belongs to systemd-resolved (stub link + NetworkManager). Preserve
-  Tailscale split DNS.
+- Do not add a machine-setup or `/etc` layer back. Those tweaks live in
+  git history and `gotcha` issues, not as a live source of truth here.
 - For privileged repairs, write a reviewed script in `/tmp/` for the owner;
   never run sudo.
 
@@ -39,8 +36,6 @@ package manifests, no apply scripts. Current work is GitHub issues.
 - Writing `CLAUDE.md`, rules, skills, or READMEs: read
   `docs/writing-claude-files.md`.
 - Known traps: issues labeled `gotcha` (open = not believed fixed). Search
-  open and closed before changing broken behavior. Symptom, evidence,
-  recovery, verification.
+  open and closed before changing broken behavior.
 - Design choices: issues labeled `decision` (closed once decided).
-- Long investigations: `docs/history/`. Issues take precedence over that
-  archive.
+- Long investigations: `docs/history/`. Issues take precedence.
