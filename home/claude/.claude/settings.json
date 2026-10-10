@@ -118,14 +118,13 @@
   "autoMode": {
     "soft_deny": [
       "$defaults",
-      "Bash(sudo pacman:*) — privileged package operations; CLAUDE.md states sudo should never be run directly by the agent, prefer flagging for owner-run script instead",
-      "Bash(rm:* system/*) — deletions under boot-critical system/ paths in ~/dotfiles warrant confirmation given boot-critical nature noted in README/CLAUDE.md"
+      "Bash(sudo pacman:*) — privileged package operations; CLAUDE.md states sudo should never be run directly by the agent, prefer flagging for owner-run script instead"
     ],
     "environment": [
       "### Org-wide",
       "**Organization**: None configured",
       "**Cloud provider(s)**: None configured",
-      "**Repository visibility**: PUBLIC — github.com/jaehho/dotfiles (default branch: master)",
+      "**Repository visibility**: PUBLIC — github.com/jaehho/dotfiles (default branch: main)",
       "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
       "**Secrets management**: None configured",
       "**Default / protected branches**: Default branch is `main`; no branch protection rules or rulesets listed via gh (treat as unprotected)",
