@@ -3,8 +3,10 @@
 #
 # Opens the failed unit(s) in a tmux pane: status first, then the journalctl
 # line to copy, then a shell. No picker. If nothing has failed, a notify.
-# Waybar is never restarted for this (a bar load drops the SNI tray host and
-# pops tray-hidden apps such as Spotify).
+# Each unit is a fake prompt block (OSC 133;A), so prefix C-y copies the last
+# unit's status and journal hint the same way it copies a real command's
+# output. Waybar is never restarted for this (a bar load drops the SNI tray
+# host and pops tray-hidden apps such as Spotify).
 #
 #   hypr-failed-units          open the failed unit(s) in a tmux pane
 #   hypr-failed-units open N   open map row N only
@@ -42,10 +44,24 @@ sh_quote() {
     printf "'%s'" "${s//\'/\'\\\'\'}"
 }
 
+# Prefix C-y ("copy last command and its output") walks OSC 133;A marks
+# (theme.fish). The dump is one prompt block per unit: mark on the context
+# line, a fake ❯ line, then status and the journal hint. C-y's two
+# cursor-downs from the mark land on the first status line, so the yank is
+# the message (status + journal hint), not the fake prompt. Without marks
+# there is no previous-prompt target and C-y collapses onto the live ❯
+# (gotcha #47).
+emit_prompt_block() {  # $1 = context, $2 = command text (no ❯)
+    inner+=$'\n'
+    inner+="printf '\\n\\033]133;A\\033\\\\'"$'\n'
+    inner+="echo $(sh_quote "$1")"$'\n'
+    inner+="echo $(sh_quote "❯ $2")"$'\n'
+}
+
 # Build the pane script with real newlines. A single-quoted '\n' is a
 # literal backslash-n and leaves `echo\necho` as one command name.
 pane_open() {  # "$@" = map row numbers (default: every row)
-    local scope unit flag a inner=""
+    local scope unit flag a display unit_q inner=""
     local -a rows=() cmd
     if [ "$#" -gt 0 ]; then
         rows=("$@")
@@ -62,15 +78,19 @@ pane_open() {  # "$@" = map row numbers (default: every row)
         [ -n "${scope:-}" ] || continue
         flag=""
         [ "$scope" = user ] && flag="--user"
+        unit_q=$(sh_quote "$unit")
         if [ -n "$flag" ]; then
             cmd=(systemctl --user status "$unit" --no-pager -l)
+            display="systemctl --user status $unit_q --no-pager -l"
         else
             cmd=(systemctl status "$unit" --no-pager -l)
+            display="systemctl status $unit_q --no-pager -l"
         fi
+        emit_prompt_block "$scope/$unit" "$display"
         for a in "${cmd[@]}"; do inner+=$(sh_quote "$a")' '; done
         inner+=$'\n'
         inner+="echo"$'\n'
-        inner+="echo \"journal: journalctl${flag:+ $flag} -u $(sh_quote "$unit")\""$'\n'
+        inner+="echo \"journal: journalctl${flag:+ $flag} -u $unit_q\""$'\n'
         inner+="echo"$'\n'
     done
     inner+="exec fish"
