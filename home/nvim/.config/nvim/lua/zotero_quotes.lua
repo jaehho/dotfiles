@@ -585,9 +585,9 @@ function M.pick(opts)
     -- item.preview table, not the file previewer (avoids "Item has no `file`")
     preview = 'preview',
     open_only = opts.open_only or false,
-    -- Snacks title chip: `t` while open-tabs mode is on (same as hidden `h`).
+    -- Snacks title chip: `o` while open-tabs mode is on (key is `O`, like `H`/`h`).
     toggles = {
-      open_only = 't',
+      open_only = 'o',
     },
     -- Grep-like: literal substring, not fuzzy. Multi-word plain queries become
     -- one literal phrase (see is_plain_phrase).
@@ -634,6 +634,11 @@ function M.pick(opts)
         end
         for _, item in ipairs(loaded) do
           if not fopts.open_only or item.open then
+            -- Cached tables keep match_tick/score from the last matcher pass.
+            -- On O re-find the tick is unchanged, so a stale match_tick makes
+            -- the matcher skip every item (empty list, stale totals).
+            item.match_tick, item.match_topk = nil, nil
+            item.score = nil
             cb(item)
           end
         end
