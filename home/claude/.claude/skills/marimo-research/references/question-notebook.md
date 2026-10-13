@@ -6,7 +6,7 @@ SKILL.md has the rules that always apply.
 A question notebook is the log of one question, two at most.
 The usual order: Introduction (the question, then the background with the
 expectations), Load data, one section per analysis, Discussion (with
-Limitations and Open questions), Terms.
+Limitations and Open questions, each only when it has content).
 
 - **Question**: one sentence, no definitions or notation.
 - **Background**: only what bears on the question.
@@ -40,8 +40,6 @@ Limitations and Open questions), Terms.
   **Limitations** say once what else could produce the result and what it
   does not show.
   **Open questions** each carry a test and the outcome that would refute it.
-- **Terms** is a glossary of words a reader may need a reminder of.
-  Each is also defined in the prose where it first appears.
 - A new question is a new notebook.
   Earlier conclusions are not rewritten; a later notebook corrects an earlier
   one and says so in both.

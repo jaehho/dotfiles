@@ -38,17 +38,14 @@ two cells, another function, another notebook, or a test that guards it.
 Loop over cases inside one cell rather than writing a function to call once
 per case, and inline a function that stops being reused.
 
-Before writing a function, look for a similar one in the project and extend
-it. Where a shared function lives follows the project's rules. A function
-written for one notebook stays in it and calls the package.
+Before writing a function, look for a similar one in the project and reuse
+it; extend it only when the new case is the same job.
+Where a shared function lives follows the project's rules.
+A function written for one notebook stays in it and calls the package.
 A package function takes columns, thresholds, and labels as arguments,
 so its signature says what it does.
 Docstrings and doctests follow the project's rules.
 
-Each `@app.function` defined in a notebook is followed at once by a cell
-that calls it and displays the return, so the reader sees what it does
-before the next definition.
-A small sample is fine as input.
 A function that fetches runs on one small input behind a run button.
 
 ### Writing a function
@@ -108,28 +105,29 @@ of the code (after Logan Smith, "How to write the perfect function").
 ## Question notebooks
 
 For a question notebook (its question, background, expectations, analysis
-sections, discussion, and terms), read `references/question-notebook.md`
+sections, and discussion), read `references/question-notebook.md`
 before you write or restructure it.
 
 ## Prose and names
 
-- Prose does not type a number the code defines or computes, the Discussion
+- Prose does not type a value the code defines or computes, the Discussion
   included.
   Name the constant (`MIN_COUNT`) or interpolate it with `mo.md(f"...")`, so
   the text follows the data.
-  A count of items ("four groups"), an adjective that carries a number
-  ("thousands"), and a verdict that depends on counts are numbers.
+  A count or share the code measures, an adjective that carries a value
+  ("thousands"), and a verdict that depends on them are values.
   A sentence that gives a value per group, or the smallest and largest,
   comes from a small function over the table, used by every such sentence.
-  Numbers stay typed only where they are not the notebook's: a quote, a
-  cited threshold, the rows of a toy example.
+  Values stay typed where they are not the notebook's (a quote, a cited
+  threshold, the rows of a toy example) or where they count a fixed list
+  the notebook itself states ("the three strengths").
 - Use the literature's word for a quantity.
   Define each term once, where it first appears, and say there where this
   notebook departs from the literature.
   Within a notebook keep one word per thing and one thing per word, across
   prose, code names, column names, and figure labels.
   Before coining a name, check the terms already defined.
-- Introduce each table, function, and variable in prose by the name it has
+- When prose refers to a table, function, or variable, use the name it has
   in the code.
 - Explanatory text is a markdown cell in complete sentences, not a comment
   at the top of a code cell.
