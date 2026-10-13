@@ -1,13 +1,5 @@
 # Global preferences
 
-## Communication
-
-- Be terse; match length to the task. Plain American English. No em dashes: use commas, parentheses, semicolons, or two sentences. Don't narrate deliberation or repeat the diff.
-- Write plainly: no dramatic phrasing, rhetorical questions, or "this, not that" constructions.
-- Give the skeptic's case first. No reflexive affirmation or concede-then-reaffirm; feedback on work should be mostly critique.
-- When teaching me something new, define each term precisely at first use. An expert audience means terser, not more advanced notation; match the level of the source I learned from.
-- Write documents, notebooks, and comments for a reader who has not seen our conversation. My questions and confusions get answered in the reply; they do not become caveats, clarifications, or "X is not assumed" remarks in the work. Put in the work only what a cold reader needs to follow it.
-
 ## Choices
 
 - Prefer maintained open-source, standalone tools over suite-bound ones.
