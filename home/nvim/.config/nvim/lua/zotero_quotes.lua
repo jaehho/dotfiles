@@ -618,10 +618,12 @@ function M.pick(opts)
   -- a reader tab can be open with no annotations).
   local auto_open = opts.open_only == nil
 
-  -- find = false: layout paints first. find() on the next tick, so the empty
-  -- chrome is on screen before load_items runs.
+  -- snacks hides the chrome until results (show_delay default 5s). Force the
+  -- empty layout up first; find() on the next tick fills the list.
   local p = picker.pick {
     find = false,
+    show_delay = 0,
+    show_empty = true,
     title = 'Zotero quotes',
     -- item.preview table, not the file previewer (avoids "Item has no `file`")
     preview = 'preview',
@@ -725,16 +727,22 @@ function M.pick(opts)
         keys = {
           -- Normal only: insert `O` must type in a query. Matches snacks `H`.
           ['O'] = { 'toggle_open_only', desc = 'Toggle open tabs / all' },
+          -- Default is multi-select; confirm inserts one quote only.
+          ['<Tab>'] = false,
+          ['<S-Tab>'] = false,
         },
       },
       list = {
         keys = {
           ['O'] = { 'toggle_open_only', desc = 'Toggle open tabs / all' },
+          ['<Tab>'] = false,
+          ['<S-Tab>'] = false,
         },
       },
     },
   }
 
+  p:show()
   vim.schedule(function()
     if p and not p.closed then
       p:find()
