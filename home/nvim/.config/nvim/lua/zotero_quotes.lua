@@ -25,16 +25,31 @@ local item_cache = { items = nil, saved = 0 }
 -- Collection-item GETs dominate a cold rebuild (~2s for 10 collections).
 local COLMAP_TTL = 3600
 
+---SystemObj:wait uses vim.wait(..., true) (fast_only) and skips UI redraws,
+---so an empty picker never paints during the fetch. Wait with UI events on.
+---@param cmd string[]
+---@return vim.SystemCompleted
+local function system_ui(cmd)
+  local done, res = false, nil ---@type boolean, vim.SystemCompleted?
+  local ok, err = pcall(vim.system, cmd, { text = true }, function(r)
+    res = r
+    done = true
+  end)
+  if not ok then
+    return { code = -1, signal = 0, stdout = '', stderr = tostring(err) }
+  end
+  vim.wait(30000, function()
+    return done
+  end, 10)
+  return res or { code = -1, signal = 0, stdout = '', stderr = 'timeout' }
+end
+
 ---@param args string[]
 ---@return string? body, string? err
 local function curl(args)
   local cmd = { 'curl', '-sS', '-m', '10' }
   vim.list_extend(cmd, args)
-  local ok, proc = pcall(vim.system, cmd, { text = true })
-  if not ok then
-    return nil, tostring(proc)
-  end
-  local res = proc:wait()
+  local res = system_ui(cmd)
   if res.code ~= 0 then
     return nil, res.stderr ~= '' and res.stderr or ('curl exit ' .. res.code)
   end
@@ -70,15 +85,28 @@ end
 ---@param keys string[]
 ---@return table<string, table> items, string? err
 local function get_items(keys)
-  local procs = {}
+  local pending = {}
   for _, key in ipairs(keys) do
-    procs[key] = vim.system({ 'curl', '-sS', '-m', '10', ('%s/api/users/0/items/%s?format=json'):format(API, key) }, { text = true })
+    pending[key] = { done = false }
+    vim.system({ 'curl', '-sS', '-m', '10', ('%s/api/users/0/items/%s?format=json'):format(API, key) }, { text = true }, function(r)
+      pending[key].res = r
+      pending[key].done = true
+    end)
   end
+  vim.wait(30000, function()
+    for _, p in pairs(pending) do
+      if not p.done then
+        return false
+      end
+    end
+    return true
+  end, 10)
   local items = {}
-  for key, proc in pairs(procs) do
-    local res = proc:wait()
-    if res.code ~= 0 then
-      return {}, res.stderr ~= '' and res.stderr or ('curl exit ' .. res.code .. ' for ' .. key)
+  for key, p in pairs(pending) do
+    local res = p.res
+    if not res or res.code ~= 0 then
+      local err = res and res.stderr or 'timeout'
+      return {}, err ~= '' and err or ('curl failed for ' .. key)
     end
     local ok, data = pcall(vim.json.decode, res.stdout or '')
     if ok and data then
@@ -134,18 +162,30 @@ local function rebuild_collection_map(cache_path)
   end
 
   -- Parallel GET per collection; Zotero serializes some of this but it still wins.
-  local procs = {}
+  local pending = {}
   for key in pairs(name) do
-    procs[key] = {
+    pending[key] = {
       label = path_of(key),
-      proc = vim.system({ 'curl', '-sS', '-m', '20', ('%s/api/users/0/collections/%s/items?format=json&limit=100'):format(API, key) }, { text = true }),
+      done = false,
     }
+    vim.system({ 'curl', '-sS', '-m', '20', ('%s/api/users/0/collections/%s/items?format=json&limit=100'):format(API, key) }, { text = true }, function(r)
+      pending[key].res = r
+      pending[key].done = true
+    end)
   end
+  vim.wait(30000, function()
+    for _, p in pairs(pending) do
+      if not p.done then
+        return false
+      end
+    end
+    return true
+  end, 10)
 
   local map = {}
-  for _, entry in pairs(procs) do
-    local res = entry.proc:wait()
-    if res.code == 0 and res.stdout then
+  for _, entry in pairs(pending) do
+    local res = entry.res
+    if res and res.code == 0 and res.stdout then
       local ok, items = pcall(vim.json.decode, res.stdout)
       if ok and type(items) == 'table' then
         for _, it in ipairs(items) do
@@ -182,8 +222,7 @@ local function fetch_collection_map()
       disk = data
     end
   end
-  -- Serve any on-disk map; rebuild only when missing or past COLMAP_TTL. A
-  -- scheduled rebuild after pick() would freeze the UI on proc:wait().
+  -- Serve any on-disk map; rebuild only when missing or past COLMAP_TTL.
   if disk and (os.time() - (disk.saved or 0)) < COLMAP_TTL then
     return disk.map, nil
   end
@@ -235,12 +274,12 @@ local function open_reader_attachment_keys()
   for id in pairs(item_ids) do
     id_list[#id_list + 1] = id
   end
-  local out = vim.system({
+  local out = system_ui {
     'sqlite3',
     '-batch',
     ('file:%s?immutable=1'):format(db),
     ('SELECT itemID, key FROM items WHERE itemID IN (%s);'):format(table.concat(id_list, ',')),
-  }, { text = true }):wait()
+  }
   if out.code == 0 then
     for line in (out.stdout or ''):gmatch '[^\n]+' do
       local id, key = line:match '^(%d+)|(%w+)$'
@@ -576,11 +615,13 @@ function M.pick(opts)
   end
 
   -- Open-tabs default is resolved from the first load (cheap path is wrong:
-  -- a reader tab can be open with no annotations). Finder paints the window
-  -- first; no pre-open spinner (snacks fills the list instead).
+  -- a reader tab can be open with no annotations).
   local auto_open = opts.open_only == nil
 
-  picker.pick {
+  -- find = false: layout paints first. find() on the next tick, so the empty
+  -- chrome is on screen before load_items runs.
+  local p = picker.pick {
+    find = false,
     title = 'Zotero quotes',
     -- item.preview table, not the file previewer (avoids "Item has no `file`")
     preview = 'preview',
@@ -608,8 +649,8 @@ function M.pick(opts)
     ---@async
     finder = function(fopts, ctx)
       return function(cb)
-        -- load_items uses vim.system:wait → vim.wait, which is illegal in
-        -- snacks' fast-event async task. schedule() hops to the main loop.
+        -- schedule() hops out of snacks' fast-event task; load_items uses
+        -- vim.wait and must not run in an api-fast context.
         local loaded, err = ctx.async:schedule(load_items)
         if err then
           Snacks.notify.error('Zotero quotes: ' .. err)
@@ -693,6 +734,12 @@ function M.pick(opts)
       },
     },
   }
+
+  vim.schedule(function()
+    if p and not p.closed then
+      p:find()
+    end
+  end)
 end
 
 return M
