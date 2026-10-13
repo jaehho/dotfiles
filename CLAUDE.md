@@ -21,7 +21,7 @@ apply scripts, no `/etc` installer. Current work is GitHub issues.
   helpers, `home/hypr` for compositor glue.
 - Apps under `~/projects/` own their implementation. This repo owns their
   integration (hyprland.lua, Neovim lazy specs, stowed configs).
-- swaync is the jaehho fork in `~/projects/forks/swaync`. Native arrows and
+- swaync is the jaehho fork in `~/projects/upstream/swaync`. Native arrows and
   action digits pass through; `hypr-swaync-keys` handles Ctrl+n/p.
 - Monitor rules are computed in `home/hypr/.config/hypr/monitors.lua`. No
   layout daemon.
