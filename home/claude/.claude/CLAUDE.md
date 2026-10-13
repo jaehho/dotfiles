@@ -2,11 +2,10 @@
 
 ## Choices
 
-- Prefer maintained open-source, standalone tools over suite-bound ones.
-- Keep system behavior close to distro/upstream defaults. When a fix adds a layer over earlier fixes, consider removing layers first.
+- Keep system behavior close to distro/upstream defaults.
 - I use fish, Firefox, and nvim. Python is uv (`uv sync`, `uv run`), never pip or a hand-activated venv.
 - Dataframes: polars, not pandas; convert where a library hands back pandas.
-- Python line length is PEP 8: 79 for code, 72 for comments, docstrings, and flowing text (markdown cells included). Lint it (ruff `E501`, `W505` with `max-doc-length = 72`). Break prose at thoughts (after a sentence, comma, or semicolon), one thought per line, not at the width alone.
+- Python line length is PEP 8: 79 for code, 72 for comments, docstrings, and flowing text (markdown cells included). Lint it (ruff `E501`, `W505` with `max-doc-length = 72`).
 
 ## Working
 
@@ -19,14 +18,14 @@
 
 ## Projects
 
-- Add a test when a rule breaks silently and is cheap to check (network boundaries, path literals, imported helpers). Don't test style, prose, or section conventions; research needs room to move. State a rule first and add a test after it has been broken in practice.
+- Add a test when a rule breaks silently and is cheap to check (network boundaries, path literals, imported helpers). Don't test style, prose, or section conventions; research needs room to move.
 - When a change touches several similar things (notebooks, modules, the same bug in several places), make it in one instance first and wait for confirmation before rolling it out to the rest.
 - Commit work in small WIP commits instead of leaving it uncommitted. Never discard uncommitted work (`git checkout`/`restore` on a file).
 - Tasks, gotchas, and design decisions live in GitHub issues, never in TODO.md, ISSUES.md, or DESIGN_LOG.md. Label gotchas `gotcha` (symptom, evidence, recovery, verification; open until believed fixed, reopen on recurrence) and decisions `decision` (what and why; closed once decided). Before changing broken behavior, search both labels open and closed.
 - Root docs, each only when it has content: `README.md` (install, use, what it is and how it works), `CHANGELOG.md` (release notes, for published packages), `CLAUDE.md` (agent rules and pointers only). Projects with a UI that the impeccable skill works on also keep `PRODUCT.md` and `DESIGN.md`, which it reads by name.
 - Writing CLAUDE.md, rules, skills, or READMEs: read `~/dotfiles/docs/writing-claude-files.md` (sources and dated checks).
-- Before an upstream issue or PR: read `CONTRIBUTING.md` and templates and follow them; search open and closed issues and PRs; comment on an existing thread rather than filing. Read several recent issues or PRs of the same kind by maintainers and reliable contributors, and match their title style, structure, and length. Keep the prose simple; add detail only when the repro needs it. Open PRs as drafts unless I say otherwise.
+- Before an upstream issue or PR: read `CONTRIBUTING.md` and templates and follow them; search open and closed issues and PRs; comment on an existing thread rather than filing. Find who writes the good ones (list issues by label through the tracker API, count authors, compare median description length), read three to five of the same kind, and match their title style, structure, and length. Put long evidence in your own issue or an attachment, not the report; keep the prose simple and add detail only when the repro needs it. Open PRs as drafts unless I say otherwise.
 
 ## Memory
 
-Auto-memory is project-local. At the end of a session, propose promoting cross-project rules here instead of leaving them in one project.
+Auto-memory is project-local.
