@@ -575,42 +575,16 @@ function M.pick(opts)
     return
   end
 
-  -- Shown before the blocking fetch so the open is not a silent freeze.
-  local spin = require('snacks.picker.util.spinner').loading 'Zotero quotes…'
-  local ok_load, items, err = pcall(load_items)
-  spin:stop()
-  if not ok_load then
-    vim.notify('Zotero quotes: ' .. tostring(items), vim.log.levels.ERROR)
-    return
-  end
-  if err then
-    vim.notify('Zotero quotes: ' .. err, vim.log.levels.ERROR)
-    return
-  end
-  if #items == 0 then
-    vim.notify('Zotero quotes: no annotations (is Zotero running?)', vim.log.levels.WARN)
-    return
-  end
-
-  local has_open = false
-  for _, it in ipairs(items) do
-    if it.open then
-      has_open = true
-      break
-    end
-  end
-  -- Default to open-tabs mode when any reader tab has annotations.
-  local open_only = opts.open_only
-  if open_only == nil then
-    open_only = has_open
-  end
+  -- Open-tabs default is resolved from the first load (cheap path is wrong:
+  -- a reader tab can be open with no annotations). Finder paints the window
+  -- first; no pre-open spinner (snacks fills the list instead).
+  local auto_open = opts.open_only == nil
 
   picker.pick {
     title = 'Zotero quotes',
-    items = items,
     -- item.preview table, not the file previewer (avoids "Item has no `file`")
     preview = 'preview',
-    open_only = open_only,
+    open_only = opts.open_only or false,
     -- Snacks title chip: `t` while open-tabs mode is on (same as hidden `h`).
     toggles = {
       open_only = 't',
@@ -631,14 +605,41 @@ function M.pick(opts)
         return false
       end,
     },
+    ---@async
     finder = function(fopts, ctx)
-      local list = items
-      if fopts.open_only then
-        list = vim.tbl_filter(function(i)
-          return i.open
-        end, items)
+      return function(cb)
+        local loaded, err = load_items()
+        if err then
+          vim.schedule(function()
+            vim.notify('Zotero quotes: ' .. err, vim.log.levels.ERROR)
+          end)
+          return
+        end
+        if #loaded == 0 then
+          vim.schedule(function()
+            vim.notify('Zotero quotes: no annotations (is Zotero running?)', vim.log.levels.WARN)
+          end)
+          return
+        end
+        if auto_open then
+          auto_open = false
+          local has_open = false
+          for _, it in ipairs(loaded) do
+            if it.open then
+              has_open = true
+              break
+            end
+          end
+          ctx.picker.opts.open_only = has_open
+          fopts.open_only = has_open
+          ctx.picker:update_titles()
+        end
+        for _, item in ipairs(loaded) do
+          if not fopts.open_only or item.open then
+            cb(item)
+          end
+        end
       end
-      return ctx.filter:filter(list)
     end,
     -- Rank by match score. Empty query keeps load_items order (paper, page).
     sort = { fields = { 'score:desc', 'idx' } },

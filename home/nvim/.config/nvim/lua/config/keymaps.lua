@@ -38,7 +38,8 @@ vim.keymap.set('t', '<Esc><Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' }
 vim.keymap.set('n', '<leader>tp', function() require('config.preview').toggle() end, { desc = '[T]oggle [P]review' })
 
 -- Zotero annotation → markdown blockquote at cursor (stock local API :23119)
-vim.keymap.set('n', '<leader>zq', function() require('zotero_quotes').pick() end, { desc = 'Zotero [Q]uote' })
+-- gz: same g-prefix as gB/gA/gC; <leader>zq was a three-key reach.
+vim.keymap.set('n', 'gz', function() require('zotero_quotes').pick() end, { desc = 'Zotero Quote' })
 
 -- Claude Code memory and CLAUDE.md files across projects (<c-x> deletes, <c-g> toggles full-text grep)
 vim.api.nvim_create_user_command('ClaudeMemory', function() require('claude_memory').pick() end, {})
