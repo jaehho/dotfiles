@@ -143,6 +143,25 @@ resolve_window_address() {
   hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty' 2>/dev/null
 }
 
+# True when the user is already looking at the source window and tmux pane.
+# Skip the notification then: the TUI already shows the result. Anything
+# that fires while they are elsewhere still lands and stays in the panel.
+source_focused() {
+  local addr="${1:-}" target="${2:-}" socket="${3:-}"
+  [[ -n "$addr" ]] || return 1
+
+  local active
+  active=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty' 2>/dev/null) || return 1
+  [[ "$active" == "$addr" ]] || return 1
+
+  if [[ -n "$target" ]]; then
+    # #{pane_active} alone is per-window; require the pane to be the one shown.
+    [[ "$(tmux ${socket:+-S "$socket"} display-message -t "$target" \
+      -p '#{window_active}:#{pane_active}' 2>/dev/null)" == "1:1" ]] || return 1
+  fi
+  return 0
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 # Desktop: notify-send on local Wayland; OSC 99 for SSH/remote.
 if [[ -z "${SSH_CONNECTION:-}" ]]; then
@@ -156,7 +175,6 @@ if [[ -z "${SSH_CONNECTION:-}" ]]; then
 fi
 
 if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]; then
-  play_sound
   WINDOW_ADDR=$(resolve_window_address) || true
   TMUX_SOCKET="${TMUX:-}"
   TMUX_SOCKET="${TMUX_SOCKET%%,*}"
@@ -165,6 +183,11 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
     TMUX_TARGET=$(tmux display-message -t "$TMUX_PANE" \
       -p '#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null) || true
   fi
+
+  # Already on the source pane: no toast, no sound, no panel entry.
+  source_focused "${WINDOW_ADDR:-}" "${TMUX_TARGET:-}" "${TMUX_SOCKET:-}" && exit 0
+
+  play_sound
 
   # -t 0 is NOT "never expire" in swaync: expire_timeout 0 falls back to the
   # daemon's `timeout` (5s). That only hides the popup; the control center
