@@ -532,13 +532,6 @@ local function is_plain_phrase(pattern)
     and pattern:match "[\'!^$|:%\"%*]" == nil
 end
 
----@param p table snacks.Picker
-local function toggle_open_only(p)
-  p.opts.open_only = not p.opts.open_only
-  p.list:set_target()
-  p:find()
-end
-
 ---@param opts { open_only?: boolean }?
 function M.pick(opts)
   opts = opts or {}
@@ -581,14 +574,9 @@ function M.pick(opts)
     -- item.preview table, not the file previewer (avoids "Item has no `file`")
     preview = 'preview',
     open_only = open_only,
-    -- Flag in the input title when open-tabs mode is on.
+    -- Snacks title chip: `t` while open-tabs mode is on (same as hidden `h`).
     toggles = {
-      open_only = { icon = 'open tabs', value = true },
-    },
-    -- Named action so keys receive the picker (raw fn keys get snacks.win).
-    -- Distinct from auto `toggle_open_only`, which snacks overwrites from `toggles`.
-    actions = {
-      zq_toggle_mode = toggle_open_only,
+      open_only = 't',
     },
     -- Grep-like: literal substring, not fuzzy. Multi-word plain queries become
     -- one literal phrase (see is_plain_phrase).
@@ -652,16 +640,13 @@ function M.pick(opts)
         },
       },
       input = {
-        -- Show the mode switch without opening help.
-        footer_keys = { '<c-o>' },
         keys = {
-          ['<c-o>'] = { 'zq_toggle_mode', mode = { 'n', 'i' }, desc = 'Toggle open tabs / all' },
+          ['<c-o>'] = { 'toggle_open_only', mode = { 'n', 'i' }, desc = 'Toggle open tabs / all' },
         },
       },
       list = {
-        footer_keys = { '<c-o>' },
         keys = {
-          ['<c-o>'] = { 'zq_toggle_mode', desc = 'Toggle open tabs / all' },
+          ['<c-o>'] = { 'toggle_open_only', desc = 'Toggle open tabs / all' },
         },
       },
     },
