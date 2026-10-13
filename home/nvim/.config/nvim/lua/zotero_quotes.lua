@@ -608,17 +608,15 @@ function M.pick(opts)
     ---@async
     finder = function(fopts, ctx)
       return function(cb)
-        local loaded, err = load_items()
+        -- load_items uses vim.system:wait → vim.wait, which is illegal in
+        -- snacks' fast-event async task. schedule() hops to the main loop.
+        local loaded, err = ctx.async:schedule(load_items)
         if err then
-          vim.schedule(function()
-            vim.notify('Zotero quotes: ' .. err, vim.log.levels.ERROR)
-          end)
+          Snacks.notify.error('Zotero quotes: ' .. err)
           return
         end
         if #loaded == 0 then
-          vim.schedule(function()
-            vim.notify('Zotero quotes: no annotations (is Zotero running?)', vim.log.levels.WARN)
-          end)
+          Snacks.notify.warn('Zotero quotes: no annotations (is Zotero running?)')
           return
         end
         if auto_open then
