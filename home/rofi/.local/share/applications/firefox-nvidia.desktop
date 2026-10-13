@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Firefox (NVIDIA GPU)
+Comment=Firefox Developer Edition on the RTX, in its own profile
+Exec=firefox-nvidia %u
+Icon=firefox-developer-edition
+Terminal=false
+Categories=Network;WebBrowser;
+StartupWMClass=firefox-nvidia

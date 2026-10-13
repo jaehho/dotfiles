@@ -1,0 +1,18 @@
+#!/bin/bash
+# firefox-nvidia [URL...]: Firefox Developer Edition drawing on the RTX.
+#
+# Firefox takes its GPU from the environment at launch, so this is a
+# second instance with its own profile (--no-remote). The default
+# Firefox stays on the Intel GPU, whose iris driver hangs on some
+# FlyWire meshes (mesa/mesa#16568).
+set -euo pipefail
+
+profile="${FIREFOX_NVIDIA_PROFILE:-${XDG_DATA_HOME:-$HOME/.local/share}/firefox-nvidia}"
+mkdir -p "$profile"
+
+export __NV_PRIME_RENDER_OFFLOAD=1
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+
+exec firefox-developer-edition --no-remote --name firefox-nvidia \
+    --profile "$profile" "$@"
