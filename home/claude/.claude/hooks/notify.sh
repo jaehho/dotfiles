@@ -97,15 +97,13 @@ case "$EVENT" in
     HOOK_TITLE=$(echo "$INPUT" | jq -r '.title // empty')
 
     # Actionable types only. Quota, computer-use, and plugin chatter stay out.
+    # idle_prompt is intentionally not handled: Stop already notified with the
+    # assistant message when the turn ended; "waiting for input" is just a
+    # later nudge with no content.
     case "$TYPE" in
       permission_prompt)
         TITLE="Permission needed"
         BODY="${MSG:-Claude needs your approval.}"
-        URGENCY="normal"
-        ;;
-      idle_prompt)
-        TITLE="${HOOK_TITLE:-Claude}"
-        BODY="${MSG:-Claude is waiting for your input.}"
         URGENCY="normal"
         ;;
       worker_permission_prompt|agent_needs_input|elicitation_dialog|elicitation_url_dialog)
