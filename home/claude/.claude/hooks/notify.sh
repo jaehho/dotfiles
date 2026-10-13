@@ -6,8 +6,11 @@
 # Focus mode (`notify.sh focus`, run by swaync on action): focus that source.
 #
 # Click path is swaync's action script, not notify-send --action. That keeps
-# notify-send fire-and-forget: no FIFO, no waiter, no CloseNotification
-# watcher wiping panel history. Expired popups stay in the control center.
+# notify-send fire-and-forget: no FIFO and no action waiter.
+#
+# Lifetime: skip entirely if the source pane is already focused at send time.
+# Otherwise the toast lives in the panel until dismissed, clicked, or the user
+# focuses the source (watcher CloseNotification) or the source dies.
 
 set -euo pipefail
 
@@ -192,14 +195,59 @@ if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]
   # -t 0 is NOT "never expire" in swaync: expire_timeout 0 falls back to the
   # daemon's `timeout` (5s). That only hides the popup; the control center
   # keeps the entry. 12s gives the toast time to be clicked.
-  notify-send \
+  NOTIF_ID=$(notify-send --print-id \
     --app-name="Claude Code" \
     -u "${URGENCY:-normal}" \
     -t 12000 \
     ${WINDOW_ADDR:+-h "string:claude-window:$WINDOW_ADDR"} \
     ${TMUX_SOCKET:+-h "string:claude-tmux-socket:$TMUX_SOCKET"} \
     ${TMUX_TARGET:+-h "string:claude-tmux:$TMUX_TARGET"} \
-    "$TITLE" "$BODY" </dev/null &>/dev/null &
+    "$TITLE" "$BODY" 2>/dev/null) || true
+
+  # Dismiss from the panel once the user goes to the source, or if it dies.
+  if [[ -n "${NOTIF_ID:-}" ]]; then
+    setsid bash -c '
+      addr="$1"; target="$2"; socket="$3"; id="$4"; his="$5"
+      export HYPRLAND_INSTANCE_SIGNATURE="$his"
+      focused() {
+        [[ -n "$addr" ]] || return 1
+        local active
+        active=$(hyprctl activewindow -j 2>/dev/null | jq -r ".address // empty") || return 1
+        [[ "$active" == "$addr" ]] || return 1
+        if [[ -n "$target" ]]; then
+          [[ "$(tmux ${socket:+-S "$socket"} display-message -t "$target" \
+            -p "#{window_active}:#{pane_active}" 2>/dev/null)" == "1:1" ]] || return 1
+        fi
+        return 0
+      }
+      alive() {
+        if [[ -n "$target" ]]; then
+          tmux ${socket:+-S "$socket"} display-message -t "$target" -p "" >/dev/null 2>&1
+          return $?
+        fi
+        if [[ -n "$addr" ]]; then
+          hyprctl clients -j 2>/dev/null | jq -e --arg a "$addr" \
+            ".[] | select(.address == \$a)" >/dev/null 2>&1
+          return $?
+        fi
+        return 0
+      }
+      dismiss() {
+        gdbus call --session \
+          --dest org.freedesktop.Notifications \
+          --object-path /org/freedesktop/Notifications \
+          --method org.freedesktop.Notifications.CloseNotification \
+          "$id" >/dev/null 2>&1
+      }
+      # ~30 min cap; longer-lived history stays until the user clears it.
+      for _ in $(seq 1 600); do
+        sleep 3
+        focused && { dismiss; exit 0; }
+        alive || { dismiss; exit 0; }
+      done
+    ' _ "${WINDOW_ADDR:-}" "${TMUX_TARGET:-}" "${TMUX_SOCKET:-}" \
+      "$NOTIF_ID" "${HYPRLAND_INSTANCE_SIGNATURE:-}" </dev/null &>/dev/null &
+  fi
 else
   # SSH/remote: kitty OSC 99 desktop notification. Clicking focuses the kitty
   # window; we deliberately do NOT auto-switch tmux. The only available trigger
