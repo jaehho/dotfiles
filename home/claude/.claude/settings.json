@@ -9,7 +9,6 @@
     "ask": [],
     "defaultMode": "auto"
   },
-  "model": "sonnet",
   "skillOverrides": {
     "built-in-browser": "off",
     "chrome-browser": "off",
@@ -115,6 +114,7 @@
   "skipDangerousModePermissionPrompt": true,
   "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true,
+  "preferredNotifChannel": "notifications_disabled",
   "autoMode": {
     "soft_deny": [
       "$defaults",

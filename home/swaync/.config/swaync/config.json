@@ -72,6 +72,11 @@
       "run-on": "action",
       "app-name": "^screenshot$",
       "summary": "^Screenshot saved$"
+    },
+    "claude-focus": {
+      "exec": "~/.claude/hooks/notify.sh focus",
+      "run-on": "action",
+      "app-name": "^Claude Code$"
     }
   }
 }
