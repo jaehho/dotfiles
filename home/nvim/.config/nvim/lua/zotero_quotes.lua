@@ -9,12 +9,21 @@
 --   a few words literal phrase (whitespace-normalized), the way a quote is typed
 --   !word       exclude   ^word  prefix   word$  suffix
 --   title:foo   field search (text, quote, title, author, ...)
--- <C-o> toggles open-reader-tabs vs the whole library.
+-- O (normal) toggles open-reader-tabs vs the whole library. Not insert:
+-- that would steal typing capital O in a query.
 
 local M = {}
 
 local API = 'http://127.0.0.1:23119'
-local PAGE = 100
+-- One page covers a normal library; fewer round-trips than limit=100.
+local PAGE = 500
+
+-- Reopen is instant; open-tab flags are refreshed from the cheap path.
+local ITEM_CACHE_TTL = 60
+local item_cache = { items = nil, saved = 0 }
+
+-- Collection-item GETs dominate a cold rebuild (~2s for 10 collections).
+local COLMAP_TTL = 3600
 
 ---@param args string[]
 ---@return string? body, string? err
@@ -101,19 +110,9 @@ end
 
 ---Collection names by item key (parents and attachments). Cached on disk —
 ---collection-item endpoints are ~0.5s each and dominate load time.
+---A stale map is served immediately; the rebuild is scheduled and paid later.
 ---@return table<string, string[]> map, string? err
-local function fetch_collection_map()
-  local cache_path = vim.fn.stdpath 'cache' .. '/zotero_collection_map.json'
-  local cached = io.open(cache_path, 'r')
-  if cached then
-    local body = cached:read '*a'
-    cached:close()
-    local ok, data = pcall(vim.json.decode, body)
-    if ok and type(data) == 'table' and data.saved and (os.time() - data.saved) < 300 then
-      return data.map or {}, nil
-    end
-  end
-
+local function rebuild_collection_map(cache_path)
   local cols, err = get_json(('%s/api/users/0/collections?format=json&limit=100'):format(API))
   if not cols then
     return {}, err
@@ -169,6 +168,26 @@ local function fetch_collection_map()
     f:close()
   end
   return map, nil
+end
+
+local function fetch_collection_map()
+  local cache_path = vim.fn.stdpath 'cache' .. '/zotero_collection_map.json'
+  local cached = io.open(cache_path, 'r')
+  local disk
+  if cached then
+    local body = cached:read '*a'
+    cached:close()
+    local ok, data = pcall(vim.json.decode, body)
+    if ok and type(data) == 'table' and type(data.map) == 'table' then
+      disk = data
+    end
+  end
+  -- Serve any on-disk map; rebuild only when missing or past COLMAP_TTL. A
+  -- scheduled rebuild after pick() would freeze the UI on proc:wait().
+  if disk and (os.time() - (disk.saved or 0)) < COLMAP_TTL then
+    return disk.map, nil
+  end
+  return rebuild_collection_map(cache_path)
 end
 
 ---Attachment keys currently open in Zotero reader tabs (last saved session).
@@ -384,6 +403,15 @@ end
 
 ---@return table[] items, string? err
 local function load_items()
+  local now = os.time()
+  if item_cache.items and (now - item_cache.saved) < ITEM_CACHE_TTL then
+    local open = open_reader_attachment_keys()
+    for _, it in ipairs(item_cache.items) do
+      it.open = open[it.attachmentKey] or false
+    end
+    return item_cache.items, nil
+  end
+
   local annots, err = fetch_annotations()
   if err then
     return {}, err
@@ -516,6 +544,7 @@ local function load_items()
     end
     return (a.annotationText or '') < (b.annotationText or '')
   end)
+  item_cache.items, item_cache.saved = items, os.time()
   return items, nil
 end
 
@@ -539,19 +568,27 @@ function M.pick(opts)
     vim.notify('Zotero quotes: not a normal buffer', vim.log.levels.WARN)
     return
   end
-  local items, err = load_items()
+
+  local ok, picker = pcall(require, 'snacks.picker')
+  if not ok then
+    vim.notify('Zotero quotes: snacks.picker unavailable', vim.log.levels.ERROR)
+    return
+  end
+
+  -- Shown before the blocking fetch so the open is not a silent freeze.
+  local spin = require('snacks.picker.util.spinner').loading 'Zotero quotes…'
+  local ok_load, items, err = pcall(load_items)
+  spin:stop()
+  if not ok_load then
+    vim.notify('Zotero quotes: ' .. tostring(items), vim.log.levels.ERROR)
+    return
+  end
   if err then
     vim.notify('Zotero quotes: ' .. err, vim.log.levels.ERROR)
     return
   end
   if #items == 0 then
     vim.notify('Zotero quotes: no annotations (is Zotero running?)', vim.log.levels.WARN)
-    return
-  end
-
-  local ok, picker = pcall(require, 'snacks.picker')
-  if not ok then
-    vim.notify('Zotero quotes: snacks.picker unavailable', vim.log.levels.ERROR)
     return
   end
 
@@ -641,12 +678,13 @@ function M.pick(opts)
       },
       input = {
         keys = {
-          ['<c-o>'] = { 'toggle_open_only', mode = { 'n', 'i' }, desc = 'Toggle open tabs / all' },
+          -- Normal only: insert `O` must type in a query. Matches snacks `H`.
+          ['O'] = { 'toggle_open_only', desc = 'Toggle open tabs / all' },
         },
       },
       list = {
         keys = {
-          ['<c-o>'] = { 'toggle_open_only', desc = 'Toggle open tabs / all' },
+          ['O'] = { 'toggle_open_only', desc = 'Toggle open tabs / all' },
         },
       },
     },
