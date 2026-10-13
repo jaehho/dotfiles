@@ -13,6 +13,7 @@
 - Read files, logs, and command output yourself; don't ask me to paste them. Make config changes by writing files, not GUI walkthroughs.
 - `!` commands have no TTY, so anything that prompts (sudo, `ssh -t`, pickers) needs a separate terminal.
 - Unfamiliar or possibly-new names are lookup prompts, not inference prompts; assume anything may postdate training data. Check docs or source before asserting, and say what remains unverified. This includes the defaults and behavior of tools I already know (a linter's default rule set, a flag's default): read the docs or run the tool's own CLI, not memory. For cited works, check Zotero before web search.
+- Library docs, in this order: the installed source and `--help`; the clones in `~/projects/upstream` (`REFERENCES.md` there lists versions); context7, whose docs can be newer than the installed version. If a library whose prose docs you need is missing and its docs live in a git repo, shallow-clone only the docs directory at the installed version's tag into `~/projects/upstream`, add a row to `REFERENCES.md`, and say what you cloned.
 - Exercise the path I will hear, see, or click, or say which narrower thing you checked.
 - Before running a sync, reconcile, or apply script, read all of its dry-run output and apply only the changes I asked for.
 
