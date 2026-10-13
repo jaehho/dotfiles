@@ -23,6 +23,13 @@ These are working rules we derived from the sources below.
 - Keep a rule at its scope. Preferences for every project go in the global
   file. Facts about one project go in that project. A method that applies to
   several projects is a skill.
+- A rule earns a place only if following it is better, not merely
+  different. Keep facts Claude cannot infer, guards against a mistake
+  Claude would make, and the user's stated environment and decisions. Do
+  not add taste or format preferences framed as improvements,
+  restatements of default behavior, or rules another file owns. One
+  correction is not a rule: add it after it recurs, or ask. Before adding
+  a rule, look for one to merge it into or remove.
 
 ## CLAUDE.md
 
