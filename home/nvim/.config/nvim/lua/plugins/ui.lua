@@ -11,4 +11,17 @@ return {
       checkbox = { enabled = true },
     },
   },
+
+  { -- Kitty graphics: open image files, inline images in markdown/typst.
+    -- LazyVim ships snacks.image but leaves it off. tmux allow-passthrough
+    -- is on in .tmux.conf; magick is on PATH. `:checkhealth snacks` if a
+    -- format fails. See issue #35 for the XTVERSION probe under tmux.
+    'folke/snacks.nvim',
+    optional = true,
+    opts = {
+      image = {
+        enabled = true,
+      },
+    },
+  },
 }
