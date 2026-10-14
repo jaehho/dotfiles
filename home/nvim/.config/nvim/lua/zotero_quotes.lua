@@ -618,12 +618,7 @@ function M.pick(opts)
   -- a reader tab can be open with no annotations).
   local auto_open = opts.open_only == nil
 
-  -- snacks hides the chrome until results (show_delay default 5s). Force the
-  -- empty layout up first; find() on the next tick fills the list.
-  local p = picker.pick {
-    find = false,
-    show_delay = 0,
-    show_empty = true,
+  picker.pick {
     title = 'Zotero quotes',
     -- item.preview table, not the file previewer (avoids "Item has no `file`")
     preview = 'preview',
@@ -673,15 +668,20 @@ function M.pick(opts)
           end
           ctx.picker.opts.open_only = has_open
           fopts.open_only = has_open
-          ctx.picker:update_titles()
+          -- Titles use win APIs; illegal in this fast-event task.
+          vim.schedule(function()
+            if not ctx.picker.closed then
+              ctx.picker:update_titles()
+            end
+          end)
         end
         for _, item in ipairs(loaded) do
+          -- Cached tables keep match_tick/score from the last matcher pass.
+          -- On O re-find the tick is unchanged, so a stale match_tick makes
+          -- the matcher skip every item (empty list, stale totals).
+          item.match_tick, item.match_topk = nil, nil
+          item.score = nil
           if not fopts.open_only or item.open then
-            -- Cached tables keep match_tick/score from the last matcher pass.
-            -- On O re-find the tick is unchanged, so a stale match_tick makes
-            -- the matcher skip every item (empty list, stale totals).
-            item.match_tick, item.match_topk = nil, nil
-            item.score = nil
             cb(item)
           end
         end
@@ -727,27 +727,15 @@ function M.pick(opts)
         keys = {
           -- Normal only: insert `O` must type in a query. Matches snacks `H`.
           ['O'] = { 'toggle_open_only', desc = 'Toggle open tabs / all' },
-          -- Default is multi-select; confirm inserts one quote only.
-          ['<Tab>'] = false,
-          ['<S-Tab>'] = false,
         },
       },
       list = {
         keys = {
           ['O'] = { 'toggle_open_only', desc = 'Toggle open tabs / all' },
-          ['<Tab>'] = false,
-          ['<S-Tab>'] = false,
         },
       },
     },
   }
-
-  p:show()
-  vim.schedule(function()
-    if p and not p.closed then
-      p:find()
-    end
-  end)
 end
 
 return M
