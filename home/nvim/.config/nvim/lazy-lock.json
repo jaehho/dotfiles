@@ -1,7 +1,7 @@
 {
   "LazyVim": { "branch": "main", "commit": "999700997f72227187d49d8b92667183dc7fc809" },
   "LuaSnip": { "branch": "master", "commit": "0abc8f390b278c3b4aabc4c004ac8a088b65cf24" },
-  "SchemaStore.nvim": { "branch": "main", "commit": "5e132f7176ddcf2a0c557cdc9c47d3508a8b9e42" },
+  "SchemaStore.nvim": { "branch": "main", "commit": "1c6d5e0b721c877c4c8061d2361f8fc20adaf896" },
   "auto-save.nvim": { "branch": "main", "commit": "5961d5e041c227e4d99e9e44e3a7ce9c6826c145" },
   "aw-watcher.nvim": { "branch": "master", "commit": "c9cdc2285d384f4e2717bd3734435dfc63ff6f48" },
   "backend-tmux": { "branch": "master", "commit": "9e9e6aa9b3eb7a8d3896a993611622ac97abff52" },
@@ -35,6 +35,7 @@
   "mini.pairs": { "branch": "main", "commit": "03eb1f0062a2cee5314d1ac3939246e4bb21352e" },
   "mini.surround": { "branch": "main", "commit": "59ce0acf79e1d930756ef3a7cb4c2369560cf548" },
   "minuet-ai.nvim": { "branch": "main", "commit": "3b0a4c5f97b7124d94302c608fbe01c0270d4fbe" },
+  "neominimap.nvim": { "branch": "main", "commit": "0676085d898019f06044923934e38663f5efa290" },
   "noice.nvim": { "branch": "main", "commit": "7bfd942445fb63089b59f97ca487d605e715f155" },
   "nui.nvim": { "branch": "main", "commit": "10fc361835c856ba4233ef5ea135b919bf3dce97" },
   "nvim-dap": { "branch": "master", "commit": "cfa2d58f4537aca6ca83e2de1a0d9f1491121264" },
