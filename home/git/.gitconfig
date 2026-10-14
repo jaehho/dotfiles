@@ -10,7 +10,12 @@
 [core]
 	editor = nvim
 	hooksPath = ~/.git-hooks
-	pager = diff-highlight | less
+	# delta does intra-line word marks + bat syntax colors.
+	# Fall back: git -c core.pager="diff-highlight | less" diff
+	pager = delta
+[interactive]
+	# git add -p: word marks without the pager chrome
+	diffFilter = delta --color-only
 [sendemail]
 	# Kernel patches: git send-email through Gmail. The password is a Gmail
 	# app password, prompted for at send time and never stored.
@@ -25,16 +30,30 @@
 	autoSetupRemote = true
 [diff]
 	colorMoved = default
+# Fallback colors when delta is not the pager (git -c core.pager=..., --no-pager).
+# Palette: catppuccin mocha, matching nvim diff_hl.lua / lazygit theme.
+# Quote every style: unquoted # starts a gitconfig comment.
 [color "diff"]
-	meta = 111
-	old = 174
-	new = 150
-	frag = 183 bold
+	meta = "#89b4fa"
+	old = "#f38ba8"
+	new = "#a6e3a1"
+	frag = "#cba6f7 bold"
 [color "diff-highlight"]
-	oldNormal = 174
-	oldHighlight = 174 bold 52
-	newNormal = 150
-	newHighlight = 150 bold 22
+	oldNormal = "#f38ba8"
+	oldHighlight = "bold #1e1e2e #f38ba8"
+	newNormal = "#a6e3a1"
+	newHighlight = "bold #1e1e2e #a6e3a1"
+# Shared renderer: word marks are bold-on-color (same idea as GitSigns*Inline).
+[delta]
+	syntax-theme = Catppuccin Mocha
+	navigate = true
+	dark = true
+	minus-style = "#f38ba8"
+	plus-style = "#a6e3a1"
+	minus-emph-style = "bold #1e1e2e #f38ba8"
+	plus-emph-style = "bold #1e1e2e #a6e3a1"
+	minus-non-emph-style = "#f38ba8"
+	plus-non-emph-style = "#a6e3a1"
 [alias]
 	co = checkout
 	br = branch
@@ -42,5 +61,10 @@
 	st = !git fetch --all && git status
 	unstage = reset HEAD --
 	lg = log --all --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(auto)%d%C(reset)'
+	# Structural (AST) diff via difftastic. Default `git diff` stays on delta.
+	# Opt out of external diff on a one-off: git --no-ext-diff ...
+	difft = -c diff.external=difft diff
+	showt = -c diff.external=difft show --ext-diff
+	logt = -c diff.external=difft log --ext-diff
 [lfs]
 	locksverify = false

@@ -27,3 +27,19 @@ theme:
 
 authorColors:
   '*': '#b4befe'
+
+# Cycle with | . Delta matches terminal git (core.pager) and the
+# solid-word / quiet-line idea in nvim diff_hl.lua. Difftastic is
+# on-demand structural review (same as `git difft`).
+git:
+  diffRenderers:
+    - command: delta --{{colorScheme}} --paging=never
+      name: delta
+    - type: extDiff
+      command: difft --color=always --background={{colorScheme}} --context={{diffContext}}
+      name: difftastic
+    - type: rawGit
+      args: [--color-words]
+      name: color-words
+    - type: rawGit
+      name: default
