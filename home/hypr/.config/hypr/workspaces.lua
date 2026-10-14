@@ -7,6 +7,12 @@
 -- workspace.removed, not on window.close — an empty workspace you are still
 -- looking at stays until you leave it.
 --
+-- A workspace whose id is another monitor's slot is not a hole here. Leave it
+-- for monitors.lua to move whole (windows follow). Packing it onto this
+-- monitor's slots is what kept windows on the same output when a display was
+-- plugged in: workspace 2 would renumber onto a laptop slot before apply()
+-- could send it to the tablet.
+--
 -- Renumbering uses hl.dsp.workspace.change_id (same workspace object, windows
 -- stay). The target id must be free globally, so movers go through temp ids
 -- first; a plain low-to-high walk is not enough when off-slot ids swap.
@@ -31,15 +37,29 @@ local MAX_SLOT = 9
 -- { [monitor_name] = {slot_id, ...} }. Returns ordered {from=, to=} pairs
 -- (temps included). Untouched when a monitor has no slots recorded.
 function M.plan_pack(live, slots_by_mon)
-    local by_mon = {}
+    -- Slot id -> output that owns it. Used to tell a real hole apart from a
+    -- workspace that is merely waiting for monitors.lua to move it home.
+    local owner = {}
+    for mon, slots in pairs(slots_by_mon) do
+        for _, id in ipairs(slots) do
+            owner[id] = mon
+        end
+    end
+
+    local stay, by_mon = {}, {}
     for _, ws in ipairs(live) do
         if type(ws.id) == "number" and ws.id > 0 and not ws.special then
-            local list = by_mon[ws.monitor]
-            if not list then
-                list = {}
-                by_mon[ws.monitor] = list
+            local home = owner[ws.id]
+            if home ~= nil and home ~= ws.monitor then
+                stay[ws.id] = true
+            else
+                local list = by_mon[ws.monitor]
+                if not list then
+                    list = {}
+                    by_mon[ws.monitor] = list
+                end
+                list[#list + 1] = ws.id
             end
-            list[#list + 1] = ws.id
         end
     end
 
@@ -48,12 +68,20 @@ function M.plan_pack(live, slots_by_mon)
         table.sort(ids)
         local slots = slots_by_mon[mon]
         if slots and #slots > 0 then
-            for k, from in ipairs(ids) do
-                local to = slots[k] or from -- extras past the slot list keep their id (reclaim_strays merges those)
-                if to ~= from then
-                    finals[#finals + 1] = { from = from, to = to }
+            local k = 1
+            for _, slot in ipairs(slots) do
+                if k > #ids then break end
+                -- Skip slots held by a foreign workspace (stay) so the plan
+                -- never claims an id another output still owns.
+                if not stay[slot] then
+                    local from = ids[k]
+                    if slot ~= from then
+                        finals[#finals + 1] = { from = from, to = slot }
+                    end
+                    k = k + 1
                 end
             end
+            -- extras past the slot list keep their id (reclaim_strays merges those)
         end
     end
 

@@ -158,6 +158,9 @@ local function plan(live)
     return ordered, laptop, externals, nil
 end
 
+-- Set below; apply() may need to retry after its oneshot is spent.
+local schedule
+
 -- Recompute and apply monitor positions and workspace rules.
 local function apply()
     local monitors = live_monitors()
@@ -170,9 +173,11 @@ local function apply()
         return
     end
     -- A monitor mid-hotplug reports 0x0. Positioning off that produces a
-    -- garbage layout that sticks until the next event, so wait it out.
+    -- garbage layout that sticks until the next event, so wait it out. The
+    -- oneshot that got here is spent, so arm another — nothing else will.
     for _, m in ipairs(monitors) do
         if m.width == 0 or m.height == 0 then
+            schedule()
             return
         end
     end
@@ -310,7 +315,7 @@ local pending = new_timer()
 -- While armed, set_enabled(true) restarts the countdown, which is the debounce.
 -- A oneshot that has fired is spent (is_enabled() is nil and set_enabled
 -- revives nothing), so that case needs a new timer.
-local function schedule()
+schedule = function()
     if pending:is_enabled() then
         pending:set_enabled(true)
     else
