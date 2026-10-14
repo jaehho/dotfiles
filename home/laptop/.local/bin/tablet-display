@@ -84,6 +84,16 @@ lock() {
     flock -n 9 || die "already running"
 }
 
+# adb's fork-server daemonizes and keeps every inherited fd. With the lock
+# still open it outlives this script, and every later run reports "already
+# running" until that server exits. timeout execs adb directly (not a shell
+# function), so drop the lock fd on the call instead.
+run_adb() {
+    local t=$1
+    shift
+    timeout "$t" "$@" 9>&-
+}
+
 # Read one key from sunshine.conf. Comments are skipped so the prose above
 # cannot be mistaken for a setting.
 conf_get() {
@@ -136,7 +146,7 @@ tether_up() {
 
 # True when exactly one authorized tablet is attached over adb.
 have_tablet() {
-    command -v adb >/dev/null && [ "$(timeout 10 adb get-state 2>/dev/null)" = device ]
+    command -v adb >/dev/null && [ "$(run_adb 10 adb get-state 2>/dev/null)" = device ]
 }
 
 # Why the tablet cannot be reached, or nothing and success when it can: the
@@ -145,7 +155,7 @@ tablet_problem() {
     local states
     tether_up && return 0
     command -v adb >/dev/null || { echo "USB tethering is off and adb is not installed"; return 1; }
-    mapfile -t states < <(timeout 10 adb devices 2>/dev/null | awk 'NR > 1 && NF { print $2 }')
+    mapfile -t states < <(run_adb 10 adb devices 2>/dev/null | awk 'NR > 1 && NF { print $2 }')
     case "${#states[@]}:${states[0]:-}" in
         1:device) return 0 ;;
         1:unauthorized) echo "approve USB debugging on the tablet, then try again"; return 1 ;;
@@ -177,21 +187,21 @@ sunshine_ready() {
 # adb drops while the USB function changes, so the command's exit status says
 # nothing; the link coming up is the check.
 enable_tether() {
-    timeout 10 adb shell svc usb setFunctions rndis >/dev/null 2>&1
+    run_adb 10 adb shell svc usb setFunctions rndis >/dev/null 2>&1
 }
 
 keyguard_showing() {
-    timeout 10 adb shell dumpsys window 2>/dev/null | grep -q 'isKeyguardShowing=true'
+    run_adb 10 adb shell dumpsys window 2>/dev/null | grep -q 'isKeyguardShowing=true'
 }
 
 moonlight_foreground() {
-    timeout 10 adb shell dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity | grep -q "$MOONLIGHT"
+    run_adb 10 adb shell dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity | grep -q "$MOONLIGHT"
 }
 
 launch_moonlight() {
     local i
-    timeout "$READY_TIMEOUT" adb wait-for-device || { say "tablet did not come back on adb"; return 1; }
-    timeout 10 adb shell input keyevent KEYCODE_WAKEUP
+    run_adb "$READY_TIMEOUT" adb wait-for-device || { say "tablet did not come back on adb"; return 1; }
+    run_adb 10 adb shell input keyevent KEYCODE_WAKEUP
     for ((i = 0; i < UNLOCK_TIMEOUT; i++)); do
         keyguard_showing || break
         [ "$i" = 0 ] && say "unlock the tablet"
@@ -201,7 +211,7 @@ launch_moonlight() {
         say "tablet still locked; open $APP_NAME on $PC_NAME in Moonlight yourself"
         return 1
     fi
-    timeout 10 adb shell am start -n "$MOONLIGHT/.ShortcutTrampoline" --es Name "$PC_NAME" --es AppName "$APP_NAME" 2>&1 |
+    run_adb 10 adb shell am start -n "$MOONLIGHT/.ShortcutTrampoline" --es Name "$PC_NAME" --es AppName "$APP_NAME" 2>&1 |
         grep -q '^Error' && { say "Moonlight did not start on the tablet"; return 1; }
     return 0
 }
@@ -340,8 +350,8 @@ cmd_status() {
 }
 
 cmd_state() {
-    exec 8>"$LOCK"
-    if ! flock -n 8; then echo starting; return; fi
+    exec 9>"$LOCK"
+    if ! flock -n 9; then echo starting; return; fi
     if output_exists || sunshine_active; then
         # The host being up is not the stream being on: Moonlight has to be
         # in front on the tablet, which only adb can see.
