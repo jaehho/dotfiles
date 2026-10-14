@@ -521,6 +521,16 @@ for i = 1, 9 do
         hl.dsp.exec_cmd("~/.local/bin/hypr-move-workspace-to " .. i))
 end
 
+-- Swap every window here with every window on target workspace with
+-- mainMod + ALT + [1-9]. Rearranges which stack sits at which Super+N.
+-- Window lists, not ids: monitors.lua owns id → output, and workspaces.lua
+-- packs on workspace.removed — both would undo a change_id swap. Snapshot
+-- then move, so it holds across monitors. Empty target is a send (Ctrl+N).
+for i = 1, 9 do
+    hl.bind(mainMod .. " + ALT + " .. i, -- swap windows here with workspace
+        hl.dsp.exec_cmd("~/.local/bin/hypr-swap-workspace-with " .. i))
+end
+
 -- Move active workspace to adjacent monitor
 hl.bind(mainMod .. " + CTRL + comma",  hl.dsp.exec_cmd("~/.local/bin/hypr-move-ws-monitor -1")) -- workspace to the left monitor
 hl.bind(mainMod .. " + CTRL + period", hl.dsp.exec_cmd("~/.local/bin/hypr-move-ws-monitor +1")) -- workspace to the right monitor

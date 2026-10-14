@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Swap every window on the active workspace with every window on the target.
+#
+# Both address lists are snapshotted from one `clients` dump before anything
+# moves, then each side is sent with follow=false. A live walk would see its
+# own moves and could bounce windows back; this way the second batch is still
+# the original target set.
+#
+# Cross-monitor is fine: ids stay put, so monitors.lua's id → output map and
+# the packer in workspaces.lua never see a hole. Windows hop outputs; the
+# tiling trees are rebuilt as the windows land (same as Super+Ctrl+N).
+#
+# Empty or missing target is a send (same as hypr-move-workspace-to): the
+# windows go to N and focus follows. An empty current pulls the target here.
+target=$1
+if [[ -z "$target" ]]; then
+    echo "Usage: hypr-swap-workspace-with <workspace_number>" >&2
+    exit 1
+fi
+
+ws_id=$(hyprctl activeworkspace -j | jq -r .id)
+if [[ "$ws_id" -eq "$target" ]]; then
+    exit 0
+fi
+
+clients=$(hyprctl clients -j)
+mapfile -t here < <(jq -r --argjson ws "$ws_id" \
+    '.[] | select(.workspace.id == $ws) | .address' <<<"$clients")
+mapfile -t there < <(jq -r --argjson ws "$target" \
+    '.[] | select(.workspace.id == $ws) | .address' <<<"$clients")
+
+move_to() {
+    local dest=$1 addr
+    shift
+    for addr in "$@"; do
+        # follow=false is the key that suppresses the focus jump; `silent` is
+        # accepted and ignored (same as hypr-move-workspace-to).
+        hyprctl dispatch "hl.dsp.window.move({ workspace = $dest, window = \"address:$addr\", follow = false })"
+    done
+}
+
+if ((${#here[@]} == 0 && ${#there[@]} == 0)); then
+    exit 0
+fi
+if ((${#there[@]} == 0)); then
+    # Send + follow, matching hypr-move-workspace-to. Focus moves so an
+    # emptied workspace can die and pack, rather than sitting on a hole.
+    move_to "$target" "${here[@]}"
+    hyprctl dispatch "hl.dsp.focus({ workspace = $target })"
+elif ((${#here[@]} == 0)); then
+    move_to "$ws_id" "${there[@]}"
+else
+    move_to "$target" "${here[@]}"
+    move_to "$ws_id" "${there[@]}"
+fi
