@@ -7,6 +7,8 @@ apply scripts, no `/etc` installer. Current work is GitHub issues.
 
 - Repo files are the live configs through stow. Never discard uncommitted
   work (`git checkout`/`restore` on a file reverts the running system).
+- Commit straight to `main`; no task branches or worktrees here. The
+  global branch rule is off: a branch swaps the running configs.
 - Stow uses `--no-folding`. After adding a file to a package:
   `stow --no-folding -d home -t ~ <pkg>`.
 - Do not add a machine-setup or `/etc` layer back. Those tweaks live in
