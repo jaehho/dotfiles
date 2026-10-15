@@ -4,10 +4,31 @@ return {
     'neovim/nvim-lspconfig',
     opts = {
       -- Ghosts on their own rows instead of eol virtual_text (which
-      -- hard-cuts at the window edge). virtual_lines splits messages on \n.
+      -- hard-cuts at the window edge). Stock virt_lines also trunc at the
+      -- window edge (no wrap until neovim#41369), so wrap in format and
+      -- let the handler split on \n.
       diagnostics = {
         virtual_text = false,
-        virtual_lines = true,
+        virtual_lines = {
+          format = function(diagnostic)
+            local width = math.max(20, vim.api.nvim_win_get_width(0) - 12)
+            local lines, cur = {}, ''
+            for word in diagnostic.message:gmatch '%S+' do
+              if cur == '' then
+                cur = word
+              elseif #cur + 1 + #word <= width then
+                cur = cur .. ' ' .. word
+              else
+                lines[#lines + 1] = cur
+                cur = word
+              end
+            end
+            if cur ~= '' then
+              lines[#lines + 1] = cur
+            end
+            return table.concat(lines, '\n')
+          end,
+        },
       },
       servers = {
         bashls = {},
