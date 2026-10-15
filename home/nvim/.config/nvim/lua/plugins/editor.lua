@@ -36,6 +36,15 @@ return {
     opts = {},
   },
 
+  { -- Stock-delta paint: filled +/- lines, words emphasized inside.
+    -- Colors live in config.diff_hl (delta --dark hexes).
+    'lewis6991/gitsigns.nvim',
+    opts = {
+      linehl = true,
+      word_diff = true,
+    },
+  },
+
   { -- ActivityWatch: file, language, git branch, project → aw-server :5600
     -- Record every buffer as-is (including Claude temps). Classification
     -- belongs in awq, not a drop at the watcher.

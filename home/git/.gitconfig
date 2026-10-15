@@ -43,17 +43,11 @@
 	oldHighlight = "bold #1e1e2e #f38ba8"
 	newNormal = "#a6e3a1"
 	newHighlight = "bold #1e1e2e #a6e3a1"
-# Shared renderer: word marks are bold-on-color (same idea as GitSigns*Inline).
+# Stock delta paint: whole +/- lines filled, words emphasized inside.
+# Only theme + dark lock; style strings stay at delta defaults.
 [delta]
 	syntax-theme = Catppuccin Mocha
-	navigate = true
 	dark = true
-	minus-style = "#f38ba8"
-	plus-style = "#a6e3a1"
-	minus-emph-style = "bold #1e1e2e #f38ba8"
-	plus-emph-style = "bold #1e1e2e #a6e3a1"
-	minus-non-emph-style = "#f38ba8"
-	plus-non-emph-style = "#a6e3a1"
 [alias]
 	co = checkout
 	br = branch

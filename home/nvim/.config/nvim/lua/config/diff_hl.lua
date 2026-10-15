@@ -1,38 +1,39 @@
--- Word-diff previews: line fill quiet, actual add/change/delete words solid.
--- Colors come from the catppuccin.nvim palette (official port), not literals.
+-- Stock-delta paint model: whole +/- lines filled, words louder inside.
+-- Line/emph backgrounds match delta --dark defaults (#002800/#006000,
+-- #3f0001/#901011) so the buffer reads like `git diff` / lazygit.
 local M = {}
 
-local function mocha()
-  local ok, pal = pcall(require, 'catppuccin.palettes')
-  if ok and pal.get_palette then
-    return pal.get_palette('mocha')
-  end
-  return nil
-end
+-- delta --dark defaults (stable, not catppuccin).
+local plus_line = '#002800'
+local plus_emph = '#006000'
+local minus_line = '#3f0001'
+local minus_emph = '#901011'
+-- No stock analog for in-place "change"; dark amber keeps the same weight.
+local change_line = '#3a2a00'
+local change_emph = '#806011'
 
 function M.apply()
-  local p = mocha()
-  if not p then
-    return
-  end
   local function hl(name, opts)
     vim.api.nvim_set_hl(0, name, opts)
   end
 
-  -- Solid word marks (read these).
-  hl('GitSignsAddInline', { fg = p.base, bg = p.green, bold = true })
-  hl('GitSignsChangeInline', { fg = p.base, bg = p.yellow, bold = true })
-  hl('GitSignsDeleteInline', { fg = p.base, bg = p.red, bold = true })
+  -- Whole-line fills (gitsigns linehl / previews).
+  hl('GitSignsAddLn', { bg = plus_line })
+  hl('GitSignsDeleteLn', { bg = minus_line })
+  hl('GitSignsChangeLn', { bg = change_line })
+  hl('GitSignsAddPreview', { bg = plus_line })
+  hl('GitSignsDeletePreview', { bg = minus_line })
+  hl('GitSignsDeleteVirtLn', { bg = minus_line })
+  hl('GitSignsVirtLnum', { fg = minus_emph })
+
+  -- Word marks on top (gitsigns word_diff / inline previews).
+  hl('GitSignsAddInline', { bg = plus_emph, bold = true })
+  hl('GitSignsChangeInline', { bg = change_emph, bold = true })
+  hl('GitSignsDeleteInline', { bg = minus_emph, bold = true })
   hl('GitSignsAddLnInline', { link = 'GitSignsAddInline' })
   hl('GitSignsChangeLnInline', { link = 'GitSignsChangeInline' })
   hl('GitSignsDeleteLnInline', { link = 'GitSignsDeleteInline' })
   hl('GitSignsDeleteVirtLnInLine', { link = 'GitSignsDeleteInline' })
-
-  -- Quiet line fills (context, not the diff).
-  hl('GitSignsAddPreview', { fg = p.text, bg = p.surface0 })
-  hl('GitSignsDeletePreview', { fg = p.text, bg = p.surface0 })
-  hl('GitSignsDeleteVirtLn', { fg = p.text, bg = p.surface0 })
-  hl('GitSignsVirtLnum', { fg = p.red, bg = p.surface0 })
 end
 
 --- Re-apply after a colorscheme change (Colorscheme autocmd).
