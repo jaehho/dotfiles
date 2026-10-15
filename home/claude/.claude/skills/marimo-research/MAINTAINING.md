@@ -10,7 +10,7 @@ A rule earns a place here only if a research notebook on any topic is
 better for it, not merely different.
 A one-off preference, a data-specific fix, a tool or palette choice, and a
 shape (a heading, a file name, a size) stay in the notebook or the
-project's `CLAUDE.md` or `.claude/rules/`.
+project's `CLAUDE.md`.
 Before adding a rule, look for one to merge it into, or to remove.
 
 - When the user leaves a comment inside a notebook, treat it as an
