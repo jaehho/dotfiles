@@ -18,35 +18,13 @@ return {
     optional = true,
     opts = function(_, opts)
       opts.formatters_by_ft = opts.formatters_by_ft or {}
-      -- lang.markdown wants prettier + markdownlint-cli2 as well. Prettier
-      -- reflows prose; markdownlint is the inline noise. Keep toc only.
-      opts.formatters_by_ft.markdown = { 'markdown-toc' }
-      opts.formatters_by_ft['markdown.mdx'] = { 'markdown-toc' }
+      -- markdown formatters stay LazyVim lang.markdown stock
+      -- (prettier + markdownlint-cli2 + markdown-toc).
       opts.formatters_by_ft.lua = { 'stylua' }
       opts.formatters_by_ft.python = { 'ruff_organize_imports', 'ruff_format' }
       opts.formatters_by_ft.sh = { 'shfmt' }
       opts.formatters_by_ft.bash = { 'shfmt' }
       opts.formatters_by_ft.typst = { 'typstyle' }
-    end,
-  },
-
-  { -- lang.markdown lints markdown with markdownlint-cli2 (nvim-lint). Those
-    -- diagnostics are the inline errors in notes. Off; do not reinstall.
-    'mfussenegger/nvim-lint',
-    optional = true,
-    opts = function(_, opts)
-      opts.linters_by_ft = opts.linters_by_ft or {}
-      opts.linters_by_ft.markdown = {}
-    end,
-  },
-
-  {
-    'mason-org/mason.nvim',
-    optional = true,
-    opts = function(_, opts)
-      opts.ensure_installed = vim.tbl_filter(function(tool)
-        return tool ~= 'markdownlint-cli2'
-      end, opts.ensure_installed or {})
     end,
   },
 
