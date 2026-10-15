@@ -16,9 +16,8 @@ return {
     config = function(_, opts)
       -- A custom config replaces lazy.nvim's require('lazyvim').setup(opts).
       -- Without that call, clipboard stays empty after LazyVim's defer and
-      -- config/keymaps.lua never loads. Call setup, then lock the word-diff split.
+      -- config/keymaps.lua never loads.
       require('lazyvim').setup(opts)
-      require('config.diff_hl').hook()
     end,
   },
 }
