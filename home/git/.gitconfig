@@ -60,5 +60,8 @@
 	difft = -c diff.external=difft diff
 	showt = -c diff.external=difft show --ext-diff
 	logt = -c diff.external=difft log --ext-diff
+	# Delete local branches merged into <base> (default main). -d keeps
+	# unmerged work; --no-contains skips a branch still at the base tip.
+	prune-merged = "!f() { b=${1:-main}; git branch --merged \"$b\" --no-contains \"$b\" | grep -vE \"^[*+]|^[[:space:]]*$b$\" | xargs -r git branch -d; }; f"
 [lfs]
 	locksverify = false
