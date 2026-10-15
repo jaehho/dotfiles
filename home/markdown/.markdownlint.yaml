@@ -1,4 +1,0 @@
-# User-level markdownlint config (applies when no project config wins).
-# MD013 off: prose stays one paragraph = one long line. Hard wrap at 80
-# makes git word-diff noisy and fights editing. Stock rules otherwise.
-MD013: false

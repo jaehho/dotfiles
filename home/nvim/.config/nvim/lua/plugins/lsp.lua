@@ -20,28 +20,12 @@ return {
       opts.formatters_by_ft = opts.formatters_by_ft or {}
       -- markdown formatters stay LazyVim lang.markdown stock
       -- (prettier + markdownlint-cli2 + markdown-toc).
-      -- markdownlint-cli2 only walks config up to the invocation cwd,
-      -- so pin the user config (~/.markdownlint.yaml, MD013 off).
-      opts.formatters = opts.formatters or {}
-      opts.formatters['markdownlint-cli2'] = {
-        prepend_args = { '--config', vim.fn.expand '~/.markdownlint.yaml' },
-      }
+      -- markdownlint config is per project (.markdownlint.yaml).
       opts.formatters_by_ft.lua = { 'stylua' }
       opts.formatters_by_ft.python = { 'ruff_organize_imports', 'ruff_format' }
       opts.formatters_by_ft.sh = { 'shfmt' }
       opts.formatters_by_ft.bash = { 'shfmt' }
       opts.formatters_by_ft.typst = { 'typstyle' }
-    end,
-  },
-
-  { -- Same --config as conform: stock rule set minus MD013.
-    'mfussenegger/nvim-lint',
-    optional = true,
-    opts = function(_, opts)
-      opts.linters = opts.linters or {}
-      opts.linters['markdownlint-cli2'] = {
-        prepend_args = { '--config', vim.fn.expand '~/.markdownlint.yaml' },
-      }
     end,
   },
 
