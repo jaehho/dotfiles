@@ -3,6 +3,12 @@ return {
   {
     'neovim/nvim-lspconfig',
     opts = {
+      -- Ghosts on their own rows instead of eol virtual_text (which
+      -- hard-cuts at the window edge). virtual_lines splits messages on \n.
+      diagnostics = {
+        virtual_text = false,
+        virtual_lines = true,
+      },
       servers = {
         bashls = {},
         marksman = {},
