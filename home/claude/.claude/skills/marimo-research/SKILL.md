@@ -38,8 +38,6 @@ two cells, another function, another notebook, or a test that guards it.
 Loop over cases inside one cell rather than writing a function to call once
 per case, and inline a function that stops being reused.
 
-Before writing a function, look for a similar one in the project and reuse
-it; extend it only when the new case is the same job.
 Where a shared function lives follows the project's rules.
 A function written for one notebook stays in it and calls the package.
 A package function takes columns, thresholds, and labels as arguments,
@@ -48,40 +46,8 @@ Docstrings and doctests follow the project's rules.
 
 A function that fetches runs on one small input behind a run button.
 
-### Writing a function
-
-A reader, and a test, should be able to reason about a body without the rest
-of the code (after Logan Smith, "How to write the perfect function").
-
-- **Honest.**
-  Everything the result depends on is a parameter: a cutoff, a column name,
-  a seed, the current time.
-  A default is fine (`cutoff: int = MIN_COUNT`);
-  reading a setup constant, the project's config module, a global, or the clock in the body is not.
-  Files, the network, and writes belong to the shell
-  (the loaders, the fetch code, a notebook's top cells), which calls honest
-  functions.
-  If a test would need a mock or a fixture file, look for what the body reads
-  that is not a parameter.
-  A figure function may read the base look set once in setup.
-- **Clear to the caller.**
-  The name is a noun phrase for what it returns (`fit_summary`) or a verb
-  phrase for what it does (`add_legend`), reads well at the call site
-  (`rows_between(table, start, stop)`), and promises neither less nor more
-  than the function does.
-  No catch-all words (`output`, `process`, `get`, `data`).
-  Parameters are named for their role (`window_size`, not `n`), options are
-  keyword-only, and a function asks for no more than its body uses.
-  It returns a `NamedTuple`, a dataclass, or a frame whose columns the
-  docstring lists, not a dict with string keys, and never `None` or a
-  sentinel for failure.
-  A precondition the types cannot state raises a `ValueError` that says which.
-- **One level of abstraction.**
-  A body calls smaller named functions instead of mixing levels;
-  a comment that labels a section of the body marks a piece to name.
-  Reuse what the notebook already computes (a CCDF, an overlap index);
-  a second copy drifts.
-  Producing data and acting on it (plotting, writing) are two functions.
+How to write the function itself (parameters, names, returns, levels of
+abstraction) is the writing-functions skill.
 
 ## marimo mechanics
 
