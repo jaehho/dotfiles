@@ -112,9 +112,9 @@
   },
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
+  "preferredNotifChannel": "notifications_disabled",
   "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true,
-  "preferredNotifChannel": "notifications_disabled",
   "autoMode": {
     "soft_deny": [
       "$defaults",
