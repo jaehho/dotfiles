@@ -45,16 +45,9 @@
 	newHighlight = "bold #1e1e2e #a6e3a1"
 # Stock delta paint: whole +/- lines filled, words emphasized inside.
 # Only theme + dark lock; style strings stay at delta defaults.
-#
-# pager must chop (-S), not wrap. less wraps long lines onto extra screen
-# rows and, on any redraw after scrolling, re-emits each row with ESC[49m
-# at the start — which drops delta's line fill on the wrapped tail.
-# Short lines are unaffected. A custom pager replaces delta's default
-# less flags, so keep -R -X -F and add --chop-long-lines.
 [delta]
 	syntax-theme = Catppuccin Mocha
 	dark = true
-	pager = less --RAW-CONTROL-CHARS --no-init --quit-if-one-screen --chop-long-lines
 [alias]
 	co = checkout
 	br = branch
