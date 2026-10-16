@@ -20,3 +20,7 @@ build
 .local/share/Steam
 .local/share/bottles
 .local/share/lutris
+
+# Keypress log: secrets of everything typed. Never leave this machine.
+.local/state/keylog
+.local/share/keylog
