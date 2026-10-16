@@ -29,12 +29,8 @@ mkdir -p "$runtime"
 printf '%s\n' "$now" >"$stamp"
 
 # Habit metric for keylog: physical left-Ctrl is swallowed by keyd's
-# command(), so the evdev stream never sees it. Append one JSON line.
-state="${XDG_STATE_HOME:-$HOME/.local/state}/keylog"
-mkdir -p "$state"
-chmod 700 "$state" 2>/dev/null || true
-printf '{"ts_ms":%s000,"note":"caps-instead"}\n' "$now" >>"$state/leftctrl.jsonl"
-chmod 600 "$state/leftctrl.jsonl" 2>/dev/null || true
+# command(), so the evdev stream never sees it. keylog owns the JSONL shape.
+/home/jaeho/.local/bin/keylog hit leftctrl || true
 
 # runuser does not carry the session bus; point at the seat user's.
 export XDG_RUNTIME_DIR="$runtime"
