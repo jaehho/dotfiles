@@ -110,6 +110,7 @@
       "effortLevel": "xhigh"
     }
   },
+  "editorMode": "vim",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "preferredNotifChannel": "notifications_disabled",
