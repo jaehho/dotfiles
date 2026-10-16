@@ -17,6 +17,19 @@ process.stdin.on('end', () => {
   clearTimeout(timeout);
   try {
     const data = JSON.parse(input);
+    // Vim mode → terminal cursor shape (DECSCUSR). Claude Code only
+    // show/hides the native cursor; shape is up to us. Write to the
+    // tty, never stdout (stdout is the status-line text).
+    //   INSERT → bar (CSI 6 SP q), otherwise → block (CSI 2 SP q)
+    const vimMode = data.vim?.mode;
+    if (vimMode) {
+      const shape = vimMode === 'INSERT' ? '\x1b[6 q' : '\x1b[2 q';
+      try {
+        const tty = fs.openSync('/dev/tty', 'w');
+        fs.writeSync(tty, shape);
+        fs.closeSync(tty);
+      } catch {}
+    }
     const dim = '\x1b[2m';
     const rst = '\x1b[0m';    const modelId = data.model?.id || '';
     const glm = /glm/i.test(modelId);
