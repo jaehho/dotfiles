@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# caps-instead: habit nudge when the bottom-left Ctrl is pressed.
+#
+# Caps Lock is already the real Control (keyd: overload(control, esc)).
+# This script is bound to leftcontrol in /etc/keyd/default.conf so the
+# physical Ctrl key is swallowed and the reminder is labeled at the source.
+# keyd runs command() as root, so drop to the seat user before notify-send.
+#
+# Restore the key with the matching keyd edit (remove the leftcontrol line)
+# once the habit sticks.
+
+set -euo pipefail
+
+if [ "$(id -u)" -eq 0 ]; then
+    exec runuser -u jaeho -- "$0" "$@"
+fi
+
+# Coalesce key bounce / a held key into one popup per second.
+runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+stamp="$runtime/caps-instead.last"
+now=$(date +%s)
+if [ -r "$stamp" ]; then
+    last=$(cat "$stamp")
+    if [ -n "$last" ] && [ $((now - last)) -lt 1 ]; then
+        exit 0
+    fi
+fi
+mkdir -p "$runtime"
+printf '%s\n' "$now" >"$stamp"
+
+# runuser does not carry the session bus; point at the seat user's.
+export XDG_RUNTIME_DIR="$runtime"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${runtime}/bus}"
+
+notify-send -u normal -t 4000 \
+    "Use Caps Lock as Ctrl" \
+    "Bottom-left Ctrl is disabled. Hold Caps for Ctrl, tap for Esc."
