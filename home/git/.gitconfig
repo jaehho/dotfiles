@@ -49,7 +49,7 @@
 	syntax-theme = Catppuccin Mocha
 	dark = true
 [alias]
-	co = checkout
+	sw = switch
 	br = branch
 	ci = commit
 	st = !git fetch --all && git status
