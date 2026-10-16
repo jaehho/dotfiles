@@ -191,6 +191,9 @@ local function pack_now()
             -- setId — so {name} labels and active-by-name go stale (double-active
             -- pills, missing numbers). A same-name rename is a no-op for us and
             -- still emits renameworkspace>>id,name, which waybar does handle.
+            -- Reusing a freed id can also collide with waybar's queued destroy
+            -- and drop the live button (issue #62); patched in
+            -- ~/projects/upstream/waybar (onWorkspaceIdChanged).
             hl.dispatch(hl.dsp.workspace.rename({ workspace = mv.to, name = tostring(mv.to) }))
         end
         packing = false
