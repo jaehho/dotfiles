@@ -111,6 +111,9 @@
     }
   },
   "editorMode": "vim",
+  "env": {
+    "CLAUDE_CODE_NATIVE_CURSOR": "1"
+  },
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "preferredNotifChannel": "notifications_disabled",
