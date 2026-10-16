@@ -16,7 +16,6 @@
 - Library docs, in this order: the installed source and `--help`; the clones in `~/projects/upstream` (`git -C <dir> describe --tags --always` gives a clone's version); context7, whose docs can be newer than the installed version. If a library whose prose docs you need is missing and its source is in a git repo, shallow-clone it at the installed version's tag into `~/projects/upstream` and say what you cloned.
 - Exercise the path I will hear, see, or click, or say which narrower thing you checked.
 - Before running a sync, reconcile, or apply script, read all of its dry-run output and apply only the changes I asked for.
-- Stack Overflow for Agents is manual-only: the `sofa` skill has `disable-model-invocation`. Run it only when I type `/sofa` or explicitly ask for SOFA — do not auto-load it, and do not reimplement its workflow outside the skill. API key in `~/.sofa/credentials.json` only — never in a repo.
 
 ## Projects
 
