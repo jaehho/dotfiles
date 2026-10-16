@@ -30,6 +30,9 @@
 	autoSetupRemote = true
 [diff]
 	colorMoved = default
+[merge]
+	# nvimdiff: LOCAL|BASE|REMOTE over MERGED. Numbered variants are layouts.
+	tool = nvimdiff
 # Fallback colors when delta is not the pager (git -c core.pager=..., --no-pager).
 # Palette: catppuccin mocha, matching nvim diff_hl.lua / lazygit theme.
 # Quote every style: unquoted # starts a gitconfig comment.
@@ -54,6 +57,10 @@
 	ci = commit
 	st = !git fetch --all && git status
 	unstage = reset HEAD --
+	# Stop before the merge commit; never fast-forward. Review with git
+	# signs / mergetool, then --continue or --abort. Clears MERGE_HEAD if
+	# you unstage — abort only while it is still staged.
+	ncmerge = merge --no-commit --no-ff
 	lg = log --all --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(auto)%d%C(reset)'
 	# Structural (AST) diff via difftastic. Default `git diff` stays on delta.
 	# Opt out of external diff on a one-off: git --no-ext-diff ...
