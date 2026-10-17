@@ -136,6 +136,15 @@ trough {
   padding: 3px 0;
 }
 
+/* The packaged theme dims every collapsed group to opacity 0.4 while
+   another group is expanded (`.not-expanded`), which reads as a
+   translucent card over a bright wallpaper (#45). `all: unset` above
+   happens to reset it; pin it so dropping that line cannot bring it
+   back. */
+.notification-group.collapsed.not-expanded {
+  opacity: 1;
+}
+
 /* control center */
 .control-center {
   box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.8), inset 0 0 0 1px #313244;
