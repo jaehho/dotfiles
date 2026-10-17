@@ -284,8 +284,8 @@
 
     "custom/swaync": {
         "tooltip": true,
-        // {icon}{text}: jq adds the space only when there is a count to show.
-        // Under DND the count is hidden (the tooltip still has it).
+        // The script runs the swaync-client | jq pipeline and reaps it when
+        // waybar dies (issue #50). `exec` keeps it the sh -c process itself.
         "format": "{icon}{text}",
         "format-icons": {
             "notification": "󰂚",
@@ -299,7 +299,7 @@
         },
         "return-type": "json",
         "exec-if": "command -v swaync-client",
-        "exec": "swaync-client -swb | jq --unbuffered -c '.text = (if .text == \"0\" or (.alt | startswith(\"dnd\")) then \"\" else \" \" + .text end)'",
+        "exec": "exec ~/.config/waybar/scripts/swaync-stream.sh",
         "on-click": "swaync-client -t -sw",
         "on-click-right": "~/.local/bin/hypr-settings-menu dnd",
         "escape": true
