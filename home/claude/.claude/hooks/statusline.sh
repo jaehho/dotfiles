@@ -6,11 +6,19 @@
 
 input=$(cat)
 
+# Vim mode → cursor shape. Prefer tmux (this session is inside tmux;
+# tmux owns the pane cursor and forwards it once Ss/Se is set). Fall
+# back to DECSCUSR on the session pts for a bare kitty window.
+#   INSERT → bar, otherwise → block
 shape=
 case $input in
-  *'"mode":"INSERT"'*) shape='\033[6 q' ;;
-  *'"vim":'*) shape='\033[2 q' ;;
+  *'"mode":"INSERT"'*) shape='\033[6 q' ; style=bar ;;
+  *'"vim":'*) shape='\033[2 q' ; style=block ;;
 esac
+
+if [ -n "$style" ] && [ -n "$TMUX" ]; then
+  tmux set -p -t "${TMUX_PANE:-}" cursor-style "$style" 2>/dev/null
+fi
 
 if [ -n "$shape" ]; then
   tty=
