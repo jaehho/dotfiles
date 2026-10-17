@@ -5,7 +5,15 @@ approvals_reviewer = "user"
 [mcp_servers.zotero]
 command = "uvx"
 args = ["--from", "zotero-mcp-server[all]", "zotero-mcp"]
-env_vars = ["ZOTERO_API_KEY", "ZOTERO_LIBRARY_ID"]
+# The WEBDAV vars make a web-API attach also upload to WebDAV file sync;
+# without them the file never reaches this laptop (jaehho/zotero#18).
+env_vars = [
+  "ZOTERO_API_KEY",
+  "ZOTERO_LIBRARY_ID",
+  "ZOTERO_WEBDAV_URL",
+  "ZOTERO_WEBDAV_USERNAME",
+  "ZOTERO_WEBDAV_PASSWORD",
+]
 
 [projects."/home/jaeho/dotfiles"]
 trust_level = "trusted"
