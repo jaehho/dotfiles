@@ -80,7 +80,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "node \"/home/jaeho/.claude/hooks/statusline.js\""
+    "command": "\"/home/jaeho/.claude/hooks/statusline.sh\""
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,

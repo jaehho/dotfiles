@@ -17,49 +17,8 @@ process.stdin.on('end', () => {
   clearTimeout(timeout);
   try {
     const data = JSON.parse(input);
-    // Vim mode → terminal cursor shape (DECSCUSR). Claude Code only
-    // show/hides the native cursor; shape is up to us. Write to the
-    // real tty, never stdout (stdout is the status-line text).
-    // Statusline is spawned with a pipe stdin and no controlling
-    // terminal (/dev/tty → ENXIO), so walk parents for a pts.
-    //   INSERT → bar (CSI 6 SP q), otherwise → block (CSI 2 SP q)
-    function ttyPath() {
-      try {
-        fs.statSync('/dev/tty');
-        const t = fs.openSync('/dev/tty', 'w');
-        fs.closeSync(t);
-        return '/dev/tty';
-      } catch {}
-      let p = process.ppid;
-      for (let i = 0; i < 12 && p > 1; i++) {
-        for (const fd of [1, 0, 2]) {
-          try {
-            const t = fs.readlinkSync(`/proc/${p}/fd/${fd}`);
-            if (t.startsWith('/dev/pts/') || t === '/dev/tty')
-              return t;
-          } catch {}
-        }
-        try {
-          const stat = fs.readFileSync(`/proc/${p}/stat`, 'utf8');
-          p = parseInt(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1], 10);
-        } catch {
-          break;
-        }
-      }
-      return null;
-    }
-    const vimMode = data.vim?.mode;
-    if (vimMode) {
-      const shape = vimMode === 'INSERT' ? '\x1b[6 q' : '\x1b[2 q';
-      const t = ttyPath();
-      if (t) {
-        try {
-          const fd = fs.openSync(t, 'w');
-          fs.writeSync(fd, shape);
-          fs.closeSync(fd);
-        } catch {}
-      }
-    }
+    // Cursor shape (DECSCUSR) is written by statusline.sh before this
+    // script starts — node cold-start was adding visible lag.
     const dim = '\x1b[2m';
     const rst = '\x1b[0m';    const modelId = data.model?.id || '';
     const glm = /glm/i.test(modelId);
