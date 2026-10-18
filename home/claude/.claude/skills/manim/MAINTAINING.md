@@ -16,8 +16,9 @@ rather than copied:
   Left out: the 22 rule files and examples. They restate the Manim
   documentation, which current models know.
 
-The still-diagram section comes from the champalimaud project's
-`champalimaud.draw` module.
+The still-diagram section comes from the lab project's
+`lab.connectome.draw` module (`src/lab/connectome/draw.py`). It began
+as `champalimaud.draw`, when the project was named champalimaud.
 
 ## Verified against manim 0.21.0 (2026-10-09)
 
