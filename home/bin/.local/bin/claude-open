@@ -197,7 +197,11 @@ pass=("$@")
 # script; __CC_MEMORY_DIR__ in it is filled with this project's memory dir.
 sp_dir=$(dirname "$(readlink -f "$0")")
 if [ -f "$sp_dir/claude-open-system-prompt.md" ]; then
-    mem="$HOME/.claude/projects/$(printf '%s' "$PWD" | sed 's|/|-|g')"
+    # Claude names the project dir by replacing every non-alphanumeric char
+    # with '-' (2.1.302: path.replace(/[^a-zA-Z0-9]/g, "-"); a path over 200
+    # chars is cut and gets a hash suffix, not handled here). Replacing only
+    # '/' gave jaehho.github.io, a dir Claude never uses.
+    mem="$HOME/.claude/projects/$(printf '%s' "$PWD" | LC_ALL=C sed 's/[^a-zA-Z0-9]/-/g')"
     pass=("--system-prompt" "$(sed "s|__CC_MEMORY_DIR__|$mem|" "$sp_dir/claude-open-system-prompt.md")" "${pass[@]}")
 fi
 # One shared settings template, generated per launch with this lane's /model
