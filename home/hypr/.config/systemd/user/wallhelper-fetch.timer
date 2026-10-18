@@ -2,12 +2,14 @@
 Description=Daily photograph fetch
 
 [Timer]
-OnCalendar=daily
+# Bing's day turns over at 07:00 UTC (03:00 Eastern), so a midnight run still
+# gets yesterday's photograph. Run after the turnover.
+OnCalendar=*-*-* 08:00
 # Catch up after a suspend or a day powered off, so a missed day still lands a
 # photo instead of silently skipping.
 Persistent=true
-# Bing rolls over at 00:00 UTC and every client on earth hits it at once.
-RandomizedDelaySec=2h
+# Spread the load a little; every client hits Bing just after its turnover.
+RandomizedDelaySec=30min
 
 [Install]
 WantedBy=timers.target
