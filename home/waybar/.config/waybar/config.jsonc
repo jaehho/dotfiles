@@ -277,7 +277,9 @@
     "custom/idle-inhibitor": {
         "exec": "if pgrep -x hypridle > /dev/null; then echo '{\"text\": \"󰾪\", \"tooltip\": \"Stay awake: OFF\", \"class\": \"off\"}'; else echo '{\"text\": \"󰅶\", \"tooltip\": \"Stay awake: ON (idle + lid)\", \"class\": \"on\"}'; fi",
         "return-type": "json",
-        "interval": 2,
+        // hypr-idle-toggle sends signal 11 for an instant update; the slow
+        // poll only notices hypridle dying (pgrep walks all of /proc)
+        "interval": 30,
         "signal": 11,
         "on-click": "~/.local/bin/hypr-settings-menu awake"
     },
