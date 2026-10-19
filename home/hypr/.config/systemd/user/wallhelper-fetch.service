@@ -10,4 +10,4 @@ Type=oneshot
 # the user manager pulls it in, so this fires at login with no DNS and every
 # source fails. See issue #13.
 Environment=WALLHELPER_DIR=%h/Media/wallpapers
-ExecStart=/usr/bin/wallhelper fetch --wait
+ExecStart=%h/.local/bin/wallhelper fetch --wait
