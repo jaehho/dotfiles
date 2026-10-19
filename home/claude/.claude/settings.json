@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_NATIVE_CURSOR": "1"
+  },
   "attribution": {
     "commit": "",
     "pr": ""
@@ -9,6 +12,7 @@
     "ask": [],
     "defaultMode": "auto"
   },
+  "model": "sonnet",
   "skillOverrides": {
     "built-in-browser": "off",
     "chrome-browser": "off",
@@ -110,12 +114,10 @@
       "effortLevel": "xhigh"
     }
   },
-  "editorMode": "vim",
-  "env": {
-    "CLAUDE_CODE_NATIVE_CURSOR": "1"
-  },
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
+  "editorMode": "vim",
   "preferredNotifChannel": "notifications_disabled",
   "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true,
