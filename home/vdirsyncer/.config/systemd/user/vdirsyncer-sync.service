@@ -12,4 +12,7 @@ ExecCondition=/usr/bin/curl -s -o /dev/null --max-time 10 \
     https://nextcloud.wonhomelab.net/status.php
 # nextcloud-app-password reads the app password from the Secret Service.
 Environment=PATH=%h/.local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/vdirsyncer sync
+# Nextcloud pairs only until google.env is filled and the first
+# `vdirsyncer sync google_calendar` has authorized. Then switch the
+# last line to: ExecStart=/usr/bin/vdirsyncer sync
+ExecStart=/usr/bin/vdirsyncer sync nextcloud_calendar nextcloud_contacts

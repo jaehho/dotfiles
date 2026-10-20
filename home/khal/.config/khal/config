@@ -1,11 +1,16 @@
-# Reads the vdirs vdirsyncer mirrors from Nextcloud. Run `vdirsyncer sync`
-# first; discover fills ~/.local/share/vdirsyncer/calendars/*/.
+# Reads the vdirs vdirsyncer mirrors from Nextcloud and Google.
+# Run `vdirsyncer sync` first; discover fills the *-calendars/* folders.
 
 [calendars]
 [[nextcloud]]
 path = ~/.local/share/vdirsyncer/calendars/*
 type = discover
 color = dark blue
+
+[[google]]
+path = ~/.local/share/vdirsyncer/google-calendars/*
+type = discover
+color = dark red
 
 [sqlite]
 path = ~/.local/share/khal/khal.db
