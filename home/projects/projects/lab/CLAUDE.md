@@ -16,7 +16,7 @@ Fly visual system and locomotion.
 - A new notebook also gets a symlink in `docs/content/notebooks/`, made with `ln -s ../../../notebooks/<file>.py` from that folder. Without it the table-of-contents entry that `docs/gen_site.py` writes points at nothing.
 - A notebook opens with `# Title`, `## Introduction`, `### Question`. The home page card shows the paragraph under `### Question`, so a notebook without one has an empty card.
 - A notebook has no Terms section at the end. Define each term where it first appears.
-- Markdown cells are not hard-wrapped (one paragraph, one line), so `pyproject.toml` ignores `E501` in `notebooks/`; keep code lines under 79 by hand or with `ruff format`.
+- Markdown cells are not hard-wrapped (one paragraph, one line), so `pyproject.toml` ignores `E501` and `W505` in `notebooks/`; keep code lines under 79 by hand or with `ruff format`.
 - Name another notebook in prose as a link, `` [`stem`](?file=stem.py) ``. `uv run python docs/link_notebooks.py --fix` rewrites bare names and warns about links to notebooks that no longer exist. Links may be cyclic.
 - A follow-up of one notebook carries its parent's stem as a prefix (`lc_output_strength_definitions`) and links to it. A notebook that builds on two notebooks is a new root and takes no prefix. Listing the notebooks in name order puts each parent before its children.
 
