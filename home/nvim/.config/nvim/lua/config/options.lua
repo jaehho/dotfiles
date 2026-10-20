@@ -14,7 +14,12 @@ vim.g.loaded_perl_provider = 0
 vim.g.loaded_ruby_provider = 0
 
 -- nvim-lspconfig's marksman advertises the compound filetype markdown.mdx
-vim.filetype.add { extension = { mdx = 'markdown.mdx' } }
+-- Claude Code's fullscreen transcript `v` dump is cc-transcript-*.txt
+-- (markdown body, .txt name) — open it as markdown so render-markdown runs.
+vim.filetype.add {
+  extension = { mdx = 'markdown.mdx' },
+  pattern = { ['.*/cc%-transcript%-.*%.txt'] = 'markdown' },
+}
 
 vim.opt.breakindent = true
 vim.opt.linebreak = true
