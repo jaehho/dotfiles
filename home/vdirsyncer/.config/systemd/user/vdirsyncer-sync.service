@@ -1,0 +1,15 @@
+[Unit]
+Description=Sync Nextcloud calendar/contacts to local vdirs for khal
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Skip, don't fail, when Nextcloud is unreachable (wrong subnet, laptop
+# asleep offline). A failing ExecCondition leaves the unit inactive.
+ExecCondition=/usr/bin/curl -s -o /dev/null --max-time 10 \
+    --retry 2 --retry-delay 3 --retry-all-errors \
+    https://nextcloud.wonhomelab.net/status.php
+# nextcloud-app-password reads the app password from the Secret Service.
+Environment=PATH=%h/.local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/vdirsyncer sync

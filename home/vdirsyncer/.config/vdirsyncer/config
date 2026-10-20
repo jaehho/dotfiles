@@ -21,7 +21,7 @@ fileext = ".ics"
 type = "caldav"
 url = "https://nextcloud.wonhomelab.net/remote.php/dav/calendars/jaeho/"
 username = "jaeho"
-password.fetch = ["command", "nextcloud-app-password"]
+password.fetch = ["command", "/home/jaeho/.local/bin/nextcloud-app-password"]
 
 [pair nextcloud_contacts]
 a = "nextcloud_contacts_local"
@@ -39,4 +39,4 @@ fileext = ".vcf"
 type = "carddav"
 url = "https://nextcloud.wonhomelab.net/remote.php/dav/addressbooks/users/jaeho/"
 username = "jaeho"
-password.fetch = ["command", "nextcloud-app-password"]
+password.fetch = ["command", "/home/jaeho/.local/bin/nextcloud-app-password"]

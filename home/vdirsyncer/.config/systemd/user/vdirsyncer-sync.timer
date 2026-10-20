@@ -1,0 +1,14 @@
+[Unit]
+Description=Sync Nextcloud calendar/contacts to local vdirs for khal
+
+[Timer]
+# khal has no daemon. Betterbird and the phone each poll Nextcloud themselves;
+# this unit is only the hop into ~/.local/share/vdirsyncer that khal reads.
+# Ten minutes is well under Betterbird's own 15-minute refresh and cheap
+# when nothing changed (a sync-collection report with a same token).
+OnBootSec=2min
+OnUnitActiveSec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
