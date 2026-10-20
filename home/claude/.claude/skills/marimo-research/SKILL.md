@@ -95,6 +95,9 @@ before you write or restructure it.
   Before coining a name, check the terms already defined.
 - When prose refers to a table, function, or variable, use the name it has
   in the code.
+- Define a variable in the cell where the prose first needs it, and say in
+  the prose what each package function that cell calls does.
+  A filter or reshape that the code shows plainly needs no sentence.
 - Explanatory text is a markdown cell in complete sentences, not a comment
   at the top of a code cell.
   Comments stay for a choice at its site and stay short; a setup constant's
