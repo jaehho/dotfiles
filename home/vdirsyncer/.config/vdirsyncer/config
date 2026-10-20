@@ -41,15 +41,15 @@ url = "https://nextcloud.wonhomelab.net/remote.php/dav/addressbooks/users/jaeho/
 username = "jaeho"
 password.fetch = ["command", "/home/jaeho/.local/bin/nextcloud-app-password"]
 
-# Google Calendar (gmail + Research) via OAuth. VEVENT only — Google's CalDAV
-# rejects VTODO. First `vdirsyncer sync` opens a browser; after that the timer
-# refreshes the token. Collections are Google's UUIDs; run discover first.
+# Google Calendar via OAuth. VEVENT only — Google's CalDAV rejects VTODO.
+# One pair per Google account (each has its own token). Only the calendars
+# listed here land in khal; the rest of the Google account is left alone.
 # See google.env.example for the Cloud Console steps.
 
 [pair google_calendar]
 a = "google_calendar_local"
 b = "google_calendar_remote"
-collections = ["from b"]
+collections = ["jaeho2025@gmail.com"]
 metadata = ["displayname", "color"]
 
 [storage google_calendar_local]
@@ -60,5 +60,24 @@ fileext = ".ics"
 [storage google_calendar_remote]
 type = "google_calendar"
 token_file = "~/.local/share/vdirsyncer/google-token"
+client_id.fetch = ["command", "/home/jaeho/.local/bin/google-oauth-secret", "client_id"]
+client_secret.fetch = ["command", "/home/jaeho/.local/bin/google-oauth-secret", "client_secret"]
+
+# Lab Google Workspace account. Separate token_file — OAuth is per account.
+# Run `vdirsyncer discover google_research` and sign in as jaeho.cho@…
+[pair google_research]
+a = "google_research_local"
+b = "google_research_remote"
+collections = ["from b"]
+metadata = ["displayname", "color"]
+
+[storage google_research_local]
+type = "filesystem"
+path = "~/.local/share/vdirsyncer/google-research/"
+fileext = ".ics"
+
+[storage google_research_remote]
+type = "google_calendar"
+token_file = "~/.local/share/vdirsyncer/google-research-token"
 client_id.fetch = ["command", "/home/jaeho/.local/bin/google-oauth-secret", "client_id"]
 client_secret.fetch = ["command", "/home/jaeho/.local/bin/google-oauth-secret", "client_secret"]

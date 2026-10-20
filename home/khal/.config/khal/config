@@ -12,6 +12,11 @@ path = ~/.local/share/vdirsyncer/google-calendars/*
 type = discover
 color = dark red
 
+[[google-research]]
+path = ~/.local/share/vdirsyncer/google-research/*
+type = discover
+color = dark magenta
+
 [sqlite]
 path = ~/.local/share/khal/khal.db
 
