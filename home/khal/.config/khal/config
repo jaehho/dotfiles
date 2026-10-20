@@ -1,0 +1,25 @@
+# Reads the vdirs vdirsyncer mirrors from Nextcloud. Run `vdirsyncer sync`
+# first; discover fills ~/.local/share/vdirsyncer/calendars/*/.
+
+[calendars]
+[[nextcloud]]
+path = ~/.local/share/vdirsyncer/calendars/*
+type = discover
+color = dark blue
+
+[sqlite]
+path = ~/.local/share/khal/khal.db
+
+[locale]
+local_timezone = America/New_York
+timeformat = %H:%M
+dateformat = %m-%d
+longdateformat = %Y-%m-%d
+datetimeformat = %m-%d %H:%M
+longdatetimeformat = %Y-%m-%d %H:%M
+firstweekday = 0
+
+[default]
+default_calendar = personal
+timedelta = 2d
+highlight_event_days = True
