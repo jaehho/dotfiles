@@ -5,7 +5,8 @@
 - Keep system behavior close to distro/upstream defaults.
 - I use fish, Firefox, and nvim. Python is uv (`uv sync`, `uv run`), never pip or a hand-activated venv.
 - Dataframes: polars, not pandas; convert where a library hands back pandas.
-- Python line length is PEP 8: 79 for code, 72 for comments, docstrings, and flowing text (markdown cells included). Lint it (ruff `E501`, `W505` with `max-doc-length = 72`).
+- Python line length is PEP 8: 79 for code, 72 for comments and docstrings. Lint it (ruff `E501`, `W505` with `max-doc-length = 72`).
+- Prose is not hard-wrapped: a paragraph in a markdown cell, README, doc, or note is one line, and a list item is one line.
 
 ## Working
 

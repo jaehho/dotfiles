@@ -17,7 +17,7 @@ left out.
   Quote exactly; never paraphrase inside quotation marks.
 - Quote as a blockquote of the highlight, then
   `> — Author year, p. N · [PDF p. N](zotero://open-pdf/library/items/<attachment key>?page=N&annotation=<annotation key>) · [<doi>](https://doi.org/<doi>)`,
-  split at the `·` so no line passes the limit.
+  on one line.
   N is the page label Zotero stores on the annotation (`page` in
   `zotero_get_annotations`, often the journal page), not the PDF index.
   The user's annotation comment goes outside the quote, as complete
