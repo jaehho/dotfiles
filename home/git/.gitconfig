@@ -36,20 +36,11 @@
 # Fallback colors when delta is not the pager (git -c core.pager=..., --no-pager).
 # Palette: catppuccin mocha, matching nvim diff_hl.lua / lazygit theme.
 # Quote every style: unquoted # starts a gitconfig comment.
-# Moved lines (diff.colorMoved): git's stock zebra is bare bold fg and
-# reads as "unchanged". Peach left, lavender arrived — a hue away from
-# old/new so a move is its own thing. Underline the zebra alternative so
-# adjacent blocks flip. No +/- markers: delta paints those with the
-# red/green minus/plus bar and would read as delete/add.
 [color "diff"]
 	meta = "#89b4fa"
 	old = "#f38ba8"
 	new = "#a6e3a1"
 	frag = "#cba6f7 bold"
-	oldMoved = "#fab387 #2a1800"
-	newMoved = "#b4befe #181830"
-	oldMovedAlternative = "ul #fab387 #3a2200"
-	newMovedAlternative = "ul #b4befe #222248"
 [color "diff-highlight"]
 	oldNormal = "#f38ba8"
 	oldHighlight = "bold #1e1e2e #f38ba8"
@@ -57,8 +48,6 @@
 	newHighlight = "bold #1e1e2e #a6e3a1"
 # Stock delta paint: whole +/- lines filled, words emphasized inside.
 # Only theme + dark lock; style strings stay at delta defaults.
-# No keep-plus-minus-markers: it paints the marker with the red/green
-# minus/plus bar, which fights moved lines' peach/lavender.
 [delta]
 	syntax-theme = Catppuccin Mocha
 	dark = true
