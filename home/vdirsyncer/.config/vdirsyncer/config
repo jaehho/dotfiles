@@ -68,7 +68,7 @@ client_secret.fetch = ["command", "/home/jaeho/.local/bin/google-oauth-secret", 
 [pair google_research]
 a = "google_research_local"
 b = "google_research_remote"
-collections = ["from b"]
+collections = ["jaeho.cho@research.fchampalimaud.org"]
 metadata = ["displayname", "color"]
 
 [storage google_research_local]
