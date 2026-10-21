@@ -12,4 +12,3 @@ README covers install and use. This file is agent rules only.
   the evdev stream (keyd `command()` swallows the key).
 - State is `~/.local/state/keylog/`. Restic must keep excluding it
   (`home/restic/.config/restic/excludes` in dotfiles).
-- Tasks and gotchas: GitHub issues (`gotcha`, `decision`), not TODO files.
