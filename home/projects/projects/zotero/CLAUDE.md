@@ -1,12 +1,11 @@
 # Zotero plugins
 
 Open Claude at **this directory** (`~/projects/zotero`) for all Zotero plugin
-work so memories and shared docs stay in one project.
-
-Each child is its own git repo (separate GitHub releases):
-
-- `zotero-citegraph/` — citation graph plugin
-- `zotero-tray/` — tray icon instead of quitting
+work so memories and shared docs stay in one project. Each child is its own
+git repo (separate GitHub releases): `zotero-citegraph/` (citation graph) and
+`zotero-tray/` (tray icon instead of quitting). Both are plain-JS bootstrap
+plugins with no TypeScript or scaffold, so the MCP's `zotero_scaffold_*`
+tools are unused. `make help` lists each repo's targets.
 
 ## Shared rules
 
@@ -25,33 +24,21 @@ Each child is its own git repo (separate GitHub releases):
   Zotero auto-updates from `releases/latest/download/updates.json`. Side-loading
   an XPI into `extensions/` is not a release.
 
-## Build
-
-Plain-JS bootstrap plugins. `addon/` is the XPI body; `make xpi` zips it.
-No TypeScript, no esbuild, no `zotero-plugin-scaffold` (the MCP's
-`zotero_scaffold_*` tools are therefore unused). Hot-reload iteration is
-`make dev` / `make run` (source proxy + `-purgecaches`).
-
 ## zotero-dev MCP
 
-Project-scoped in `.mcp.json`: screenshot, DOM/styles, click/type, JS eval in
-the privileged Zotero context, logs, plugin reload. It talks Firefox RDP to the
-**test instance only** (`ZOTERO_RDP_PORT=6100`).
+Project-scoped in `.mcp.json`; talks Firefox RDP to the **test instance only**
+(`ZOTERO_RDP_PORT=6100`).
 
-- Bridge XPI (`mcp-rdp@zotero.org`, `tools/`) is installed by
-  `zotero-citegraph/scripts/test-zotero-setup.sh` into the test profile.
-  Never install it into the user's daily Zotero — it serves privileged JS eval.
+- The bridge XPI (`mcp-rdp@zotero.org`, `tools/`) is installed into the test
+  profile by `zotero-citegraph/scripts/test-zotero-setup.sh`. Never install it
+  into the user's daily Zotero: it serves privileged JS eval.
 - Start the test Zotero first (`make check`, or
-  `zotero -profile … -datadir … -no-remote`); the MCP cannot start it for you.
+  `zotero -profile … -datadir … -no-remote`); the MCP cannot start it.
 - Debug the bridge via `<test profile>/mcp-rdp-events.log`.
 
-## Shared gotchas
+## Gotchas
 
-Zotero 10 install, API, and live-test traps are closed `gotcha` issues in this
-repo: `gh issue list -R jaehho/zotero --label gotcha --state all --search <term>`.
-Plugin-specific ones are `gotcha` issues in each plugin's repo. Reopen one that
-recurs; file new traps there, not in files.
-
-## Commands (per repo)
-
-`make test` · `make check` · `make xpi` · `make dev` / `make run` · `make release`
+Shared Zotero 10 install, API, and live-test traps are closed `gotcha` issues
+here: `gh issue list -R jaehho/zotero --label gotcha --state all --search <term>`.
+Plugin-specific ones live in each plugin's repo. Reopen one that recurs; file
+new traps there, not in files.
