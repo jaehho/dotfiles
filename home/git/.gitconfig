@@ -46,11 +46,17 @@
 	oldHighlight = "bold #1e1e2e #f38ba8"
 	newNormal = "#a6e3a1"
 	newHighlight = "bold #1e1e2e #a6e3a1"
-# Stock delta paint: whole +/- lines filled, words emphasized inside.
-# Only theme + dark lock; style strings stay at delta defaults.
+# Bright fill means changed. A line added or removed whole gets the same
+# fill as the changed words inside a paired line; the unchanged rest of a
+# paired line stays at delta's dim default (minus-/plus-style default to
+# the non-emph styles, so the whole-line ones are set explicitly).
 [delta]
 	syntax-theme = Catppuccin Mocha
 	dark = true
+	minus-style = normal "#901011"
+	plus-style = syntax "#006000"
+	minus-non-emph-style = normal "#3f0001"
+	plus-non-emph-style = syntax "#002800"
 [alias]
 	sw = switch
 	br = branch
