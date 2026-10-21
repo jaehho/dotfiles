@@ -53,11 +53,18 @@
 [delta]
 	syntax-theme = Catppuccin Mocha
 	dark = true
+	keep-plus-minus-markers = true
 	minus-style = normal "#901011"
 	plus-style = syntax "#006000"
 	minus-non-emph-style = normal "#3f0001"
 	plus-non-emph-style = syntax "#002800"
+# Opt-in side-by-side: git sdiff, git sshow, or any git -c delta.features=side ...
+[delta "side"]
+	side-by-side = true
+	line-numbers = true
 [alias]
+	sdiff = -c delta.features=side diff
+	sshow = -c delta.features=side show
 	sw = switch
 	br = branch
 	ci = commit
