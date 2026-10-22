@@ -13,7 +13,7 @@
 - Files in `~/.claude/` may be stow symlinks. Edit their targets under `~/dotfiles/home/claude/.claude/`.
 - Read files, logs, and command output yourself; don't ask me to paste them. Make config changes by writing files, not GUI walkthroughs.
 - Don't build a fix for a cause you haven't proven. Add logging that pins it down first, then fix what it shows.
-- Mail drafts: write each round to `~/drafts/YYYY-MM-DD-<slug>.md` with front matter (`account`, `to`, `subject`, `attach`), and paste the text in chat too. I edit the file in nvim. Delete a draft only when I say it is sent.
+- Mail drafts: write each round to `~/.local/share/drafts/YYYY-MM-DD-<slug>.md` with front matter (`account`, `to`, `subject`, `attach`), and paste the text in chat too. I edit the file in nvim. Delete a draft only when I say it is sent.
 - `!` commands have no TTY, so anything that prompts (sudo, `ssh -t`, pickers) needs a separate terminal.
 - Unfamiliar or possibly-new names are lookup prompts, not inference prompts; assume anything may postdate training data. Check docs or source before asserting, and say what remains unverified. This includes the defaults and behavior of tools I already know (a linter's default rule set, a flag's default): read the docs or run the tool's own CLI, not memory. For cited works, check Zotero before web search.
 - Library docs, in this order: the installed source and `--help`; the clones in `~/projects/upstream` (`git -C <dir> describe --tags --always` gives a clone's version); context7, whose docs can be newer than the installed version. If a library whose prose docs you need is missing and its source is in a git repo, shallow-clone it at the installed version's tag into `~/projects/upstream` and say what you cloned.
