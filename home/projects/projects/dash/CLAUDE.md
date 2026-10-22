@@ -7,7 +7,7 @@ Control-room dashboard shown as the desktop: dotfiles' hyprland.lua starts it at
 - `bin/dash-data board` is cached 30 s in /tmp; don't trust it as "now" when verifying. `health` is fresh.
 - `bin/dash-spec` must capture with `stream.capture.sink`, never `--target <sink>.monitor`: PipeWire does not resolve that name and pw-cat silently records the microphone instead. Tests: `uv run --no-project --with pytest --with numpy pytest tests`
 - The live dash reads symlinks in `~/.local/share/dash`: rerun `make install` after adding, renaming or moving a qml file. `make screenshot` and `make screenshot-headless` run the working tree and need no install.
-- `dash-llm` reads the Claude Code OAuth token (`~/.claude/.credentials.json`) read-only; Claude Code owns refresh, so an expired token skips until the next local CC run. The statusline hook (dotfiles `home/claude/.claude/hooks/statusline.js`) never sees burn from other machines or z.ai sessions.
+- `dash-llm` reads the Claude Code OAuth token (`~/.claude/.credentials.json`) read-only; Claude Code owns refresh, so an expired token skips until the next local CC run. The statusline hook (dotfiles `home/claude/.claude/hooks/statusline.js`) never sees burn from other machines.
 - State is `~/.local/state/dash/state.db`, the long-term archive (OpenRouter keeps 30 days, Claude Code deletes transcripts after 30).
 
 ## Data-quality keys
