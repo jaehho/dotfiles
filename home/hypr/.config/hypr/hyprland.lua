@@ -855,11 +855,12 @@ hl.layer_rule({
 -- never entered by hand. The helper checks visibility before restoring it.
 --
 -- Only the translations below are bound. Everything swaync already handles --
--- Return, Delete/BackSpace/x/d, Home/End, Escape, q (close), Shift+C (clear
--- all), 1-9 (actions) -- is deliberately left unbound so Hyprland forwards
--- it untouched, and bare letters stay free. A `catchall` here would swallow
--- the lot. Media keys and screenshots are re-declared below because they are
--- compositor binds that an exclusive submap would otherwise silence.
+-- Return, Delete/BackSpace/x/d, Home/End, Escape, q (close), y (yank),
+-- Shift+C (clear all), 1-9 (actions) -- is deliberately left unbound so
+-- Hyprland forwards it untouched, and bare letters stay free. A `catchall`
+-- here would swallow the lot. Media keys and screenshots are re-declared
+-- below because they are compositor binds that an exclusive submap would
+-- otherwise silence.
 local function swaync_key(key)
     return hl.dsp.exec_cmd("~/.local/bin/hypr-swaync-keys send " .. key)
 end
