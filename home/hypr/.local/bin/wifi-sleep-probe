@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# hypridle's sleep companion: `pre` (before_sleep_cmd) and `post`
+# (after_sleep_cmd) log the Wi-Fi module's state around each suspend.
+# The BE200/AX211 once died in a 9 h s2idle and stayed dead through a
+# reboot (crf-id 0xbadcafe), and nothing recorded whether it was alive
+# going to sleep. `post` samples again after 20 s to see whether it
+# recovers on its own. Reads sysfs, the config header, iw and the journal as
+# the user, no root. See issue #68.
+# Logs every sample under tag wifi-sleep-probe.
+
+phase=${1:?usage: wifi-sleep-probe pre|post}
+
+log() { logger -t wifi-sleep-probe "$*"; }
+rd() { cat "$1" 2>/dev/null || echo '?'; }
+
+# The Wi-Fi function is the PCI network controller (class 0x0280xx); resolve
+# it instead of copying the address.
+dev=$(grep -l '^0x0280' /sys/bus/pci/devices/*/class 2>/dev/null | head -n1)
+dev=${dev%/class}
+[ -n "$dev" ] || { log "$phase: no PCI network controller"; exit 0; }
+
+sample() {
+    local tag=$1 id iface oper assoc bt kern crf fwerr
+    [ -d "$dev" ] || { log "$tag: ${dev##*/} gone from sysfs"; return; }
+    # Live read of vendor and device ID: ffff ffff means the function no
+    # longer answers. (sysfs vendor/device files are cached, not live.)
+    id=$(od -An -v -tx2 -N4 "$dev/config" 2>/dev/null | xargs)
+    iface=$(ls "$dev/net" 2>/dev/null | head -n1)
+    if [ -n "$iface" ]; then
+        oper=$(rd "/sys/class/net/$iface/operstate")
+        timeout 2 iw dev "$iface" link 2>/dev/null | grep -q '^Connected' \
+            && assoc=yes || assoc=no
+    else
+        oper=- assoc=-
+    fi
+    bt=$(ls /sys/class/bluetooth 2>/dev/null | grep -E '^hci[0-9]+$' | xargs)
+    kern=$(timeout 3 journalctl -k -b -q --no-pager \
+        -g 'iwlwifi.*(crf-id|Failed to start RT ucode|device is gone)')
+    crf=$(grep -o 'crf-id 0x[0-9a-f]*' <<<"$kern" | tail -n1)
+    fwerr=$(grep -c -E 'Failed to start RT ucode|device is gone' <<<"$kern")
+    log "$tag ${dev##*/} id=${id:-?} pwr=$(rd "$dev/power_state")" \
+        "rt=$(rd "$dev/power/runtime_status") iface=${iface:--} oper=$oper" \
+        "assoc=$assoc bt=${bt:--} ${crf:-crf-id ?} fwerr=$fwerr"
+}
+
+sample "$phase"
+if [ "$phase" = post ]; then
+    sleep 20
+    sample post+20s
+fi
