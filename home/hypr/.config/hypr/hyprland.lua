@@ -64,12 +64,16 @@ local menu     = "rofi -show drun"
 -------------------
 
 hl.on("hyprland.start", function()
+    -- sni-watcher owns org.kde.StatusNotifierWatcher before the bar claims
+    -- it. Pure D-Bus, so no WAYLAND_DISPLAY gate. Sequenced in one command
+    -- so waybar cannot take the name first (issues #52 / #63 -- a bar that
+    -- owns the watcher drops it on restart and pops tray-hidden Spotify).
     -- Started from its own config dir on purpose: waybar's reload_style_on_change
     -- follows the style.css symlink with a raw read_symlink and resolves stow's
     -- *relative* target (../../dotfiles/...) against its working directory, not
     -- the link's. From anywhere else it watches a path that does not exist and
     -- CSS edits never apply live. Same in the Super+B bind below.
-    hl.exec_cmd([[cd ~/.config/waybar && waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' &]])
+    hl.exec_cmd([[systemctl --user start sni-watcher && cd ~/.config/waybar && waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' &]])
     hl.exec_cmd("hyprpaper")
     hl.exec_cmd("swaync")
     hl.exec_cmd("~/.local/bin/hypr-urgent-focus")

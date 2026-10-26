@@ -1,0 +1,20 @@
+[Unit]
+Description=Session StatusNotifierWatcher (survives waybar restarts)
+Documentation=https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/
+# Waybar owns org.kde.StatusNotifierWatcher and drops it on every bar
+# restart or reload. Tray-hidden apps lose their icon then; Spotify with
+# ui.minimize_to_tray maps a window again (issue #52 / #63). This unit
+# holds the name so a bar restart is only a host swap.
+# Pure D-Bus, no WAYLAND_DISPLAY gate: it must be up before waybar starts.
+# Start from default like notification-log (Hyprland never starts
+# graphical-session.target), and kick it from hyprland.lua before the bar.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/sni-watcher
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,260 @@
+#!/usr/bin/env python
+"""Own org.kde.StatusNotifierWatcher for the whole session.
+
+Waybar's tray module claims that name and drops it whenever the bar dies or
+reloads. Tray items then see their icon vanish. Spotify with
+``ui.minimize_to_tray`` treats a vanished icon as "no way back into the UI"
+and maps a window again (issue #52); issue #63 is the same gap, with a
+process exit recorded once. This daemon keeps the name so a bar restart is
+only a host swap: items stay registered, and waybar re-reads them on start.
+
+Ownership is the point. The name is taken with REPLACE and held without
+ALLOW_REPLACEMENT, so waybar (which requests ALLOW_REPLACEMENT | REPLACE)
+cannot steal it back. If this daemon exits, waybar's queued request succeeds
+and the stock single-watcher behaviour returns.
+
+Protocol: freedesktop StatusNotifierItem, the org.kde.StatusNotifierWatcher
+interface (the same XML waybar's SNI module generates from). Registration
+strings in properties and signals are ``bus_name + object_path``, as every
+host expects.
+"""
+
+from __future__ import annotations
+
+import sys
+
+WATCHER_NAME = "org.kde.StatusNotifierWatcher"
+WATCHER_PATH = "/StatusNotifierWatcher"
+DEFAULT_ITEM_PATH = "/StatusNotifierItem"
+PROTOCOL_VERSION = 0
+
+INTROSPECTION = """
+<node>
+  <interface name="org.kde.StatusNotifierWatcher">
+    <method name="RegisterStatusNotifierItem">
+      <arg name="service" type="s" direction="in"/>
+    </method>
+    <method name="RegisterStatusNotifierHost">
+      <arg name="service" type="s" direction="in"/>
+    </method>
+    <property name="RegisteredStatusNotifierItems" type="as" access="read"/>
+    <property name="IsStatusNotifierHostRegistered" type="b" access="read"/>
+    <property name="ProtocolVersion" type="i" access="read"/>
+    <signal name="StatusNotifierItemRegistered">
+      <arg type="s" direction="out" name="service"/>
+    </signal>
+    <signal name="StatusNotifierItemUnregistered">
+      <arg type="s" direction="out" name="service"/>
+    </signal>
+    <signal name="StatusNotifierHostRegistered"/>
+    <signal name="StatusNotifierHostUnregistered"/>
+  </interface>
+</node>
+"""
+
+PROPERTY_NAMES = (
+    "RegisteredStatusNotifierItems",
+    "IsStatusNotifierHostRegistered",
+    "ProtocolVersion",
+)
+
+
+def registration_id(bus_name: str, object_path: str) -> str:
+    """The host-visible id: sender name glued to the item path."""
+    return bus_name + object_path
+
+
+def resolve_service(service: str, sender: str) -> tuple[str, str]:
+    """Map a Register* argument to (bus_name, object_path).
+
+    An argument starting with ``/`` is an object path on the caller's
+    connection. Anything else is a bus name whose object path is the
+    default ``/StatusNotifierItem`` (the registration rules both
+    libayatana-appindicator and Chromium follow).
+    """
+    if not service:
+        raise ValueError("empty StatusNotifier service string")
+    if service.startswith("/"):
+        return sender, service
+    return service, DEFAULT_ITEM_PATH
+
+
+def owns_entry(entry: str, bus_name: str) -> bool:
+    """True when ``entry`` is a registration of ``bus_name``.
+
+    Ids are ``bus_name + object_path`` and every object path starts with
+    ``/``, so match on ``bus_name + "/"``. A bare prefix match would drop
+    ``:1.71/...`` when ``:1.7`` vanishes.
+    """
+    return entry.startswith(bus_name + "/")
+
+
+def drop_by_bus_name(
+    items: list[str], hosts: list[str], bus_name: str
+) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Split registrations into (kept items, gone items, kept hosts, gone hosts)."""
+    kept_items = [e for e in items if not owns_entry(e, bus_name)]
+    gone_items = [e for e in items if owns_entry(e, bus_name)]
+    kept_hosts = [e for e in hosts if not owns_entry(e, bus_name)]
+    gone_hosts = [e for e in hosts if owns_entry(e, bus_name)]
+    return kept_items, gone_items, kept_hosts, gone_hosts
+
+
+def main() -> int:
+    try:
+        import gi
+        gi.require_version("Gio", "2.0")
+        gi.require_version("GLib", "2.0")
+        from gi.repository import Gio, GLib
+    except (ImportError, ValueError) as exc:
+        print(f"sni-watcher: python-gobject is required ({exc})", file=sys.stderr)
+        return 0
+
+    node = Gio.DBusNodeInfo.new_for_xml(INTROSPECTION)
+    iface = node.interfaces[0]
+
+    items: list[str] = []
+    hosts: list[str] = []
+    watches: dict[str, int] = {}
+    conn_box: dict[str, Gio.DBusConnection] = {}
+    loop = GLib.MainLoop()
+
+    def emit(method: str, *args: GLib.Variant) -> None:
+        conn = conn_box.get("conn")
+        if conn is None:
+            return
+        payload = GLib.Variant.new_tuple(*args) if args else None
+        conn.emit_signal(None, WATCHER_PATH, iface.name, method, payload)
+
+    def emit_props_changed(*names: str) -> None:
+        conn = conn_box.get("conn")
+        if conn is None:
+            return
+        changed = GLib.Variant("a{sv}", {name: property_variant(name) for name in names})
+        conn.emit_signal(
+            None,
+            WATCHER_PATH,
+            "org.freedesktop.DBus.Properties",
+            "PropertiesChanged",
+            GLib.Variant.new_tuple(
+                GLib.Variant("s", iface.name),
+                changed,
+                GLib.Variant("as", []),
+            ),
+        )
+
+    def property_variant(name: str) -> GLib.Variant:
+        if name == "RegisteredStatusNotifierItems":
+            return GLib.Variant("as", list(items))
+        if name == "IsStatusNotifierHostRegistered":
+            return GLib.Variant("b", bool(hosts))
+        if name == "ProtocolVersion":
+            return GLib.Variant("i", PROTOCOL_VERSION)
+        raise ValueError(f"unknown property {name}")
+
+    def watch_sender(bus_name: str) -> None:
+        if bus_name in watches:
+            return
+
+        def vanished(_conn: Gio.DBusConnection, name: str) -> None:
+            watch_id = watches.pop(name, None)
+            if watch_id is not None:
+                Gio.bus_unwatch_name(watch_id)
+            nonlocal items, hosts
+            items, gone_items, hosts, gone_hosts = drop_by_bus_name(items, hosts, name)
+            for entry in gone_items:
+                print(f"item unregistered {entry}", flush=True)
+                emit("StatusNotifierItemUnregistered", GLib.Variant("s", entry))
+            if gone_items:
+                emit_props_changed("RegisteredStatusNotifierItems")
+            if gone_hosts and not hosts:
+                print("host unregistered", flush=True)
+                emit("StatusNotifierHostUnregistered")
+                emit_props_changed("IsStatusNotifierHostRegistered")
+
+        watches[bus_name] = Gio.bus_watch_name(
+            Gio.BusType.SESSION,
+            bus_name,
+            Gio.BusNameWatcherFlags.NONE,
+            None,
+            vanished,
+        )
+
+    def handle_call(
+        _conn: Gio.DBusConnection,
+        _sender: str,
+        _path: str,
+        _iface: str,
+        method: str,
+        params: GLib.Variant,
+        invocation: Gio.DBusMethodInvocation,
+    ) -> None:
+        sender = invocation.get_sender()
+        service = params.unpack()[0]
+        try:
+            bus_name, object_path = resolve_service(service, sender)
+        except ValueError as exc:
+            invocation.return_dbus_error(
+                f"org.freedesktop.DBus.Error.InvalidArgs: {exc}"
+            )
+            return
+
+        entry = registration_id(bus_name, object_path)
+        watch_sender(bus_name)
+        if method == "RegisterStatusNotifierItem":
+            if entry in items:
+                # Ayatana items re-register whenever the host set changes.
+                # Completing without a second signal keeps hosts quiet.
+                invocation.return_value(None)
+                return
+            items.append(entry)
+            print(f"item registered {entry}", flush=True)
+            emit_props_changed("RegisteredStatusNotifierItems")
+            emit("StatusNotifierItemRegistered", GLib.Variant("s", entry))
+        else:
+            first = not hosts
+            if entry not in hosts:
+                hosts.append(entry)
+                print(f"host registered {entry}", flush=True)
+            if first:
+                emit_props_changed("IsStatusNotifierHostRegistered")
+                emit("StatusNotifierHostRegistered")
+        invocation.return_value(None)
+
+    def handle_get(
+        _conn: Gio.DBusConnection,
+        _sender: str,
+        _path: str,
+        _iface: str,
+        name: str,
+    ) -> GLib.Variant:
+        return property_variant(name)
+
+    def on_bus_acquired(conn: Gio.DBusConnection, _name: str) -> None:
+        conn_box["conn"] = conn
+        conn.register_object(WATCHER_PATH, iface, handle_call, handle_get, None)
+        print("bus acquired", flush=True)
+
+    def on_name_acquired(_conn: Gio.DBusConnection, name: str) -> None:
+        print(f"name acquired {name}", flush=True)
+
+    def on_name_lost(_conn: Gio.DBusConnection, name: str) -> None:
+        # Another owner took it, or the session bus is gone. Exit so
+        # systemd can restart us; a clean stop lets waybar fall back.
+        print(f"name lost {name}", flush=True)
+        loop.quit()
+
+    Gio.bus_own_name(
+        Gio.BusType.SESSION,
+        WATCHER_NAME,
+        Gio.BusNameOwnerFlags.REPLACE,
+        on_bus_acquired,
+        on_name_acquired,
+        on_name_lost,
+    )
+    loop.run()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
