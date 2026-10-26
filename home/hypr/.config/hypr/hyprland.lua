@@ -75,7 +75,10 @@ hl.on("hyprland.start", function()
     -- CSS edits never apply live. Same in the Super+B bind below.
     hl.exec_cmd([[systemctl --user start sni-watcher && cd ~/.config/waybar && waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' &]])
     hl.exec_cmd("hyprpaper")
-    hl.exec_cmd("swaync")
+    -- swaync is a user unit pointed at the fork in ~/.local/bin (the packaged
+    -- one targets /usr/local/bin and used to be masked, which also blocked
+    -- D-Bus revival). Start it with the same post-import kick as swayosd.
+    hl.exec_cmd("systemctl --user start swaync")
     hl.exec_cmd("~/.local/bin/hypr-urgent-focus")
     hl.exec_cmd("~/.local/bin/hypr-swaync-keys")
     hl.exec_cmd("hypridle")

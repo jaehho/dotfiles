@@ -1,0 +1,24 @@
+[Unit]
+Description=SwayNotificationCenter (jaehho fork)
+Documentation=https://github.com/ErikReider/SwayNotificationCenter
+# The packaged unit points at /usr/local/bin/swaync and used to be masked to
+# /dev/null so D-Bus could not activate that older binary over the fork in
+# ~/.local/bin. A mask also blocks revival when the daemon dies mid-session:
+# Super+period piles up hung `swaync-client -t` processes and nothing owns
+# org.freedesktop.Notifications. Own the unit here instead, pointed at the
+# fork, and let both Restart= and D-Bus activation bring it back.
+#
+# Same kick as swayosd-server: Hyprland never starts graphical-session.target
+# (issue #34), so default.target plus an explicit start once WAYLAND_DISPLAY
+# is in the manager. StartLimitIntervalSec=0 because the early starts before
+# the compositor env is imported must not burn the start limit.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/swaync
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
