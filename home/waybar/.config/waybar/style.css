@@ -321,6 +321,11 @@ window#waybar {
     font-weight: bold;
 }
 
+/* dash red-only glance (class=alert; empty text at rest hides the module) */
+#custom-dash-alerts.alert {
+    color: @red;
+}
+
 /* ── Power glyph ── */
 #custom-power {
     font-size: 15px;

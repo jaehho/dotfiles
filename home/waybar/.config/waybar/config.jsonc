@@ -45,6 +45,7 @@
             "privacy",
             "custom/idle-inhibitor",
             "custom/swaync",
+            "custom/dash-alerts",
             "custom/reboot-needed",
             "systemd-failed-units"
         ]
@@ -317,6 +318,18 @@
         "menu-actions": {
             "reboot": "~/.local/bin/hypr-settings-menu reboot"
         }
+    },
+
+    // dash's red-only glance (jaehho/dash#29): empty text at rest so the
+    // module is invisible until a waiting session, a failed unit, an
+    // exhausted quota or a stale backup needs the owner. The data and the
+    // click semantics live in dash; this is only the surface.
+    "custom/dash-alerts": {
+        "exec": "~/.local/bin/dash-data alerts",
+        "return-type": "json",
+        "interval": 30,
+        "on-click": "~/.local/bin/dash-data alerts-click",
+        "escape": true
     },
 
     // Which icons appear here is not decided in this file: the tray is a
