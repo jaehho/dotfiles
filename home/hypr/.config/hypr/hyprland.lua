@@ -86,7 +86,9 @@ hl.on("hyprland.start", function()
     -- awatcher is restarted, not started: after a compositor restart the old
     -- process is still "active" but its Wayland socket is dead, so a plain
     -- start is a no-op and it logs Broken pipe every second (issue #64).
-    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user start swayosd-server && systemctl --user restart awatcher")
+    -- aw-watcher-terminal has the same ConditionEnvironment=WAYLAND_DISPLAY
+    -- gate and is otherwise skipped at login (dead since 2026-10-08).
+    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user start swayosd-server && systemctl --user restart awatcher && systemctl --user restart aw-watcher-terminal")
     hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
     hl.exec_cmd("~/.local/bin/laptop-watchdog &")
     hl.exec_cmd("playerctld daemon")
