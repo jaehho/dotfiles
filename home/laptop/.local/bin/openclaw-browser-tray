@@ -1,12 +1,15 @@
 #!/usr/bin/env python
-"""Tray item for OpenClaw's agent Chrome, which lives on a hidden workspace.
+"""Tray item for OpenClaw: a terminal chat, and its agent Chrome.
+
+Left click opens ``openclaw tui`` (the gateway's main session, the same one
+Telegram talks to) in a tmux pane via hypr-pane.
 
 hyprland.lua sends every Google Chrome window to the special workspace
-``openclaw`` without focusing it, so the agent browses out of sight. This
-item shows or hides that workspace. Left click (or middle click) toggles it;
-with no browser running it starts one and shows it once its window maps.
-Right click opens a menu: show/hide, start/stop/restart the browser, open
-the Control UI, and the gateway's state.
+``openclaw`` without focusing it, so the agent browses out of sight. Middle
+click shows or hides that workspace; with no browser running it starts one
+and shows it once its window maps. Right click opens a menu: the chat,
+show/hide, start/stop/restart the browser, open the Control UI, and the
+gateway's state.
 
 It speaks StatusNotifierItem itself instead of using libayatana-appindicator.
 That library cannot do a left-click action: it never sets ``ItemIsMenu`` to
@@ -37,6 +40,7 @@ WORKSPACE = "special:openclaw"
 BROWSER_CLASS = "Google-chrome"
 GATEWAY_UNIT = "openclaw-gateway"
 CONFIG = Path.home() / ".openclaw" / "openclaw.json"
+HYPR_PANE = Path.home() / ".local" / "bin" / "hypr-pane"
 POLL_SECONDS = 2
 # A browser start that never maps a window should not leave the "show once
 # it maps" wish armed forever.
@@ -137,6 +141,7 @@ class Tray:
 
     def build_menu(self) -> None:
         self.root = Dbusmenu.Menuitem.new()
+        self.add_item("Open terminal chat", self.open_chat)
         self.toggle_item = self.add_item("Show OpenClaw browser", self.toggle)
         self.start_stop_item = self.add_item("Start browser", self.start_stop)
         self.restart_item = self.add_item("Restart browser", self.restart)
@@ -183,7 +188,9 @@ class Tray:
         )
 
     def on_call(self, _conn, _sender, _path, _iface, method, _params, inv):
-        if method in ("Activate", "SecondaryActivate"):
+        if method == "Activate":
+            self.open_chat()
+        elif method == "SecondaryActivate":
             self.activate()
         inv.return_value(None)
 
@@ -194,7 +201,7 @@ class Tray:
         props = {
             "Category": GLib.Variant("s", "ApplicationStatus"),
             "Id": GLib.Variant("s", "openclaw-browser"),
-            "Title": GLib.Variant("s", "OpenClaw browser"),
+            "Title": GLib.Variant("s", "OpenClaw"),
             "Status": GLib.Variant("s", "Active"),
             "WindowId": GLib.Variant("u", 0),
             "IconName": GLib.Variant("s", "openclaw"),
@@ -209,8 +216,10 @@ class Tray:
 
     def tip(self) -> str:
         if not self.running:
-            return "Browser not running. Click to start and show it."
-        return "Browser " + ("visible" if self.shown else "hidden")
+            browser = "not running"
+        else:
+            browser = "visible" if self.shown else "hidden"
+        return f"Click: chat. Middle click: browser ({browser})."
 
     def activate(self) -> None:
         if self.running:
@@ -234,6 +243,9 @@ class Tray:
 
     def restart(self) -> None:
         spawn("sh", "-c", "openclaw browser stop; openclaw browser start")
+
+    def open_chat(self) -> None:
+        spawn(str(HYPR_PANE), "--", "openclaw", "tui")
 
     def open_control_ui(self) -> None:
         spawn("xdg-open", control_ui_url())
