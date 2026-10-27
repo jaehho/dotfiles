@@ -1,4 +1,7 @@
--- Editor extras: tmux-aware splits, git diff viewer, activity watcher.
+-- Editor extras: tmux-aware splits, git diff viewer, gitsigns base toggle,
+-- activity watcher.
+local vs_parent = false
+
 return {
   { -- Smart split navigation + directional resizing (works across tmux panes)
     -- v3 core has no multiplexer code. backend-tmux sets tmux's @pane-is-vim
@@ -34,6 +37,22 @@ return {
       { '<leader>gF', '<cmd>DiffviewFileHistory<cr>', desc = '[G]it repo history ([F]ull)' },
     },
     opts = {},
+  },
+
+  { -- Gitsigns against HEAD~1: on a clean tree the signs show the last commit
+    -- LazyVim's gitsigns spec owns the signs and <leader>gh*; this adds a toggle
+    'lewis6991/gitsigns.nvim',
+    keys = {
+      {
+        '<leader>g~',
+        function()
+          vs_parent = not vs_parent
+          require('gitsigns').change_base(vs_parent and 'HEAD~1' or nil, true)
+          vim.notify('gitsigns base: ' .. (vs_parent and 'HEAD~1' or 'index'))
+        end,
+        desc = 'Toggle gitsigns base HEAD~1',
+      },
+    },
   },
 
   { -- ActivityWatch: file, language, git branch, project → aw-server :5600
