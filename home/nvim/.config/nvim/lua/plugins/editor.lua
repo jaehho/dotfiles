@@ -79,7 +79,7 @@ return {
         end,
       })
       Snacks.toggle({
-        name = 'Gitsigns vs last change',
+        name = 'Gitsigns ~ previous version',
         get = function() return vs_last_change end,
         set = function(state)
           vs_last_change = state
