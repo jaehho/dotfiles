@@ -5,7 +5,8 @@ hyprland.lua sends every Google Chrome window to the special workspace
 ``openclaw`` without focusing it, so the agent browses out of sight. This
 puts an item in the waybar tray while that window exists; its menu shows or
 hides the workspace (middle click does the same), so the browser can be
-taken over by hand and put away again.
+taken over by hand and put away again. The icon is OpenClaw's lobster, the
+Control UI favicon, installed as hicolor/scalable/apps/openclaw.svg.
 
 State comes from ``hyprctl`` (clients, monitors) on a two-second poll. The
 toggle goes through ``hyprctl eval`` because a Lua config rejects the legacy
@@ -52,7 +53,7 @@ class Tray:
     def __init__(self) -> None:
         self.indicator = AppIndicator.Indicator.new(
             "openclaw-browser",
-            "google-chrome",
+            "openclaw",
             AppIndicator.IndicatorCategory.APPLICATION_STATUS,
         )
         self.indicator.set_title("OpenClaw browser")
