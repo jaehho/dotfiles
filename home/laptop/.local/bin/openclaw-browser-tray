@@ -1,40 +1,96 @@
 #!/usr/bin/env python
-"""Tray icon for OpenClaw's agent Chrome, which lives on a hidden workspace.
+"""Tray item for OpenClaw's agent Chrome, which lives on a hidden workspace.
 
 hyprland.lua sends every Google Chrome window to the special workspace
 ``openclaw`` without focusing it, so the agent browses out of sight. This
-puts an item in the waybar tray while that window exists; its menu shows or
-hides the workspace (middle click does the same), so the browser can be
-taken over by hand and put away again. The icon is OpenClaw's lobster, the
-Control UI favicon, installed as hicolor/scalable/apps/openclaw.svg.
+item shows or hides that workspace. Left click (or middle click) toggles it;
+with no browser running it starts one and shows it once its window maps.
+Right click opens a menu: show/hide, start/stop/restart the browser, open
+the Control UI, and the gateway's state.
 
-State comes from ``hyprctl`` (clients, monitors) on a two-second poll. The
-toggle goes through ``hyprctl eval`` because a Lua config rejects the legacy
-``hyprctl dispatch`` string form.
+It speaks StatusNotifierItem itself instead of using libayatana-appindicator.
+That library cannot do a left-click action: it never sets ``ItemIsMenu`` to
+false, and waybar's default for a missing ``ItemIsMenu`` is true, which opens
+the menu on left click. The menu is a ``com.canonical.dbusmenu`` served by
+libdbusmenu; waybar reads it from the ``Menu`` property on right click.
+
+State comes from ``hyprctl`` (clients, monitors) and ``systemctl`` on a
+two-second poll. The toggle goes through ``hyprctl eval`` because a Lua
+config rejects the legacy ``hyprctl dispatch`` string form. The icon is
+OpenClaw's lobster, the Control UI favicon, installed as
+hicolor/scalable/apps/openclaw.svg.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+from pathlib import Path
 
 import gi
 
-gi.require_version("Gtk", "3.0")
-gi.require_version("AyatanaAppIndicator3", "0.1")
-from gi.repository import AyatanaAppIndicator3 as AppIndicator  # noqa: E402
-from gi.repository import GLib, Gtk  # noqa: E402
+gi.require_version("Dbusmenu", "0.4")
+from gi.repository import Dbusmenu, Gio, GLib  # noqa: E402
 
 WORKSPACE = "special:openclaw"
 BROWSER_CLASS = "Google-chrome"
+GATEWAY_UNIT = "openclaw-gateway"
+CONFIG = Path.home() / ".openclaw" / "openclaw.json"
 POLL_SECONDS = 2
+# A browser start that never maps a window should not leave the "show once
+# it maps" wish armed forever.
+SHOW_WAIT_POLLS = 20
 TOGGLE = 'hl.dispatch(hl.dsp.workspace.toggle_special("openclaw"))'
+
+WATCHER = "org.kde.StatusNotifierWatcher"
+WATCHER_PATH = "/StatusNotifierWatcher"
+ITEM_IFACE = "org.kde.StatusNotifierItem"
+ITEM_PATH = "/StatusNotifierItem"
+MENU_PATH = "/MenuBar"
+
+ITEM_XML = """
+<node>
+  <interface name="org.kde.StatusNotifierItem">
+    <method name="Activate">
+      <arg type="i" direction="in"/><arg type="i" direction="in"/>
+    </method>
+    <method name="SecondaryActivate">
+      <arg type="i" direction="in"/><arg type="i" direction="in"/>
+    </method>
+    <method name="ContextMenu">
+      <arg type="i" direction="in"/><arg type="i" direction="in"/>
+    </method>
+    <method name="Scroll">
+      <arg type="i" direction="in"/><arg type="s" direction="in"/>
+    </method>
+    <property name="Category" type="s" access="read"/>
+    <property name="Id" type="s" access="read"/>
+    <property name="Title" type="s" access="read"/>
+    <property name="Status" type="s" access="read"/>
+    <property name="WindowId" type="u" access="read"/>
+    <property name="IconName" type="s" access="read"/>
+    <property name="IconPixmap" type="a(iiay)" access="read"/>
+    <property name="IconThemePath" type="s" access="read"/>
+    <property name="OverlayIconName" type="s" access="read"/>
+    <property name="AttentionIconName" type="s" access="read"/>
+    <property name="ToolTip" type="(sa(iiay)ss)" access="read"/>
+    <property name="ItemIsMenu" type="b" access="read"/>
+    <property name="Menu" type="o" access="read"/>
+    <signal name="NewIcon"/>
+    <signal name="NewToolTip"/>
+    <signal name="NewStatus"><arg type="s"/></signal>
+  </interface>
+</node>
+"""
+
+
+def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=5)
 
 
 def hyprctl_json(what: str) -> list[dict]:
-    out = subprocess.run(
-        ["hyprctl", what, "-j"], capture_output=True, text=True, timeout=5
-    )
+    out = run(["hyprctl", what, "-j"])
     return json.loads(out.stdout) if out.returncode == 0 else []
 
 
@@ -49,37 +105,171 @@ def browser_shown() -> bool:
     )
 
 
+def gateway_state() -> str:
+    out = run(["systemctl", "--user", "is-active", GATEWAY_UNIT])
+    return out.stdout.strip()
+
+
+def control_ui_url() -> str:
+    gateway = json.loads(CONFIG.read_text()).get("gateway", {})
+    return gateway.get("publicOrigin", "http://127.0.0.1:18789")
+
+
+def spawn(*cmd: str) -> None:
+    subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
 class Tray:
     def __init__(self) -> None:
-        self.indicator = AppIndicator.Indicator.new(
-            "openclaw-browser",
-            "openclaw",
-            AppIndicator.IndicatorCategory.APPLICATION_STATUS,
-        )
-        self.indicator.set_title("OpenClaw browser")
-        self.item = Gtk.MenuItem(label="Show OpenClaw browser")
-        self.item.connect("activate", self.toggle)
-        menu = Gtk.Menu()
-        menu.append(self.item)
-        menu.show_all()
-        self.indicator.set_menu(menu)
-        self.indicator.set_secondary_activate_target(self.item)
+        self.running = False
+        self.shown = False
+        self.show_polls_left = 0
+        self.build_menu()
+        self.export_item()
         self.refresh()
         GLib.timeout_add_seconds(POLL_SECONDS, self.refresh)
 
-    def toggle(self, _item: Gtk.MenuItem) -> None:
-        subprocess.run(["hyprctl", "eval", TOGGLE], capture_output=True)
+    def build_menu(self) -> None:
+        self.root = Dbusmenu.Menuitem.new()
+        self.toggle_item = self.add_item("Show OpenClaw browser", self.toggle)
+        self.start_stop_item = self.add_item("Start browser", self.start_stop)
+        self.restart_item = self.add_item("Restart browser", self.restart)
+        self.add_separator()
+        self.add_item("Open Control UI", self.open_control_ui)
+        self.gateway_item = self.add_item("Gateway: …", None)
+        self.server = Dbusmenu.Server.new(MENU_PATH)
+        self.server.set_root(self.root)
+
+    def add_item(self, label, action) -> Dbusmenu.Menuitem:
+        item = Dbusmenu.Menuitem.new()
+        item.property_set(Dbusmenu.MENUITEM_PROP_LABEL, label)
+        if action is not None:
+            item.connect("item-activated", lambda _i, _ts: action())
+        self.root.child_append(item)
+        return item
+
+    def add_separator(self) -> None:
+        item = Dbusmenu.Menuitem.new()
+        item.property_set(Dbusmenu.MENUITEM_PROP_TYPE, "separator")
+        self.root.child_append(item)
+
+    def export_item(self) -> None:
+        self.conn = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        info = Gio.DBusNodeInfo.new_for_xml(ITEM_XML).interfaces[0]
+        self.conn.register_object(
+            ITEM_PATH, info, self.on_call, self.on_get_property, None
+        )
+        self.bus_name = f"org.kde.StatusNotifierItem-{os.getpid()}-1"
+        Gio.bus_own_name_on_connection(
+            self.conn, self.bus_name, Gio.BusNameOwnerFlags.NONE, None, None
+        )
+        # sni-watcher can restart; an item has to register again with it.
+        Gio.bus_watch_name_on_connection(
+            self.conn, WATCHER, Gio.BusNameWatcherFlags.NONE,
+            self.register, None,
+        )
+
+    def register(self, *_args) -> None:
+        self.conn.call(
+            WATCHER, WATCHER_PATH, WATCHER, "RegisterStatusNotifierItem",
+            GLib.Variant("(s)", (self.bus_name,)),
+            None, Gio.DBusCallFlags.NONE, -1, None, None, None,
+        )
+
+    def on_call(self, _conn, _sender, _path, _iface, method, _params, inv):
+        if method in ("Activate", "SecondaryActivate"):
+            self.activate()
+        inv.return_value(None)
+
+    def on_get_property(self, _conn, _sender, _path, _iface, name):
+        if name == "ToolTip":
+            tip = ("", [], "OpenClaw", self.tip())
+            return GLib.Variant("(sa(iiay)ss)", tip)
+        props = {
+            "Category": GLib.Variant("s", "ApplicationStatus"),
+            "Id": GLib.Variant("s", "openclaw-browser"),
+            "Title": GLib.Variant("s", "OpenClaw browser"),
+            "Status": GLib.Variant("s", "Active"),
+            "WindowId": GLib.Variant("u", 0),
+            "IconName": GLib.Variant("s", "openclaw"),
+            "IconPixmap": GLib.Variant("a(iiay)", []),
+            "IconThemePath": GLib.Variant("s", ""),
+            "OverlayIconName": GLib.Variant("s", ""),
+            "AttentionIconName": GLib.Variant("s", ""),
+            "ItemIsMenu": GLib.Variant("b", False),
+            "Menu": GLib.Variant("o", MENU_PATH),
+        }
+        return props.get(name)
+
+    def tip(self) -> str:
+        if not self.running:
+            return "Browser not running. Click to start and show it."
+        return "Browser " + ("visible" if self.shown else "hidden")
+
+    def activate(self) -> None:
+        if self.running:
+            self.toggle()
+        else:
+            self.show_polls_left = SHOW_WAIT_POLLS
+            self.start()
+
+    def toggle(self) -> None:
+        run(["hyprctl", "eval", TOGGLE])
         self.refresh()
 
+    def start(self) -> None:
+        spawn("openclaw", "browser", "start")
+
+    def start_stop(self) -> None:
+        if self.running:
+            spawn("openclaw", "browser", "stop")
+        else:
+            self.start()
+
+    def restart(self) -> None:
+        spawn("sh", "-c", "openclaw browser stop; openclaw browser start")
+
+    def open_control_ui(self) -> None:
+        spawn("xdg-open", control_ui_url())
+
     def refresh(self) -> bool:
-        active = AppIndicator.IndicatorStatus.ACTIVE
-        passive = AppIndicator.IndicatorStatus.PASSIVE
-        self.indicator.set_status(active if browser_exists() else passive)
-        verb = "Hide" if browser_shown() else "Show"
-        self.item.set_label(f"{verb} OpenClaw browser")
+        running = browser_exists()
+        shown = browser_shown()
+        gateway = gateway_state()
+        if running and not shown and self.show_polls_left > 0:
+            self.show_polls_left = 0
+            run(["hyprctl", "eval", TOGGLE])
+            shown = browser_shown()
+        elif self.show_polls_left > 0:
+            self.show_polls_left -= 1
+        if (running, shown) != (self.running, self.shown):
+            self.running, self.shown = running, shown
+            self.conn.emit_signal(
+                None, ITEM_PATH, ITEM_IFACE, "NewToolTip", None
+            )
+        verb = "Hide" if shown else "Show"
+        self.set_item(self.toggle_item, f"{verb} OpenClaw browser", running)
+        self.set_item(
+            self.start_stop_item,
+            "Stop browser" if running else "Start browser",
+            True,
+        )
+        self.set_item(self.restart_item, "Restart browser", running)
+        self.set_item(self.gateway_item, f"Gateway: {gateway}", False)
         return True
+
+    @staticmethod
+    def set_item(item: Dbusmenu.Menuitem, label: str, enabled: bool) -> None:
+        item.property_set(Dbusmenu.MENUITEM_PROP_LABEL, label)
+        item.property_set_bool(Dbusmenu.MENUITEM_PROP_ENABLED, enabled)
 
 
 if __name__ == "__main__":
     Tray()
-    Gtk.main()
+    GLib.MainLoop().run()
