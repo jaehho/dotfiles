@@ -1,0 +1,84 @@
+#!/usr/bin/env python
+"""Tray icon for OpenClaw's agent Chrome, which lives on a hidden workspace.
+
+hyprland.lua sends every Google Chrome window to the special workspace
+``openclaw`` without focusing it, so the agent browses out of sight. This
+puts an item in the waybar tray while that window exists; its menu shows or
+hides the workspace (middle click does the same), so the browser can be
+taken over by hand and put away again.
+
+State comes from ``hyprctl`` (clients, monitors) on a two-second poll. The
+toggle goes through ``hyprctl eval`` because a Lua config rejects the legacy
+``hyprctl dispatch`` string form.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("AyatanaAppIndicator3", "0.1")
+from gi.repository import AyatanaAppIndicator3 as AppIndicator  # noqa: E402
+from gi.repository import GLib, Gtk  # noqa: E402
+
+WORKSPACE = "special:openclaw"
+BROWSER_CLASS = "Google-chrome"
+POLL_SECONDS = 2
+TOGGLE = 'hl.dispatch(hl.dsp.workspace.toggle_special("openclaw"))'
+
+
+def hyprctl_json(what: str) -> list[dict]:
+    out = subprocess.run(
+        ["hyprctl", what, "-j"], capture_output=True, text=True, timeout=5
+    )
+    return json.loads(out.stdout) if out.returncode == 0 else []
+
+
+def browser_exists() -> bool:
+    return any(c["class"] == BROWSER_CLASS for c in hyprctl_json("clients"))
+
+
+def browser_shown() -> bool:
+    return any(
+        m["specialWorkspace"]["name"] == WORKSPACE
+        for m in hyprctl_json("monitors")
+    )
+
+
+class Tray:
+    def __init__(self) -> None:
+        self.indicator = AppIndicator.Indicator.new(
+            "openclaw-browser",
+            "google-chrome",
+            AppIndicator.IndicatorCategory.APPLICATION_STATUS,
+        )
+        self.indicator.set_title("OpenClaw browser")
+        self.item = Gtk.MenuItem(label="Show OpenClaw browser")
+        self.item.connect("activate", self.toggle)
+        menu = Gtk.Menu()
+        menu.append(self.item)
+        menu.show_all()
+        self.indicator.set_menu(menu)
+        self.indicator.set_secondary_activate_target(self.item)
+        self.refresh()
+        GLib.timeout_add_seconds(POLL_SECONDS, self.refresh)
+
+    def toggle(self, _item: Gtk.MenuItem) -> None:
+        subprocess.run(["hyprctl", "eval", TOGGLE], capture_output=True)
+        self.refresh()
+
+    def refresh(self) -> bool:
+        active = AppIndicator.IndicatorStatus.ACTIVE
+        passive = AppIndicator.IndicatorStatus.PASSIVE
+        self.indicator.set_status(active if browser_exists() else passive)
+        verb = "Hide" if browser_shown() else "Show"
+        self.item.set_label(f"{verb} OpenClaw browser")
+        return True
+
+
+if __name__ == "__main__":
+    Tray()
+    Gtk.main()

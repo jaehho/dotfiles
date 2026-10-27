@@ -98,6 +98,9 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user start swayosd-server && systemctl --user restart awatcher && systemctl --user restart aw-watcher-terminal")
     hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
     hl.exec_cmd("~/.local/bin/laptop-watchdog &")
+    -- Tray item for the agent Chrome hidden by the openclaw-browser rule below.
+    -- It needs the watcher above, so start it after the bar's own startup line.
+    hl.exec_cmd("~/.local/bin/openclaw-browser-tray")
     hl.exec_cmd("playerctld daemon")
 
     -- Tray apps: all started here, none from ~/.config/autostart (this session
@@ -696,6 +699,17 @@ hl.window_rule({
     keep_aspect_ratio = true,
     size              = "25% 25%",
     move              = "73% 72%",
+})
+
+-- OpenClaw's agent browser (a Chrome the gateway launches; the daily browser
+-- is Firefox, so any Google Chrome window is the agent's). Silent on a special
+-- workspace: it never takes focus or the screen, and the tray item from
+-- openclaw-browser-tray shows it on demand.
+hl.window_rule({
+    name  = "openclaw-browser",
+    match = { class = "^Google-chrome$" },
+
+    workspace = "special:openclaw silent",
 })
 
 -- Inhibit idle when fullscreen (browsers, media players)
