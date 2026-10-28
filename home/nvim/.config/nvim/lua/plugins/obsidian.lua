@@ -23,11 +23,6 @@ return {
       completion = { min_chars = 2 },
       -- render-markdown already draws markdown; leave conceallevel alone.
       ui = { enable = false },
-      -- No {{properties}}: Note.status counts the always-present id/aliases/tags
-      -- keys, so it reads 3 even for a file with no front matter.
-      footer = {
-        format = '{{backlinks}} backlinks  {{words}} words  {{chars}} chars',
-      },
     },
   },
 }
