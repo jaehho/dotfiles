@@ -14,6 +14,7 @@
 - Read files, logs, and command output yourself; don't ask me to paste them. Make config changes by writing files, not GUI walkthroughs.
 - Don't build a fix for a cause you haven't proven. Add logging that pins it down first, then fix what it shows.
 - Writing that goes out under my name (mail, messages, issue and PR text, posts): read `~/projects/writing/CLAUDE.md` and `STYLE.md` first and work in that repo, not `/tmp`.
+- When interacting with Cloudflare, use the `cf` CLI unless the project has a Wrangler configuration file.
 - Google services (Gmail, Calendar, Drive, Docs) go through the `gog` CLI; `gog auth list` shows the accounts, `gog --help` the commands. Pass `--readonly` unless I ask for a change, and never send mail without asking.
 - `!` commands have no TTY, so anything that prompts (sudo, `ssh -t`, pickers) needs a separate terminal.
 - Unfamiliar or possibly-new names are lookup prompts, not inference prompts; assume anything may postdate training data. Check docs or source before asserting, and say what remains unverified. This includes the defaults and behavior of tools I already know (a linter's default rule set, a flag's default): read the docs or run the tool's own CLI, not memory. For cited works, check Zotero before web search.
