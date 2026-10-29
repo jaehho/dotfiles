@@ -55,6 +55,6 @@ Links today:
 
 ## Development and tests
 
-- Nothing in a test or a dev run touches real data or the real display. A GUI app has a dev entry point that runs it with isolated XDG folders, a private session bus that cannot start the installed daemon, and its window off the real display (asst's `scripts/dev`, steno's `start_broadway` in its tests).
+- Nothing in a test or a dev run reaches the user's desktop: not their notifications, real data or real display. Run anything that might notify with `DBUS_SESSION_BUS_ADDRESS` pointed at a dead path (steno's `tests/__init__.py`), or on a private bus (`dbus-run-session`, asst's `scripts/dev`) when it needs one, and stub `notify-send` in a test that checks a failure is announced (`scripts/test-reel-live`). This holds for a command run by hand to try something too: an app started from a shell with a scratch HOME will still tell the real desktop it cannot start. A GUI app has a dev entry point that runs it with isolated XDG folders, a private session bus that cannot start the installed daemon, and its window off the real display (asst's `scripts/dev`, steno's `start_broadway` in its tests).
 - The window can be driven and captured through app actions, so a test or an agent can check it without a pointer (asst's `drive`, `snapshot` and `dump` in `devel.rs`).
 - A test that writes or deletes refuses to run against real data (wallhelper's `make test`).
