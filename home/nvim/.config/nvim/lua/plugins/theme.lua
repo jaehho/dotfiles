@@ -1,28 +1,21 @@
--- Colorscheme: official Catppuccin Mocha (catppuccin/nvim).
+-- Colorscheme: Everforest Dark Medium (sainnhe/everforest, the author's
+-- own Vimscript port).
 return {
   {
-    'catppuccin/nvim',
-    name = 'catppuccin',
+    'sainnhe/everforest',
     priority = 1000,
-    opts = {
-      flavour = 'mocha',
-      custom_highlights = function(colors)
-        -- Catppuccin dims GitSignsChangeInline to 14% blue, so replaced words
-        -- in <leader>ghp barely show next to the 36% green of added words.
-        -- Replaced words sit on the green added line; match the add strength.
-        local darken = require('catppuccin.utils.colors').darken
-        return {
-          GitSignsChangeInline = {
-            bg = darken(colors.green, 0.36, colors.base),
-          },
-        }
-      end,
-    },
+    init = function()
+      vim.g.everforest_background = 'medium'
+    end,
+    -- No GitSignsChangeInline override (the Catppuccin one lifted replaced
+    -- words to the strength of added words in <leader>ghp). Everforest
+    -- leaves all GitSigns*Inline groups on gitsigns' TermCursor fallback,
+    -- so replaced and added words already render alike.
   },
   {
     'LazyVim/LazyVim',
     opts = {
-      colorscheme = 'catppuccin-mocha',
+      colorscheme = 'everforest',
     },
     config = function(_, opts)
       -- A custom config replaces lazy.nvim's require('lazyvim').setup(opts).

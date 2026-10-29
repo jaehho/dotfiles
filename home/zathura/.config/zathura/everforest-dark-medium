@@ -1,0 +1,40 @@
+# Everforest Dark Medium: a hand recolor of the Catppuccin Mocha port
+# (catppuccin/zathura) with sainnhe/everforest palette.md.
+
+set default-fg                rgba(211,198,170,1)
+set default-bg                rgba(45,53,59,1)
+
+set completion-bg             rgba(52,63,68,1)
+set completion-fg             rgba(211,198,170,1)
+set completion-highlight-bg   rgba(214,153,182,1)
+set completion-highlight-fg   rgba(45,53,59,1)
+set completion-group-bg       rgba(35,42,46,1)
+set completion-group-fg       rgba(211,198,170,1)
+
+set statusbar-fg              rgba(211,198,170,1)
+set statusbar-bg              rgba(35,42,46,1)
+set inputbar-fg               rgba(211,198,170,1)
+set inputbar-bg               rgba(45,53,59,1)
+
+set notification-bg           rgba(45,53,59,1)
+set notification-fg           rgba(211,198,170,1)
+set notification-error-bg     rgba(45,53,59,1)
+set notification-error-fg     rgba(230,126,128,1)
+set notification-warning-bg   rgba(45,53,59,1)
+set notification-warning-fg   rgba(219,188,127,1)
+
+set recolor                   "true"
+set recolor-lightcolor        rgba(45,53,59,1)
+set recolor-darkcolor         rgba(211,198,170,1)
+
+set index-fg                  rgba(211,198,170,1)
+set index-bg                  rgba(45,53,59,1)
+set index-active-fg           rgba(211,198,170,1)
+set index-active-bg           rgba(52,63,68,1)
+
+set render-loading-bg         rgba(45,53,59,1)
+set render-loading-fg         rgba(211,198,170,1)
+
+set highlight-color           rgba(157,169,160,0.3)
+set highlight-fg              rgba(211,198,170,1)
+set highlight-active-color    rgba(214,153,182,0.3)

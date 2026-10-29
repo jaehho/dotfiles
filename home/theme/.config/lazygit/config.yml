@@ -1,32 +1,34 @@
+# theme/authorColors: Everforest Dark Medium, a hand recolor of the
+# Catppuccin Mocha (lavender) port with sainnhe/everforest palette.md.
 theme:
   activeBorderColor:
-    - '#b4befe'
+    - '#a7c080'
     - bold
   inactiveBorderColor:
-    - '#a6adc8'
+    - '#9da9a0'
   searchingActiveBorderColor:
-    - '#f9e2af'
+    - '#dbbc7f'
   optionsTextColor:
-    - '#89b4fa'
+    - '#7fbbb3'
   selectedLineBgColor:
-    - '#313244'
+    - '#343f44'
   inactiveViewSelectedLineBgColor:
-    - '#6c7086'
+    - '#475258'
   cherryPickedCommitFgColor:
-    - '#b4befe'
+    - '#a7c080'
   cherryPickedCommitBgColor:
-    - '#45475a'
+    - '#3d484d'
   markedBaseCommitFgColor:
-    - '#89b4fa'
+    - '#7fbbb3'
   markedBaseCommitBgColor:
-    - '#f9e2af'
+    - '#dbbc7f'
   unstagedChangesColor:
-    - '#f38ba8'
+    - '#e67e80'
   defaultFgColor:
-    - '#cdd6f4'
+    - '#d3c6aa'
 
 authorColors:
-  '*': '#b4befe'
+  '*': '#a7c080'
 
 # Cycle with | . Delta matches terminal git (core.pager) and the
 # solid-word / quiet-line idea in nvim diff_hl.lua. Difftastic is

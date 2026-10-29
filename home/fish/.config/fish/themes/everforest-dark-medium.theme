@@ -1,0 +1,90 @@
+# name: 'Everforest Dark Medium'
+# Hand recolor of the Catppuccin Mocha/Latte port (catppuccin/fish)
+# with sainnhe/everforest palette.md (dark and light, medium).
+
+[light]
+# preferred_background: fdf6e3
+fish_color_normal 5c6a72
+fish_color_command 3a94c5
+fish_color_param 5c6a72
+fish_color_keyword df69ba
+fish_color_quote 8da101
+fish_color_redirection df69ba
+fish_color_end f57d26
+fish_color_comment 939f91
+fish_color_error f85552
+fish_color_gray a6b0a0
+fish_color_selection --background=f4f0d9
+fish_color_search_match --background=f4f0d9
+fish_color_option 8da101
+fish_color_operator df69ba
+fish_color_escape f85552
+fish_color_autosuggestion a6b0a0
+fish_color_cancel f85552
+fish_color_cwd dfa000
+fish_color_user 35a77c
+fish_color_host 3a94c5
+fish_color_host_remote 8da101
+fish_color_status f85552
+fish_pager_color_progress a6b0a0
+fish_pager_color_prefix df69ba
+fish_pager_color_completion 5c6a72
+fish_pager_color_description a6b0a0
+
+[dark]
+# preferred_background: 2d353b
+fish_color_normal d3c6aa
+fish_color_command 7fbbb3
+fish_color_param d3c6aa
+fish_color_keyword d699b6
+fish_color_quote a7c080
+fish_color_redirection d699b6
+fish_color_end e69875
+fish_color_comment 859289
+fish_color_error e67e80
+fish_color_gray 7a8478
+fish_color_selection --background=343f44
+fish_color_search_match --background=343f44
+fish_color_option a7c080
+fish_color_operator d699b6
+fish_color_escape e67e80
+fish_color_autosuggestion 7a8478
+fish_color_cancel e67e80
+fish_color_cwd dbbc7f
+fish_color_user 83c092
+fish_color_host 7fbbb3
+fish_color_host_remote a7c080
+fish_color_status e67e80
+fish_pager_color_progress 7a8478
+fish_pager_color_prefix d699b6
+fish_pager_color_completion d3c6aa
+fish_pager_color_description 7a8478
+
+[unknown]
+# preferred_background: 2d353b
+fish_color_normal d3c6aa
+fish_color_command 7fbbb3
+fish_color_param d3c6aa
+fish_color_keyword d699b6
+fish_color_quote a7c080
+fish_color_redirection d699b6
+fish_color_end e69875
+fish_color_comment 859289
+fish_color_error e67e80
+fish_color_gray 7a8478
+fish_color_selection --background=343f44
+fish_color_search_match --background=343f44
+fish_color_option a7c080
+fish_color_operator d699b6
+fish_color_escape e67e80
+fish_color_autosuggestion 7a8478
+fish_color_cancel e67e80
+fish_color_cwd dbbc7f
+fish_color_user 83c092
+fish_color_host 7fbbb3
+fish_color_host_remote a7c080
+fish_color_status e67e80
+fish_pager_color_progress 7a8478
+fish_pager_color_prefix d699b6
+fish_pager_color_completion d3c6aa
+fish_pager_color_description 7a8478

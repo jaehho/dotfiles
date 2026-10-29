@@ -34,24 +34,25 @@
 	# nvimdiff: LOCAL|BASE|REMOTE over MERGED. Numbered variants are layouts.
 	tool = nvimdiff
 # Fallback colors when delta is not the pager (git -c core.pager=..., --no-pager).
-# Palette: catppuccin mocha, matching nvim diff_hl.lua / lazygit theme.
+# Palette: Everforest Dark Medium (sainnhe/everforest palette.md), matching
+# the nvim colorscheme / lazygit theme.
 # Quote every style: unquoted # starts a gitconfig comment.
 [color "diff"]
-	meta = "#89b4fa"
-	old = "#f38ba8"
-	new = "#a6e3a1"
-	frag = "#cba6f7 bold"
+	meta = "#7fbbb3"
+	old = "#e67e80"
+	new = "#a7c080"
+	frag = "#d699b6 bold"
 [color "diff-highlight"]
-	oldNormal = "#f38ba8"
-	oldHighlight = "bold #1e1e2e #f38ba8"
-	newNormal = "#a6e3a1"
-	newHighlight = "bold #1e1e2e #a6e3a1"
+	oldNormal = "#e67e80"
+	oldHighlight = "bold #2d353b #e67e80"
+	newNormal = "#a7c080"
+	newHighlight = "bold #2d353b #a7c080"
 # Bright fill means changed. A line added or removed whole gets the same
 # fill as the changed words inside a paired line; the unchanged rest of a
 # paired line stays at delta's dim default (minus-/plus-style default to
 # the non-emph styles, so the whole-line ones are set explicitly).
 [delta]
-	syntax-theme = Catppuccin Mocha
+	syntax-theme = Everforest Dark
 	dark = true
 	keep-plus-minus-markers = true
 	minus-style = normal "#901011"
