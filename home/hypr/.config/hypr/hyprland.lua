@@ -715,6 +715,18 @@ hl.window_rule({
     workspace = "special:openclaw silent",
 })
 
+-- Claude's Playwright browser (~/.claude/playwright-mcp.json launches Chrome
+-- with --class=playwright). Silent on a special workspace so test windows
+-- never take focus or the screen. To watch it:
+-- `hyprctl dispatch togglespecialworkspace playwright`.
+hl.window_rule({
+    name  = "playwright-browser",
+    match = { class = "^playwright$" },
+
+    workspace        = "special:playwright silent",
+    no_initial_focus = true,
+})
+
 -- Inhibit idle when fullscreen (browsers, media players)
 hl.window_rule({
     name  = "idle-inhibit-fullscreen",
