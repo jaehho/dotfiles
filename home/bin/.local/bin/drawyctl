@@ -1,0 +1,3254 @@
+#!/usr/bin/env python3
+# Inspect and edit Drawy boards (.drawy: one zstd frame of compact JSON)
+# without opening Drawy: dump, render, check, unpack/pack, and edits
+# that Drawy loads the same as its own.
+#
+# Item rects, text sizes and drops come from drawy-render, which links
+# the installed libdrawygui. It is built on demand from
+# ../share/drawyctl/render.cpp into ${XDG_CACHE_HOME:-~/.cache}/drawyctl
+# against the Drawy source clone at the installed tag (DRAWY_SRC,
+# default ~/projects/upstream/drawy). DRAWYCTL_RENDER names a prebuilt
+# renderer instead. FREEFORM boxes assume Drawy's default Pressure
+# Sensitivity: drawy-render never reads drawyrc.
+#
+# Every write is decoded again, validated and rendered before an atomic
+# replace; an existing target is first copied to .../drawyctl/backups.
+# Drawy never re-reads a board: see WRITTEN_NOTE.
+# Drawy ignores GROUP properties and zorder on load: the array order is
+# the stacking order.
+# `drawyctl selftest` runs every command on a synthetic board.
+# Citations are file:line under src/ in the Drawy source at the tag.
+
+import argparse
+import base64
+import binascii
+import contextlib
+import copy
+import datetime
+import fcntl
+import hashlib
+import itertools
+import json
+import math
+import os
+import re
+import shlex
+import shutil
+import signal
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+import zlib
+from collections import Counter
+from pathlib import Path
+from typing import NamedTuple
+
+from compression import zstd
+
+DEFAULT_DRAWY_SRC = Path.home() / "projects/upstream/drawy"
+DRAWY_GIT = "https://invent.kde.org/graphics/drawy.git"
+LIBDRAWYGUI = Path("/usr/lib/libdrawygui.so")
+DRAWY_INCLUDE = Path("/usr/include/DrawyCore")
+FONTS_SUBDIR = Path("src/widgets/resources/fonts")
+FONT_FILES = ("FuzzyBubbles.ttf", "Inter.ttf")
+BUILD_EXTRA = "// build-extra: "
+
+ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+ZSTD_LEVEL = 4  # common/utils/compression.cpp:17
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+CANVAS_COLORS = {"light": "#f8f9fa", "dark": "#121212"}
+ZOOM_MIN, ZOOM_MAX = 0.1, 30.0  # common/constants.hpp:48-49
+PASTE_BOX = 250.0  # mime/imagemimehandler.cpp:44-55
+MAX_COORDINATE = 1e9  # beyond any real board; Drawy keeps such items
+FAR_WARNING = f"a number beyond {MAX_COORDINATE:g}, far from any real board"
+
+SHAPE_TYPES = ("RECTANGLE", "ELLIPSE", "DIAMOND", "CUSTOM")
+LINE_TYPES = ("LINE", "ARROW")
+LEAF_TYPES = (*SHAPE_TYPES, *LINE_TYPES, "FREEFORM", "TEXT", "IMAGE")
+ITEM_TYPES = (*LEAF_TYPES, "GROUP")
+PLUGIN_FORMS = {"standardforms": ("TRIANGLE", "XBOX")}
+STROKE = ("Opacity", "StrokeColor", "StrokeStyle", "StrokeWidth")
+FILL = ("BackgroundColor", "BackgroundStyle")
+HEADS = ("StartArrowType", "EndArrowType")
+OWNED_PROPERTIES = {
+    **dict.fromkeys(SHAPE_TYPES, (*FILL, *STROKE)),
+    "LINE": STROKE,
+    "ARROW": (*HEADS, *STROKE),
+    "FREEFORM": STROKE,
+    "TEXT": ("FontSize", "Opacity", "StrokeColor"),
+    "IMAGE": ("Opacity",),
+    "GROUP": (),
+}
+# Enum order, the order Drawy writes them in (properties/property.hpp).
+PROPERTY_ORDER = (*HEADS, *FILL, "FontSize", *STROKE)
+INT_RANGES = {"FontSize": (1, None), "Opacity": (0, 255)}
+INT_RANGES["StrokeWidth"] = (0, None)
+COLOR_PROPERTIES = ("StrokeColor", "BackgroundColor")
+HEAD_KINDS = ("None", "Open", "Unfilled", "Filled", "Circle", "Diamond")
+ENUM_VALUES = {
+    **dict.fromkeys(HEADS, HEAD_KINDS),
+    "StrokeStyle": ("Solid", "DashLine", "DotLine"),
+    "BackgroundStyle": ("Solid", "Diagonal", "CrossDiagonal", "None"),
+}
+COLOR_RE = re.compile(r"#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")
+MATRIX_KEYS = ("m11", "m12", "m13", "m21", "m22", "m23")
+MATRIX_KEYS += ("m31", "m32", "m33")
+ROOT_KEYS = ("version", "offset_pos", "zoom_factor", "items")
+COMMON_KEYS = ("type", "id", "properties", "transform", "locked", "zorder")
+EXTRA_KEYS = {
+    **dict.fromkeys((*SHAPE_TYPES, *LINE_TYPES), ("start", "end")),
+    "CUSTOM": ("start", "end", "pluginName", "customObjectName"),
+    "FREEFORM": ("points", "pressures", "simulatePressure"),
+    "TEXT": ("text", "top_left"),
+    "IMAGE": ("image_data", "bounding_box"),
+    "GROUP": ("items",),
+}
+PATH_RE = re.compile(r"\d+(?:\.\d+)*")
+ID_PREFIX_RE = re.compile(r"[0-9a-f]{4,}")
+# Printed after every write over an existing board. A plain launch
+# restores the autosave under the last board's name
+# (restoreautosavejob.cpp:45-65), and File > Open asks to save only
+# when Drawy holds unsaved changes (actionmanager.cpp:624-650).
+WRITTEN_NOTE = (
+    "note: Drawy does not reload files. Open {path} by path (drawy FILE"
+    " or File > Open): a plain launch shows Drawy's older autosave under"
+    " this name, and saving that overwrites this edit. If Drawy asks to"
+    " save first, it holds unsaved changes of its own: Save keeps them"
+    " and overwrites this edit (run it again after); Discard keeps this"
+    " edit and loses them."
+)
+SOURCE_KEY = "drawyctl_source_sha256"  # unpack's note of the board's hash
+
+
+class Failure(Exception):
+    """An expected failure: one line on stderr, exit status 1."""
+
+    status = 1
+
+
+class UsageError(Failure):
+    """A bad command line: exit status 2."""
+
+    status = 2
+
+
+# --- JSON as Drawy writes it
+
+
+def qt_numbers(value):
+    """value with integral floats up to 2**53 as ints, which is how
+    QJsonDocument writes them."""
+    if isinstance(value, dict):
+        return {key: qt_numbers(each) for key, each in value.items()}
+    if isinstance(value, list):
+        return [qt_numbers(each) for each in value]
+    if isinstance(value, float) and value.is_integer():
+        return int(value) if abs(value) <= 2**53 else value
+    return value
+
+
+def board_payload(doc: dict) -> bytes:
+    """The board's JSON bytes, uncompressed: compact with sorted keys,
+    as Drawy saves (serializer/serializerutils.cpp:28-34). Numbers
+    match Qt's, except that 0.000d is de-04 there (the same double)."""
+    try:
+        text = json.dumps(
+            qt_numbers(doc),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        return text.encode("utf-8")
+    except (ValueError, UnicodeEncodeError) as exc:
+        raise Failure(f"cannot write the board: {exc}") from None
+
+
+def board_bytes(doc: dict) -> bytes:
+    """The .drawy bytes: one zstd frame that states its content size
+    (compression.cpp:27-48 needs both)."""
+    return zstd.compress(board_payload(doc), level=ZSTD_LEVEL)
+
+
+def refuse_constant(name: str):
+    raise ValueError(f"{name} is not JSON (Drawy refuses it)")
+
+
+def payload_of(raw: bytes) -> bytes:
+    """JSON bytes of a .drawy (zstd) or plain JSON file."""
+    if not raw.startswith(ZSTD_MAGIC):
+        return raw
+    try:
+        return zstd.decompress(raw)
+    except zstd.ZstdError as exc:
+        raise Failure(f"broken zstd data: {exc}") from None
+
+
+def parsed_board(raw: bytes) -> dict:
+    """The board object in a .drawy (zstd) or plain JSON file."""
+    try:
+        doc = json.loads(payload_of(raw), parse_constant=refuse_constant)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise Failure(f"not valid JSON: {exc}") from None
+    if not isinstance(doc, dict):
+        raise Failure("the JSON root is not an object")
+    return doc
+
+
+# --- the item tree
+
+
+def is_group(item) -> bool:
+    return (
+        isinstance(item, dict)
+        and item.get("type") == "GROUP"
+        and isinstance(item.get("items"), list)
+    )
+
+
+def items_of(doc: dict) -> list:
+    """The board's top-level items array."""
+    items = doc.get("items")
+    if not isinstance(items, list):
+        raise Failure('the board has no "items" array')
+    return items
+
+
+def walked(items: list, prefix: tuple = ()):
+    """(path, item) for every item, in document pre-order."""
+    for index, item in enumerate(items):
+        path = (*prefix, index)
+        yield path, item
+        if is_group(item):
+            yield from walked(item["items"], path)
+
+
+def path_text(path: tuple) -> str:
+    return ".".join(map(str, path))
+
+
+def parsed_path(text: str) -> tuple:
+    return tuple(int(part) for part in text.split("."))
+
+
+def prefixes(path: tuple) -> list:
+    """The paths of path's ancestors, outermost first."""
+    return [path[:depth] for depth in range(1, len(path))]
+
+
+def item_at(doc: dict, path: tuple):
+    """The item at path: a top-level index, then child indices."""
+    container, item = items_of(doc), None
+    for depth, index in enumerate(path):
+        if not 0 <= index < len(container):
+            raise Failure(f"no item at {path_text(path[: depth + 1])}")
+        item = container[index]
+        if depth < len(path) - 1:
+            if not is_group(item):
+                where = path_text(path[: depth + 1])
+                raise Failure(f"{where} is not a group")
+            container = item["items"]
+    return item
+
+
+def container_of(doc: dict, parent: tuple) -> list:
+    """The items array holding parent's children (() for the top)."""
+    return item_at(doc, parent)["items"] if parent else items_of(doc)
+
+
+def short_id(item) -> str:
+    value = item.get("id") if isinstance(item, dict) else None
+    return value[:8] if isinstance(value, str) and value else "-"
+
+
+def kind_of(item) -> str:
+    if not isinstance(item, dict) or not isinstance(item.get("type"), str):
+        return "?"
+    if item["type"] == "CUSTOM":
+        return f"CUSTOM/{item.get('customObjectName')}"
+    return item["type"]
+
+
+def quoted(text: str, limit: int = 40) -> str:
+    cut = text if len(text) <= limit else text[: limit - 1] + "…"
+    return json.dumps(cut, ensure_ascii=False)
+
+
+def item_label(doc: dict, path: tuple) -> str:
+    """Path, short id, type and text of an item, for messages."""
+    item = item_at(doc, path)
+    label = f"{path_text(path)} ({short_id(item)} {kind_of(item)}"
+    if isinstance(item, dict) and isinstance(item.get("text"), str):
+        label += " " + quoted(item["text"], 24)
+    return label + ")"
+
+
+# --- geometry
+
+
+class Affine(NamedTuple):
+    """A QTransform without perspective: x' = m11 x + m21 y + dx."""
+
+    m11: float
+    m12: float
+    m21: float
+    m22: float
+    dx: float
+    dy: float
+
+    def then(self, other: "Affine") -> "Affine":
+        """Qt's self * other: apply self, then other."""
+        a, b = self, other
+        return Affine(
+            a.m11 * b.m11 + a.m12 * b.m21,
+            a.m11 * b.m12 + a.m12 * b.m22,
+            a.m21 * b.m11 + a.m22 * b.m21,
+            a.m21 * b.m12 + a.m22 * b.m22,
+            a.dx * b.m11 + a.dy * b.m21 + b.dx,
+            a.dx * b.m12 + a.dy * b.m22 + b.dy,
+        )
+
+    def mapped(self, x: float, y: float) -> tuple:
+        a = self
+        return a.m11 * x + a.m21 * y + a.dx, a.m12 * x + a.m22 * y + a.dy
+
+    def inverted(self) -> "Affine":
+        det = self.m11 * self.m22 - self.m12 * self.m21
+        if det == 0:
+            raise Failure("a transform is singular")
+        m11, m12 = self.m22 / det, -self.m12 / det
+        m21, m22 = -self.m21 / det, self.m11 / det
+        dx = -(self.dx * m11 + self.dy * m21)
+        dy = -(self.dx * m12 + self.dy * m22)
+        return Affine(m11, m12, m21, m22, dx, dy)
+
+    @property
+    def is_translation(self) -> bool:
+        return (self.m11, self.m12, self.m21, self.m22) == (1, 0, 0, 1)
+
+
+IDENTITY = Affine(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+
+def translation(x: float, y: float) -> Affine:
+    return Affine(1.0, 0.0, 0.0, 1.0, x, y)
+
+
+def scaling(sx: float, sy: float) -> Affine:
+    return Affine(sx, 0.0, 0.0, sy, 0.0, 0.0)
+
+
+def affine_of(item: dict) -> Affine:
+    t = item["transform"]
+    keys = ("m11", "m12", "m21", "m22", "m31", "m32")
+    return Affine(*(float(t[key]) for key in keys))
+
+
+def transform_json(a: Affine) -> dict:
+    values = (a.m11, a.m12, 0, a.m21, a.m22, 0, a.dx, a.dy, 1)
+    return dict(zip(MATRIX_KEYS, values, strict=True))
+
+
+def world_affine(doc: dict, path: tuple) -> Affine:
+    """Item-local to canvas: T_item * T_parent * ... (group.cpp:12-20).
+    The empty path gives the identity."""
+    world = IDENTITY
+    for depth in range(len(path), 0, -1):
+        world = world.then(affine_of(item_at(doc, path[:depth])))
+    return world
+
+
+def extracted_scale(a: Affine) -> tuple[Affine, float, float]:
+    """Math::extractScale (common/utils/math.cpp:109-132): a with unit
+    rows, and the row lengths."""
+    sx, sy = math.hypot(a.m11, a.m12), math.hypot(a.m21, a.m22)
+    m11, m12 = (a.m11 / sx, a.m12 / sx) if sx > 0 else (a.m11, a.m12)
+    m21, m22 = (a.m21 / sy, a.m22 / sy) if sy > 0 else (a.m21, a.m22)
+    return Affine(m11, m12, m21, m22, a.dx, a.dy), sx, sy
+
+
+class Rect(NamedTuple):
+    x: float
+    y: float
+    w: float
+    h: float
+
+    @property
+    def right(self) -> float:
+        return self.x + self.w
+
+    @property
+    def bottom(self) -> float:
+        return self.y + self.h
+
+    @property
+    def center(self) -> tuple:
+        return self.x + self.w / 2, self.y + self.h / 2
+
+    def shifted(self, dx: float, dy: float) -> "Rect":
+        return Rect(self.x + dx, self.y + dy, self.w, self.h)
+
+    def grown(self, margin: float) -> "Rect":
+        m = margin
+        return Rect(self.x - m, self.y - m, self.w + 2 * m, self.h + 2 * m)
+
+
+def united(rects) -> Rect | None:
+    """QRectF |= over rects, which skips null rects (both sides 0)."""
+    real = [r for r in rects if r.w or r.h]
+    if not real:
+        return None
+    x, y = min(r.x for r in real), min(r.y for r in real)
+    right, bottom = max(r.right for r in real), max(r.bottom for r in real)
+    return Rect(x, y, right - x, bottom - y)
+
+
+def overlap(a: Rect, b: Rect) -> Rect | None:
+    """The intersection of a and b, if it has positive area."""
+    x, y = max(a.x, b.x), max(a.y, b.y)
+    w, h = min(a.right, b.right) - x, min(a.bottom, b.bottom) - y
+    return Rect(x, y, w, h) if w > 0 and h > 0 else None
+
+
+def qt_round(value: float) -> int:
+    """qRound, for the non-negative values it gets here."""
+    return math.floor(value + 0.5)
+
+
+# --- properties
+
+
+def property_value(item: dict, name: str, default=None):
+    for entry in item.get("properties") or []:
+        if isinstance(entry, dict) and entry.get("type") == name:
+            return entry.get("value")
+    return default
+
+
+def set_property(item: dict, name: str, value) -> None:
+    """Replace or insert a property, keeping Drawy's enum order."""
+    entries = item.setdefault("properties", [])
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("type") == name:
+            entry["value"] = value
+            return
+    rank = PROPERTY_ORDER.index(name)
+    later = (
+        index
+        for index, entry in enumerate(entries)
+        if isinstance(entry, dict)
+        and entry.get("type") in PROPERTY_ORDER
+        and PROPERTY_ORDER.index(entry["type"]) > rank
+    )
+    entries.insert(next(later, len(entries)), {"type": name, "value": value})
+
+
+def property_name(key: str) -> str:
+    """The JSON name of a property (or "text"), any case."""
+    for name in (*PROPERTY_ORDER, "text"):
+        if name.lower() == key.lower():
+            return name
+    known = ", ".join((*PROPERTY_ORDER, "text"))
+    raise UsageError(f"unknown property {key!r} (known: {known})")
+
+
+def coerced_property(name: str, text: str):
+    """The JSON value Drawy writes for a property given as text."""
+    if name in INT_RANGES:
+        try:
+            number = float(text)
+        except ValueError:
+            number = math.nan
+        value = int(number) if number.is_integer() else text
+    elif name in COLOR_PROPERTIES:
+        value = text.lower()
+    else:
+        folded = (v for v in ENUM_VALUES[name] if v.lower() == text.lower())
+        value = next(folded, text)
+    problem = property_problem(name, value)
+    if problem:
+        raise UsageError(problem)
+    return value
+
+
+# --- what Drawy does to geometry
+
+
+def shift_translation(item: dict, dx: float, dy: float) -> None:
+    """Add (dx, dy) to the item's m31/m32 (its parent's space)."""
+    t = item["transform"]
+    t["m31"], t["m32"] = float(t["m31"]) + dx, float(t["m32"]) + dy
+
+
+def scale_point(point: dict, sx: float, sy: float) -> None:
+    point["x"], point["y"] = float(point["x"]) * sx, float(point["y"]) * sy
+
+
+def placeable(item) -> bool:
+    """Whether item is a known type with a usable transform."""
+    return (
+        isinstance(item, dict)
+        and item.get("type") in ITEM_TYPES
+        and not transform_problems(item.get("transform"))
+    )
+
+
+def scale_geometry(item: dict, sx: float, sy: float) -> None:
+    """Scale an item's own geometry in place: the second half of each
+    type's commitTransformation."""
+    kind = item["type"]
+    if kind == "IMAGE":  # item/image.cpp:24-32
+        box = item["bounding_box"]
+        box["x"], box["width"] = box["x"] * sx, box["width"] * sx
+        box["y"], box["height"] = box["y"] * sy, box["height"] * sy
+    elif kind == "TEXT":  # item/text.cpp:133-147, x scale only
+        size = qt_round(int(property_value(item, "FontSize", 18)) * sx)
+        if size < 1:
+            raise Failure(f"{quoted(item['text'])} would get FontSize 0")
+        set_property(item, "FontSize", size)
+        scale_point(item["top_left"], sx, sy)
+    elif kind in SHAPE_TYPES or kind in LINE_TYPES:  # polygon.cpp:119
+        scale_point(item["start"], sx, sy)
+        scale_point(item["end"], sx, sy)
+    elif kind == "FREEFORM":  # item/freeform.cpp:261-275
+        for point in item["points"]:
+            scale_point(point, sx, sy)
+    elif kind == "GROUP":  # item/group.cpp:34-48
+        for child in item["items"]:
+            if placeable(child):
+                after = affine_of(child).then(scaling(sx, sy))
+                child["transform"] = transform_json(after)
+                commit_transformation(child)
+
+
+def commit_transformation(item: dict) -> None:
+    """Item::commitTransformation in place: move the scale out of the
+    transform into the geometry."""
+    affine, sx, sy = extracted_scale(affine_of(item))
+    item["transform"] = transform_json(affine)
+    scale_geometry(item, sx, sy)
+
+
+def fold_into_children(group: dict) -> None:
+    """GroupItem::unGroup in place (group.cpp:76-89): each child gets
+    T_child * T_group, committed."""
+    outer = affine_of(group)
+    for child in group["items"]:
+        if placeable(child):
+            after = affine_of(child).then(outer)
+            child["transform"] = transform_json(after)
+            commit_transformation(child)
+
+
+def kept_children(group: dict, path: tuple, rects: dict) -> list:
+    """(path, child) for the children Drawy kept, which have rects."""
+    return [
+        ((*path, index), child)
+        for index, child in enumerate(group["items"])
+        if (*path, index) in rects
+    ]
+
+
+def normalize_like_load(group: dict, path: tuple, rects: dict) -> None:
+    """LoadJobUtil::loadFile's group step in place
+    (widgets/jobs/loadjobutil.cpp:21-36): fold the group into its
+    children, recurse, and regroup at the top-left of the children's
+    canvas union (group.cpp:50-67). group's transform must map to the
+    canvas, and rects are the canvas rects Drawy reports."""
+    children = kept_children(group, path, rects)
+    union = united(rects[p] for p, _ in children)
+    if union is None:
+        return
+    fold_into_children(group)
+    for child_path, child in children:
+        if is_group(child):
+            normalize_like_load(child, child_path, rects)
+    group["transform"] = transform_json(translation(union.x, union.y))
+    for _, child in children:
+        shift_translation(child, -union.x, -union.y)
+
+
+def has_turned_frame(doc: dict, container: tuple) -> bool:
+    """Whether a group on the way down to container (inclusive) has
+    rotation or scale, which Drawy's loader pushes into children."""
+    return any(
+        not affine_of(item_at(doc, container[:depth])).is_translation
+        for depth in range(1, len(container) + 1)
+    )
+
+
+def load_formed(doc: dict, containers, rects: dict) -> tuple[dict, list]:
+    """doc with each top-level group that holds one of containers put
+    in the form Drawy's loader gives it, if it is not in that form
+    already, and notes saying so. Canvas rects stay valid."""
+    tops = {c[0] for c in containers if c and has_turned_frame(doc, c)}
+    if not tops:
+        return doc, []
+    out, notes = copy.deepcopy(doc), []
+    for top in sorted(tops):
+        normalize_like_load(item_at(out, (top,)), (top,), rects)
+        notes.append(
+            f"moved the rotation or scale of group {item_label(out, (top,))}"
+            " into its children, as Drawy's loader does"
+        )
+    return out, notes
+
+
+def translated(doc: dict, path: tuple, dx: float, dy: float) -> dict:
+    """doc with the item at path moved by (dx, dy) on the canvas:
+    MoveItemCommand adds the delta to m31/m32
+    (command/moveitemcommand.cpp:32-43)."""
+    out = copy.deepcopy(doc)
+    inverse = world_affine(out, path[:-1]).inverted()
+    local_dx = inverse.m11 * dx + inverse.m21 * dy
+    local_dy = inverse.m12 * dx + inverse.m22 * dy
+    shift_translation(item_at(out, path), local_dx, local_dy)
+    return out
+
+
+def scaled(doc: dict, path: tuple, factor: float) -> dict:
+    """doc with the item at path scaled about its local origin, the
+    scale committed into its geometry as a resize does
+    (command/resizeitemcommand.cpp:39-45)."""
+    out = copy.deepcopy(doc)
+    item = item_at(out, path)
+    after = scaling(factor, factor).then(affine_of(item))
+    item["transform"] = transform_json(after)
+    commit_transformation(item)
+    return out
+
+
+def anchor_shift(before: Rect, after: Rect, anchor: str) -> tuple:
+    """The move that puts after's anchor point back where before's
+    was."""
+    if anchor == "center":
+        (bx, by), (ax, ay) = before.center, after.center
+        return bx - ax, by - ay
+    return before.x - after.x, before.y - after.y
+
+
+# --- edits
+
+
+class Edited(NamedTuple):
+    """An edited board and notes for the user."""
+
+    doc: dict
+    notes: tuple
+
+
+def leaves_under(item) -> list:
+    """item itself, or every non-group item under it if a group."""
+    if not is_group(item):
+        return [item]
+    return [
+        child
+        for _, child in walked(item["items"])
+        if isinstance(child, dict) and child.get("type") in LEAF_TYPES
+    ]
+
+
+def with_settings(doc: dict, path: tuple, settings: list) -> Edited:
+    """doc with properties (or text) set on the item, or on every item
+    under a group that owns the property: Drawy ignores group
+    properties on load (serializer/groupdeserializer.cpp:22-29)."""
+    out = copy.deepcopy(doc)
+    target = item_at(out, path)
+    leaves = leaves_under(target)
+    notes = []
+    for name, value in settings:
+        if name == "text":
+            if target.get("type") != "TEXT":
+                label = item_label(doc, path)
+                raise UsageError(f"text= needs a TEXT item, not {label}")
+            target["text"] = value
+            continue
+        owners = [
+            leaf
+            for leaf in leaves
+            if name in OWNED_PROPERTIES[leaf.get("type")]
+        ]
+        if not owners:
+            if is_group(target):
+                label = item_label(doc, path)
+                raise Failure(f"no item in group {label} has {name}")
+            owned = ", ".join(OWNED_PROPERTIES[target["type"]])
+            raise Failure(f"{target['type']} has no {name} (has {owned})")
+        for leaf in owners:
+            set_property(leaf, name, value)
+        if is_group(target):
+            count = len(owners)
+            notes.append(f"set {name} on {count} item{'s' * (count > 1)}")
+    return Edited(out, tuple(notes))
+
+
+def text_item(
+    text: str, *, item_id: str, origin: tuple, size: int, color: str
+) -> dict:
+    """A new TEXT as Drawy's paste makes it: top_left (0, 0), position
+    in the transform (mime/textmimehandler.cpp:26)."""
+    return {
+        "type": "TEXT",
+        "id": item_id,
+        "properties": [
+            {"type": "FontSize", "value": size},
+            {"type": "Opacity", "value": 255},
+            {"type": "StrokeColor", "value": color},
+        ],
+        "text": text,
+        "top_left": {"x": 0, "y": 0},
+        "transform": transform_json(translation(*origin)),
+    }
+
+
+def image_item(
+    png: bytes, *, item_id: str, origin: tuple, size: tuple
+) -> dict:
+    """A new IMAGE as Drawy's paste makes it
+    (mime/imagemimehandler.cpp:41-57)."""
+    box = {"x": 0, "y": 0, "width": size[0], "height": size[1]}
+    return {
+        "type": "IMAGE",
+        "id": item_id,
+        "properties": [{"type": "Opacity", "value": 255}],
+        "bounding_box": box,
+        "image_data": base64.b64encode(png).decode("ascii"),
+        "transform": transform_json(translation(*origin)),
+    }
+
+
+def png_size(data: bytes) -> tuple[int, int]:
+    """Pixel width and height from a PNG's IHDR chunk."""
+    if not data.startswith(PNG_SIGNATURE) or data[12:16] != b"IHDR":
+        raise ValueError("not a PNG")
+    width, height = struct.unpack(">II", data[16:24])
+    return width, height
+
+
+def image_box(pixels: tuple, *, width=None, height=None) -> tuple:
+    """Box for an image: the given width or height with the aspect
+    kept, else Drawy's paste size (longest side at most 250)."""
+    pw, ph = pixels
+    if width is not None:
+        return width, width * ph / pw
+    if height is not None:
+        return height * pw / ph, height
+    factor = min(1.0, PASTE_BOX / max(pw, ph))
+    return pw * factor, ph * factor
+
+
+def common_text_color(doc: dict) -> str:
+    """The StrokeColor most TEXT items use, else #000000."""
+    colors = Counter(
+        property_value(item, "StrokeColor")
+        for _, item in walked(items_of(doc))
+        if isinstance(item, dict) and item.get("type") == "TEXT"
+    )
+    colors.pop(None, None)
+    return colors.most_common(1)[0][0] if colors else "#000000"
+
+
+def local_point(doc: dict, group: tuple, point: tuple) -> tuple:
+    """A canvas point in group's space (() for the canvas)."""
+    return world_affine(doc, group).inverted().mapped(*point)
+
+
+def with_item_added(doc: dict, item: dict, into: tuple) -> dict:
+    """doc with item on top of the board, or last in group into."""
+    out = copy.deepcopy(doc)
+    container_of(out, into).append(item)
+    return out
+
+
+def without_items(doc: dict, paths) -> Edited:
+    """doc without the items at paths. A group left empty goes too:
+    Drawy drops empty groups (data-structures/quadtree.cpp:61-65)."""
+    out, doomed = copy.deepcopy(doc), set(paths)
+    notes = []
+
+    def pruned(items: list, prefix: tuple) -> list:
+        kept = []
+        for index, item in enumerate(items):
+            path = (*prefix, index)
+            if path in doomed:
+                continue
+            if is_group(item):
+                before = len(item["items"])
+                item["items"] = pruned(item["items"], path)
+                if before and not item["items"]:
+                    notes.append(
+                        f"deleted group {path_text(path)}"
+                        f" ({short_id(item)}): its last child went, and"
+                        " Drawy drops empty groups"
+                    )
+                    continue
+            kept.append(item)
+        return kept
+
+    out["items"] = pruned(items_of(out), ())
+    return Edited(out, tuple(notes))
+
+
+def reordered(doc: dict, path: tuple, where: str) -> dict:
+    """doc with the item moved within its parent's array, which is the
+    stacking order (loadjobutil.cpp:40-41, group.cpp:12-20)."""
+    out = copy.deepcopy(doc)
+    container, index = container_of(out, path[:-1]), path[-1]
+    item = container.pop(index)
+    position = {
+        "front": len(container),
+        "back": 0,
+        "up": min(index + 1, len(container)),
+        "down": max(index - 1, 0),
+    }[where]
+    container.insert(position, item)
+    return out
+
+
+def sibling_parent(paths) -> tuple:
+    """The common parent of paths, which must be distinct siblings."""
+    parents = {p[:-1] for p in paths}
+    if len(parents) != 1:
+        listed = ", ".join(map(path_text, paths))
+        raise UsageError(f"items must share one parent: {listed}")
+    if len(set(paths)) != len(paths):
+        raise UsageError("an item is selected twice")
+    return parents.pop()
+
+
+def grouped(doc: dict, paths, rects: dict, *, group_id: str) -> dict:
+    """doc with sibling items wrapped in a new group where the first of
+    them was, translated to their union's top-left and the children
+    shifted back (group.cpp:50-67). Group properties stay empty: Drawy
+    ignores them on load."""
+    parent = sibling_parent(paths)
+    for path in paths:
+        if path not in rects:
+            label = item_label(doc, path)
+            raise Failure(f"Drawy drops {label}; cannot group it")
+    union = united(rects[p] for p in paths)
+    if union is None:
+        raise Failure("the selected items have no area")
+    out = copy.deepcopy(doc)
+    container = container_of(out, parent)
+    origin = local_point(out, parent, (union.x, union.y))
+    indices = sorted(p[-1] for p in paths)
+    children = [container[i] for i in indices]
+    for child in children:
+        shift_translation(child, -origin[0], -origin[1])
+    for index in reversed(indices):
+        del container[index]
+    group = {
+        "type": "GROUP",
+        "id": group_id,
+        "properties": [],
+        "transform": transform_json(translation(*origin)),
+        "items": children,
+    }
+    container.insert(indices[0], group)
+    return out
+
+
+def ungrouped(doc: dict, path: tuple) -> dict:
+    """doc with the group's transform folded into its children and
+    them spliced into the parent where the group was."""
+    out = copy.deepcopy(doc)
+    group = item_at(out, path)
+    if not is_group(group):
+        raise UsageError(f"{item_label(doc, path)} is not a group")
+    fold_into_children(group)
+    container_of(out, path[:-1])[path[-1] : path[-1] + 1] = group["items"]
+    return out
+
+
+def arranged_corners(
+    sizes, *, columns: int, gap: float, origin: tuple, align: str
+) -> list:
+    """Top-left corners laying out boxes of these sizes in order, in
+    rows of columns cells. A column is as wide as its widest box, a
+    row as tall as its tallest; align places each box in its cell."""
+    columns = min(columns, len(sizes))
+    widths = [max(w for w, _ in sizes[c::columns]) for c in range(columns)]
+    heights = [
+        max(h for _, h in sizes[start : start + columns])
+        for start in range(0, len(sizes), columns)
+    ]
+
+    def starts(spans, first):
+        return list(
+            itertools.accumulate((s + gap for s in spans), initial=first)
+        )
+
+    xs, ys = starts(widths, origin[0]), starts(heights, origin[1])
+    share = {"start": 0.0, "center": 0.5, "end": 1.0}[align]
+    corners = []
+    for index, (w, h) in enumerate(sizes):
+        row, col = divmod(index, columns)
+        x = xs[col] + share * (widths[col] - w)
+        corners.append((x, ys[row] + share * (heights[row] - h)))
+    return corners
+
+
+def fit_zoom(canvas: Rect, viewport: tuple, margin: float) -> float:
+    """The zoom that fits canvas in a viewport of that many view pixels
+    with margin to spare, before Drawy's 0.1–30 clamp."""
+    fits = [
+        (span - 2 * margin) / size
+        for span, size in zip(viewport, (canvas.w, canvas.h), strict=True)
+        if size > 0 and span > 2 * margin
+    ]
+    return min(fits, default=1.0)
+
+
+def centered_offset(canvas: Rect, viewport: tuple, zoom: float) -> tuple:
+    """The offset that centers canvas in the viewport at zoom: view =
+    (world - offset) * zoom (context/coordinatetransformer.cpp:30-33).
+    """
+    (cx, cy), (vw, vh) = canvas.center, viewport
+    return cx - vw / 2 / zoom, cy - vh / 2 / zoom
+
+
+def with_view(doc: dict, zoom: float, offset: tuple) -> dict:
+    out = copy.deepcopy(doc)
+    out["zoom_factor"] = zoom
+    out["offset_pos"] = {"x": offset[0], "y": offset[1]}
+    return out
+
+
+# --- validation
+
+
+class Issue(NamedTuple):
+    severity: str  # "error" or "warning"
+    path: str
+    item_id: str
+    message: str
+
+
+def is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def number_problem(value, name: str) -> str | None:
+    if not is_number(value):
+        return f"{name} is not a number"
+    if not math.isfinite(value):
+        return f"{name} is not finite"
+    return None
+
+
+def has_far_number(value) -> bool:
+    """Whether value holds a finite number beyond MAX_COORDINATE."""
+    if isinstance(value, dict):
+        return any(map(has_far_number, value.values()))
+    if isinstance(value, list):
+        return any(map(has_far_number, value))
+    return is_number(value) and MAX_COORDINATE < abs(value) < math.inf
+
+
+def point_problem(value, name: str) -> str | None:
+    if not isinstance(value, dict) or not {"x", "y"} <= value.keys():
+        return f"{name} must be an object with x and y"
+    x, y = value["x"], value["y"]
+    return number_problem(x, f"{name}.x") or number_problem(y, f"{name}.y")
+
+
+def transform_problems(value) -> list[str]:
+    if not isinstance(value, dict):
+        return ["no transform (Drawy reads a zero matrix: the item goes)"]
+    problems = [
+        f"transform.{key} is missing (read as 0)"
+        if key not in value
+        else number_problem(value[key], f"transform.{key}")
+        for key in MATRIX_KEYS
+    ]
+    if any(problems):
+        return [p for p in problems if p]
+    if (value["m13"], value["m23"], value["m33"]) != (0, 0, 1):
+        return ["transform is not affine (m13 = m23 = 0, m33 = 1)"]
+    if value["m11"] * value["m22"] == value["m12"] * value["m21"]:
+        return ["transform is singular: the item collapses"]
+    return []
+
+
+def property_problem(name: str, value) -> str | None:
+    if name in INT_RANGES:
+        low, high = INT_RANGES[name]
+        integral = is_number(value) and float(value).is_integer()
+        if not integral:
+            return f"{name} must be an integer, not {value!r}"
+        if value < low or (high is not None and value > high):
+            span = f"{low}–{high}" if high is not None else f">= {low}"
+            return f"{name} must be {span}, not {value}"
+    elif name in COLOR_PROPERTIES:
+        if not isinstance(value, str) or not COLOR_RE.fullmatch(value):
+            return (
+                f"{name} must be #rrggbb or #aarrggbb (alpha first, as"
+                f" Qt writes it), not {value!r}"
+            )
+    elif name in ENUM_VALUES and value not in ENUM_VALUES[name]:
+        choices = ", ".join(ENUM_VALUES[name])
+        return f"{name} must be one of {choices}, not {value!r}"
+    return None
+
+
+def image_problem(data) -> str | None:
+    if not isinstance(data, str) or not data:
+        return "no image_data (the image is blank and saved empty)"
+    try:
+        png_size(base64.b64decode(data, validate=True)[:24])
+    except binascii.Error:
+        return "image_data is not standard padded base64"
+    except ValueError:
+        return "image_data is not a PNG (imagedeserializer.cpp:29-32)"
+    return None
+
+
+def box_problem(box) -> str | None:
+    keys = ("x", "y", "width", "height")
+    if not isinstance(box, dict) or not set(keys) <= box.keys():
+        return "bounding_box needs x, y, width, height"
+    for key in keys:
+        problem = number_problem(box[key], f"bounding_box.{key}")
+        if problem:
+            return problem
+    if box["width"] <= 0 or box["height"] <= 0:
+        return "bounding_box width and height must be > 0"
+    return None
+
+
+def type_problems(item: dict, kind: str) -> tuple[list, list]:
+    """Errors and warnings in the fields only this type has."""
+    errors, warnings = [], []
+    if kind == "TEXT":
+        text = item.get("text")
+        if not isinstance(text, str) or not text:
+            errors.append("text must be a non-empty string")
+        errors.append(point_problem(item.get("top_left"), "top_left"))
+        if property_value(item, "StrokeColor") is None:
+            warnings.append("no StrokeColor: drawn white (text.cpp:29)")
+    elif kind == "IMAGE":
+        errors.append(image_problem(item.get("image_data")))
+        errors.append(box_problem(item.get("bounding_box")))
+    elif kind == "FREEFORM":
+        points, pressures = item.get("points"), item.get("pressures")
+        if not isinstance(points, list) or not points:
+            errors.append("points must be a non-empty array")
+        else:
+            errors += [point_problem(p, "a point") for p in points]
+        if not isinstance(pressures, list):
+            errors.append("pressures must be an array")
+        else:
+            errors += [number_problem(p, "a pressure") for p in pressures]
+            if isinstance(points, list) and len(points) != len(pressures):
+                errors.append(
+                    f"{len(points)} points but {len(pressures)} pressures"
+                    " (freeformdeserializer.cpp:29-33)"
+                )
+        if not isinstance(item.get("simulatePressure"), bool):
+            warnings.append("simulatePressure is not a boolean")
+    elif kind in SHAPE_TYPES or kind in LINE_TYPES:
+        errors.append(point_problem(item.get("start"), "start"))
+        errors.append(point_problem(item.get("end"), "end"))
+        plugin, form = item.get("pluginName"), item.get("customObjectName")
+        if kind == "CUSTOM" and form not in PLUGIN_FORMS.get(plugin, ()):
+            errors.append(f"no plugin shape {plugin!r}/{form!r}")
+    elif kind == "GROUP":
+        if not isinstance(item.get("items"), list) or not item["items"]:
+            errors.append("a group needs items (Drawy drops empty ones)")
+    return [e for e in errors if e], warnings
+
+
+def property_problems(item: dict, kind: str) -> tuple[list, list]:
+    """Errors and warnings in an item's properties array."""
+    entries = item.get("properties")
+    if kind == "GROUP":  # derived from the children; ignored on load
+        ok = isinstance(entries, list)
+        return [], [] if ok else ["properties is not an array"]
+    if not isinstance(entries, list):
+        return ["properties must be an array"], []
+    errors, warnings = [], []
+    names = [e.get("type") for e in entries if isinstance(e, dict)]
+    for entry in entries:
+        if not isinstance(entry, dict) or "value" not in entry:
+            errors.append("a properties entry is not {type, value}")
+        elif entry.get("type") not in OWNED_PROPERTIES[kind]:
+            name = entry.get("type")
+            errors.append(f"{kind} has no {name}; Drawy ignores and drops it")
+        else:
+            errors.append(property_problem(entry["type"], entry["value"]))
+    warnings += [
+        f"{n} is given twice" for n, c in Counter(names).items() if c > 1
+    ]
+    return [e for e in errors if e], warnings
+
+
+def item_issues(item, path: tuple) -> list[Issue]:
+    """Writer-rule problems of an item and its children (load.md)."""
+    where = path_text(path)
+    if not isinstance(item, dict):
+        return [Issue("error", where, "", "not an object; Drawy skips it")]
+    item_id = item["id"] if isinstance(item.get("id"), str) else ""
+    kind = item.get("type")
+    if kind not in ITEM_TYPES:
+        message = f"unknown type {kind!r}; Drawy skips the item"
+        return [Issue("error", where, item_id, message)]
+    errors, warnings = [], []
+    if not item_id or not item_id.isascii():
+        errors.append("id must be a non-empty ASCII string")
+    errors += transform_problems(item.get("transform"))
+    for more_errors, more_warnings in (
+        property_problems(item, kind),
+        type_problems(item, kind),
+    ):
+        errors += more_errors
+        warnings += more_warnings
+    if not isinstance(item.get("locked", False), bool):
+        errors.append("locked must be true or absent (else read as false)")
+    own = {k: v for k, v in item.items() if k not in ("items", "properties")}
+    if has_far_number(own):
+        warnings.append(FAR_WARNING)
+    allowed = (*COMMON_KEYS, *EXTRA_KEYS[kind])
+    warnings += [
+        f"unknown key {key!r} (dropped on Drawy's next save)"
+        for key in item
+        if key not in allowed
+    ]
+    issues = [Issue("error", where, item_id, e) for e in errors]
+    issues += [Issue("warning", where, item_id, w) for w in warnings]
+    for index, child in enumerate(item["items"] if is_group(item) else ()):
+        issues += item_issues(child, (*path, index))
+    return issues
+
+
+def duplicate_id_issues(doc: dict) -> list[Issue]:
+    where = {}
+    for path, item in walked(items_of(doc)):
+        if isinstance(item, dict) and isinstance(item.get("id"), str):
+            where.setdefault(item["id"], []).append(path_text(path))
+    return [
+        Issue(
+            "warning",
+            ", ".join(paths),
+            item_id,
+            f"id shared by {len(paths)} items (Drawy's paste makes these)",
+        )
+        for item_id, paths in where.items()
+        if item_id and len(paths) > 1
+    ]
+
+
+def board_issues(doc: dict) -> list[Issue]:
+    """Every writer-rule problem in a parsed board."""
+    errors, warnings = [], []
+    warnings += [
+        f"unknown top-level key {key!r} (dropped on Drawy's next save)"
+        for key in doc
+        if key not in ROOT_KEYS
+    ]
+    zoom = doc.get("zoom_factor")
+    zoom_problem = number_problem(zoom, "zoom_factor")
+    if zoom_problem:
+        errors.append(f"{zoom_problem} (read as 0.1)")
+    elif not ZOOM_MIN <= zoom <= ZOOM_MAX:
+        warnings.append(f"zoom_factor {zoom:g} is clamped to 0.1–30")
+    errors.append(point_problem(doc.get("offset_pos"), "offset_pos"))
+    if has_far_number(doc.get("offset_pos")):
+        warnings.append(f"offset_pos: {FAR_WARNING}")
+    if doc.get("version") != 1:
+        warnings.append("version is not 1 (ignored; Drawy writes 1)")
+    if not isinstance(doc.get("items"), list):
+        errors.append("items must be an array (else an empty board)")
+    issues = [Issue("error", "", "", e) for e in errors if e]
+    issues += [Issue("warning", "", "", w) for w in warnings]
+    if isinstance(doc.get("items"), list):
+        for index, item in enumerate(doc["items"]):
+            issues += item_issues(item, (index,))
+        issues += duplicate_id_issues(doc)
+    return issues
+
+
+def container_issues(raw: bytes) -> list[Issue]:
+    """Container problems Drawy aborts on (compression.cpp:27-48,
+    jobs/loadjob.cpp:42)."""
+    if not raw.startswith(ZSTD_MAGIC):
+        return [Issue("error", "", "", "not a zstd frame; Drawy aborts")]
+    try:
+        info, size = zstd.get_frame_info(raw), zstd.get_frame_size(raw)
+    except zstd.ZstdError as exc:
+        return [Issue("error", "", "", f"broken zstd frame: {exc}")]
+    problems = []
+    if info.decompressed_size is None:
+        problems.append("the frame does not state its size; Drawy aborts")
+    if size != len(raw):
+        problems.append("more than one zstd frame; Drawy aborts")
+    return [Issue("error", "", "", p) for p in problems]
+
+
+# --- the renderer
+
+
+class Renderer(NamedTuple):
+    binary: Path
+    fonts_dir: Path
+    drawy_version: str  # of the installed libdrawygui
+
+
+class Boxes(NamedTuple):
+    """drawy-render's report: canvas rects and more, by input path."""
+
+    canvas: Rect | None
+    rects: dict
+    quads: dict
+    text_sizes: dict
+    dropped: dict
+    dpi: float
+    drawy_version: str
+
+
+def boxes_from_report(report: dict) -> Boxes:
+    """Boxes from drawy-render's --boxes JSON, where a non-finite
+    coordinate is null (read as NaN)."""
+
+    def number(value) -> float:
+        return math.nan if value is None else float(value)
+
+    def rect(value: dict) -> Rect:
+        return Rect(*(number(value[k]) for k in ("x", "y", "w", "h")))
+
+    rects, quads, sizes = {}, {}, {}
+    for entry in report["items"]:
+        path = parsed_path(entry["path"])
+        rects[path] = rect(entry["rect"])
+        quads[path] = tuple((number(x), number(y)) for x, y in entry["quad"])
+        if "text_size" in entry:
+            size = entry["text_size"]
+            sizes[path] = (float(size["w"]), float(size["h"]))
+    dropped = {
+        parsed_path(drop["path"]): str(drop["reason"])
+        for drop in report["dropped"]
+    }
+    canvas = rect(report["canvas"]) if report["canvas"] else None
+    return Boxes(
+        canvas,
+        rects,
+        quads,
+        sizes,
+        dropped,
+        float(report["dpi"]),
+        str(report["drawy_version"]),
+    )
+
+
+def last_line(data: bytes) -> str:
+    lines = data.decode("utf-8", "replace").strip().splitlines()
+    return lines[-1] if lines else "no message"
+
+
+def run_renderer(renderer: Renderer, board: bytes, options: list) -> bytes:
+    """drawy-render's stdout for a board given on stdin."""
+    fonts = ["--fonts-dir", str(renderer.fonts_dir)]
+    command = [str(renderer.binary), "-", *options, *fonts]
+    # Headless whatever the session sets: no compositor connection.
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+    try:
+        result = subprocess.run(
+            command,
+            input=board,
+            capture_output=True,
+            env=env,
+            timeout=300,
+            check=False,
+        )
+    except OSError as exc:
+        raise Failure(
+            f"cannot run {renderer.binary}: {exc.strerror}"
+        ) from None
+    except subprocess.TimeoutExpired:
+        raise Failure("drawy-render took over 5 minutes") from None
+    message = last_line(result.stderr)
+    if result.returncode == 3:
+        raise Failure(f"Drawy cannot load this board: {message}")
+    if result.returncode:
+        raise Failure(f"drawy-render exit {result.returncode}: {message}")
+    return result.stdout
+
+
+def measured(renderer: Renderer, board: bytes) -> Boxes:
+    """Where Drawy puts every item of a board (zstd or JSON bytes)."""
+    output = run_renderer(renderer, board, ["--boxes", "-"])
+    try:
+        boxes = boxes_from_report(json.loads(output))
+    except (ValueError, KeyError, TypeError) as exc:
+        raise Failure(f"unexpected drawy-render report: {exc!r}") from None
+    if boxes.drawy_version != renderer.drawy_version:
+        raise Failure(
+            f"{renderer.binary} was built for Drawy {boxes.drawy_version},"
+            f" but Drawy {renderer.drawy_version} is installed"
+        )
+    return boxes
+
+
+def library_version(library: str) -> str:
+    """x.y.z of a resolved libdrawygui path (libdrawygui.so.1.0.2)."""
+    match = re.search(r"\.so\.(\d+\.\d+\.\d+)$", library)
+    if not match:
+        raise Failure(f"cannot tell Drawy's version from {library}")
+    return match.group(1)
+
+
+def build_extra_flags(source: str) -> list[str]:
+    """Flags render.cpp asks for on its `// build-extra: ` lines."""
+    return [
+        flag
+        for line in source.splitlines()
+        if line.startswith(BUILD_EXTRA)
+        for flag in shlex.split(line.removeprefix(BUILD_EXTRA))
+    ]
+
+
+def renderer_key(source: bytes, library: str, qt: str, extra: list) -> str:
+    digest = hashlib.sha256(source)
+    for part in (library, qt, shlex.join(extra)):
+        digest.update(b"\0" + part.encode())
+    return digest.hexdigest()
+
+
+def compile_command(
+    *, compiler, version, drawy_src, source, output, qt_flags, extra
+) -> list[str]:
+    """The renderer's build line; qt_flags is (cflags, libs)."""
+    cflags, libs = qt_flags
+    return [
+        *compiler,
+        *("-std=c++20", "-O2", "-Wall", "-Wextra"),
+        f'-DDRAWY_VERSION="{version}"',
+        f"-I{drawy_src / 'src/gui'}",
+        f"-I{DRAWY_INCLUDE}",
+        *cflags,
+        str(source),
+        *("-o", str(output), "-ldrawygui"),
+        *libs,
+        *extra,
+    ]
+
+
+def tool_output(command: list) -> str:
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, check=False
+        )
+    except OSError as exc:
+        raise Failure(f"cannot run {command[0]}: {exc}") from None
+    if result.returncode:
+        message = last_line(result.stderr.encode())
+        raise Failure(f"{shlex.join(command)} failed: {message}")
+    return result.stdout.strip()
+
+
+def check_source_tag(drawy_src: Path, version: str) -> None:
+    """Refuse unless the Drawy clone is at the installed version's
+    tag: render.cpp compiles against its headers."""
+    tag = f"v{version}"
+    if not (drawy_src / "src/gui").is_dir():
+        raise Failure(
+            f"no Drawy source at {drawy_src} (set DRAWY_SRC); run: git"
+            f" clone --depth 1 --branch {tag} {DRAWY_GIT} {drawy_src}"
+        )
+    describe = ["git", "-C", str(drawy_src), "describe", "--tags"]
+    try:
+        found = subprocess.run(
+            [*describe, "--always", "--dirty"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+    except OSError as exc:
+        raise Failure(f"cannot run git: {exc.strerror}") from None
+    git = f"git -C {drawy_src}"
+    if found == f"{tag}-dirty":
+        raise Failure(
+            f"{drawy_src} has local changes at {tag}, and render.cpp"
+            f" compiles against its headers; see {git} status"
+        )
+    if found != tag:
+        raise Failure(
+            f"{drawy_src} is at {found or 'an unknown revision'}, but the"
+            f" installed libdrawygui is {version}; run: {git} fetch"
+            f" --depth 1 origin tag {tag} && {git} checkout {tag}"
+        )
+
+
+def cache_root(env) -> Path:
+    base = env.get("XDG_CACHE_HOME", "")
+    home = Path(base) if os.path.isabs(base) else Path.home() / ".cache"
+    return home / "drawyctl"
+
+
+def renderer_source() -> Path:
+    here = Path(os.path.realpath(__file__)).parent
+    return here.parent / "share/drawyctl/render.cpp"
+
+
+def installed_library() -> str:
+    """The resolved path of the installed libdrawygui."""
+    library = os.path.realpath(LIBDRAWYGUI)
+    if not os.path.exists(library):
+        raise Failure(f"{LIBDRAWYGUI} is missing; is Drawy installed?")
+    return library
+
+
+def is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def removed_stale_builds(binary_dir: Path, current: Path) -> None:
+    """Delete all but the two newest other drawy-render binaries (a
+    running drawyctl or another checkout may use them) and staging
+    files whose build process is gone."""
+    others = []
+    for path in binary_dir.glob("drawy-render-*"):
+        if path == current:
+            continue
+        with contextlib.suppress(FileNotFoundError):  # removed meanwhile
+            others.append((path.stat().st_mtime, path))
+    for _, stale in sorted(others, reverse=True)[2:]:
+        stale.unlink(missing_ok=True)
+    for staging in binary_dir.glob(".drawy-render-*"):
+        pid = staging.suffix.removeprefix(".")
+        if pid.isdigit() and not is_running(int(pid)):
+            staging.unlink(missing_ok=True)
+
+
+def built_renderer(
+    env, *, library: str, drawy_src: Path, binary_dir: Path, force: bool
+) -> Path:
+    """The cached drawy-render for library, compiled first if missing,
+    stale, or force is set."""
+    version = library_version(library)
+    check_source_tag(drawy_src, version)
+    source = renderer_source()
+    try:
+        code = source.read_bytes()
+    except OSError as exc:
+        raise Failure(f"cannot read {source}: {exc.strerror}") from None
+    extra = build_extra_flags(code.decode("utf-8", "replace"))
+    qt = tool_output(["pkg-config", "--modversion", "Qt6Gui"])
+    binary = (
+        binary_dir / f"drawy-render-{renderer_key(code, library, qt, extra)}"
+    )
+    if binary.is_file() and not force:
+        return binary
+    binary_dir.mkdir(parents=True, exist_ok=True)
+    staging = binary.with_name(f".{binary.name}.{os.getpid()}")
+    pkg = ["pkg-config", "Qt6Gui"]
+    command = compile_command(
+        compiler=shlex.split(env.get("CXX") or "g++"),
+        version=version,
+        drawy_src=drawy_src,
+        source=source,
+        output=staging,
+        qt_flags=[
+            shlex.split(tool_output([*pkg, flag]))
+            for flag in ("--cflags", "--libs")
+        ],
+        extra=extra,
+    )
+    print(
+        f"drawyctl: building drawy-render for Drawy {version}", file=sys.stderr
+    )
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, check=False
+        )
+    except OSError as exc:
+        raise Failure(f"cannot run {command[0]}: {exc}") from None
+    if result.returncode:
+        staging.unlink(missing_ok=True)
+        sys.stderr.write("\n".join(result.stderr.splitlines()[-30:]) + "\n")
+        raise Failure(f"building drawy-render failed: {shlex.join(command)}")
+    os.replace(staging, binary)
+    removed_stale_builds(binary_dir, binary)
+    return binary
+
+
+def ensure_renderer(env, *, force: bool = False) -> Renderer:
+    """drawy-render with the fonts it needs, built if needed (or
+    DRAWYCTL_RENDER)."""
+    drawy_src = Path(env.get("DRAWY_SRC") or DEFAULT_DRAWY_SRC)
+    fonts_dir = drawy_src / FONTS_SUBDIR
+    library = installed_library()
+    if env.get("DRAWYCTL_RENDER"):
+        binary = Path(env["DRAWYCTL_RENDER"])
+    else:
+        binary = built_renderer(
+            env,
+            library=library,
+            drawy_src=drawy_src,
+            binary_dir=cache_root(env),
+            force=force,
+        )
+    for name in FONT_FILES:
+        if not (fonts_dir / name).is_file():
+            raise Failure(f"no {name} in {fonts_dir} (set DRAWY_SRC)")
+    return Renderer(binary, fonts_dir, library_version(library))
+
+
+# --- reading and writing boards
+
+
+class Loaded(NamedTuple):
+    path: Path
+    raw: bytes
+    digest: str
+    doc: dict
+
+
+def read_board(path: Path) -> Loaded:
+    """A board file, read again once if it does not parse: Drawy saves
+    in place, so it may be mid-write (serializerutils.cpp:36-52)."""
+    for attempt in (1, 2):
+        try:
+            raw = path.read_bytes()
+        except OSError as exc:
+            raise Failure(f"cannot read {path}: {exc.strerror}") from None
+        try:
+            doc = parsed_board(raw)
+        except Failure:
+            if attempt == 2:
+                raise
+            time.sleep(0.3)
+            continue
+        return Loaded(path, raw, hashlib.sha256(raw).hexdigest(), doc)
+    raise AssertionError("unreachable")
+
+
+class Baseline(NamedTuple):
+    """Errors, warnings and drops a board already had, which a write
+    may keep."""
+
+    errors: Counter
+    warnings: Counter
+    drops: Counter
+
+
+EMPTY_BASELINE = Baseline(Counter(), Counter(), Counter())
+
+
+def issue_keys(issues, severity: str) -> Counter:
+    return Counter(
+        (i.item_id, i.message) for i in issues if i.severity == severity
+    )
+
+
+def new_issues(issues, severity: str, had: Counter) -> list[Issue]:
+    """The issues of that severity beyond the ones had counts."""
+    spare, fresh = Counter(had), []
+    for issue in issues:
+        key = (issue.item_id, issue.message)
+        if issue.severity != severity:
+            continue
+        if spare[key] > 0:
+            spare[key] -= 1
+        else:
+            fresh.append(issue)
+    return fresh
+
+
+def issue_line(issue: Issue) -> str:
+    """An issue as check prints it: severity, path, short id, text."""
+    where = [issue.severity, issue.path]
+    where.append(f"({issue.item_id[:8]})" if issue.item_id else "")
+    return " ".join(filter(None, where)) + ": " + issue.message
+
+
+def drop_key(doc: dict, path: tuple) -> tuple:
+    item = item_at(doc, path)
+    return kind_of(item), item.get("id") if isinstance(item, dict) else None
+
+
+def drop_keys(doc: dict, boxes: Boxes) -> Counter:
+    return Counter(drop_key(doc, path) for path in boxes.dropped)
+
+
+def baseline_of(doc: dict, boxes: Boxes | None) -> Baseline:
+    """What a board already has; drops only if measured (boxes)."""
+    issues = board_issues(doc)
+    drops = drop_keys(doc, boxes) if boxes else Counter()
+    errors, warnings = (
+        issue_keys(issues, "error"),
+        issue_keys(issues, "warning"),
+    )
+    return Baseline(errors, warnings, drops)
+
+
+class Checked(NamedTuple):
+    """A board's .drawy bytes and the warnings its baseline lacked."""
+
+    data: bytes
+    warnings: list
+
+
+def checked_board(
+    doc: dict, *, renderer: Renderer | None, before: Baseline
+) -> Checked:
+    """doc as .drawy bytes, if Drawy reads them no worse than before:
+    no error or drop that before lacks. renderer None skips the drop
+    check (--no-verify)."""
+    data = board_bytes(doc)
+    written = parsed_board(data)
+    issues = board_issues(written) + container_issues(data)
+    errors = new_issues(issues, "error", before.errors)
+    if errors:
+        first, more = errors[0], len(errors) - 1
+        where = f" ({first.item_id[:8]})" if first.item_id else ""
+        tail = f", and {more} more" if more else ""
+        raise Failure(f"refusing to write: {first.message}{where}{tail}")
+    if renderer:
+        boxes = measured(renderer, data)
+        new_drops = drop_keys(written, boxes) - before.drops
+        for path, reason in boxes.dropped.items():
+            if drop_key(written, path) in new_drops:
+                label = item_label(written, path)
+                raise Failure(
+                    f"refusing to write: Drawy would drop {label}: {reason}"
+                )
+    return Checked(data, new_issues(issues, "warning", before.warnings))
+
+
+def same_file(a: Path, b: Path) -> bool:
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def is_board_file(path: Path) -> bool:
+    """Whether path is a .drawy name, existing or not, or an existing
+    zstd frame."""
+    if path.suffix.lower() == ".drawy":
+        return True
+    try:
+        with path.open("rb") as handle:
+            return handle.read(len(ZSTD_MAGIC)) == ZSTD_MAGIC
+    except OSError:
+        return False
+
+
+def refuse_board_output(output: Path, board: Path, *, what: str) -> None:
+    """Refuse to put what (not a board) over board, over any existing
+    Drawy board, or under a .drawy name Drawy would try to open:
+    nothing backs those writes up."""
+    if same_file(output, board) or is_board_file(output):
+        raise Failure(
+            f"refusing to write {what} over the board {output}; pick"
+            " another name"
+        )
+
+
+def backup_path(cache: Path, target: Path, now: datetime.datetime) -> Path:
+    """Where target's bytes go before a write. The name holds a hash
+    of target's path, so each board's backups glob apart, and a stamp
+    that sorts in time order."""
+    digest = hashlib.sha256(os.fsencode(target)).hexdigest()[:8]
+    stamp = now.strftime("%Y%m%dT%H%M%S.%fZ")
+    return cache / "backups" / f"{target.stem}-{digest}-{stamp}.drawy"
+
+
+def file_mode(path: Path) -> int:
+    """path's permission bits, or what a new file gets (the umask)."""
+    try:
+        return path.stat().st_mode & 0o7777
+    except FileNotFoundError:
+        umask = os.umask(0o022)
+        os.umask(umask)
+        return 0o666 & ~umask
+
+
+def write_atomically(
+    target: Path, data: bytes, *, mode: int, exclusive: bool = False
+) -> None:
+    """Put data at target with mode: temp file beside it, fsync, then
+    rename over target, or if exclusive link it, failing if target
+    exists."""
+    try:
+        fd, temp = tempfile.mkstemp(
+            dir=target.parent, prefix=f".{target.name}.", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.chmod(temp, mode)
+            if exclusive:
+                os.link(temp, target)
+            else:
+                os.replace(temp, target)
+        finally:
+            Path(temp).unlink(missing_ok=True)
+        directory = os.open(target.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except OSError as exc:
+        raise Failure(f"cannot write {target}: {exc.strerror}") from None
+
+
+@contextlib.contextmanager
+def directory_lock(directory: Path):
+    """Hold an exclusive flock on directory for the with block, so two
+    drawyctl writes into it cannot interleave a check and a replace."""
+    fd = os.open(directory, os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
+class Expected(NamedTuple):
+    """The digest an existing target must still have, and what to say
+    if it does not."""
+
+    digest: str
+    stale: str
+
+
+def write_board(
+    data: bytes, *, target: Path, expected: Expected | None, cache: Path
+) -> None:
+    """Replace target with data, copying an existing target to the
+    backups under cache first. Nothing is written if an existing
+    target's digest is not expected's."""
+    target = Path(os.path.realpath(target))
+    if target.is_dir():
+        raise Failure(f"cannot write {target}: it is a directory")
+    if not (target.parent.is_dir() and os.access(target.parent, os.W_OK)):
+        where = target.parent
+        raise Failure(f"cannot write {target}: {where} is not writable")
+    with directory_lock(target.parent):
+        try:
+            previous, links = target.read_bytes(), target.stat().st_nlink
+        except FileNotFoundError:
+            previous, links = None, 1
+        except OSError as exc:
+            raise Failure(f"cannot read {target}: {exc.strerror}") from None
+        if previous is not None:
+            digest = hashlib.sha256(previous).hexdigest()
+            if expected and digest != expected.digest:
+                raise Failure(expected.stale)
+            backup = backup_path(
+                cache, target, datetime.datetime.now(datetime.UTC)
+            )
+            try:
+                backup.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                raise Failure(f"cannot back up: {exc.strerror}") from None
+            mode = file_mode(target)
+            write_atomically(backup, previous, mode=mode, exclusive=True)
+            print(f"backup: {backup}")
+        write_atomically(target, data, mode=file_mode(target))
+    print(f"wrote {target}")
+    if links > 1:
+        warn(f"{target} had other hard links; they keep the old board")
+    if previous is not None:
+        print(WRITTEN_NOTE.format(path=target))
+
+
+def warn(message: str) -> None:
+    print(f"drawyctl: warning: {message}", file=sys.stderr)
+
+
+# --- selection
+
+
+def labels_text(doc: dict, paths, limit: int = 12) -> str:
+    shown = ", ".join(item_label(doc, p) for p in paths[:limit])
+    more = len(paths) - limit
+    return shown + (f", and {more} more" if more > 0 else "")
+
+
+def selector_hits(everything: list, selector: str) -> list:
+    """Paths an item selector matches (see selected_path)."""
+    if selector.startswith("text:"):
+        needle = selector.removeprefix("text:").casefold()
+        if not needle:
+            raise UsageError("text: needs a substring")
+        return [
+            path
+            for path, item in everything
+            if kind_of(item) == "TEXT"
+            and isinstance(item.get("text"), str)
+            and needle in item["text"].casefold()
+        ]
+    prefix = selector.lower()
+    by_path = PATH_RE.fullmatch(selector) is not None
+    by_id = ID_PREFIX_RE.fullmatch(prefix) is not None
+    if not by_path and not by_id:
+        raise UsageError(
+            f"bad selector {selector!r}: use a path like 0.1, an id"
+            " prefix (4+ hex), or text:WORDS"
+        )
+    hits = []
+    if by_path and parsed_path(selector) in dict(everything):
+        hits.append(parsed_path(selector))
+    if by_id:
+        hits += [
+            path
+            for path, item in everything
+            if path not in hits
+            and isinstance(item, dict)
+            and isinstance(item.get("id"), str)
+            and item["id"].lower().startswith(prefix)
+        ]
+    return hits
+
+
+def selected_path(doc: dict, selector: str) -> tuple:
+    """The one item a selector names: a path ("2", "0.1"), a unique id
+    prefix of 4+ hex characters, or "text:WORDS" (one TEXT holding
+    WORDS, any case)."""
+    everything = list(walked(items_of(doc)))
+    hits = selector_hits(everything, selector)
+    if not hits:
+        listed = labels_text(doc, [p for p, _ in everything]) or "none"
+        raise Failure(f"nothing matches {selector!r}; items: {listed}")
+    if len(hits) > 1:
+        listed = labels_text(doc, hits)
+        raise Failure(f"{selector!r} matches {listed}; use a path")
+    return hits[0]
+
+
+def structure_problem(item) -> str | None:
+    """A malformed field that edits read (transform, geometry,
+    properties array), or None."""
+    if not isinstance(item, dict) or item.get("type") not in ITEM_TYPES:
+        return "Drawy skips this item"
+    kind = item["type"]
+    found = transform_problems(item.get("transform"))
+    if kind != "GROUP" and not isinstance(item.get("properties"), list):
+        found.append("properties is not an array")
+    if kind == "TEXT":
+        found.append(point_problem(item.get("top_left"), "top_left"))
+        size = property_value(item, "FontSize", 18)
+        found.append(property_problem("FontSize", size))
+    elif kind == "IMAGE":
+        found.append(box_problem(item.get("bounding_box")))
+    elif kind == "FREEFORM":
+        points = item.get("points")
+        if not isinstance(points, list):
+            found.append("points is not an array")
+        else:
+            found += [point_problem(point, "a point") for point in points]
+    elif kind == "GROUP":
+        if not isinstance(item.get("items"), list) or not item["items"]:
+            found.append("a group needs items")
+    else:
+        found += [point_problem(item.get(k), k) for k in ("start", "end")]
+    return next((problem for problem in found if problem), None)
+
+
+def require_editable(doc: dict, paths) -> None:
+    """Refuse to edit near malformed items: everything in the top-level
+    items holding paths must have well-formed geometry."""
+    for top in sorted({path[0] for path in paths}):
+        for path, item in walked(items_of(doc)[top : top + 1]):
+            problem = structure_problem(item)
+            if problem:
+                where = item_label(doc, ((top,) + path[1:]))
+                raise Failure(
+                    f"{where}: {problem}; delete or fix it first"
+                    " (drawyctl check)"
+                )
+
+
+def selected_item(doc: dict, selector: str) -> tuple:
+    """selected_path for an edit that moves or restyles things: the
+    item's top-level subtree must be well-formed."""
+    path = selected_path(doc, selector)
+    require_editable(doc, [path])
+    return path
+
+
+def selected_group(doc: dict, selector: str) -> tuple:
+    path = selected_item(doc, selector)
+    if not is_group(item_at(doc, path)):
+        raise UsageError(f"{item_label(doc, path)} is not a group")
+    return path
+
+
+# --- reports
+
+
+def rect_text(rect: Rect | None) -> str:
+    if rect is None:
+        return "-"
+    return f"{rect.x:.1f}, {rect.y:.1f}  {rect.w:.1f}×{rect.h:.1f}"
+
+
+def image_pixels(item: dict) -> tuple | None:
+    data = item.get("image_data")
+    try:
+        return png_size(base64.b64decode(data[:44], validate=True))
+    except (ValueError, TypeError, binascii.Error):
+        return None
+
+
+def item_details(item: dict) -> list[str]:
+    """Short facts dump shows after an item's rect."""
+    kind, facts = item.get("type"), []
+    if kind == "TEXT" and isinstance(item.get("text"), str):
+        facts.append(quoted(item["text"]))
+        facts.append(f"{property_value(item, 'FontSize', 18)}pt")
+        facts.append(str(property_value(item, "StrokeColor", "#ffffff")))
+    elif kind == "IMAGE":
+        pixels = image_pixels(item)
+        facts.append(f"{pixels[0]}×{pixels[1]}px" if pixels else "not PNG")
+    elif kind == "GROUP":
+        count = len(item.get("items") or ())
+        facts.append(f"{count} item{'s' * (count != 1)}")
+    elif kind in LEAF_TYPES:
+        stroke = property_value(item, "StrokeColor", "#000000")
+        facts.append(f"stroke {stroke}")
+        style = property_value(item, "BackgroundStyle", "None")
+        if kind in SHAPE_TYPES and style != "None":
+            fill = property_value(item, "BackgroundColor")
+            facts.append(f"fill {fill} {style}")
+    opacity = property_value(item, "Opacity", 255)
+    if kind != "GROUP" and opacity != 255:
+        facts.append(f"opacity {opacity}")
+    if item.get("locked") is True:
+        facts.append("locked")
+    return facts
+
+
+class Row(NamedTuple):
+    path: tuple
+    item: object
+    rect: Rect | None
+    dropped: str | None
+
+
+def dump_rows(doc: dict, boxes: Boxes | None) -> list[Row]:
+    """Every item in document order with its rect and drop reason."""
+    dropped = boxes.dropped if boxes else {}
+    rects = boxes.rects if boxes else {}
+    rows = []
+    for path, item in walked(items_of(doc)):
+        reason = dropped.get(path)
+        if reason is None and any(p in dropped for p in prefixes(path)):
+            reason = "inside a dropped item"
+        rows.append(Row(path, item, rects.get(path), reason))
+    return rows
+
+
+def dump_lines(name: str, doc: dict, boxes: Boxes | None) -> list[str]:
+    zoom, offset = doc.get("zoom_factor"), doc.get("offset_pos")
+    head = f"{name}  zoom {zoom:g}" if is_number(zoom) else f"{name}"
+    if not point_problem(offset, "offset_pos"):
+        head += f"  offset {offset['x']:.1f}, {offset['y']:.1f}"
+    if boxes:
+        head += f"  canvas {rect_text(boxes.canvas)}  ({boxes.dpi:g} dpi)"
+    rows = dump_rows(doc, boxes)
+    width = max(
+        (len(path_text(r.path)) + 2 * len(r.path) for r in rows), default=0
+    )
+    lines = [head]
+    for row in rows:
+        indent = "  " * (len(row.path) - 1)
+        parts = [(indent + path_text(row.path)).ljust(width - 2)]
+        parts += [short_id(row.item).ljust(8), kind_of(row.item).ljust(9)]
+        parts.append(rect_text(row.rect))
+        if isinstance(row.item, dict):
+            parts += item_details(row.item)
+        if row.dropped:
+            parts.append(f"DROPPED: {row.dropped}")
+        lines.append("  ".join(parts))
+    return lines
+
+
+def dump_report(name: str, doc: dict, boxes: Boxes | None) -> dict:
+    """dump --json: every item with its rect, without image data."""
+    entries = []
+    for row in dump_rows(doc, boxes):
+        item = row.item
+        if isinstance(item, dict):
+            item = {
+                k: v
+                for k, v in item.items()
+                if k not in ("image_data", "items")
+            }
+        entry = {
+            "path": path_text(row.path),
+            "rect": row.rect._asdict() if row.rect else None,
+            "dropped": row.dropped,
+            "item": item,
+        }
+        if boxes and row.path in boxes.quads:
+            entry["quad"] = boxes.quads[row.path]
+        if boxes and row.path in boxes.text_sizes:
+            w, h = boxes.text_sizes[row.path]
+            entry["text_size"] = {"w": w, "h": h}
+        if kind_of(row.item) == "IMAGE":
+            entry["image_px"] = image_pixels(row.item)
+        entries.append(entry)
+    canvas = boxes.canvas if boxes else None
+    return {
+        "file": name,
+        "zoom_factor": doc.get("zoom_factor"),
+        "offset_pos": doc.get("offset_pos"),
+        "canvas": canvas._asdict() if canvas else None,
+        "dpi": boxes.dpi if boxes else None,
+        "drawy_version": boxes.drawy_version if boxes else None,
+        "items": entries,
+    }
+
+
+class Overlap(NamedTuple):
+    first: tuple
+    second: tuple
+    area: Rect
+
+
+def overlaps(rects: dict) -> list[Overlap]:
+    """Pairs of siblings (top-level, or in one group) whose canvas
+    rects share positive area."""
+    by_parent = {}
+    for path in sorted(rects):
+        by_parent.setdefault(path[:-1], []).append(path)
+    return [
+        Overlap(a, b, area)
+        for siblings in by_parent.values()
+        for a, b in itertools.combinations(siblings, 2)
+        if (area := overlap(rects[a], rects[b]))
+    ]
+
+
+def leaf_paths(doc: dict, rects: dict, path: tuple) -> list:
+    """Paths of the kept non-group items at or under path."""
+    return [
+        p
+        for p in sorted(rects)
+        if p[: len(path)] == path and not is_group(item_at(doc, p))
+    ]
+
+
+def touching_leaves(doc: dict, rects: dict, found: Overlap) -> list:
+    """Pairs of non-group items, one from each side of an overlap,
+    whose rects share positive area."""
+    return [
+        (a, b)
+        for a in leaf_paths(doc, rects, found.first)
+        for b in leaf_paths(doc, rects, found.second)
+        if overlap(rects[a], rects[b])
+    ]
+
+
+def overlap_line(doc: dict, rects: dict, found: Overlap) -> str:
+    """One check line for an overlap; for groups, whether their
+    contents touch or only their boxes do."""
+    first, second = found.first, found.second
+    pair = f"{item_label(doc, first)} and {item_label(doc, second)}"
+    a = found.area
+    line = f"overlap {pair}: {a.w:.1f}×{a.h:.1f} at {a.x:.1f}, {a.y:.1f}"
+    if not (is_group(item_at(doc, first)) or is_group(item_at(doc, second))):
+        return line
+    touching = touching_leaves(doc, rects, found)
+    if not touching:
+        return line + "; only the group boxes overlap, not their contents"
+    shown = ", ".join(
+        f"{path_text(x)} and {path_text(y)}" for x, y in touching[:4]
+    )
+    more = len(touching) - 4
+    tail = f", and {more} more" if more > 0 else ""
+    return f"{line}; contents overlap: {shown}{tail}"
+
+
+def skipped_paths(doc: dict) -> set:
+    """Paths of the items Drawy skips for their type, which item_issues
+    already reports as errors."""
+    return {
+        path
+        for path, item in walked(items_of(doc))
+        if not isinstance(item, dict) or item.get("type") not in ITEM_TYPES
+    }
+
+
+def check_lines(doc: dict, issues, boxes: Boxes | None) -> list[str]:
+    ordered = sorted(issues, key=lambda i: i.severity != "error")
+    lines = [issue_line(issue) for issue in ordered]
+    found = overlaps(boxes.rects) if boxes else []
+    dropped = {}
+    if boxes:
+        skipped = skipped_paths(doc)
+        dropped = {p: r for p, r in boxes.dropped.items() if p not in skipped}
+    for path, reason in dropped.items():
+        lines.append(f"dropped {item_label(doc, path)}: {reason}")
+    lines += [overlap_line(doc, boxes.rects, o) for o in found]
+    count = Counter(i.severity for i in issues)
+    summary = f"{count['error']} errors, {count['warning']} warnings"
+    if boxes:
+        summary += f", {len(dropped)} dropped, {len(found)} overlaps"
+    else:
+        summary += "; drops and overlaps not checked (--no-render)"
+    return [*lines, summary]
+
+
+# --- commands
+
+
+def open_renderer(*, allow_missing: bool) -> Renderer | None:
+    """The renderer, or None when it cannot be had and allow_missing
+    (--no-verify) lets a write go on without it."""
+    try:
+        return ensure_renderer(os.environ)
+    except Failure as exc:
+        if not allow_missing:
+            raise
+        warn(f"{exc}; going on without drawy-render")
+        return None
+
+
+def report_renderer() -> Renderer:
+    """The renderer for dump and check, whose failure says how to do
+    without it."""
+    try:
+        return ensure_renderer(os.environ)
+    except Failure as exc:
+        raise Failure(f"{exc}; or pass --no-render") from None
+
+
+def print_warnings(issues, *, verified: bool) -> None:
+    """Warn about a written board's new issues, and if it was not
+    rendered."""
+    for issue in issues:
+        print(f"drawyctl: {issue_line(issue)}", file=sys.stderr)
+    if not verified:
+        warn("not checked with drawy-render (--no-verify)")
+
+
+class Session(NamedTuple):
+    """The board an edit starts from and where the edit goes."""
+
+    loaded: Loaded
+    renderer: Renderer | None
+    boxes: Boxes | None
+    before: Baseline
+    target: Path
+    verify: bool
+
+
+def open_session(args) -> Session:
+    """The board an edit starts from, measured, and its baseline."""
+    loaded = read_board(args.file)
+    items_of(loaded.doc)
+    renderer = open_renderer(allow_missing=args.no_verify)
+    boxes = None
+    if renderer:
+        boxes = measured(renderer, board_payload(loaded.doc))
+    target = loaded.path if args.in_place else args.output
+    before = baseline_of(loaded.doc, boxes)
+    return Session(loaded, renderer, boxes, before, target, not args.no_verify)
+
+
+def need_boxes(session: Session) -> Boxes:
+    if session.boxes is None:
+        raise Failure("this edit needs drawy-render for positions")
+    return session.boxes
+
+
+def rect_of(boxes: Boxes, doc: dict, path: tuple) -> Rect:
+    if path not in boxes.rects:
+        label = item_label(doc, path)
+        raise Failure(f"Drawy drops {label}; it has no position")
+    return boxes.rects[path]
+
+
+def save_edit(session: Session, doc: dict, notes=()) -> int:
+    """Print notes and write doc to the session's target, unless Drawy
+    would read it worse than the session's board."""
+    for note in notes:
+        print(note)
+    renderer = session.renderer if session.verify else None
+    checked = checked_board(doc, renderer=renderer, before=session.before)
+    print_warnings(checked.warnings, verified=session.verify)
+    expected = None
+    if same_file(session.target, session.loaded.path):
+        stale = f"{session.target} changed since it was read; not written"
+        expected = Expected(session.loaded.digest, stale)
+    write_board(
+        checked.data,
+        target=session.target,
+        expected=expected,
+        cache=cache_root(os.environ),
+    )
+    return 0
+
+
+def cmd_dump(args) -> int:
+    loaded = read_board(args.file)
+    boxes = None
+    if not args.no_render:
+        boxes = measured(report_renderer(), board_payload(loaded.doc))
+    if args.json:
+        report = dump_report(loaded.path.name, loaded.doc, boxes)
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+    else:
+        print("\n".join(dump_lines(loaded.path.name, loaded.doc, boxes)))
+    return 0
+
+
+def cmd_check(args) -> int:
+    loaded = read_board(args.file)
+    issues = container_issues(loaded.raw) + board_issues(loaded.doc)
+    boxes = None
+    if not args.no_render and isinstance(loaded.doc.get("items"), list):
+        boxes = measured(report_renderer(), board_payload(loaded.doc))
+    print("\n".join(check_lines(loaded.doc, issues, boxes)))
+    errors = any(i.severity == "error" for i in issues)
+    return 1 if errors or (boxes and boxes.dropped) else 0
+
+
+def cmd_render(args) -> int:
+    loaded = read_board(args.file)
+    if args.output:
+        refuse_board_output(args.output, loaded.path, what="a PNG")
+    if args.svg:
+        refuse_board_output(args.svg, loaded.path, what="an SVG")
+    renderer = ensure_renderer(os.environ)
+    payload = board_payload(loaded.doc)
+    boxes = measured(renderer, payload)
+    if args.focus:
+        path = selected_path(loaded.doc, args.focus)
+        area = rect_of(boxes, loaded.doc, path)
+    elif boxes.canvas is None:
+        raise Failure("nothing to render: Drawy keeps no item of it")
+    else:
+        area = boxes.canvas
+    region = area.grown(args.margin)
+    scale = min(1.0, args.max_size / max(region.w, region.h))
+    renders = cache_root(os.environ) / "renders"
+    output = args.output or renders / f"{loaded.path.stem}.png"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    options = ["--png", str(output), "--scale", repr(scale)]
+    options += ["--region", ",".join(map(repr, region))]
+    options += ["--bg", args.bg or CANVAS_COLORS[args.theme]]
+    if args.svg:
+        options += ["--svg", str(args.svg)]
+    run_renderer(renderer, payload, options)
+    print(output)
+    if args.svg:
+        print(args.svg)
+    return 0
+
+
+def cmd_unpack(args) -> int:
+    loaded = read_board(args.file)
+    noted = {SOURCE_KEY: loaded.digest, **loaded.doc}
+    text = json.dumps(noted, indent=2, ensure_ascii=False) + "\n"
+    if args.output:
+        what = "JSON (which Drawy cannot open)"
+        refuse_board_output(args.output, loaded.path, what=what)
+        target = Path(os.path.realpath(args.output))
+        write_atomically(target, text.encode(), mode=file_mode(target))
+        print(f"wrote {args.output}")
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
+def cmd_pack(args) -> int:
+    loaded = read_board(args.input)
+    doc = {k: v for k, v in loaded.doc.items() if k != SOURCE_KEY}
+    renderer = None if args.no_verify else ensure_renderer(os.environ)
+    checked = checked_board(doc, renderer=renderer, before=EMPTY_BASELINE)
+    print_warnings(checked.warnings, verified=not args.no_verify)
+    source = loaded.doc.get(SOURCE_KEY)
+    expected = None
+    if isinstance(source, str) and not args.force:
+        stale = (
+            f"{args.output} is not the board {args.input} was unpacked"
+            " from, or changed since; unpack it again, or pass --force"
+        )
+        expected = Expected(source, stale)
+    write_board(
+        checked.data,
+        target=args.output,
+        expected=expected,
+        cache=cache_root(os.environ),
+    )
+    return 0
+
+
+def cmd_move(args) -> int:
+    session = open_session(args)
+    doc = session.loaded.doc
+    path = selected_item(doc, args.sel)
+    if args.by:
+        dx, dy = args.by
+    else:
+        rect = rect_of(need_boxes(session), doc, path)
+        dx, dy = args.to[0] - rect.x, args.to[1] - rect.y
+    return save_edit(session, translated(doc, path, dx, dy))
+
+
+def cmd_scale(args) -> int:
+    session = open_session(args)
+    path = selected_item(session.loaded.doc, args.sel)
+    boxes = need_boxes(session)
+    # Drawy's loader pushes a group's turn or scale into its children,
+    # so a scaled group is put in that form first.
+    frame = path if is_group(item_at(session.loaded.doc, path)) else path[:-1]
+    doc, notes = load_formed(session.loaded.doc, [frame], boxes.rects)
+    before = rect_of(boxes, doc, path)
+    doc = scaled(doc, path, args.factor)
+    after = measured(session.renderer, board_payload(doc))
+    if path not in after.rects:
+        raise Failure(f"Drawy would drop {item_label(doc, path)} then")
+    dx, dy = anchor_shift(before, after.rects[path], args.anchor)
+    return save_edit(session, translated(doc, path, dx, dy), notes)
+
+
+def parsed_settings(assignments) -> list[tuple]:
+    """(JSON name, value) pairs from KEY=VALUE arguments."""
+    settings = []
+    for assignment in assignments:
+        key, sep, text = assignment.partition("=")
+        if not sep:
+            raise UsageError(f"expected KEY=VALUE, not {assignment!r}")
+        name = property_name(key)
+        if name == "text" and not text:
+            raise UsageError("text must not be empty")
+        value = text if name == "text" else coerced_property(name, text)
+        settings.append((name, value))
+    return settings
+
+
+def cmd_set(args) -> int:
+    settings = parsed_settings(args.assignments)
+    session = open_session(args)
+    path = selected_item(session.loaded.doc, args.sel)
+    edited = with_settings(session.loaded.doc, path, settings)
+    return save_edit(session, edited.doc, edited.notes)
+
+
+def add_item(args, session: Session, make_item) -> int:
+    """Add make_item(origin) at canvas point args.at, on top of the
+    board or as the last child of group args.into."""
+    doc, into, notes = session.loaded.doc, (), []
+    if args.into:
+        into = selected_group(doc, args.into)
+        rects = need_boxes(session).rects
+        doc, notes = load_formed(doc, [into], rects)
+    item = make_item(local_point(doc, into, args.at))
+    return save_edit(session, with_item_added(doc, item, into), notes)
+
+
+def cmd_add_text(args) -> int:
+    if not args.text:
+        raise UsageError("the text must not be empty")
+    if args.size < 1:
+        raise UsageError("--size must be at least 1")
+    color = args.color and coerced_property("StrokeColor", args.color)
+    session = open_session(args)
+    color = color or common_text_color(session.loaded.doc)
+
+    def make(origin: tuple) -> dict:
+        return text_item(
+            args.text,
+            item_id=uuid.uuid4().hex,
+            origin=origin,
+            size=args.size,
+            color=color,
+        )
+
+    return add_item(args, session, make)
+
+
+def png_name(image: Path) -> Path:
+    """Where a PNG conversion of image goes: beside it, as .png, or as
+    -converted.png when it already has that suffix."""
+    if image.suffix.lower() == ".png":
+        return image.with_name(f"{image.stem}-converted.png")
+    return image.with_suffix(".png")
+
+
+def cmd_add_image(args) -> int:
+    try:
+        png = args.png.read_bytes()
+        pixels = png_size(png)
+    except OSError as exc:
+        raise Failure(f"cannot read {args.png}: {exc.strerror}") from None
+    except ValueError:
+        command = shlex.join(
+            ["magick", str(args.png), str(png_name(args.png))]
+        )
+        raise Failure(
+            f"{args.png} is not a PNG, and Drawy stores PNG only; convert"
+            f" it first ({command})"
+        ) from None
+    if 0 in pixels:
+        raise Failure(f"{args.png} has no pixels")
+    size = image_box(pixels, width=args.width, height=args.height)
+    session = open_session(args)
+
+    def make(origin: tuple) -> dict:
+        item_id = uuid.uuid4().hex
+        return image_item(png, item_id=item_id, origin=origin, size=size)
+
+    return add_item(args, session, make)
+
+
+def cmd_delete(args) -> int:
+    session = open_session(args)
+    doc = session.loaded.doc
+    paths = [selected_path(doc, s) for s in args.sels]
+    edited = without_items(doc, paths)
+    return save_edit(session, edited.doc, edited.notes)
+
+
+def cmd_order(args) -> int:
+    session = open_session(args)
+    doc = session.loaded.doc
+    path = selected_path(doc, args.sel)
+    return save_edit(session, reordered(doc, path, args.where))
+
+
+def cmd_group(args) -> int:
+    session = open_session(args)
+    doc = session.loaded.doc
+    paths = [selected_item(doc, s) for s in args.sels]
+    rects = need_boxes(session).rects
+    group_id = uuid.uuid4().hex
+    return save_edit(session, grouped(doc, paths, rects, group_id=group_id))
+
+
+def cmd_ungroup(args) -> int:
+    session = open_session(args)
+    path = selected_group(session.loaded.doc, args.sel)
+    return save_edit(session, ungrouped(session.loaded.doc, path))
+
+
+def cmd_arrange(args) -> int:
+    session = open_session(args)
+    doc = session.loaded.doc
+    paths = [selected_item(doc, s) for s in args.sels]
+    sibling_parent(paths)
+    boxes = need_boxes(session)
+    rects = [rect_of(boxes, doc, p) for p in paths]
+    union = united(rects)
+    origin = args.at or ((union.x, union.y) if union else (0.0, 0.0))
+    columns = {"row": len(paths), "column": 1}.get(args.layout, args.grid)
+    corners = arranged_corners(
+        [(r.w, r.h) for r in rects],
+        columns=columns,
+        gap=args.gap,
+        origin=origin,
+        align=args.align,
+    )
+    for path, rect, (x, y) in zip(paths, rects, corners, strict=True):
+        doc = translated(doc, path, x - rect.x, y - rect.y)
+    return save_edit(session, doc)
+
+
+def cmd_view(args) -> int:
+    if args.zoom and args.offset is None:
+        raise UsageError("--zoom needs --offset X,Y")
+    session = open_session(args)
+    if args.fit:
+        canvas = need_boxes(session).canvas
+        if canvas is None:
+            raise Failure("nothing to fit: Drawy keeps no item of it")
+        zoom = fit_zoom(canvas, args.viewport, args.margin)
+        if zoom < ZOOM_MIN:
+            warn(
+                f"content is {canvas.w:.0f}×{canvas.h:.0f}, too big for"
+                f" Drawy's {ZOOM_MIN:g} minimum zoom in this viewport;"
+                " the view shows its center"
+            )
+        zoom = min(max(zoom, ZOOM_MIN), ZOOM_MAX)
+        offset = centered_offset(canvas, args.viewport, zoom)
+    else:
+        zoom, offset = min(max(args.zoom, ZOOM_MIN), ZOOM_MAX), args.offset
+    print(f"zoom {zoom:.4g}, offset {offset[0]:.1f}, {offset[1]:.1f}")
+    return save_edit(session, with_view(session.loaded.doc, zoom, offset))
+
+
+def cmd_build(args) -> int:
+    print(ensure_renderer(os.environ, force=args.force).binary)
+    return 0
+
+
+# --- selftest
+
+
+def png_bytes(width: int, height: int, rgb: tuple) -> bytes:
+    """A solid-colour RGB PNG."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        crc = struct.pack(">I", zlib.crc32(body))
+        return struct.pack(">I", len(data)) + body + crc
+
+    rows = b"".join(b"\0" + bytes(rgb) * width for _ in range(height))
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    chunks = (b"IHDR", header), (b"IDAT", zlib.compress(rows)), (b"IEND", b"")
+    return PNG_SIGNATURE + b"".join(chunk(*c) for c in chunks)
+
+
+def sample_item(kind: str, digits: str, at: tuple, props: dict, **fields):
+    """An item with id digits * 16 at canvas offset at."""
+    return {
+        "type": kind,
+        "id": digits * 16,
+        "properties": [{"type": k, "value": v} for k, v in props.items()],
+        "transform": transform_json(translation(*at)),
+        **fields,
+    }
+
+
+def sample_board() -> dict:
+    """A board with every item type, a group, a nested group and a
+    rotated group, in the form Drawy saves."""
+    png = base64.b64encode(png_bytes(40, 30, (200, 60, 40))).decode()
+    stroke = {"Opacity": 255, "StrokeColor": "#1e1e1e"}
+    stroke |= {"StrokeStyle": "Solid", "StrokeWidth": 2}
+    shape = {"BackgroundColor": "#ffd8a8", "BackgroundStyle": "Solid"}
+    shape |= stroke
+    font = {"FontSize": 18, "Opacity": 255, "StrokeColor": "#2b2f36"}
+    corners = {"start": {"x": 2, "y": 2}, "end": {"x": 122, "y": 82}}
+    line = {"start": {"x": 0, "y": 0}, "end": {"x": 120, "y": 40}}
+    heads = {"StartArrowType": "None", "EndArrowType": "Filled"}
+    stroke_points = [{"x": 0, "y": 0}, {"x": 30, "y": 20}, {"x": 60, "y": 5}]
+    origin = {"x": 0, "y": 0}
+
+    def text(digits, words, at):
+        return sample_item(
+            "TEXT", digits, at, font, text=words, top_left=origin
+        )
+
+    def image(digits, at):
+        box = {"x": 0, "y": 0, "width": 80, "height": 60}
+        props = {"Opacity": 255}
+        return sample_item(
+            "IMAGE", digits, at, props, bounding_box=box, image_data=png
+        )
+
+    def group(digits, at, items):
+        return sample_item("GROUP", digits, at, {}, items=items)
+
+    def shape_item(kind, digits, at, **fields):
+        return sample_item(kind, digits, at, shape, **corners, **fields)
+
+    turned = group(
+        "a0", (0, 0), [text("a1", "turned", (0, 0)), image("a2", (0, 40))]
+    )
+    turned["transform"] = transform_json(Affine(0.0, 1.0, -1.0, 0.0, 900, 500))
+    triangle = {"pluginName": "standardforms", "customObjectName": "TRIANGLE"}
+    freeform = {"points": stroke_points, "pressures": [1, 1, 1]}
+    freeform["simulatePressure"] = True
+    nested = [image("32", (0, 0)), image("33", (100, 0))]
+    items = [
+        text("10", "Title", (100, 50)),
+        image("11", (100, 120)),
+        shape_item("RECTANGLE", "12", (300, 120)),
+        shape_item("ELLIPSE", "13", (450, 120)),
+        shape_item("DIAMOND", "14", (600, 120)),
+        shape_item("CUSTOM", "15", (750, 120), **triangle),
+        sample_item("LINE", "16", (100, 260), stroke, **line),
+        sample_item("ARROW", "17", (300, 260), heads | stroke, **line),
+        sample_item("FREEFORM", "18", (500, 260), stroke, **freeform),
+        group(
+            "20",
+            (100, 400),
+            [text("21", "caption", (0, 0)), image("22", (0, 40))],
+        ),
+        group(
+            "30",
+            (400, 400),
+            [group("31", (0, 0), nested), text("34", "nested", (0, 80))],
+        ),
+        turned,
+    ]
+    return {
+        "version": 1,
+        "zoom_factor": 1,
+        "offset_pos": origin,
+        "items": items,
+    }
+
+
+def flipped_board() -> dict:
+    """Two rectangles in a group turned 180° inside another one turned
+    180°, so the turns cancel on the canvas; Drawy writes these when a
+    group is mirrored twice before a reload."""
+    stroke = {"Opacity": 255, "StrokeColor": "#1e1e1e"}
+    stroke |= {"StrokeStyle": "Solid", "StrokeWidth": 2}
+    corners = {"start": {"x": 0, "y": 0}, "end": {"x": 100, "y": 60}}
+
+    def rect(digits, at):
+        return sample_item("RECTANGLE", digits, at, stroke, **corners)
+
+    def flipped(digits, at, items):
+        group = sample_item("GROUP", digits, at, {}, items=items)
+        group["transform"] = transform_json(Affine(-1, 0, 0, -1, *at))
+        return group
+
+    inner = flipped(
+        "b0", (400, 200), [rect("b1", (0, 0)), rect("b2", (150, 0))]
+    )
+    outer = flipped("c0", (800, 600), [inner, rect("c1", (0, 100))])
+    return {
+        "version": 1,
+        "zoom_factor": 1,
+        "offset_pos": {"x": 0, "y": 0},
+        "items": [outer],
+    }
+
+
+class Selftest(NamedTuple):
+    directory: Path
+    board: Path
+    start: Boxes
+    env: dict
+    renderer: Renderer
+
+
+def run_cli(test: Selftest, *arguments) -> subprocess.CompletedProcess:
+    script = os.path.realpath(__file__)
+    command = [sys.executable, script, *map(str, arguments)]
+    return subprocess.run(
+        command, capture_output=True, text=True, env=test.env, check=False
+    )
+
+
+def expect(condition, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
+def expect_ok(result: subprocess.CompletedProcess) -> None:
+    said = (result.stderr or result.stdout).strip().splitlines()
+    last = said[-1] if said else ""
+    expect(result.returncode == 0, f"exit {result.returncode}: {last}")
+
+
+def near(a, b, tolerance: float = 1e-6) -> bool:
+    """Whether two equal-length number sequences agree."""
+    return all(abs(x - y) <= tolerance for x, y in zip(a, b, strict=True))
+
+
+def edited_board(
+    test: Selftest, name: str, command: str, *arguments, board=None
+):
+    """Run one edit of board (default: the sample) into NAME.drawy,
+    check that nothing is dropped, and return the result's doc and
+    boxes. The edit itself refuses new errors and drops."""
+    output = test.directory / f"{name}.drawy"
+    source = board or test.board
+    expect_ok(run_cli(test, command, source, *arguments, "-o", output))
+    boxes = measured(test.renderer, output.read_bytes())
+    expect(not boxes.dropped, f"dropped {boxes.dropped}")
+    return parsed_board(output.read_bytes()), boxes
+
+
+def refused(result: subprocess.CompletedProcess, output: Path) -> bool:
+    return result.returncode == 1 and not output.exists()
+
+
+def case_roundtrip(test: Selftest) -> None:
+    unpacked = test.directory / "unpacked.json"
+    repacked = test.directory / "repacked.drawy"
+    expect_ok(run_cli(test, "unpack", test.board, "-o", unpacked))
+    expect_ok(run_cli(test, "pack", unpacked, "-o", repacked))
+    same = repacked.read_bytes() == test.board.read_bytes()
+    expect(same, "pack(unpack(board)) differs from the board")
+    # pack refuses a board that changed after the unpack.
+    expect_ok(
+        run_cli(test, "move", repacked, "0", "--by", "1,1", "-o", repacked)
+    )
+    edited = repacked.read_bytes()
+    result = run_cli(test, "pack", unpacked, "-o", repacked)
+    expect(result.returncode == 1, "pack over a changed board")
+    expect(repacked.read_bytes() == edited, "the changed board is kept")
+    expect_ok(run_cli(test, "pack", unpacked, "-o", repacked, "--force"))
+
+
+def case_reports(test: Selftest) -> None:
+    expect_ok(run_cli(test, "check", test.board))
+    expect_ok(run_cli(test, "dump", test.board))
+    report = json.loads(run_cli(test, "dump", test.board, "--json").stdout)
+    count = len(list(walked(items_of(sample_board()))))
+    expect(len(report["items"]) == count, "dump --json item count")
+    png, svg = test.directory / "board.png", test.directory / "board.svg"
+    options = ("-o", png, "--svg", svg, "--max-size", 500)
+    expect_ok(run_cli(test, "render", test.board, *options))
+    expect(max(png_size(png.read_bytes())) == 500, "PNG size")
+    expect(svg.read_bytes().startswith(b"<?xml"), "SVG output")
+
+
+def case_move(test: Selftest) -> None:
+    start = test.start.rects
+    _, boxes = edited_board(
+        test, "move-top", "move", "1111", "--to", "400,700"
+    )
+    expect(boxes.rects[(1,)][:2] == (400, 700), "top-level --to")
+    _, boxes = edited_board(
+        test, "move-child", "move", "9.1", "--by", "-30,25"
+    )
+    expect(near(boxes.rects[(9, 1)], start[(9, 1)].shifted(-30, 25)), "child")
+    expect(boxes.rects[(9, 0)] == start[(9, 0)], "sibling moved")
+    _, boxes = edited_board(
+        test, "move-nested", "move", "10.0.0", "--to", "380,390"
+    )
+    expect(near(boxes.rects[(10, 0, 0)][:2], (380, 390)), "nested child")
+
+
+def case_move_rotated(test: Selftest) -> None:
+    _, boxes = edited_board(test, "move-turned", "move", "11.0", "--by", "5,5")
+    start = test.start.rects
+    expect(near(boxes.rects[(11, 1)], start[(11, 1)], 1e-4), "sibling moved")
+    want = start[(11, 0)].shifted(5, 5)
+    expect(near(boxes.rects[(11, 0)], want, 1e-4), "rotated child")
+
+
+def case_scale(test: Selftest) -> None:
+    _, boxes = edited_board(test, "scale-image", "scale", "1", "2")
+    r0, r1 = test.start.rects[(1,)], boxes.rects[(1,)]
+    expect(near(r1, (r0.x, r0.y, 2 * r0.w, 2 * r0.h)), f"{r0} -> {r1}")
+    doc, boxes = edited_board(
+        test, "scale-group", "scale", "9", "1.5", "--anchor", "center"
+    )
+    before, after = test.start.rects[(9,)].center, boxes.rects[(9,)].center
+    expect(near(before, after), f"center {before} -> {after}")
+    expect(property_value(item_at(doc, (9, 0)), "FontSize") == 27, "FontSize")
+    _, boxes = edited_board(test, "scale-turned", "scale", "11", "0.5")
+    want = test.start.rects[(11,)]
+    got = boxes.rects[(11,)]
+    expect(near(got[:2], want[:2], 1e-4), f"anchor {want} -> {got}")
+
+
+def case_set(test: Selftest) -> None:
+    settings = ("FontSize=30", "StrokeColor=#FF0000", "text=Hello")
+    doc, _ = edited_board(test, "set", "set", "text:title", *settings)
+    item = item_at(doc, (0,))
+    values = (
+        property_value(item, "FontSize"),
+        property_value(item, "StrokeColor"),
+    )
+    expect((*values, item["text"]) == (30, "#ff0000", "Hello"), "values")
+    doc, _ = edited_board(test, "set-group", "set", "10", "Opacity=128")
+    under = ((10, 0, 0), (10, 0, 1), (10, 1))
+    opacities = {property_value(item_at(doc, p), "Opacity") for p in under}
+    expect(opacities == {128}, "group descendants")
+    bad = test.directory / "bad.drawy"
+    result = run_cli(test, "set", test.board, "1", "FontSize=3", "-o", bad)
+    expect(refused(result, bad), "FontSize on an IMAGE")
+
+
+def case_add(test: Selftest) -> None:
+    doc, boxes = edited_board(
+        test, "add-text", "add-text", "Note", "--at", "50,800"
+    )
+    expect(boxes.rects[(12,)][:2] == (50, 800), "text position")
+    color = property_value(item_at(doc, (12,)), "StrokeColor")
+    expect(color == "#2b2f36", "the board's text colour")
+    into = ("--at", "90,380", "--into", "9")
+    _, boxes = edited_board(test, "add-into", "add-text", "deep", *into)
+    expect(near(boxes.rects[(9, 2)][:2], (90, 380)), "text into a group")
+    picture = test.directory / "picture.png"
+    picture.write_bytes(png_bytes(500, 200, (20, 120, 200)))
+    _, boxes = edited_board(
+        test, "add-image", "add-image", picture, "--at", "700,600"
+    )
+    expect(boxes.rects[(12,)] == (700, 600, 250, 100), "paste size")
+    sized = ("--at", "0,0", "--width", "100", "--into", "10")
+    _, boxes = edited_board(test, "add-sized", "add-image", picture, *sized)
+    expect(near(boxes.rects[(10, 2)], (0, 0, 100, 40)), "--width")
+    bad = test.directory / "bad.drawy"
+    result = run_cli(
+        test, "add-image", test.board, test.board, "--at", "0,0", "-o", bad
+    )
+    expect(result.returncode == 1, "a non-PNG image")
+
+
+def case_delete_order(test: Selftest) -> None:
+    doc, _ = edited_board(test, "delete", "delete", "3", "9.0")
+    expect(len(items_of(doc)) == 11, "top-level count")
+    expect(len(item_at(doc, (8,))["items"]) == 1, "group count")
+    doc, _ = edited_board(test, "delete-all", "delete", "9.0", "9.1")
+    expect(all(i["id"] != "20" * 16 for i in items_of(doc)), "empty group")
+    for where, index in (("front", 11), ("back", 0), ("up", 3), ("down", 1)):
+        doc, _ = edited_board(test, f"order-{where}", "order", "2", where)
+        expect(item_at(doc, (index,))["id"] == "12" * 16, f"order {where}")
+
+
+def case_flipped(test: Selftest) -> None:
+    board = test.directory / "flipped.drawy"
+    board.write_bytes(board_bytes(flipped_board()))
+    start = measured(test.renderer, board.read_bytes()).rects
+    _, boxes = edited_board(
+        test, "flip-delete", "delete", "0.0.0", board=board
+    )
+    expect(near(boxes.rects[(0, 0, 0)], start[(0, 0, 1)]), "sibling moved")
+    _, boxes = edited_board(
+        test, "flip-set", "set", "0.0.1", "StrokeWidth=1", board=board
+    )
+    expect(near(boxes.rects[(0, 0, 0)], start[(0, 0, 0)]), "other moved")
+
+
+def case_group(test: Selftest) -> None:
+    start = test.start.rects
+    doc, boxes = edited_board(test, "group", "group", "2", "3", "4")
+    expect(len(items_of(doc)) == 10, "count after group")
+    for i in range(3):
+        expect(near(boxes.rects[(2, i)], start[(2 + i,)]), "grouped moved")
+    doc, boxes = edited_board(test, "ungroup", "ungroup", "9")
+    expect(len(items_of(doc)) == 13, "count after ungroup")
+    for i in range(2):
+        expect(near(boxes.rects[(9 + i,)], start[(9, i)]), "ungrouped moved")
+    doc, boxes = edited_board(test, "ungroup-turned", "ungroup", "11")
+    for i in range(2):
+        want = start[(11, i)]
+        expect(near(boxes.rects[(11 + i,)], want, 1e-4), "unturned moved")
+
+
+def case_arrange(test: Selftest) -> None:
+    layout = ("--row", "--gap", "10", "--at", "100,900", "--align", "center")
+    _, boxes = edited_board(test, "arrange", "arrange", "2", "3", "4", *layout)
+    rects = [boxes.rects[(i,)] for i in (2, 3, 4)]
+    expect(near((rects[0].x,), (100,)), "row start")
+    gaps = [b.x - a.right for a, b in itertools.pairwise(rects)]
+    expect(near(gaps, (10, 10)), f"row gaps {gaps}")
+    _, boxes = edited_board(
+        test, "grid", "arrange", "9.0", "9.1", "--grid", "1"
+    )
+    expect(not overlap(boxes.rects[(9, 0)], boxes.rects[(9, 1)]), "overlap")
+
+
+def case_view(test: Selftest) -> None:
+    viewport = ("--fit", "--viewport", "800x600")
+    doc, _ = edited_board(test, "view", "view", *viewport)
+    zoom, offset, canvas = (
+        doc["zoom_factor"],
+        doc["offset_pos"],
+        test.start.canvas,
+    )
+    left = (canvas.x - offset["x"]) * zoom
+    top = (canvas.y - offset["y"]) * zoom
+    inside = left >= 0 and left + canvas.w * zoom <= 800 + 1e-6
+    inside = inside and top >= 0 and top + canvas.h * zoom <= 600 + 1e-6
+    expect(inside, "content outside the viewport")
+    doc, _ = edited_board(
+        test, "zoom", "view", "--zoom", "2", "--offset", "-10,20"
+    )
+    view = doc["zoom_factor"], doc["offset_pos"]
+    expect(view == (2, {"x": -10, "y": 20}), f"view {view}")
+
+
+def case_safety(test: Selftest) -> None:
+    board = test.directory / "inplace.drawy"
+    shutil.copyfile(test.board, board)
+    expect_ok(run_cli(test, "move", board, "0", "--by", "1,1", "--in-place"))
+    backups = list(test.directory.glob("cache/drawyctl/backups/inplace-*"))
+    expect(len(backups) == 1, "no backup")
+    expect(backups[0].read_bytes() == test.board.read_bytes(), "backup")
+    expect(board.read_bytes() != test.board.read_bytes(), "not edited")
+    doc = parsed_board(test.board.read_bytes())
+    item_at(doc, (1,))["bounding_box"]["width"] = 0
+    zero, output = test.directory / "zero.json", test.directory / "zero.drawy"
+    zero.write_text(json.dumps(doc))
+    expect(refused(run_cli(test, "pack", zero, "-o", output), output), "zero")
+    doc = sample_board()
+    expect(selected_path(doc, "text:CAPT") == (9, 0), "text: selector")
+    expect(selected_path(doc, "3434") == (10, 1), "id selector")
+    bad = test.directory / "bad.drawy"
+    result = run_cli(
+        test, "move", test.board, "text:e", "--by", "1,1", "-o", bad
+    )
+    expect(refused(result, bad) and "matches" in result.stderr, "ambiguity")
+    boards = {path: path.read_bytes() for path in (board, test.board)}
+    for option in ("-o", "--svg"):
+        result = run_cli(test, "render", board, option, board)
+        expect(result.returncode == 1, f"render {option} over its board")
+    result = run_cli(test, "unpack", board, "-o", test.board)
+    expect(result.returncode == 1, "unpack over a board")
+    kept = all(path.read_bytes() == data for path, data in boards.items())
+    expect(kept, "a board was overwritten")
+
+
+SELFTEST_CASES = (
+    ("unpack + pack is byte-identical", case_roundtrip),
+    ("check, dump, render", case_reports),
+    ("move: top level, child, nested", case_move),
+    ("move inside a rotated group", case_move_rotated),
+    ("scale: image, group about center", case_scale),
+    ("set: properties, text, groups", case_set),
+    ("add-text and add-image", case_add),
+    ("delete and order", case_delete_order),
+    ("edits inside mirrored groups", case_flipped),
+    ("group and ungroup", case_group),
+    ("arrange", case_arrange),
+    ("view", case_view),
+    ("backups, refusals, selectors", case_safety),
+)
+
+
+def run_selftest(test: Selftest) -> int:
+    """Run every case on test, print PASS or FAIL for each, and return
+    how many failed."""
+    failures = 0
+    for name, case in SELFTEST_CASES:
+        try:
+            case(test)
+        except Exception as exc:  # noqa: BLE001 - report every case
+            failures += 1
+            print(f"FAIL {name}: {exc!r}")
+        else:
+            print(f"PASS {name}")
+    return failures
+
+
+def cmd_selftest(args) -> int:
+    renderer = ensure_renderer(os.environ)
+    directory = Path(tempfile.mkdtemp(prefix="drawyctl-selftest-"))
+    try:
+        board = directory / "board.drawy"
+        board.write_bytes(board_bytes(sample_board()))
+        env = dict(os.environ, DRAWYCTL_RENDER=str(renderer.binary))
+        env["XDG_CACHE_HOME"] = str(directory / "cache")
+        start = measured(renderer, board.read_bytes())
+        failures = run_selftest(
+            Selftest(directory, board, start, env, renderer)
+        )
+    finally:
+        if args.keep:
+            print(f"kept {directory}")
+        else:
+            shutil.rmtree(directory)
+    return 1 if failures else 0
+
+
+# --- command line
+
+
+def numbers(count: int):
+    """An argparse type for count comma-separated finite numbers."""
+
+    def parse(text: str) -> tuple:
+        try:
+            values = tuple(float(part) for part in text.split(","))
+        except ValueError:
+            values = ()
+        if len(values) != count or not all(map(math.isfinite, values)):
+            raise argparse.ArgumentTypeError(
+                f"expected {count} comma-separated numbers: {text!r}"
+            )
+        return values
+
+    return parse
+
+
+def bounded(low: float, *, inclusive: bool):
+    """An argparse type for a finite number above (or at) low."""
+
+    def parse(text: str) -> float:
+        try:
+            value = float(text)
+        except ValueError:
+            value = math.nan
+        fits = value >= low if inclusive else value > low
+        if not (math.isfinite(value) and fits):
+            sign = ">=" if inclusive else ">"
+            raise argparse.ArgumentTypeError(
+                f"expected {sign} {low}: {text!r}"
+            )
+        return value
+
+    return parse
+
+
+def column_count(text: str) -> int:
+    """An argparse type for a whole number of columns, at least 1."""
+    if not text.isdigit() or int(text) < 1:
+        raise argparse.ArgumentTypeError(
+            f"expected at least 1 column: {text!r}"
+        )
+    return int(text)
+
+
+def viewport_size(text: str) -> tuple:
+    match = re.fullmatch(r"([1-9]\d*)x([1-9]\d*)", text)
+    if not match:
+        raise argparse.ArgumentTypeError(
+            f"expected WxH like 1600x900: {text!r}"
+        )
+    return int(match[1]), int(match[2])
+
+
+SEL_HELP = (
+    "SEL names one item: a path from dump (2, 0.1), a unique id prefix"
+    " (4+ hex), or text:WORDS (one TEXT holding WORDS, any case)."
+)
+TEXT_HELP = (
+    "Text is taken literally: pass a line break as a real one (bash"
+    ' $\'a\\nb\', fish "a"\\n"b"); dump shows it as \\n.'
+)
+
+
+def parser() -> argparse.ArgumentParser:
+    top = argparse.ArgumentParser(
+        prog="drawyctl",
+        description="Inspect and edit Drawy boards.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "SEL names one item: a path from dump (2, 0.1), a unique id"
+            "\nprefix (4+ hex), or text:WORDS (one TEXT, any case)."
+            "\nCoordinates are canvas units, as dump prints them."
+            "\nEdits write -o OUT or --in-place; an existing target is"
+            "\nbacked up first. TEXT and text= are taken literally: pass"
+            '\nline breaks as real ones (bash $\'a\\nb\', fish "a"\\n"b");'
+            "\ndump shows them as \\n. Drawy ignores GROUP properties and"
+            "\nzorder: set restyles a group's children, and the array"
+            "\norder (see order) is the stacking order."
+        ),
+    )
+    sub = top.add_subparsers(dest="command", required=True, metavar="COMMAND")
+    point = numbers(2)
+    positive = bounded(0, inclusive=False)
+    non_negative = bounded(0, inclusive=True)
+
+    def command(name, run, text, *, board=True, epilog=None):
+        cmd = sub.add_parser(name, help=text, description=text, epilog=epilog)
+        if board:
+            cmd.add_argument("file", type=Path, metavar="FILE")
+        cmd.set_defaults(run=run)
+        return cmd
+
+    def edit(name, run, text, *, epilog=SEL_HELP):
+        cmd = command(name, run, text, epilog=epilog)
+        where = cmd.add_mutually_exclusive_group(required=True)
+        where.add_argument(
+            "-o", "--output", type=Path, metavar="OUT", help="write here"
+        )
+        where.add_argument(
+            "--in-place", action="store_true", help="replace FILE (backed up)"
+        )
+        cmd.add_argument(
+            "--no-verify",
+            action="store_true",
+            help="skip the drawy-render drop check",
+        )
+        return cmd
+
+    cmd = command("dump", cmd_dump, "List items with their canvas rects.")
+    cmd.add_argument(
+        "--json", action="store_true", help="print JSON (no image data)"
+    )
+    cmd.add_argument(
+        "--no-render", action="store_true", help="no rects or drops"
+    )
+
+    text = "Render as File > Export does."
+    cmd = command("render", cmd_render, text, epilog=SEL_HELP)
+    cmd.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        metavar="OUT.png",
+        help="default: renders/FILE.png in drawyctl's cache",
+    )
+    cmd.add_argument("--svg", type=Path, metavar="OUT.svg", help="also SVG")
+    cmd.add_argument(
+        "--margin",
+        type=non_negative,
+        default=20.0,
+        help="canvas units around the content (default %(default)g)",
+    )
+    cmd.add_argument(
+        "--max-size",
+        type=positive,
+        default=2000.0,
+        metavar="PX",
+        help="longest side of the PNG (default %(default)g)",
+    )
+    cmd.add_argument("--focus", metavar="SEL", help="one item and margin")
+    cmd.add_argument(
+        "--theme",
+        choices=CANVAS_COLORS,
+        default="light",
+        help="canvas colour (default %(default)s)",
+    )
+    cmd.add_argument("--bg", metavar="COLOR", help="overrides --theme")
+
+    cmd = command("check", cmd_check, "Validate against Drawy's loader.")
+    cmd.add_argument(
+        "--no-render", action="store_true", help="no drops or overlaps"
+    )
+
+    text = "Print the board as JSON."
+    epilog = f"{SOURCE_KEY} holds the board's hash; pack strips it."
+    cmd = command("unpack", cmd_unpack, text, epilog=epilog)
+    cmd.add_argument("-o", "--output", type=Path, metavar="OUT.json")
+
+    text = "Write JSON as a .drawy."
+    cmd = command("pack", cmd_pack, text, board=False)
+    cmd.add_argument("input", type=Path, metavar="IN.json")
+    cmd.add_argument(
+        "-o", "--output", type=Path, required=True, metavar="FILE"
+    )
+    cmd.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="skip the drawy-render drop check",
+    )
+    cmd.add_argument(
+        "--force",
+        action="store_true",
+        help="write over FILE although IN.json was not unpacked from it",
+    )
+
+    cmd = edit("move", cmd_move, "Move an item by DX,DY or to X,Y.")
+    cmd.add_argument("sel", metavar="SEL")
+    how = cmd.add_mutually_exclusive_group(required=True)
+    how.add_argument("--by", type=point, metavar="DX,DY")
+    how.add_argument("--to", type=point, metavar="X,Y", help="rect top-left")
+
+    cmd = edit("scale", cmd_scale, "Scale an item about an anchor.")
+    cmd.add_argument("sel", metavar="SEL")
+    cmd.add_argument("factor", type=positive, metavar="FACTOR")
+    cmd.add_argument(
+        "--anchor",
+        choices=("top-left", "center"),
+        default="top-left",
+        help="the rect point that stays put (default %(default)s)",
+    )
+
+    text = "Set properties or text= on an item."
+    cmd = edit("set", cmd_set, text, epilog=f"{SEL_HELP} {TEXT_HELP}")
+    cmd.add_argument("sel", metavar="SEL")
+    cmd.add_argument("assignments", nargs="+", metavar="KEY=VALUE")
+
+    text = "Add a TEXT item."
+    cmd = edit(
+        "add-text", cmd_add_text, text, epilog=f"{SEL_HELP} {TEXT_HELP}"
+    )
+    cmd.add_argument("text", metavar="TEXT")
+    cmd.add_argument("--at", type=point, required=True, metavar="X,Y")
+    cmd.add_argument(
+        "--size", type=int, default=18, help="FontSize (default %(default)s)"
+    )
+    cmd.add_argument("--color", help="default: the board's text colour")
+    cmd.add_argument("--into", metavar="GROUP_SEL")
+
+    cmd = edit("add-image", cmd_add_image, "Add a PNG image.")
+    cmd.add_argument("png", type=Path, metavar="PNG")
+    cmd.add_argument("--at", type=point, required=True, metavar="X,Y")
+    size = cmd.add_mutually_exclusive_group()
+    size.add_argument("--width", type=positive, metavar="W")
+    size.add_argument("--height", type=positive, metavar="H")
+    cmd.add_argument("--into", metavar="GROUP_SEL")
+
+    cmd = edit("delete", cmd_delete, "Delete items.")
+    cmd.add_argument("sels", nargs="+", metavar="SEL")
+
+    cmd = edit("order", cmd_order, "Restack an item among its siblings.")
+    cmd.add_argument("sel", metavar="SEL")
+    cmd.add_argument("where", choices=("front", "back", "up", "down"))
+
+    cmd = edit("group", cmd_group, "Group sibling items.")
+    cmd.add_argument("sels", nargs="+", metavar="SEL")
+
+    cmd = edit("ungroup", cmd_ungroup, "Dissolve a group.")
+    cmd.add_argument("sel", metavar="SEL")
+
+    cmd = edit("arrange", cmd_arrange, "Lay out sibling items in order.")
+    cmd.add_argument("sels", nargs="+", metavar="SEL")
+    layout = cmd.add_mutually_exclusive_group(required=True)
+    layout.add_argument(
+        "--row", dest="layout", action="store_const", const="row"
+    )
+    layout.add_argument(
+        "--column", dest="layout", action="store_const", const="column"
+    )
+    layout.add_argument("--grid", type=column_count, metavar="COLS")
+    cmd.add_argument(
+        "--gap",
+        type=non_negative,
+        default=40.0,
+        help="canvas units between items (default %(default)g)",
+    )
+    cmd.add_argument("--at", type=point, metavar="X,Y")
+    cmd.add_argument(
+        "--align",
+        choices=("start", "center", "end"),
+        default="start",
+        help="within each cell (default %(default)s)",
+    )
+
+    text = "Set the saved zoom and offset."
+    cmd = edit("view", cmd_view, text, epilog=None)
+    how = cmd.add_mutually_exclusive_group(required=True)
+    how.add_argument("--fit", action="store_true", help="show every item")
+    how.add_argument(
+        "--zoom", type=positive, metavar="Z", help="needs --offset"
+    )
+    cmd.add_argument(
+        "--viewport",
+        type=viewport_size,
+        default=(1600, 900),
+        metavar="WxH",
+        help="window size in px for --fit (default 1600x900)",
+    )
+    cmd.add_argument(
+        "--margin",
+        type=non_negative,
+        default=40.0,
+        help="view px kept free by --fit (default %(default)g)",
+    )
+    cmd.add_argument(
+        "--offset",
+        type=point,
+        metavar="X,Y",
+        help="the canvas point at the window's top-left",
+    )
+
+    cmd = command("build", cmd_build, "Build drawy-render.", board=False)
+    cmd.add_argument("--force", action="store_true", help="even if cached")
+
+    cmd = command("selftest", cmd_selftest, "Test on a sample.", board=False)
+    cmd.add_argument("--keep", action="store_true", help="keep its files")
+    return top
+
+
+def main(argv: list) -> int:
+    # The default SIGTERM ends Python without running cleanup, which
+    # would leave a temp file beside the board.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(128 + signal.SIGTERM))
+    args = parser().parse_args(argv)
+    try:
+        return args.run(args)
+    except Failure as exc:
+        print(f"drawyctl: {exc}", file=sys.stderr)
+        return exc.status
+    except RecursionError:
+        print("drawyctl: the board nests groups too deeply", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("drawyctl: interrupted", file=sys.stderr)
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
