@@ -137,11 +137,11 @@ gi.require_version("Gtk4LayerShell", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
 
-# Catppuccin Mocha via the official hyprlock theme (catppuccin/Hyprlock).
-# Token names match the port. Do not restate hexes here.
-def _mocha_hex():
-    """name -> bare rrggbb, from ~/.config/hypr/themes/hyprlock-mocha.conf."""
-    path = Path.home() / ".config/hypr/themes/hyprlock-mocha.conf"
+# Everforest Dark Medium, read from the hyprlock palette file.
+# Token names are Everforest's. Do not restate hexes here.
+def _palette_hex():
+    """name -> bare rrggbb, from hypr/themes/everforest.conf."""
+    path = Path.home() / ".config/hypr/themes/everforest.conf"
     colors = {}
     try:
         for line in path.read_text().splitlines():
@@ -161,15 +161,15 @@ def _mocha_hex():
 
 
 def palette():
-    return {k: f"#{v}" for k, v in _mocha_hex().items()}
+    return {k: f"#{v}" for k, v in _palette_hex().items()}
 
 
 CSS = """
 window.display {{ background: transparent; }}
 
 .sheet {{
-  background: alpha({crust}, 0.985);
-  border: 1px solid {surface1};
+  background: alpha({bg_dim}, 0.985);
+  border: 1px solid {bg2};
   border-radius: 16px;
   padding: 18px 20px 14px 20px;
 }}
@@ -178,15 +178,15 @@ window.display {{ background: transparent; }}
   font-family: "Adwaita Sans", sans-serif;
   font-size: 11px;
   font-weight: 700;
-  color: {overlay0};
+  color: {grey0};
   margin: 4px 2px 0 2px;
 }}
 
 button.layout, button.card {{
   font-family: "Adwaita Sans", sans-serif;
-  color: {subtext1};
-  background: {base};
-  border: 1px solid {surface0};
+  color: {grey2};
+  background: {bg0};
+  border: 1px solid {bg1};
   border-radius: 12px;
   box-shadow: none;
   min-height: 0;
@@ -196,30 +196,30 @@ button.layout {{ padding: 8px 4px; }}
 button.card {{ padding: 10px 12px; }}
 
 button.layout:hover, button.card:hover {{
-  background: {surface0};
-  border-color: {surface2};
+  background: {bg1};
+  border-color: {bg3};
 }}
 button.layout:focus-visible, button.card:focus-visible {{
-  border-color: {text};
-  outline: 2px solid {sapphire};
+  border-color: {fg};
+  outline: 2px solid {blue};
   outline-offset: 1px;
 }}
 
 .icon {{
   font-family: "JetBrainsMono Nerd Font", monospace;
   font-size: 17px;
-  color: {text};
+  color: {fg};
 }}
-.name {{ font-size: 13px; color: {text}; }}
-.state {{ font-size: 11px; color: {overlay0}; }}
+.name {{ font-size: 13px; color: {fg}; }}
+.state {{ font-size: 11px; color: {grey0}; }}
 
 button.on {{
-  background: alpha({sapphire}, 0.18);
-  border-color: alpha({sapphire}, 0.55);
+  background: alpha({blue}, 0.18);
+  border-color: alpha({blue}, 0.55);
 }}
-button.on .icon, button.on .state {{ color: {sapphire}; }}
+button.on .icon, button.on .state {{ color: {blue}; }}
 
-button.card.off .icon, button.card.off .name {{ color: {overlay0}; }}
+button.card.off .icon, button.card.off .name {{ color: {grey0}; }}
 """
 
 POLL_MS = 1000

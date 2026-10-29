@@ -6,7 +6,7 @@ busy, pegged) rather than by metric; hovering drops a panel with bars and
 details, labeled in each metric's own hue. One process samples everything, so each GPU is queried
 once per tick.
 
-Colors are Catppuccin Mocha role hues (official palette).
+Colors are Everforest Dark Medium role hues (hypr/themes/everforest.conf).
 
 Intel (xe) has no busy-percent file, but each GT reports how long it has been
 idle; busy = 1 - idle delta / wall delta, from the render GT (gt*-rc). NVIDIA
@@ -33,11 +33,11 @@ def read(path):
 
 
 def colors():
-    """Role hues from the official Mocha tokens (hyprlock mocha.conf)."""
+    """Role hues from the Everforest tokens (hyprlock everforest.conf)."""
     from pathlib import Path as _P
     hexes = {}
     try:
-        for line in (_P.home() / ".config/hypr/themes/hyprlock-mocha.conf").read_text().splitlines():
+        for line in (_P.home() / ".config/hypr/themes/everforest.conf").read_text().splitlines():
             line = line.strip()
             if line.startswith("$") and "=" in line:
                 name, _, val = line.partition("=")
@@ -49,10 +49,10 @@ def colors():
         pass
     def n(name, fallback):
         return f"#{hexes.get(name, fallback)}"
-    return {"calm": n("text", "cdd6f4"), "warn": n("peach", "fab387"),
-            "alert": n("red", "f38ba8"), "cpu": n("subtext0", "a6adc8"),
-            "ram": n("sky", "89dceb"), "gpu": n("blue", "89b4fa"),
-            "track": n("surface0", "313244"), "dim": n("overlay0", "6c7086")}
+    return {"calm": n("fg", "d3c6aa"), "warn": n("orange", "e69875"),
+            "alert": n("red", "e67e80"), "cpu": n("grey2", "9da9a0"),
+            "ram": n("aqua", "83c092"), "gpu": n("blue", "7fbbb3"),
+            "track": n("bg1", "343f44"), "dim": n("grey0", "7a8478")}
 
 
 def cpu_times():
@@ -109,7 +109,7 @@ def glyph(pct):
 
 
 def level(pct, c, color, can_alert=True):
-    """The metric's color while calm, amber when busy, red when pegged."""
+    """The metric's color while calm, orange when busy, red when pegged."""
     if can_alert and pct >= CRITICAL:
         return c["alert"]
     if pct >= BUSY:
@@ -170,7 +170,7 @@ def main():
 
         text = chip(cpu) + chip(ram)
         if gpus:
-            # A long job pegs the dGPU on purpose, so the GPU glyph stops at amber
+            # A long job pegs the dGPU on purpose, so the GPU glyph stops at orange
             text += chip(max(gpus), can_alert=False)
 
         out = {

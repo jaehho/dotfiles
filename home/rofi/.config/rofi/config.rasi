@@ -1,5 +1,6 @@
-/* Official Catppuccin Mocha (catppuccin/rofi). Layout prefs (font, width,
-   Papirus icons) stay on top of the stock theme. */
+/* Everforest Dark Medium (themes/everforest.rasi) through the stock role
+   map in everforest-default.rasi. Layout prefs (font, width, Papirus icons)
+   stay on top of the stock theme. */
 
 configuration {
   show-icons:          true;
@@ -16,8 +17,8 @@ configuration {
   display-filebrowser: "";
 }
 
-@import "themes/catppuccin-mocha.rasi"
-@import "catppuccin-default.rasi"
+@import "themes/everforest.rasi"
+@import "everforest-default.rasi"
 
 * {
   font: "JetBrainsMono Nerd Font 11";

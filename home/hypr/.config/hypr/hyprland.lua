@@ -38,18 +38,18 @@ end
 if not ok_ws then
     hl.notification.create({ text = "workspaces.lua failed: " .. tostring(workspaces), timeout = 10000, icon = "error" })
 end
--- Colors only from the official Catppuccin Mocha module (catppuccin/hyprland).
--- Active border is fixed lavender.
-package.loaded["themes.catppuccin_mocha"] = nil
-local ok_theme, mocha = pcall(require, "themes.catppuccin_mocha")
-if not ok_theme or type(mocha) ~= "table" or mocha.lavenderAlpha == nil then
-    hl.notification.create({ text = "catppuccin_mocha.lua failed to load", timeout = 10000, icon = "error" })
-    mocha = { lavenderAlpha = "b4befe", overlay1Alpha = "7f849c", crustAlpha = "11111b" }
+-- Colors only from the Everforest Dark Medium module (themes/everforest.lua).
+-- Active border is fixed green, the Everforest accent.
+package.loaded["themes.everforest"] = nil
+local ok_theme, palette = pcall(require, "themes.everforest")
+if not ok_theme or type(palette) ~= "table" or palette.greenAlpha == nil then
+    hl.notification.create({ text = "everforest.lua failed to load", timeout = 10000, icon = "error" })
+    palette = { greenAlpha = "a7c080", grey1Alpha = "859289", bg_dimAlpha = "232a2e" }
 end
 local clr = {
-    active   = "rgba(" .. mocha.lavenderAlpha .. "ee)",
-    inactive = "rgba(" .. mocha.overlay1Alpha .. "aa)",
-    shadow   = "rgba(" .. mocha.crustAlpha .. "ee)",
+    active   = "rgba(" .. palette.greenAlpha .. "ee)",
+    inactive = "rgba(" .. palette.grey1Alpha .. "aa)",
+    shadow   = "rgba(" .. palette.bg_dimAlpha .. "ee)",
 }
 
 ---------------------

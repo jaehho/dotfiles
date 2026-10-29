@@ -1,6 +1,9 @@
-/* swaync style — official Catppuccin Mocha (catppuccin/swaync release CSS).
+/* swaync style — Everforest Dark Medium (everforest.css, Everforest's names),
+   recolored over the release theme CSS this file started from.
    Font and corner radii snapped to this repo's scale (JetBrainsMono, 12/8/pill).
    config.json and hypr-swaync-keys are unchanged. */
+@import "everforest.css";
+
 * {
   all: unset;
   font-size: 14px;
@@ -9,7 +12,7 @@
 }
 
 trough highlight {
-  background: #cdd6f4;
+  background: @fg;
 }
 
 scale {
@@ -28,24 +31,24 @@ trough slider {
   border-radius: 12px;
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
   transition: all 0.2s ease;
-  background-color: #89b4fa;
+  background-color: @blue;
 }
 
 trough slider:hover {
-  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 8px #89b4fa;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 8px @blue;
 }
 
 trough {
-  background-color: #313244;
+  background-color: @bg1;
 }
 
 /* notifications */
 .notification-background {
-  box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.8), inset 0 0 0 1px #45475a;
+  box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.8), inset 0 0 0 1px @bg2;
   border-radius: 12px;
   margin: 18px;
-  background: #181825;
-  color: #cdd6f4;
+  background: @bg_dim;
+  color: @fg;
   padding: 0;
 }
 
@@ -55,7 +58,7 @@ trough {
 }
 
 .notification-background .notification.critical {
-  box-shadow: inset 0 0 7px 0 #f38ba8;
+  box-shadow: inset 0 0 7px 0 @red;
 }
 
 .notification .notification-content {
@@ -68,15 +71,15 @@ trough {
 }
 
 .notification-content .summary {
-  color: #cdd6f4;
+  color: @fg;
 }
 
 .notification-content .time {
-  color: #a6adc8;
+  color: @grey2;
 }
 
 .notification-content .body {
-  color: #bac2de;
+  color: @grey2;
 }
 
 .notification > *:last-child > * {
@@ -87,46 +90,46 @@ trough {
   margin: 7px;
   padding: 2px;
   border-radius: 8px;
-  color: #1e1e2e;
-  background-color: #f38ba8;
+  color: @bg0;
+  background-color: @red;
 }
 
 .notification-background .close-button:hover {
-  background-color: #eba0ac;
+  background-color: @orange;
 }
 
 .notification-background .close-button:active {
-  background-color: #f5c2e7;
+  background-color: @purple;
 }
 
 .notification .notification-action {
   border-radius: 8px;
-  color: #cdd6f4;
-  box-shadow: inset 0 0 0 1px #45475a;
+  color: @fg;
+  box-shadow: inset 0 0 0 1px @bg2;
   margin: 4px;
   padding: 8px;
   font-size: 0.2rem; /* controls the button size not text size*/
 }
 
 .notification .notification-action {
-  background-color: #313244;
+  background-color: @bg1;
 }
 
 .notification .notification-action:hover {
-  background-color: #45475a;
+  background-color: @bg2;
 }
 
 .notification .notification-action:active {
-  background-color: #585b70;
+  background-color: @bg3;
 }
 
 .notification.critical progress {
-  background-color: #f38ba8;
+  background-color: @red;
 }
 
 .notification.low progress,
 .notification.normal progress {
-  background-color: #89b4fa;
+  background-color: @blue;
 }
 
 .notification progress,
@@ -147,16 +150,16 @@ trough {
 
 /* control center */
 .control-center {
-  box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.8), inset 0 0 0 1px #313244;
+  box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.8), inset 0 0 0 1px @bg1;
   border-radius: 12px;
-  background-color: #1e1e2e;
-  color: #cdd6f4;
+  background-color: @bg0;
+  color: @fg;
   padding: 14px;
 }
 
 .control-center .notification-background {
   border-radius: 8px;
-  box-shadow: inset 0 0 0 1px #45475a;
+  box-shadow: inset 0 0 0 1px @bg2;
   margin: 4px 10px;
 }
 
@@ -169,24 +172,24 @@ trough {
 }
 
 .control-center .widget-title > label {
-  color: #cdd6f4;
+  color: @fg;
   font-size: 1.3em;
 }
 
 .control-center .widget-title button {
   border-radius: 8px;
-  color: #cdd6f4;
-  background-color: #313244;
-  box-shadow: inset 0 0 0 1px #45475a;
+  color: @fg;
+  background-color: @bg1;
+  box-shadow: inset 0 0 0 1px @bg2;
   padding: 8px;
 }
 
 .control-center .widget-title button:hover {
-  background-color: #45475a;
+  background-color: @bg2;
 }
 
 .control-center .widget-title button:active {
-  background-color: #585b70;
+  background-color: @bg3;
 }
 
 .control-center .notification-group {
@@ -194,7 +197,7 @@ trough {
 }
 
 .control-center .notification-group:focus .notification-background {
-  background-color: #313244;
+  background-color: @bg1;
 }
 
 scrollbar slider {
@@ -216,28 +219,28 @@ scrollbar trough {
 .widget-dnd > switch {
   font-size: initial;
   border-radius: 8px;
-  background: #313244;
+  background: @bg1;
   box-shadow: none;
 }
 
 .widget-dnd > switch:checked {
-  background: #89b4fa;
+  background: @blue;
 }
 
 .widget-dnd > switch slider {
-  background: #45475a;
+  background: @bg2;
   border-radius: 8px;
 }
 
 /* mpris */
 .widget-mpris-player {
-  background: #313244;
+  background: @bg1;
   border-radius: 12px;
-  color: #cdd6f4;
+  color: @fg;
 }
 
 .mpris-overlay {
-  background-color: #313244;
+  background-color: @bg1;
   opacity: 0.9;
   padding: 15px 10px;
 }
@@ -250,17 +253,17 @@ scrollbar trough {
 
 .widget-mpris-title {
   font-size: 1.2rem;
-  color: #cdd6f4;
+  color: @fg;
 }
 
 .widget-mpris-subtitle {
   font-size: 1rem;
-  color: #bac2de;
+  color: @grey2;
 }
 
 .widget-mpris button {
   border-radius: 12px;
-  color: #cdd6f4;
+  color: @fg;
   margin: 0 5px;
   padding: 2px;
 }
@@ -270,11 +273,11 @@ scrollbar trough {
 }
 
 .widget-mpris button:hover {
-  background-color: #313244;
+  background-color: @bg1;
 }
 
 .widget-mpris button:active {
-  background-color: #45475a;
+  background-color: @bg2;
 }
 
 .widget-mpris button:disabled {
@@ -287,17 +290,17 @@ scrollbar trough {
 }
 
 .widget-menubar > box > .menu-button-bar > :last-child {
-  color: #f38ba8;
+  color: @red;
 }
 
 .power-buttons button:hover,
 .powermode-buttons button:hover,
 .screenshot-buttons button:hover {
-  background: #313244;
+  background: @bg1;
 }
 
 .control-center .widget-label > label {
-  color: #cdd6f4;
+  color: @fg;
   font-size: 2rem;
 }
 
@@ -314,21 +317,21 @@ scrollbar trough {
 }
 
 .widget-volume label {
-  color: #74c7ec;
+  color: @blue;
   padding: 0 1rem;
 }
 
 .widget-volume trough highlight {
-  background: #74c7ec;
+  background: @blue;
 }
 
 .widget-backlight trough highlight {
-  background: #f9e2af;
+  background: @yellow;
 }
 
 .widget-backlight label {
   font-size: 1.5rem;
-  color: #f9e2af;
+  color: @yellow;
 }
 
 .widget-backlight .KB {

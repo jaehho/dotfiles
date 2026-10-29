@@ -295,11 +295,11 @@ class Link:
 
 
 # --- drawing ----------------------------------------------------------------
-# Catppuccin Mocha via the official hyprlock theme (catppuccin/Hyprlock).
-# Token names match the port. Do not restate hexes here.
-def _mocha_hex():
-    """name -> bare rrggbb, from ~/.config/hypr/themes/hyprlock-mocha.conf."""
-    path = Path.home() / ".config/hypr/themes/hyprlock-mocha.conf"
+# Everforest Dark Medium, read from the hyprlock palette file.
+# Token names are Everforest's. Do not restate hexes here.
+def _palette_hex():
+    """name -> bare rrggbb, from hypr/themes/everforest.conf."""
+    path = Path.home() / ".config/hypr/themes/everforest.conf"
     colors = {}
     try:
         for line in path.read_text().splitlines():
@@ -319,8 +319,8 @@ def _mocha_hex():
 
 
 def palette():
-    """Bare rrggbb tokens from the official Mocha theme."""
-    return _mocha_hex()
+    """Bare rrggbb tokens from the Everforest palette file."""
+    return _palette_hex()
 
 
 def rgb(hex_color):
@@ -328,29 +328,29 @@ def rgb(hex_color):
 
 
 CSS = """
-window.speakereq, window.speakereq > scrolledwindow {{ background: #{base}; color: #{text}; }}
+window.speakereq, window.speakereq > scrolledwindow {{ background: #{bg0}; color: #{fg}; }}
 window.speakereq headerbar {{
-  background: #{mantle}; color: #{text}; box-shadow: none;
-  border-bottom: 1px solid #{surface0};
+  background: #{bg_dim}; color: #{fg}; box-shadow: none;
+  border-bottom: 1px solid #{bg1};
 }}
 .title {{ font-weight: 700; }}
-.subtitle {{ font-size: 11px; color: #{subtext0}; }}
+.subtitle {{ font-size: 11px; color: #{grey2}; }}
 .subtitle.playing {{ color: #{green}; }}
 .subtitle.absent {{ color: #{yellow}; }}
 .panel {{
-  background: #{mantle}; border: 1px solid #{surface0};
+  background: #{bg_dim}; border: 1px solid #{bg1};
   border-radius: 12px; padding: 12px;
 }}
-.heading {{ font-size: 11px; font-weight: 700; color: #{overlay0}; }}
-.dim {{ color: #{overlay1}; font-size: 12px; }}
-.listen button:checked {{ background: alpha(#{blue}, 0.32); color: #{text}; }}
-button.suggested-action {{ background: #{sapphire}; color: #{crust}; }}
-button.suggested-action:disabled {{ background: #{surface1}; color: #{overlay0}; }}
+.heading {{ font-size: 11px; font-weight: 700; color: #{grey0}; }}
+.dim {{ color: #{grey1}; font-size: 12px; }}
+.listen button:checked {{ background: alpha(#{blue}, 0.32); color: #{fg}; }}
+button.suggested-action {{ background: #{blue}; color: #{bg_dim}; }}
+button.suggested-action:disabled {{ background: #{bg2}; color: #{grey0}; }}
 list.bands {{ background: transparent; }}
 list.bands > row {{ border-radius: 8px; padding: 3px 6px; }}
 list.bands > row.selected {{ background: alpha(#{blue}, 0.16); }}
 .notice {{ border-radius: 10px; padding: 6px 6px 6px 12px; border: 1px solid; }}
-.notice.info {{ background: alpha(#{sapphire}, 0.12); border-color: alpha(#{sapphire}, 0.45); }}
+.notice.info {{ background: alpha(#{blue}, 0.12); border-color: alpha(#{blue}, 0.45); }}
 .notice.warn {{ background: alpha(#{yellow}, 0.12); border-color: alpha(#{yellow}, 0.5); }}
 .notice.error {{ background: alpha(#{red}, 0.12); border-color: alpha(#{red}, 0.5); }}
 """
@@ -412,16 +412,16 @@ def stroke(cr, xs, ys, color, width, alpha=1.0, dash=()):
 
 
 def draw_axes(cr, fr, c, band):
-    cr.set_source_rgb(*c["base"])
+    cr.set_source_rgb(*c["bg0"])
     cr.rectangle(fr.L, fr.T, fr.pw, fr.ph)
     cr.fill()
     if band:  # outside what the speakers play
-        cr.set_source_rgba(*c["crust"], 0.75)
+        cr.set_source_rgba(*c["bg_dim"], 0.75)
         cr.rectangle(fr.L, fr.T, float(fr.x(band[0])) - fr.L, fr.ph)
         cr.rectangle(float(fr.x(band[1])), fr.T, fr.L + fr.pw - float(fr.x(band[1])), fr.ph)
         cr.fill()
     cr.set_line_width(1)
-    cr.set_source_rgb(*c["surface0"])
+    cr.set_source_rgb(*c["bg1"])
     for decade in (10, 100, 1000, 10000):
         for m in range(1, 10):
             if FREQ[0] <= m * decade <= FREQ[1]:
@@ -433,16 +433,16 @@ def draw_axes(cr, fr, c, band):
         cr.move_to(fr.L, y)
         cr.line_to(fr.L + fr.pw, y)
     cr.stroke()
-    cr.set_source_rgb(*c["surface2"])
+    cr.set_source_rgb(*c["bg3"])
     y0 = round(float(fr.y(0))) + 0.5
     cr.move_to(fr.L, y0)
     cr.line_to(fr.L + fr.pw, y0)
     cr.stroke()
     for f in (20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000):
         x = min(max(float(fr.x(f)), fr.L + 8), fr.L + fr.pw - 8)
-        text(cr, f"{f // 1000}k" if f >= 1000 else str(f), x, fr.T + fr.ph + 5, c["overlay1"], align=0.5)
+        text(cr, f"{f // 1000}k" if f >= 1000 else str(f), x, fr.T + fr.ph + 5, c["grey1"], align=0.5)
     for db in range(math.ceil(fr.lo / 6) * 6, int(fr.hi) + 1, 6):
-        text(cr, f"{db:+d}" if db else "0", fr.L - 6, float(fr.y(db)), c["overlay1"], align=1.0, valign=0.5)
+        text(cr, f"{db:+d}" if db else "0", fr.L - 6, float(fr.y(db)), c["grey1"], align=1.0, valign=0.5)
 
 
 class EqPlot(Gtk.DrawingArea):
@@ -545,7 +545,7 @@ class EqPlot(Gtk.DrawingArea):
             for x, y in zip(xs, ys):
                 cr.line_to(x, y)
             cr.line_to(xs[-1], float(fr.y(0)))
-            cr.set_source_rgba(*c["peach"], 0.22)
+            cr.set_source_rgba(*c["orange"], 0.22)
             cr.fill()
         total = sum(curves) if curves else np.zeros_like(GRID)
         stroke(cr, xs, fr.y(total), c["blue"], 2.5, dash=(7, 5) if win.listen != "edited" else ())
@@ -553,19 +553,19 @@ class EqPlot(Gtk.DrawingArea):
         for i, (_kind, fc, gain, _q) in enumerate(win.bands):
             x, y = float(fr.x(fc)), float(fr.y(gain))
             cr.arc(x, y, 11 if i == win.sel else 9.5, 0, 2 * math.pi)
-            cr.set_source_rgb(*(c["peach"] if i == win.sel else c["blue"]))
+            cr.set_source_rgb(*(c["orange"] if i == win.sel else c["blue"]))
             cr.fill_preserve()
             cr.set_line_width(2)
-            cr.set_source_rgb(*c["mantle"])
+            cr.set_source_rgb(*c["bg_dim"])
             cr.stroke()
-            text(cr, str(i + 1), x, y, c["crust"], FONT_BOLD, align=0.5, valign=0.5, ink=True)
+            text(cr, str(i + 1), x, y, c["bg_dim"], FONT_BOLD, align=0.5, valign=0.5, ink=True)
         if win.listen != "edited":
             text(cr, f"Listening to {'the saved EQ' if win.listen == 'saved' else 'no EQ'}",
-                 fr.L + 8, fr.T + 6, c["peach"])
+                 fr.L + 8, fr.T + 6, c["orange"])
         if self.pointer and self.dragging is None and fr.inside(*self.pointer):
             f, db = fr.f(self.pointer[0]), fr.db(self.pointer[1])
             hz = f"{f / 1000:.2f} kHz" if f >= 1000 else f"{f:.0f} Hz"
-            text(cr, f"{hz}  {db:+.1f} dB", fr.L + fr.pw - 8, fr.T + 6, c["overlay1"], align=1.0)
+            text(cr, f"{hz}  {db:+.1f} dB", fr.L + fr.pw - 8, fr.T + 6, c["grey1"], align=1.0)
 
 
 class Spectrum:
@@ -660,7 +660,7 @@ class Spectrum:
         for i, db in enumerate(bars):
             h = max(0.0, (db - self.RANGE[0]) / (self.RANGE[1] - self.RANGE[0])) * fr.ph
             inside = band is None or band[0] <= self.mid[i] <= band[1]
-            cr.set_source_rgba(*(c["blue"] if inside else c["surface2"]),
+            cr.set_source_rgba(*(c["blue"] if inside else c["bg3"]),
                                0.38 if inside else 0.18)
             x0, x1 = float(fr.x(self.freq[i])), float(fr.x(self.freq[i + 1]))
             cr.rectangle(x0 + 1.0, fr.T + fr.ph - h, max(x1 - x0 - 2.0, 1.0), h)
@@ -1214,7 +1214,7 @@ class App(Gtk.Application):
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         # Stock widgets follow the theme's lightness, or they clash with it.
-        r, g, b = rgb(colors["base"])
+        r, g, b = rgb(colors["bg0"])
         Gtk.Settings.get_default().props.gtk_application_prefer_dark_theme = (
             0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5)
 

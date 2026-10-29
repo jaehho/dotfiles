@@ -1,28 +1,25 @@
 /* ── Minimal floating islands ────────────────────────────────────────────────
    Layout : transparent bar; modules-left / -center / -right float as 3 islands.
-   Colour : Catppuccin Mocha (official catppuccin/waybar palette include).
-              text / subtext0 / overlay0  primary / resting / off
+   Colour : Everforest Dark Medium (everforest.css, Everforest's names).
+              fg / grey2 / grey0  primary / resting / off
               blue    you are here: active workspace, hover pills
-              pink    special workspace
-              peach   on, worth a glance: stay awake, mic, low battery,
+              purple  special workspace
+              orange  on, worth a glance: stay awake, mic, low battery,
                       notifications, busy load
               red     act now: screenshare, failures, critical battery,
                       urgent workspace, pegged CPU/RAM, DND
               green   charging, and nothing else */
 
-/* Official catppuccin/waybar palette — file sits next to style.css. */
-@import "mocha.css";
+/* Everforest Dark Medium palette — file sits next to style.css. */
+@import "everforest.css";
 
-/* Layout tints only. Values come from official tokens via alpha(). */
-@define-color base-88 alpha(@base, 0.88);
-@define-color base-88 alpha(@base, 0.88);
+/* Layout tints only. Values come from palette tokens via alpha(). */
+@define-color bg0-88 alpha(@bg0, 0.88);
 @define-color blue-14 alpha(@blue, 0.14);
 @define-color blue-18 alpha(@blue, 0.18);
 @define-color blue-28 alpha(@blue, 0.28);
 @define-color red-14 alpha(@red, 0.14);
-@define-color pink-14 alpha(@pink, 0.14);
-/* role: "worth a glance" = official peach (not a new hex) */
-@define-color yellow @peach;
+@define-color purple-14 alpha(@purple, 0.14);
 
 * {
     font-family: "JetBrainsMono Nerd Font", "Noto Sans", monospace;
@@ -38,7 +35,7 @@ window#waybar {
 .modules-left,
 .modules-center,
 .modules-right {
-    background-color: @base-88;
+    background-color: @bg0-88;
     border: 1px solid @blue-18;
     border-radius: 12px;
     margin: 4px 0;
@@ -83,7 +80,7 @@ window#waybar {
 #systemd-failed-units,
 #custom-power {
     background: transparent;
-    color: @subtext0;
+    color: @grey2;
     padding: 0 7px;
     border-radius: 8px;
     transition: color 0.2s ease, background-color 0.2s ease;
@@ -103,7 +100,7 @@ window#waybar {
 #custom-swaync:hover,
 #systemd-failed-units:hover,
 #custom-power:hover {
-    color: @text;
+    color: @fg;
     background-color: @blue-14;
 }
 
@@ -125,7 +122,7 @@ window#waybar {
 }
 
 #workspaces button {
-    color: @overlay0;
+    color: @grey0;
     background: transparent;
     border: none;
     border-radius: 8px;
@@ -135,17 +132,17 @@ window#waybar {
 }
 
 #workspaces button:hover {
-    color: @text;
+    color: @fg;
     background-color: @blue-14;
 }
 
 #workspaces button.active {
-    color: @base;
+    color: @bg0;
     background-color: @blue;
 }
 
 #workspaces button.urgent {
-    color: @base;
+    color: @bg0;
     background-color: @red;
 }
 
@@ -182,21 +179,21 @@ window#waybar {
 }
 
 /* Special workspaces (scratchpad 󰏫) sit after the numbered ones.
-   They get their own accent — pink, not the bar's blue — so a raised overlay
+   They get their own accent — purple, not the bar's blue — so a raised overlay
    never reads as "this is the workspace you are on". Must beat button.active,
    hence the doubled class. */
 #workspaces button.special {
-    color: @overlay1;
+    color: @grey1;
 }
 
 #workspaces button.special:hover {
-    color: @text;
-    background-color: @pink-14;
+    color: @fg;
+    background-color: @purple-14;
 }
 
 #workspaces button.special.active {
-    color: @base;
-    background-color: @pink;
+    color: @bg0;
+    background-color: @purple;
 }
 
 /* ── Active window title — context, not a control: quiet and italic so it never
@@ -212,35 +209,35 @@ window#waybar {
     margin: 0;
 }
 
-/* Focus is in a special workspace — same pink the special pills carry, so a
+/* Focus is in a special workspace — same purple the special pills carry, so a
    raised scratchpad never reads as the normal workspace you left. */
 #custom-window.special {
-    color: @pink;
+    color: @purple;
 }
 
 /* ── Clock — primary info: brighter, bold, never coloured ── */
 #clock {
-    color: @text;
+    color: @fg;
     font-weight: bold;
 }
 
 /* ── Media — brightens while playing ── */
 #mpris.playing {
-    color: @text;
+    color: @fg;
 }
 
 /* ── Semantic state (roles in the header) ── */
 
 /* Stay-awake engaged */
 #custom-idle-inhibitor.on {
-    color: @yellow;
+    color: @orange;
 }
 
-/* Pending notifications = amber (worth a glance). DND = red: it silences
+/* Pending notifications = orange (worth a glance). DND = red: it silences
    everything, so it must be impossible to forget it is on. */
 #custom-swaync.notification,
 #custom-swaync.inhibited-notification {
-    color: @yellow;
+    color: @orange;
 }
 #custom-swaync.dnd-none,
 #custom-swaync.dnd-notification,
@@ -252,10 +249,10 @@ window#waybar {
 /* Muted / off recede further */
 #pulseaudio.muted,
 #bluetooth.off {
-    color: @overlay0;
+    color: @grey0;
 }
 
-/* Load glyphs are colored by level, not by metric: grey when calm, amber
+/* Load glyphs are colored by level, not by metric: grey when calm, orange
    when busy, red when pegged. Which bar is which is learned by position
    (CPU, RAM, GPU), and the hover panel labels them in these identity hues.
    scripts/load.py carries its own stock colors, since a label's spans cannot
@@ -272,12 +269,12 @@ window#waybar {
     }
 }
 
-/* Battery — grey at rest, green only while charging, amber low, red critical */
+/* Battery — grey at rest, green only while charging, orange low, red critical */
 #battery.charging {
     color: @green;
 }
 #battery.warning:not(.charging) {
-    color: @yellow;
+    color: @orange;
 }
 #battery.critical:not(.charging) {
     color: @red;
@@ -285,7 +282,7 @@ window#waybar {
 }
 @keyframes blink {
     to {
-        color: @text;
+        color: @fg;
     }
 }
 
@@ -300,11 +297,11 @@ window#waybar {
     color: @red;
 }
 
-/* Something is recording the mic or sharing the screen. Amber for the mic,
+/* Something is recording the mic or sharing the screen. Orange for the mic,
    red for the screen: the screen is the one that can leak what you did not
    mean to show. */
 #privacy-item.audio-in {
-    color: @yellow;
+    color: @orange;
 }
 #privacy-item.screenshare {
     color: @red;
@@ -341,7 +338,7 @@ window#waybar {
    Which icons appear is not this file's decision — see the tray block in
    config.jsonc. */
 #tray {
-    color: @subtext0;
+    color: @grey2;
     padding: 0 3px;
 }
 
@@ -365,14 +362,14 @@ window#waybar {
 
 /* An app asking for a look (new mail and the like): worth a glance, not alarm */
 #tray > .needs-attention {
-    color: @yellow;
+    color: @orange;
 }
 
 /* ── Popup menus: tray items' right-click menus and the native module menus
    (power, reboot) alike ── */
 menu {
-    background-color: @base;
-    color: @text;
+    background-color: @bg0;
+    color: @fg;
     border: 1px solid @blue-18;
     border-radius: 12px;
     padding: 4px;
@@ -388,11 +385,11 @@ menuitem:hover {
 /* ── Tooltips ── */
 /* Border matches the menus: blue at full strength is reserved for focus */
 tooltip {
-    background-color: @base;
+    background-color: @bg0;
     border: 1px solid @blue-28;
     border-radius: 8px;
 }
 tooltip label {
-    color: @text;
+    color: @fg;
     padding: 2px;
 }

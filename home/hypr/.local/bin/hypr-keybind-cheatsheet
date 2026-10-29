@@ -46,11 +46,11 @@ COLUMNS = 4
 
 # ── palette ──────────────────────────────────────────────────────────────────
 
-# Catppuccin Mocha via the official hyprlock theme (catppuccin/Hyprlock).
-# Token names match the port. Do not restate hexes here.
-def _mocha_hex():
-    """name -> bare rrggbb, from ~/.config/hypr/themes/hyprlock-mocha.conf."""
-    path = Path.home() / ".config/hypr/themes/hyprlock-mocha.conf"
+# Everforest Dark Medium, read from the hyprlock palette file.
+# Token names are Everforest's. Do not restate hexes here.
+def _palette_hex():
+    """name -> bare rrggbb, from hypr/themes/everforest.conf."""
+    path = Path.home() / ".config/hypr/themes/everforest.conf"
     colors = {}
     try:
         for line in path.read_text().splitlines():
@@ -70,7 +70,7 @@ def _mocha_hex():
 
 
 def palette():
-    return {k: f"#{v}" for k, v in _mocha_hex().items()}
+    return {k: f"#{v}" for k, v in _palette_hex().items()}
 
 
 # ── key names ────────────────────────────────────────────────────────────────
@@ -694,8 +694,8 @@ CSS = """
 window.keybinds {{ background: transparent; }}
 
 .sheet {{
-  background: alpha({crust}, 0.985);
-  border: 1px solid {surface1};
+  background: alpha({bg_dim}, 0.985);
+  border: 1px solid {bg2};
   border-radius: 16px;
   padding: 20px 26px 16px 26px;
 }}
@@ -703,32 +703,32 @@ window.keybinds {{ background: transparent; }}
 .filter {{
   font-family: "Adwaita Sans", sans-serif;
   font-size: 14px;
-  color: {text};
-  background: {surface0};
-  border: 1px solid {surface1};
+  color: {fg};
+  background: {bg1};
+  border: 1px solid {bg2};
   border-radius: 9px;
   padding: 6px 12px;
   min-height: 0;
-  caret-color: {sapphire};
+  caret-color: {blue};
 }}
 .filter:focus-within {{
-  border-color: {sapphire};
-  outline: 1px solid alpha({sapphire}, 0.35);
+  border-color: {blue};
+  outline: 1px solid alpha({blue}, 0.35);
   outline-offset: 0;
 }}
-.filter placeholder {{ color: {overlay0}; }}
-.filter selection {{ color: {text}; background: alpha({sapphire}, 0.4); }}
+.filter placeholder {{ color: {grey0}; }}
+.filter selection {{ color: {fg}; background: alpha({blue}, 0.4); }}
 
 .tally, .foot, .group-note, .empty {{
   font-family: "Adwaita Sans", sans-serif;
   font-size: 11px;
-  color: {overlay0};
+  color: {grey0};
 }}
 
 .label {{
   font-family: "Adwaita Sans", sans-serif;
   font-size: 13px;
-  color: {subtext1};
+  color: {grey2};
 }}
 
 .empty {{ font-size: 13px; }}
@@ -737,20 +737,20 @@ window.keybinds {{ background: transparent; }}
   font-family: "JetBrainsMono Nerd Font", monospace;
   font-size: 11px;
   font-weight: 700;
-  color: {text};
-  background: linear-gradient(to bottom, {surface2}, {surface1});
-  border: 1px solid {surface2};
-  border-bottom: 2px solid {crust};
+  color: {fg};
+  background: linear-gradient(to bottom, {bg3}, {bg2});
+  border: 1px solid {bg3};
+  border-bottom: 2px solid {bg_dim};
   border-radius: 5px;
   padding: 1px 5px;
   min-width: 10px;
 }}
 .cap.prefix {{
   font-size: 12px;
-  color: {crust};
-  background: linear-gradient(to bottom, {sapphire}, shade({sapphire}, 0.82));
-  border-color: {sapphire};
-  border-bottom-color: shade({sapphire}, 0.55);
+  color: {bg_dim};
+  background: linear-gradient(to bottom, {blue}, shade({blue}, 0.82));
+  border-color: {blue};
+  border-bottom-color: shade({blue}, 0.55);
   padding: 2px 8px;
 }}
 
@@ -758,41 +758,41 @@ button.key {{
   font-family: "JetBrainsMono Nerd Font", monospace;
   font-size: 11px;
   font-weight: 700;
-  color: {overlay0};
-  background: {base};
-  border: 1px solid {surface0};
-  border-bottom: 3px solid {crust};
+  color: {grey0};
+  background: {bg0};
+  border: 1px solid {bg1};
+  border-bottom: 3px solid {bg_dim};
   border-radius: 6px;
   padding: 3px 6px;
   min-height: 0;
   min-width: 0;
   box-shadow: none;
 }}
-button.key:hover {{ border-color: {overlay0}; border-bottom-color: {crust}; }}
-button.key.faint {{ color: {subtext1}; background: {surface0}; }}
-button.key.held {{ color: {text}; background: {surface2}; border-color: {overlay0}; }}
+button.key:hover {{ border-color: {grey0}; border-bottom-color: {bg_dim}; }}
+button.key.faint {{ color: {grey2}; background: {bg1}; }}
+button.key.held {{ color: {fg}; background: {bg3}; border-color: {grey0}; }}
 button.key.bound {{
-  color: {crust};
-  background: linear-gradient(to bottom, {sapphire}, shade({sapphire}, 0.82));
-  border-color: {sapphire};
-  border-bottom-color: shade({sapphire}, 0.55);
+  color: {bg_dim};
+  background: linear-gradient(to bottom, {blue}, shade({blue}, 0.82));
+  border-color: {blue};
+  border-bottom-color: shade({blue}, 0.55);
 }}
-button.key.bound:hover {{ border-color: {text}; }}
-button.key.selected {{ outline: 2px solid {text}; outline-offset: 1px; }}
+button.key.bound:hover {{ border-color: {fg}; }}
+button.key.selected {{ outline: 2px solid {fg}; outline-offset: 1px; }}
 
 button.chip {{
   font-family: "Adwaita Sans", sans-serif;
   font-size: 12px;
-  color: {subtext1};
-  background: {surface0};
-  border: 1px solid {surface1};
+  color: {grey2};
+  background: {bg1};
+  border: 1px solid {bg2};
   border-radius: 9px;
   padding: 4px 10px;
   min-height: 0;
   box-shadow: none;
 }}
-button.chip:hover {{ border-color: {overlay0}; }}
-button.chip:checked {{ color: {text}; border-color: {sapphire}; background: {surface1}; }}
+button.chip:hover {{ border-color: {grey0}; }}
+button.chip:checked {{ color: {fg}; border-color: {blue}; background: {bg2}; }}
 """
 
 STATE = (os.environ.get("XDG_STATE_HOME", f"{HOME}/.local/state")

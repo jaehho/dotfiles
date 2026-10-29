@@ -1,0 +1,28 @@
+/* Everforest Dark Medium (sainnhe/everforest palette.md, dark medium).
+   Names are Everforest's, with - for _ (rofi property names take no _). */
+* {
+  bg-dim: #232a2e;
+  bg0: #2d353b;
+  bg1: #343f44;
+  bg2: #3d484d;
+  bg3: #475258;
+  bg4: #4f585e;
+  bg5: #56635f;
+  bg-visual: #543a48;
+  bg-red: #514045;
+  bg-yellow: #4d4c43;
+  bg-green: #425047;
+  bg-blue: #3a515d;
+  bg-purple: #4a444e;
+  fg: #d3c6aa;
+  red: #e67e80;
+  orange: #e69875;
+  yellow: #dbbc7f;
+  green: #a7c080;
+  aqua: #83c092;
+  blue: #7fbbb3;
+  purple: #d699b6;
+  grey0: #7a8478;
+  grey1: #859289;
+  grey2: #9da9a0;
+}
