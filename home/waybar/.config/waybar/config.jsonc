@@ -44,7 +44,6 @@
             "group/tray-drawer",
             "privacy",
             "custom/idle-inhibitor",
-            "custom/playwright",
             "custom/swaync",
             "custom/dash-alerts",
             "custom/reboot-needed",
@@ -130,11 +129,11 @@
         // would throw on the specials' glyph names and fall back to string order.
         "sort-by": "default",
         // The asst GUI test harness parks its dev window on a silent workspace
-        // by this name; it is machinery, not a place to work. openclaw is the
-        // hidden workspace of the agent's Chrome: openclaw-browser-tray in the
-        // tray shows it, so it needs no button here. Matched with and without
-        // the "special:" prefix because waybar's name for specials is unverified.
-        "ignore-workspaces": ["^asstdev$", "^(special:)?(openclaw|playwright)$"],
+        // by this name; it is machinery, not a place to work, so it is hidden.
+        // openclaw and playwright are the hidden workspaces of the agents'
+        // Chrome windows (silent rules in hyprland.lua); they show here while
+        // populated, and clicking their window icon raises or hides them.
+        "ignore-workspaces": ["^asstdev$"],
         // No "on-click": the workspace button's own handler switches, and needs
         // waybar-git (0.15.0 sends legacy dispatch strings the Lua config
         // rejects, so only the window icons would respond).
@@ -287,17 +286,6 @@
         "interval": 30,
         "signal": 11,
         "on-click": "~/.local/bin/hypr-settings-menu awake"
-    },
-
-    // Claude's Playwright Chrome lives on special:playwright (silent, from a
-    // rule in hyprland.lua). Invisible until that window exists; click raises
-    // or hides the workspace. Toggles through `hyprctl eval` because a Lua
-    // config rejects the legacy dispatch string form.
-    "custom/playwright": {
-        "exec": "~/.config/waybar/scripts/playwright-browser.sh",
-        "return-type": "json",
-        "interval": 2,
-        "on-click": "hyprctl eval 'hl.dispatch(hl.dsp.workspace.toggle_special(\"playwright\"))'"
     },
 
     "custom/swaync": {
