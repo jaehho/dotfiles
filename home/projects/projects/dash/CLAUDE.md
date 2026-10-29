@@ -13,7 +13,6 @@ Control-room dashboard shown as the desktop: dotfiles' hyprland.lua starts it at
 ## Data-quality keys
 
 - OpenRouter `/activity` needs `OPENROUTER_MANAGEMENT_KEY` in `~/.config/openrouter.env`; without it only `/key` totals exist.
-- MiMo plan % needs `api-platform_serviceToken` + `userId`, read from Firefox session cookies when logged in at platform.xiaomimimo.com; else `MIMO_COOKIE` in `~/.config/mimo.env`. The `tp-` key cannot read quota.
 - In `~/.config/dash/prefs`: `SHOW_SCOPED_QUOTAS=1` shows the Opus/Sonnet weekly rows (always archived in `claude_limits.scoped`); `IGNORE_FAILED=unit,unit` hides units that fail on every normal day so a new failure is the first red thing.
 - `ccusage` must be on PATH (dotfiles `packages/npm.txt`). Cost figures are list-price equivalents; the real Max constraint is the rate-limit percentages.
 
