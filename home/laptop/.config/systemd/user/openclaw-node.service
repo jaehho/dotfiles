@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenClaw node host (omnibook), gateway on wonlab
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+# `openclaw node install` fails for a named profile on Linux in 2026.10.9: it
+# sets OPENCLAW_SYSTEMD_UNIT itself and then rejects it. This is what it would
+# write. The node reconnects with its paired device credential, so no gateway
+# password is needed here.
+ExecStart=%h/.npm-global/bin/openclaw --profile node node run --host 100.64.0.3 --port 18789 --display-name omnibook
+Environment=PATH=%h/.cargo/bin:%h/.npm-global/bin:%h/.local/bin:/usr/local/bin:/usr/bin
+# The tailnet may not be up yet at login, and the node exits for a restart
+# after an automatic update.
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
