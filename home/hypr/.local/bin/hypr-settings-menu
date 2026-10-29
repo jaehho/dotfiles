@@ -125,7 +125,8 @@ def gamemode_on():
 ITEMS = [
     dict(id="nightlight", kind="toggle", icon="󰖔", label="Night light",
          run=f"{BIN}/hypr-nightlight-toggle", needs=["hyprsunset"],
-         state=lambda: running("hyprsunset")),
+         state=lambda: running("hyprsunset") and output(
+             ["hyprctl", "hyprsunset", "identity", "get"]) == "false"),
     dict(id="dnd", kind="toggle", icon="󰂛", label="Do not disturb",
          run=f"{BIN}/hypr-dnd-toggle", needs=["swaync-client"],
          state=lambda: output(["swaync-client", "-D"]) == "true"),

@@ -1,10 +1,15 @@
 #!/bin/bash
-# Toggle night light (blue light filter) via hyprsunset
+# Toggle night light (blue light filter) via hyprsunset. The daemon runs all
+# session on the schedule in hyprsunset.conf, so toggle over its IPC instead
+# of killing it; the override lasts until the next scheduled switch.
 
-if pgrep hyprsunset >/dev/null 2>&1; then
-    pkill hyprsunset
-    notify-send -u low "Night Light" "OFF"
-else
+if ! pgrep -x hyprsunset >/dev/null 2>&1; then
     notify-send -u low "Night Light" "ON (4000K)"
     nohup hyprsunset -t 4000 >/dev/null 2>&1 &
+elif [ "$(hyprctl hyprsunset identity get)" = true ]; then
+    hyprctl hyprsunset temperature 4000 >/dev/null
+    notify-send -u low "Night Light" "ON (4000K)"
+else
+    hyprctl hyprsunset identity >/dev/null
+    notify-send -u low "Night Light" "OFF"
 fi

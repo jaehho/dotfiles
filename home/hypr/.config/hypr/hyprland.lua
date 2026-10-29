@@ -82,6 +82,9 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("~/.local/bin/hypr-urgent-focus")
     hl.exec_cmd("~/.local/bin/hypr-swaync-keys")
     hl.exec_cmd("hypridle")
+    -- Night light on the schedule in hyprsunset.conf. Not the packaged user
+    -- unit: it requires graphical-session.target, which Hyprland never starts.
+    hl.exec_cmd("hyprsunset")
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
     hl.exec_cmd("wl-paste --type image --watch cliphist store")
     hl.exec_cmd("/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1")
