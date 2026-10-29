@@ -1,0 +1,20 @@
+#!/bin/bash
+# Approve pending OpenClaw node requests on wonlab, one prompt per request.
+# Run it after an OpenClaw update or a newly allowed command leaves omnibook
+# connected but without tools. Rides the shared ssh master, so log in to
+# wonlab first.
+set -eu
+oc='export PATH=$HOME/.local/opt/node/bin:$HOME/.local/opt/npm-global/bin:$PATH; openclaw'
+out=$(ssh wonhomelab.net "$oc nodes pending")
+ids=$(printf '%s\n' "$out" | grep -oE '[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}' || true)
+if [ -z "$ids" ]; then
+    echo 'no pending node requests'
+    exit 0
+fi
+printf '%s\n' "$out"
+for id in $ids; do
+    read -r -p "approve $id? [y/N] " ans </dev/tty
+    if [ "$ans" = y ]; then
+        ssh wonhomelab.net "$oc nodes approve $id"
+    fi
+done
