@@ -23,13 +23,14 @@ Owned elsewhere: live `make install`, `packaging/PKGBUILD`, root docs and issues
 - **Changes are announced.** An owner with a daemon emits a `Changed` D-Bus signal, with no arguments, after its state changes (asstd: `Changed` on interface `dev.jaeho.Asst1`, bus name `dev.jaeho.Asst.Daemon`). A consumer re-reads through the CLI when it fires, folding a burst into one read, and polls only as a fallback while its view is on screen.
 - **A missing or slow owner degrades the consumer, never breaks it.** With the owner's command not on `PATH`, the consumer goes on with its own copy. Every call has a timeout. A partial answer (one of two reads failed) is no answer, and never clears local state.
 - **A kill switch guards real data.** A consumer that writes into another app's data honours `<NAME>_NO_<OWNER>` (`STENO_NO_ASST`). Any non-empty value, `0` included, turns those writes off, so a scratch run cannot reach real lists.
-- **Opening another app's object** calls a GApplication action on its app ID through `org.freedesktop.Application.ActivateAction` (asst's `open-task` with a task href, steno's `open-session` with a session name), passing the activation token so the window may take focus. A D-Bus service file lets the bus start the app when it is not running. The CLI wraps it (`asst open ID`, `steno show`).
+- **Opening another app's object** calls a GApplication action on its app ID through `org.freedesktop.Application.ActivateAction` (asst's `open-task` with a task href, steno's `open-session` with a session name), passing the activation token so the window may take focus. A D-Bus service file lets the bus start the app when it is not running. The consumer never starts the owner itself: whether a call may start it is the owner's choice, made by shipping that file (steno ships none, since a running steno listens for meetings). The CLI wraps it (`asst open ID`, `steno show`).
 
 Links today:
 
 | Consumer | Owner | What it calls | Consumer code |
 |---|---|---|---|
 | steno | asst | `add --literal --source --list`, `ls`, `completed -n`, `show`, `done`, `reopen`, `edit --list`, `edit --title`, `rm`, `lists`, `open`; the `Changed` signal | `steno/src/steno/asstlink.py` |
+| asst | steno | `open-session` with a meeting's folder name, through `ActivateAction`; Open meeting shows only while `steno` is on `PATH` | `asst/crates/asst-gtk/src/steno.rs` |
 | dash | asst | `today`, `ls LIST`, `lists` | `dash/bin/dash-data` |
 | asst | ActivityWatch | `/api/0/buckets`, `/api/0/query` on port 5600, buckets that aw-watchers fills | `asst/crates/asst-core/src/track.rs` |
 
