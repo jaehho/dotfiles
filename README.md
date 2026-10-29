@@ -8,7 +8,7 @@ packages under `home/`; nothing else. No timers, no package list, no
 
 ```
 home/   stow packages (fish, hypr, nvim, kitty, …)
-docs/   writing rules for CLAUDE.md, Catppuccin apply notes, history/
+docs/   writing rules for CLAUDE.md, GUI app colors, history/
 ```
 
 ## Day to day
@@ -43,8 +43,7 @@ the inventory).
 One-offs inside packages:
 
 - `mime` — `mimeapps.list` is an absolute symlink (GLib safe-write).
-- `tmux` — TPM and catppuccin/tmux are git clones under `~/.tmux` and
-  `~/.config/tmux/plugins`.
+- `tmux` — TPM is a git clone under `~/.tmux`.
 - `theme` — run `bat cache --build` after it lands.
 - `hypr` — user units (wallhelper-fetch, swayosd, awatcher, …) are
   `systemctl --user enable --now` the first time.
