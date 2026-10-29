@@ -16,7 +16,6 @@ Static vendor tree of official [Catppuccin](https://github.com/catppuccin) Mocha
 | `.config/starship.toml` | catppuccin/starship |
 | `.config/qt5ct/colors/` | catppuccin/qt5ct (lavender) |
 | `.config/Kvantum/catppuccin-mocha-lavender/` | catppuccin/Kvantum |
-| `apply-notes/` | click-to-apply GUI files (see `docs/catppuccin-mocha-apply.md`) |
 
 Apps with their own stow package (kitty, fish, hypr, waybar, rofi, swaync, tmux, nvim, zathura) carry their theme files there instead.
 
