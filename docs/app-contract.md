@@ -44,8 +44,8 @@ Links today:
 
 ## Window keys
 
-- Ctrl+W closes the window (the app keeps running, as above), Ctrl+Q quits, Ctrl+F searches, Ctrl+? shows every shortcut.
-- Single-letter keys (asst's `j`, `k`, `x`) act only while focus is outside a text field.
+- Ctrl+W closes the window (the app keeps running, as above), Ctrl+Q quits, Ctrl+F searches in an app with a search, and Ctrl+? shows every shortcut. These work from a text field too.
+- Single-letter keys (asst's `j`, `k`, `x`) act only while focus is outside a text field. Where they are on, `?` also shows every shortcut.
 
 ## Install and run
 
