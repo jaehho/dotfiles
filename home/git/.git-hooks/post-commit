@@ -2,6 +2,8 @@
 # Copy the short hash to the clipboard. Detach the holder: wl-copy and
 # xclip fork a server that keeps the clipboard, and if it inherits this
 # hook's stdout, lazygit waits on pipe EOF and stays on "committing".
+# Claude Code's commits are not mine to paste: it sets CLAUDECODE.
+[ -n "$CLAUDECODE" ] && exit 0
 commit_hash=$(git rev-parse --short HEAD)
 if command -v wl-copy >/dev/null 2>&1; then
     echo -n "$commit_hash" | wl-copy >/dev/null 2>&1 &
