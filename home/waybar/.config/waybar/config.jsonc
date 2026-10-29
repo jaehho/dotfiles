@@ -44,6 +44,7 @@
             "group/tray-drawer",
             "privacy",
             "custom/idle-inhibitor",
+            "custom/playwright",
             "custom/swaync",
             "custom/dash-alerts",
             "custom/reboot-needed",
@@ -133,7 +134,7 @@
         // hidden workspace of the agent's Chrome: openclaw-browser-tray in the
         // tray shows it, so it needs no button here. Matched with and without
         // the "special:" prefix because waybar's name for specials is unverified.
-        "ignore-workspaces": ["^asstdev$", "^(special:)?openclaw$"],
+        "ignore-workspaces": ["^asstdev$", "^(special:)?(openclaw|playwright)$"],
         // No "on-click": the workspace button's own handler switches, and needs
         // waybar-git (0.15.0 sends legacy dispatch strings the Lua config
         // rejects, so only the window icons would respond).
@@ -286,6 +287,17 @@
         "interval": 30,
         "signal": 11,
         "on-click": "~/.local/bin/hypr-settings-menu awake"
+    },
+
+    // Claude's Playwright Chrome lives on special:playwright (silent, from a
+    // rule in hyprland.lua). Invisible until that window exists; click raises
+    // or hides the workspace. Toggles through `hyprctl eval` because a Lua
+    // config rejects the legacy dispatch string form.
+    "custom/playwright": {
+        "exec": "~/.config/waybar/scripts/playwright-browser.sh",
+        "return-type": "json",
+        "interval": 2,
+        "on-click": "hyprctl eval 'hl.dispatch(hl.dsp.workspace.toggle_special(\"playwright\"))'"
     },
 
     "custom/swaync": {

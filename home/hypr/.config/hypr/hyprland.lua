@@ -717,8 +717,8 @@ hl.window_rule({
 
 -- Claude's Playwright browser (~/.claude/playwright-mcp.json launches Chrome
 -- with --class=playwright). Silent on a special workspace so test windows
--- never take focus or the screen. To watch it:
--- `hyprctl dispatch togglespecialworkspace playwright`.
+-- never take focus or the screen. Waybar's custom/playwright icon toggles it
+-- (hl.dsp.workspace.toggle_special("playwright") through `hyprctl eval`).
 hl.window_rule({
     name  = "playwright-browser",
     match = { class = "^playwright$" },

@@ -74,6 +74,7 @@ window#waybar {
 #network,
 #custom-tray-toggle,
 #custom-idle-inhibitor,
+#custom-playwright,
 #custom-swaync,
 #custom-reboot-needed,
 #privacy,
@@ -97,6 +98,7 @@ window#waybar {
 #network:hover,
 #custom-tray-toggle:hover,
 #custom-idle-inhibitor:hover,
+#custom-playwright:hover,
 #custom-swaync:hover,
 #systemd-failed-units:hover,
 #custom-power:hover {
@@ -310,6 +312,11 @@ window#waybar {
 /* A failed systemd unit (module only renders while one is failed) */
 #systemd-failed-units.degraded {
     color: @red;
+}
+
+/* Claude's Playwright browser is raised over the current workspace */
+#custom-playwright.shown {
+    color: @green;
 }
 
 /* Kernel-upgrade reboot pending (module only renders when class=pending) */
