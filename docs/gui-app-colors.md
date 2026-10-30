@@ -18,3 +18,7 @@ These keep their own default colors. Do not theme them again.
 ## No port
 
 visidata, thunar, qalculate, hyprpaper keep defaults.
+
+## Own apps
+
+Apps under `~/projects/` own their colors (#71). Easel draws its boards and its chrome in Everforest Dark Medium in its own code (`crates/easel-render/src/scene.rs`, `crates/easel-gtk/src/style.css`), not through a GTK theme.
