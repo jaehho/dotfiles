@@ -396,9 +396,10 @@ hl.bind(mainMod .. " + escape", hl.dsp.exec_cmd("loginctl lock-session"))
 hl.bind(mainMod .. " + F",         hl.dsp.window.fullscreen())
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.float({ action = "toggle" })) -- float / unfloat
 
--- Browser and music
+-- Browser, music and Easel
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("firefox-developer-edition"))
 hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("~/.local/bin/hypr-spotify-toggle")) -- spotify: show / hide to tray
+hl.bind(mainMod .. " + E", hl.dsp.exec_cmd("~/.local/bin/hypr-easel-toggle")) -- easel: show / hide the board panel
 
 -- Toggle waybar: waybar-toggle reads the bar's real visibility from the
 -- compositor and sends the matching signal (see its header). Killing the bar
