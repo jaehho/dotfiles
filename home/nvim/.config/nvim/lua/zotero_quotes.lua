@@ -351,6 +351,18 @@ local function page_label(label)
   end))
 end
 
+---1-based PDF page from annotationPosition. Zotero's page= is this position,
+---not the printed label: label 126 of a reprint is PDF page 3. annotation= wins
+---in the reader, so page= only matters once the annotation is gone.
+---@param position string?
+---@return number?
+local function pdf_page(position)
+  local ok, data = pcall(vim.json.decode, position or '')
+  if ok and type(data) == 'table' and type(data.pageIndex) == 'number' then
+    return data.pageIndex + 1
+  end
+end
+
 ---@param page string?
 ---@return number
 local function page_num(page)
@@ -417,8 +429,8 @@ function M.format_markdown(a)
   local links = {}
   if a.attachmentKey and a.annotationKey then
     local q = {}
-    if page then
-      q[#q + 1] = 'page=' .. page
+    if a.pdfPage then
+      q[#q + 1] = 'page=' .. a.pdfPage
     end
     q[#q + 1] = 'annotation=' .. a.annotationKey
     links[#links + 1] = ('[PDF p. %s](zotero://open-pdf/library/items/%s?%s)'):format(
@@ -542,6 +554,7 @@ local function load_items()
       end
     end
     local page = page_label(a.annotationPageLabel)
+    local pdfPage = pdf_page(a.annotationPosition)
     local tags = {}
     for _, t in ipairs(a.tags or {}) do
       tags[#tags + 1] = t.tag
@@ -587,6 +600,7 @@ local function load_items()
           annotationComment = comment,
           annotationPageLabel = page,
           annotationType = a.annotationType,
+          pdfPage = pdfPage,
           doi = doi,
           url = url,
           publication = publication,
@@ -605,6 +619,7 @@ local function load_items()
       annotationComment = comment,
       annotationPageLabel = page,
       annotationType = a.annotationType,
+      pdfPage = pdfPage,
       doi = doi,
       url = url,
       publication = publication,
