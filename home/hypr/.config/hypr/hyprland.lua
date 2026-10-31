@@ -311,7 +311,7 @@ hl.config({
     },
 
     gestures = {
-        -- Swipe past the last workspace must not mint 10+. Super+D is the
+        -- Swipe past the last workspace must not mint 10+. Super+0 is the
         -- only "give me empty" path; the closed set is 1-9.
         workspace_swipe_create_new = false,
     },
@@ -445,13 +445,13 @@ for i = 1, 9 do
     hl.bind(mainMod .. " + SHIFT + " .. i, hl.dsp.window.move({ workspace = i })) -- send window to workspace
 end
 
--- Super+D / Super+Shift+D: empty workspace on the focused display.
+-- Super+0 / Super+Shift+0: empty workspace on the focused display.
 -- Free means an id in this monitor's round-robin slots (monitors.lua, closed
 -- set 1-9) with no windows (a missing id counts). slots_by_monitor is the same
 -- left-to-right plan apply() locks ids to, so with one external it is laptop
--- 1/3/5/7/9 and tablet 2/4/6/8. Super+D hops there and shows dash; Super+D
+-- 1/3/5/7/9 and tablet 2/4/6/8. Super+0 hops there and shows dash; Super+0
 -- again returns to the workspace it left (same round trip as Super+N).
--- Super+Shift+D sends the window, focus following, matching Super+Shift+N.
+-- Super+Shift+0 sends the window, focus following, matching Super+Shift+N.
 local function focused_monitor_name()
     for _, m in ipairs(hl.get_monitors() or {}) do
         if m.focused then
@@ -472,7 +472,7 @@ local function first_free_workspace()
     end
 end
 
--- Windows on the focused workspace. Unknown counts as busy so Super+D does
+-- Windows on the focused workspace. Unknown counts as busy so Super+0 does
 -- not treat a half-queried session as "already on empty".
 local function focused_workspace_windows()
     local ws = hl.get_active_workspace()
@@ -485,11 +485,11 @@ local function focused_workspace_id()
     return ws and tonumber(ws.id) or nil
 end
 
--- Super+D hop origin. Empty Super+D goes here; busy Super+D records here
+-- Super+0 hop origin. Empty Super+0 goes here; busy Super+0 records here
 -- then hops to the free slot.
 local dash_return_to
 
-hl.bind(mainMod .. " + D", function() -- dash: hop to empty slot, or back
+hl.bind(mainMod .. " + 0", function() -- dash: hop to empty slot, or back
     local here = focused_workspace_id()
     if focused_workspace_windows() == 0 then
         local back = dash_return_to
@@ -513,7 +513,7 @@ hl.bind(mainMod .. " + D", function() -- dash: hop to empty slot, or back
     hl.dispatch(hl.dsp.exec_cmd("dash show"))
 end)
 
-hl.bind(mainMod .. " + SHIFT + D", function() -- send window to empty workspace on this display
+hl.bind(mainMod .. " + SHIFT + 0", function() -- send window to empty workspace on this display
     local target = first_free_workspace()
     if target == nil then
         hl.notification.create({ text = "No free workspace on this display", timeout = 1500, icon = "info" })

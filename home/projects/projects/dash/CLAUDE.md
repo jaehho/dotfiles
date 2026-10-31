@@ -1,6 +1,6 @@
 # dash
 
-Control-room dashboard shown as the desktop: dotfiles' hyprland.lua starts it at login (`dash show`). Always on, no toggle. Super+D is workspace hop only (empty slot, then back); it never turns dash off. While a workspace with windows covers it the panels unmap (samplers keep running). Waybar stays up (`ExclusionMode.Normal`). No hypridle integration. The overlay is transparent: hyprpaper's wallpaper shows through the glass cards; test mode draws its own backdrop so self-captured screenshots keep it.
+Control-room dashboard shown as the desktop: dotfiles' hyprland.lua starts it at login (`dash show`). Always on, no toggle. Super+0 is workspace hop only (empty slot, then back); it never turns dash off. While a workspace with windows covers it the panels unmap (samplers keep running). Waybar stays up (`ExclusionMode.Normal`). No hypridle integration. The overlay is transparent: hyprpaper's wallpaper shows through the glass cards; test mode draws its own backdrop so self-captured screenshots keep it.
 
 ## Traps
 
@@ -18,4 +18,4 @@ Control-room dashboard shown as the desktop: dotfiles' hyprland.lua starts it at
 
 ## Issues
 
-Read the relevant `gotcha` issues (`gh issue list --label gotcha --state all`) before touching hyprland dispatch, env gates, Process restarts, or `make screenshot`. Decisions use label `decision`. Headlines: dispatch via `hl.dsp.*` only (#5); special workspaces are dispatchable only from binds (#6); dash is always-on, Super+D is workspace hop only (#15).
+Read the relevant `gotcha` issues (`gh issue list --label gotcha --state all`) before touching hyprland dispatch, env gates, Process restarts, or `make screenshot`. Decisions use label `decision`. Headlines: dispatch via `hl.dsp.*` only (#5); special workspaces are dispatchable only from binds (#6); dash is always-on, Super+0 is workspace hop only (#15, filed as Super+D).
