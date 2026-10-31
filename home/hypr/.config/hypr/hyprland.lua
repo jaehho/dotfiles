@@ -720,12 +720,17 @@ hl.window_rule({
 -- with --class=playwright). Silent on a special workspace so test windows
 -- never take focus or the screen. Waybar's custom/playwright icon toggles it
 -- (hl.dsp.workspace.toggle_special("playwright") through `hyprctl eval`).
+-- no_initial_focus only covers the first map. Chrome asks for activation again
+-- on a new tab or tab select, and misc.focus_on_activate would then focus it
+-- and open the special workspace over the screen; focus_on_activate = false
+-- keeps the urgent flag but refuses the focus.
 hl.window_rule({
     name  = "playwright-browser",
     match = { class = "^playwright$" },
 
-    workspace        = "special:playwright silent",
-    no_initial_focus = true,
+    workspace         = "special:playwright silent",
+    no_initial_focus  = true,
+    focus_on_activate = false,
 })
 
 -- Inhibit idle when fullscreen (browsers, media players)
