@@ -349,8 +349,9 @@ local function clean(s)
   if not s then
     return ''
   end
-  -- Drop C0 controls (except \n \t) and C1; keeps preview/list out of binary territory.
-  return (s:gsub('[%z\1-\8\11\12\14-\31\127-\255]', ''))
+  -- Drop C0 controls (except \n \t), DEL and C1; keeps preview/list out of binary
+  -- territory. Lua patterns see bytes: C1 is U+0080-U+009F, UTF-8 C2 80-9F.
+  return (s:gsub('[%z\1-\8\11\12\14-\31\127]', ''):gsub('\194[\128-\159]', ''))
 end
 
 ---Collapse whitespace so a typed phrase matches across line breaks in the PDF.
@@ -730,8 +731,8 @@ function M.pick(opts)
       if excerpt == '' and item.type then
         excerpt = '[' .. item.type .. ']'
       end
-      if #excerpt > 60 then
-        excerpt = excerpt:sub(1, 57) .. '…'
+      if vim.fn.strchars(excerpt) > 60 then
+        excerpt = vim.fn.strcharpart(excerpt, 0, 57) .. '…'
       end
       return {
         { item.annotationPageLabel and ('p.' .. item.annotationPageLabel) or 'p.?', 'Number' },
