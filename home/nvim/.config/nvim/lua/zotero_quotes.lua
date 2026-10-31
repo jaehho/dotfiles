@@ -331,63 +331,29 @@ local function flatten(s)
   return (clean(s):gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', ''))
 end
 
----Inserted lines stay within PEP 8 docstring limits (ruff W505, 72 cols)
----so a paste into a Python comment or markdown cell lints clean.
-local WIDTH = 72
-
----Greedy word-wrap so each result is `#prefix + text` <= WIDTH.
----A single long token (a URL) is left whole; ruff exempts those lines.
----@param text string
----@param prefix string
----@return string[]
-local function wrap_prefix(text, prefix)
-  local out = {}
-  if text == '' then
-    out[1] = prefix
-    return out
-  end
-  local limit = math.max(WIDTH - #prefix, 1)
-  local cur ---@type string?
-  for word in text:gmatch '%S+' do
-    if not cur then
-      cur = word
-    elseif #cur + 1 + #word <= limit then
-      cur = cur .. ' ' .. word
-    else
-      out[#out + 1] = prefix .. cur
-      cur = word
-    end
-  end
-  if cur then
-    out[#out + 1] = prefix .. cur
-  end
-  return out
-end
-
 ---@param s string?
 ---@return string[]
-local function wrap_quote(s)
+local function quote_lines(s)
   local text = clean(s):gsub('%s+$', '')
   if text == '' then
     return { '> *empty annotation*' }
   end
   local lines = {}
   for line in (text .. '\n'):gmatch '(.-)\n' do
-    vim.list_extend(lines, wrap_prefix(line, '> '))
+    lines[#lines + 1] = '> ' .. line
   end
   return lines
 end
 
 ---Stable attribution: author-year-page, then one citation link per line.
----Each link sits on its own `> · …` line so ruff's URL line-length exemption
----covers it when this block is pasted into a docstring or markdown cell.
+---Each link sits on its own `> · …` line. Prose is not hard-wrapped.
 ---Citekeys are omitted on purpose — Better BibTeX can rewrite them.
 ---1. Zotero deep link to *this annotation* (jumps to the highlight)
 ---2. DOI (or item URL) as a paper-level backup that outlives deletion
 ---@param a table enriched annotation
 ---@return string[]
 function M.format_markdown(a)
-  local lines = wrap_quote(a.annotationText ~= '' and a.annotationText or a.annotationComment)
+  local lines = quote_lines(a.annotationText ~= '' and a.annotationText or a.annotationComment)
   local page = a.annotationPageLabel
   local base
   if page then
@@ -423,11 +389,11 @@ function M.format_markdown(a)
     lines[#lines + 1] = '> · ' .. link
   end
 
-  -- User's own comment stays outside the quotation, same width limit.
+  -- User's own comment stays outside the quotation.
   if a.annotationText ~= '' and (a.annotationComment or '') ~= '' then
     lines[#lines + 1] = ''
     for line in (a.annotationComment .. '\n'):gmatch '(.-)\n' do
-      vim.list_extend(lines, wrap_prefix(line, ''))
+      lines[#lines + 1] = line
     end
   end
   return lines
