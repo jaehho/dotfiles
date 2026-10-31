@@ -36,9 +36,16 @@ dcs_osc99() {
     fi
 }
 
+# SSH_CONNECTION alone is not "remote": a pane started while tmux was attached
+# over ssh keeps it for life. A live Hyprland means this is the laptop.
+remote=
+if [ -n "${SSH_CONNECTION:-}" ] && ! hyprctl monitors -j >/dev/null 2>&1; then
+    remote=1
+fi
+
 if [ -n "${TMUX:-}" ]; then
     tty=$(tmux display-message -p '#{client_tty}' 2>/dev/null)
-    if [ -n "${SSH_CONNECTION:-}" ] && [ -n "$tty" ]; then
+    if [ -n "$remote" ] && [ -n "$tty" ]; then
         # Remote tmux over SSH: the DCS write bypasses remote tmux and goes
         # straight to SSH → local terminal.  Send BOTH raw and DCS-wrapped so
         # it works whether the local side is bare kitty or tmux+kitty.
@@ -47,7 +54,7 @@ if [ -n "${TMUX:-}" ]; then
         # Local tmux: DCS-wrapped for tmux to pass through to kitty
         dcs_osc99 > "$tty"
     fi
-elif [ -n "${SSH_CONNECTION:-}" ]; then
+elif [ -n "$remote" ]; then
     # SSH without remote tmux: write to controlling terminal (/dev/tty goes
     # back through SSH to local terminal).  Send both formats.
     if [ -w /dev/tty ]; then
