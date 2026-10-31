@@ -699,18 +699,18 @@ hl.window_rule({
 })
 
 -- Claude's Playwright browser (~/.claude/playwright-mcp.json launches Chrome
--- with --class=playwright). Silent on a special workspace so test windows
--- never take focus or the screen. Waybar's custom/playwright icon toggles it
--- (hl.dsp.workspace.toggle_special("playwright") through `hyprctl eval`).
--- no_initial_focus only covers the first map. Chrome asks for activation again
--- on a new tab or tab select, and misc.focus_on_activate would then focus it
--- and open the special workspace over the screen; focus_on_activate = false
+-- with --class=playwright). Silent on its own named workspace, a normal one
+-- (a special workspace always overlays 1-9): it shows in waybar while Chrome is
+-- open, switching to it replaces the screen like any other, and it vanishes
+-- when Chrome closes. no_initial_focus only covers the first map. Chrome asks
+-- for activation again on a new tab or tab select, and misc.focus_on_activate
+-- would then focus it and switch to that workspace; focus_on_activate = false
 -- keeps the urgent flag but refuses the focus.
 hl.window_rule({
     name  = "playwright-browser",
     match = { class = "^playwright$" },
 
-    workspace         = "special:playwright silent",
+    workspace         = "name:playwright silent",
     no_initial_focus  = true,
     focus_on_activate = false,
 })
