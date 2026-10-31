@@ -164,18 +164,19 @@ source_focused() {
 }
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
-# Desktop: notify-send on local Wayland; OSC 99 for SSH/remote.
-if [[ -z "${SSH_CONNECTION:-}" ]]; then
-  _runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-  if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
-    for _sock in "$_runtime"/wayland-*; do
-      [[ -S "$_sock" ]] && { export WAYLAND_DISPLAY="${_sock##*/}"; break; }
-    done
-  fi
-  recover_hypr || true
+# Desktop: notify-send when a live Hyprland is reachable; OSC 99 otherwise
+# (a remote host such as wonlab has none). SSH_CONNECTION is not a signal:
+# a pane or claude started while tmux was attached over ssh keeps it for
+# life, and every notification from it then went out as a kitty OSC 99 toast
+# with no source hint and no focus action.
+_runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+  for _sock in "$_runtime"/wayland-*; do
+    [[ -S "$_sock" ]] && { export WAYLAND_DISPLAY="${_sock##*/}"; break; }
+  done
 fi
 
-if [[ -z "${SSH_CONNECTION:-}" ]] && [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]; then
+if recover_hypr; then
   WINDOW_ADDR=$(resolve_window_address) || true
   TMUX_SOCKET="${TMUX:-}"
   TMUX_SOCKET="${TMUX_SOCKET%%,*}"
