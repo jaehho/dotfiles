@@ -337,6 +337,20 @@ local function year_of(date)
   return (date and date:match '(%d%d%d%d)') or 'n.d.'
 end
 
+---Some PDFs store page labels as UTF-16 hex strings, and Zotero keeps the raw
+---form (<FEFF00310034> is "14"). Zotero's parseInt on page= reads that as NaN.
+---@param label string?
+---@return string?
+local function page_label(label)
+  local hex = label and label:match '^<[Ff][Ee][Ff][Ff](%x+)>$'
+  if not hex or #hex % 4 ~= 0 then
+    return label
+  end
+  return (hex:gsub('%x%x%x%x', function(unit)
+    return vim.fn.nr2char(tonumber(unit, 16), 1)
+  end))
+end
+
 ---@param page string?
 ---@return number
 local function page_num(page)
@@ -527,7 +541,7 @@ local function load_items()
         end
       end
     end
-    local page = a.annotationPageLabel
+    local page = page_label(a.annotationPageLabel)
     local tags = {}
     for _, t in ipairs(a.tags or {}) do
       tags[#tags + 1] = t.tag
