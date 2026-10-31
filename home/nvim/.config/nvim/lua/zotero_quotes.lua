@@ -8,7 +8,9 @@
 --   word        literal substring
 --   a few words literal phrase (whitespace-normalized), the way a quote is typed
 --   !word       exclude   ^word  prefix   word$  suffix
---   title:foo   field search (text, quote, title, author, ...)
+--   title:foo   field search (text, quote, title, author, year, page, ...)
+--   color:green tag:LC10a comment:foo type:image collection:foo
+--   has:comment has:tag   annotations with one (has:!comment for without)
 -- O (normal) toggles open-reader-tabs vs the whole library. Not insert:
 -- that would steal typing capital O in a query.
 
@@ -21,6 +23,18 @@ local PAGE = 500
 -- Reopen is instant; open-tab flags are refreshed from the cheap path.
 local ITEM_CACHE_TTL = 60
 local item_cache = { items = nil, saved = 0 }
+
+-- Zotero.Annotations.COLORS by hex. mark goes on the inserted attribution line.
+local COLORS = {
+  ['#ffd400'] = { name = 'yellow', mark = '🟡' },
+  ['#ff6666'] = { name = 'red', mark = '🔴' },
+  ['#5fb236'] = { name = 'green', mark = '🟢' },
+  ['#2ea8e5'] = { name = 'blue', mark = '🔵' },
+  ['#a28ae5'] = { name = 'purple', mark = '🟣' },
+  ['#e56eee'] = { name = 'magenta', mark = '🩷' },
+  ['#f19837'] = { name = 'orange', mark = '🟠' },
+  ['#aaaaaa'] = { name = 'gray', mark = '⚪' },
+}
 
 -- Collection-item GETs dominate a cold rebuild (~2s for 10 collections).
 local COLMAP_TTL = 3600
@@ -291,6 +305,33 @@ local function open_reader_attachment_keys()
   return keys
 end
 
+---When each attachment was last open in Zotero's reader, as ISO 8601 UTC so it
+---compares directly with the API's dateModified. Only recent Zotero records
+---this, so most attachments have no entry.
+---@return table<string, string> last_read by attachment key
+local function attachment_last_read()
+  local last_read = {}
+  local db = vim.fn.expand '~/Zotero/zotero.sqlite'
+  if vim.fn.filereadable(db) ~= 1 then
+    return last_read
+  end
+  local out = system_ui {
+    'sqlite3',
+    '-batch',
+    ('file:%s?immutable=1'):format(db),
+    'SELECT i.key, a.lastRead FROM itemAttachments a JOIN items i USING (itemID) WHERE a.lastRead IS NOT NULL;',
+  }
+  if out.code == 0 then
+    for line in (out.stdout or ''):gmatch '[^\n]+' do
+      local key, seconds = line:match '^(%w+)|(%d+)$'
+      if key then
+        last_read[key] = os.date('!%Y-%m-%dT%H:%M:%SZ', tonumber(seconds))
+      end
+    end
+  end
+  return last_read
+end
+
 ---@param creators table[]?
 ---@return string
 local function authors_short(creators)
@@ -353,13 +394,25 @@ end
 ---@param a table enriched annotation
 ---@return string[]
 function M.format_markdown(a)
-  local lines = quote_lines(a.annotationText ~= '' and a.annotationText or a.annotationComment)
+  -- Image and ink have no text; the deep link below is the content. Their
+  -- comment is the user's own words, so it stays outside the quotation too.
+  local visual = a.annotationType == 'image' or a.annotationType == 'ink'
+  local lines
+  if visual and a.annotationText == '' then
+    lines = { ('> *%s annotation*'):format(a.annotationType) }
+  else
+    lines = quote_lines(a.annotationText ~= '' and a.annotationText or a.annotationComment)
+  end
   local page = a.annotationPageLabel
   local base
   if page then
     base = ('— %s %s, p. %s'):format(a.author, a.year, page)
   else
     base = ('— %s %s'):format(a.author, a.year)
+  end
+  local color = COLORS[a.annotationColor]
+  if color then
+    base = base .. ' ' .. color.mark
   end
 
   local links = {}
@@ -390,7 +443,7 @@ function M.format_markdown(a)
   end
 
   -- User's own comment stays outside the quotation.
-  if a.annotationText ~= '' and (a.annotationComment or '') ~= '' then
+  if (a.annotationText ~= '' or visual) and (a.annotationComment or '') ~= '' then
     lines[#lines + 1] = ''
     for line in (a.annotationComment .. '\n'):gmatch '(.-)\n' do
       lines[#lines + 1] = line
@@ -453,8 +506,11 @@ local function load_items()
 
   local colmap = fetch_collection_map()
   local open = open_reader_attachment_keys()
+  local last_read = attachment_last_read()
 
   local items = {}
+  -- Latest reader open or annotation edit, per paper; drives the list order.
+  local paper_recent = {}
   for _, a in ipairs(annots) do
     local att = a.parentItem and attachments[a.parentItem] or nil
     local parent = att and att.parentItem and parents[att.parentItem] or nil
@@ -487,6 +543,24 @@ local function load_items()
       end
     end
     local page = a.annotationPageLabel
+    local tags = {}
+    for _, t in ipairs(a.tags or {}) do
+      tags[#tags + 1] = t.tag
+    end
+    local has = {}
+    if comment ~= '' then
+      has[#has + 1] = 'comment'
+    end
+    if #tags > 0 then
+      has[#has + 1] = 'tag'
+    end
+    local paper = ('%s %s %s'):format(author, year, title)
+    local read_at = last_read[attachmentKey] or ''
+    local modified = a.dateModified or ''
+    local active = read_at > modified and read_at or modified
+    if active > (paper_recent[paper] or '') then
+      paper_recent[paper] = active
+    end
     items[#items + 1] = {
       -- Fuzzy-matched haystack: quote, comment, paper, people, collections.
       -- Whitespace-flattened so a typed phrase matches across PDF line breaks.
@@ -502,11 +576,20 @@ local function load_items()
       }, ' '),
       -- Field search targets (quote:left lamina, title:..., author:...)
       quote = quote,
+      comment = comment,
+      color = COLORS[a.annotationColor] and COLORS[a.annotationColor].name or a.annotationColor,
+      tag = table.concat(tags, ' '),
+      type = a.annotationType,
+      page = page,
+      collection = table.concat(cols, ' '),
+      has = table.concat(has, ' '),
       preview = {
         text = table.concat(M.format_markdown {
           annotationText = text,
           annotationComment = comment,
           annotationPageLabel = page,
+          annotationType = a.annotationType,
+          annotationColor = a.annotationColor,
           doi = doi,
           url = url,
           publication = publication,
@@ -524,6 +607,8 @@ local function load_items()
       annotationText = text,
       annotationComment = comment,
       annotationPageLabel = page,
+      annotationType = a.annotationType,
+      annotationColor = a.annotationColor,
       doi = doi,
       url = url,
       publication = publication,
@@ -534,13 +619,17 @@ local function load_items()
       title = title,
       collections = cols,
       -- Sort / filter helpers
-      paper = ('%s %s %s'):format(author, year, title),
+      paper = paper,
       page_n = page_num(page),
       open = open[attachmentKey] or false,
     }
   end
 
   table.sort(items, function(a, b)
+    local ra, rb = paper_recent[a.paper] or '', paper_recent[b.paper] or ''
+    if ra ~= rb then
+      return ra > rb
+    end
     if a.paper ~= b.paper then
       return a.paper < b.paper
     end
@@ -578,6 +667,11 @@ function M.pick(opts)
   if not ok then
     vim.notify('Zotero quotes: snacks.picker unavailable', vim.log.levels.ERROR)
     return
+  end
+
+  -- Set per pick: a colorscheme change clears these.
+  for hex, c in pairs(COLORS) do
+    vim.api.nvim_set_hl(0, 'ZoteroQuote' .. c.name, { fg = hex })
   end
 
   -- Open-tabs default is resolved from the first load (cheap path is wrong:
@@ -653,14 +747,19 @@ function M.pick(opts)
         end
       end
     end,
-    -- Rank by match score. Empty query keeps load_items order (paper, page).
+    -- Rank by match score. Empty query keeps load_items order (recent, page).
     sort = { fields = { 'score:desc', 'idx' } },
     format = function(item)
       local excerpt = (item.annotationText ~= '' and item.annotationText or item.annotationComment):gsub('%s+', ' ')
+      if excerpt == '' and item.type then
+        excerpt = '[' .. item.type .. ']'
+      end
       if #excerpt > 60 then
         excerpt = excerpt:sub(1, 57) .. '…'
       end
+      local color = COLORS[item.annotationColor]
       return {
+        { '● ', color and ('ZoteroQuote' .. color.name) or 'Comment' },
         { item.annotationPageLabel and ('p.' .. item.annotationPageLabel) or 'p.?', 'Number' },
         { ' ' },
         { excerpt, 'String' },
