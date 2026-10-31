@@ -12,8 +12,8 @@
 --   2+ externals  [externals..., laptop]  laptop rightmost
 -- Externals sort by EXTERNAL_ORDER preference (substring of description or
 -- serial), then alphabetically by connector name. Workspaces 1-9 are assigned
--- round-robin, leftmost monitor getting workspace 1. Super+0 is the scratchpad
--- (special), so the closed set is 1-9 — never 10. Minting past 9 is a bug.
+-- round-robin, leftmost monitor getting workspace 1. The closed set is 1-9,
+-- never 10. Minting past 9 is a bug.
 
 local LAPTOP_PATTERN = "eDP-"
 local EXTERNAL_ORDER = { "FT36ZS2", "B946ZS2" }

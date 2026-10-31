@@ -29,7 +29,7 @@ local M = {}
 local TEMP_BASE = 9000
 local DEBOUNCE_MS = 300
 
--- The closed set Super+N and Super+0 (scratchpad) address. Anything else with
+-- The closed set Super+N addresses. Anything else with
 -- id > 0 is a stray and gets packed in or destroyed.
 local MAX_SLOT = 9
 

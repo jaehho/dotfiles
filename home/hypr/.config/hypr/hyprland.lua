@@ -126,7 +126,6 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("spotify-launcher --no-exec && ~/.local/share/spotify-launcher/install/usr/share/spotify/spotify --enable-features=UseOzonePlatform --ozone-platform=wayland")
 
     -- Workspace management daemons
-    hl.exec_cmd("hyprscratch init")
     hl.exec_cmd("hyprwhenthen run")
 
     -- Desktop dashboard (bottom layer; lands on an empty workspace). Last, so
@@ -313,18 +312,9 @@ hl.config({
 
     gestures = {
         -- Swipe past the last workspace must not mint 10+. Super+D is the
-        -- only "give me empty" path; the closed set is 1-9 + special on 0.
+        -- only "give me empty" path; the closed set is 1-9.
         workspace_swipe_create_new = false,
     },
-})
-
--- Scratchpad: semi-transparent overlay
-hl.workspace_rule({ workspace = "special:󰏫", gaps_out = 30 })
-hl.window_rule({
-    name  = "scratchpad-see-through",
-    match = { workspace = "special:󰏫" },
-
-    opacity = 0.85,
 })
 
 ---------------
@@ -445,8 +435,7 @@ hl.bind(mainMod .. " + SHIFT + k", hl.dsp.window.swap({ direction = "up" }))
 hl.bind(mainMod .. " + SHIFT + j", hl.dsp.window.swap({ direction = "down" }))
 
 -- Switch workspaces / move active window with mainMod (+ SHIFT) + [1-9]
--- Super+N is workspace id N (holes allowed; the closed set is 1-9, Super+0 is
--- the scratchpad). Each id is locked to its round-robin monitor by
+-- Super+N is workspace id N (holes allowed; the closed set is 1-9). Each id is locked to its round-robin monitor by
 -- monitors.lua, so Super+N moves focus to that monitor.
 local function focus_workspace(n)
     hl.dispatch(hl.dsp.focus({ workspace = n }))
@@ -534,7 +523,6 @@ hl.bind(mainMod .. " + SHIFT + D", function() -- send window to empty workspace 
 end)
 
 -- Move all windows in active workspace to target workspace with mainMod + CTRL + [1-9]
--- (0 is the scratchpad's row)
 for i = 1, 9 do
     hl.bind(mainMod .. " + CTRL + " .. i, -- send every window here to workspace
         hl.dsp.exec_cmd("~/.local/bin/hypr-move-workspace-to " .. i))
@@ -563,12 +551,6 @@ hl.bind(mainMod .. " + CTRL + R", function() monitors.apply() end) -- re-apply m
 -- Display key (F1), which the firmware sends as Super+P: the display menu
 -- (layout, per-screen on/off, tablet). Super+; reaches it through the settings menu.
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("~/.local/bin/hypr-display-menu")) -- display menu (F1)
-
--- Scratchpad. Native dispatchers, not `hyprctl dispatch` — under a Lua config the
--- legacy string form is rejected outright. No waybar nudge needed: the special
--- workspaces are shown by waybar's own workspaces module, which follows IPC.
-hl.bind(mainMod .. " + 0", hl.dsp.workspace.toggle_special("󰏫")) -- scratchpad
-hl.bind(mainMod .. " + SHIFT + 0", hl.dsp.window.move({ workspace = "special:󰏫" })) -- send to scratchpad
 
 -- Scroll through existing workspaces on this monitor with mainMod + scroll.
 -- m+1/m-1, not e+1/e-1: e walks all monitors and empty/missing ids can mint
