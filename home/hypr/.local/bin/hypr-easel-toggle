@@ -5,6 +5,9 @@
 # screen, floating at 80% of the monitor, centred and focused; with none,
 # start Easel and do the same once its window maps. No window rule: Easel
 # opened from the launcher or the CLI tiles as usual until this shows it.
+# A transparent board (Easel's Ctrl+Shift+T) is pinned over the screen, so
+# it neither hides nor becomes the panel: this ends its click-through
+# (Ctrl+Shift+Y), the only way back from it, and focuses it.
 # The development window (dev.jaeho.Easel.Devel) is never matched.
 
 class=dev.jaeho.Easel
@@ -43,8 +46,39 @@ show() {
     hyprctl eval "$lua" >/dev/null
 }
 
+# The transparent board focused last: its address, its PID, and whether
+# clicks pass through it. Easel says both modes in the title.
+transparent_window() {
+    hyprctl clients -j | jq -r --arg c "$class" '
+        map(select(.class == $c and (.title | contains("[transparent]"))))
+        | sort_by(.focusHistoryID) | .[0] // empty
+        | "\(.address) \(.pid) \(.title | contains("[click-through]"))"'
+}
+
+# Bring transparent board $1 (PID $2) back; $3 is whether it is
+# click-through. The CLI built beside the window's binary, so a branch
+# build answers too. The title loses [click-through], and the window its
+# no_focus, a moment after; only then does the focus take.
+bring_back() {
+    if [[ $3 == true ]]; then
+        local cli
+        cli=$(dirname "$(readlink "/proc/$2/exe")")/easel
+        [[ -x $cli ]] || cli=easel
+        EASEL_NO_REBUILD=1 "$cli" click-through off >/dev/null
+        for _ in $(seq 20); do   # up to 1s
+            hyprctl clients -j | jq -e --arg a "$1" \
+                'any(.[]; .address == $a and (.title | contains("[click-through]") | not))' \
+                >/dev/null && break
+            sleep 0.05
+        done
+    fi
+    hyprctl dispatch "hl.dsp.focus({ window = 'address:$1' })" >/dev/null
+}
+
 active=$(hyprctl activewindow -j)
-if [[ $(jq -r '.class // empty' <<<"$active") == "$class" ]]; then
+if read -r addr pid through < <(transparent_window) && [[ -n $addr ]]; then
+    bring_back "$addr" "$pid" "$through"
+elif [[ $(jq -r '.class // empty' <<<"$active") == "$class" ]]; then
     addr=$(jq -r '.address' <<<"$active")
     if [[ $(jq -r '.workspace.name' <<<"$active") == "special:$hidden" ]]; then
         # Raised from waybar: it is already on special:easel, so close that.
