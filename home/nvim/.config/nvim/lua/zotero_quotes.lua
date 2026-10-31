@@ -9,7 +9,7 @@
 --   a few words literal phrase (whitespace-normalized), the way a quote is typed
 --   !word       exclude   ^word  prefix   word$  suffix
 --   title:foo   field search (text, quote, title, author, year, page, ...)
---   color:green tag:LC10a comment:foo type:image collection:foo
+--   tag:LC10a comment:foo type:image collection:foo
 --   has:comment has:tag   annotations with one (has:!comment for without)
 -- O (normal) toggles open-reader-tabs vs the whole library. Not insert:
 -- that would steal typing capital O in a query.
@@ -23,18 +23,6 @@ local PAGE = 500
 -- Reopen is instant; open-tab flags are refreshed from the cheap path.
 local ITEM_CACHE_TTL = 60
 local item_cache = { items = nil, saved = 0 }
-
--- Zotero.Annotations.COLORS by hex. mark goes on the inserted attribution line.
-local COLORS = {
-  ['#ffd400'] = { name = 'yellow', mark = '🟡' },
-  ['#ff6666'] = { name = 'red', mark = '🔴' },
-  ['#5fb236'] = { name = 'green', mark = '🟢' },
-  ['#2ea8e5'] = { name = 'blue', mark = '🔵' },
-  ['#a28ae5'] = { name = 'purple', mark = '🟣' },
-  ['#e56eee'] = { name = 'magenta', mark = '🩷' },
-  ['#f19837'] = { name = 'orange', mark = '🟠' },
-  ['#aaaaaa'] = { name = 'gray', mark = '⚪' },
-}
 
 -- Collection-item GETs dominate a cold rebuild (~2s for 10 collections).
 local COLMAP_TTL = 3600
@@ -410,10 +398,6 @@ function M.format_markdown(a)
   else
     base = ('— %s %s'):format(a.author, a.year)
   end
-  local color = COLORS[a.annotationColor]
-  if color then
-    base = base .. ' ' .. color.mark
-  end
 
   local links = {}
   if a.attachmentKey and a.annotationKey then
@@ -577,7 +561,6 @@ local function load_items()
       -- Field search targets (quote:left lamina, title:..., author:...)
       quote = quote,
       comment = comment,
-      color = COLORS[a.annotationColor] and COLORS[a.annotationColor].name or a.annotationColor,
       tag = table.concat(tags, ' '),
       type = a.annotationType,
       page = page,
@@ -589,7 +572,6 @@ local function load_items()
           annotationComment = comment,
           annotationPageLabel = page,
           annotationType = a.annotationType,
-          annotationColor = a.annotationColor,
           doi = doi,
           url = url,
           publication = publication,
@@ -608,7 +590,6 @@ local function load_items()
       annotationComment = comment,
       annotationPageLabel = page,
       annotationType = a.annotationType,
-      annotationColor = a.annotationColor,
       doi = doi,
       url = url,
       publication = publication,
@@ -667,11 +648,6 @@ function M.pick(opts)
   if not ok then
     vim.notify('Zotero quotes: snacks.picker unavailable', vim.log.levels.ERROR)
     return
-  end
-
-  -- Set per pick: a colorscheme change clears these.
-  for hex, c in pairs(COLORS) do
-    vim.api.nvim_set_hl(0, 'ZoteroQuote' .. c.name, { fg = hex })
   end
 
   -- Open-tabs default is resolved from the first load (cheap path is wrong:
@@ -757,9 +733,7 @@ function M.pick(opts)
       if #excerpt > 60 then
         excerpt = excerpt:sub(1, 57) .. '…'
       end
-      local color = COLORS[item.annotationColor]
       return {
-        { '● ', color and ('ZoteroQuote' .. color.name) or 'Comment' },
         { item.annotationPageLabel and ('p.' .. item.annotationPageLabel) or 'p.?', 'Number' },
         { ' ' },
         { excerpt, 'String' },
