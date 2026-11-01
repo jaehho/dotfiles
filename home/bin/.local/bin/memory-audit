@@ -1,0 +1,643 @@
+#!/usr/bin/env python3
+# Weekly cleanup of Claude Code memory notes by two independent agents.
+#
+#   memory-audit run [--dir DIR]   snapshot, scan, run both agents,
+#                                  reconcile; writes review.md
+#   memory-audit scan [--dir DIR]  print the mechanical findings only
+#   memory-audit apply [RUN] [--yes] [--only p1,p3]
+#                                  dry run by default; RUN is a run
+#                                  directory or "latest"
+#   memory-audit selftest          check reconcile and apply on a scratch
+#                                  directory
+#
+# Agent A gets the scan findings and only judges those. Agent B never
+# sees them and reads every note cold. Each works in its own copy of the
+# notes, has no write tools, and returns proposals as structured output.
+# The reconcile step is plain code: identical proposals are merged,
+# proposals that touch the same note differently become conflicts, and
+# nothing is applied without `apply --yes`, which refuses any note that
+# changed since the snapshot. Replaced files go to RUN/backup.
+import argparse
+import contextlib
+import datetime as dt
+import difflib
+import fcntl
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+HOME = Path.home()
+DEFAULT_DIR = HOME / ".claude/projects/-home-jaeho-dotfiles/memory"
+STATE = (
+    Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
+    / "memory-audit"
+)
+INDEX = "MEMORY.md"
+LONG_NOTE = 3500
+DUP_RATIO = 0.45
+OLD_PROJECT_DAYS = 45
+
+SCHEMA = {
+    "type": "object",
+    "required": ["notes_reviewed", "proposals"],
+    "properties": {
+        "notes_reviewed": {"type": "integer"},
+        "proposals": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["file", "action", "reason", "evidence"],
+                "properties": {
+                    "file": {"type": "string"},
+                    "action": {"enum": ["delete", "rewrite", "merge"]},
+                    "into": {"type": "string"},
+                    "new_content": {"type": "string"},
+                    "index_line": {"type": "string"},
+                    "reason": {"type": "string"},
+                    "evidence": {"type": "string"},
+                },
+            },
+        },
+    },
+}
+
+READ_ONLY_TOOLS = [
+    "Read", "Grep", "Glob",
+    "Bash(ls:*)", "Bash(cd:*)", "Bash(cat:*)", "Bash(head:*)",
+    "Bash(tail:*)", "Bash(wc:*)", "Bash(stat:*)", "Bash(test:*)",
+    "Bash(rg:*)", "Bash(grep:*)", "Bash(command -v:*)",
+    "Bash(git log:*)", "Bash(git show:*)", "Bash(git status:*)",
+    "Bash(git diff:*)", "Bash(gh issue list:*)",
+    "Bash(gh issue view:*)", "Bash(systemctl --user is-active:*)",
+    "Bash(systemctl --user status:*)",
+]
+
+RULES = """\
+These are Claude Code auto-memory notes for one user. Each note is one
+file with frontmatter (name, description, metadata.type = user |
+feedback | project | reference). feedback and project notes keep a
+Why: and How to apply: line. MEMORY.md is the index, one line per note;
+never propose editing it directly, give an index_line instead (the full
+replacement line: `- [Title](file.md) — hook`).
+
+A note should be removed or changed only on evidence you gathered in
+this run: a path, command, service, branch or date you checked, or a
+newer note that contradicts it. Notes about how the user wants Claude to
+work (feedback) are rules, not facts about the world: leave them unless
+the evidence shows they were superseded. When unsure, make no proposal;
+a missed cleanup costs a week, a wrong deletion costs a lesson.
+
+Actions:
+- delete: the note is obsolete or fully covered elsewhere.
+- rewrite: same note, new full text in new_content (frontmatter
+  included), for stale facts or to make it shorter without dropping a
+  Why or How to apply. Add index_line if the hook line changes.
+- merge: fold file into `into`; new_content is the full new text of
+  `into`; file is deleted.
+Each proposal needs reason and evidence (what you ran or read). Propose
+at most one action per note. Reads only: you have no way to edit.
+Today is {today}.
+"""
+
+PROMPT_A = RULES + """
+You are the mechanical pass. ./findings.json lists what a script found
+(dead paths, expired dates, index mismatches, near-duplicates, long
+notes). The notes are in ./notes/. For each finding, check it against
+reality and either propose the fix or skip it. Propose nothing that no
+finding points at. Return the structured result only.
+"""
+
+PROMPT_B = RULES + """
+You are the independent pass. The notes are in ./notes/. Read every
+note in full, then look for ones that are stale, contradicted by the
+current state of the repos, services and files they describe, redundant
+with another note, or too long for what they hold. Check claims against
+reality (~/dotfiles, ~/projects, git log, systemd, gh issues) before
+proposing. Return the structured result only.
+"""
+
+
+def sha(text):
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def load_notes(src):
+    return {
+        p.name: p.read_text() for p in sorted(Path(src).glob("*.md"))
+    }
+
+
+def note_type(text):
+    m = re.search(r"^\s+type:\s*(\w+)", text, re.M)
+    return m.group(1) if m else ""
+
+
+def frontmatter(text, key):
+    m = re.search(rf"^{key}:\s*(.+)$", text, re.M)
+    return m.group(1).strip().strip("\"'") if m else ""
+
+
+def index_links(index_text):
+    return re.findall(r"^- \[[^\]]*\]\(([^)]+\.md)\)", index_text, re.M)
+
+
+PATH_RE = re.compile(
+    r"^(~|/(?:home|etc|usr|opt|var|srv|mnt|[A-Z]\w+))(/[\w.@+-]+)+/?$"
+)
+SKIP_PATHS = ("/tmp/", "/run/", "/proc/", "/dev/", "/sys/")
+
+
+def path_findings(name, text):
+    out = []
+    for tok in sorted(set(re.findall(r"`([^`\n]+)`", text))):
+        if not PATH_RE.match(tok) or tok.startswith(SKIP_PATHS):
+            continue
+        if not os.path.exists(os.path.expanduser(tok)):
+            remote = " (note mentions wonlab: may be remote)" * (
+                "wonlab" in text
+            )
+            out.append(
+                (name, "dead-path", f"`{tok}` not found here{remote}")
+            )
+    return out
+
+
+DATE_RE = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
+DEADLINE_RE = re.compile(
+    r"(?:until|through|by|before|deadline|expires?)\D{0,30}"
+    r"(20\d\d-\d\d-\d\d)",
+    re.I,
+)
+
+
+def date_findings(name, text, today):
+    out = []
+    for d in sorted(set(DEADLINE_RE.findall(text))):
+        if dt.date.fromisoformat(d) < today:
+            out.append((name, "expired-date", f"deadline {d} is past"))
+    dates = [dt.date.fromisoformat(d) for d in DATE_RE.findall(text)]
+    if note_type(text) == "project" and dates:
+        age = (today - max(dates)).days
+        if age > OLD_PROJECT_DAYS:
+            out.append(
+                (name, "old-project", f"newest date is {age} days old")
+            )
+    return out
+
+
+def words(text):
+    return set(re.findall(r"[a-z]{4,}", text.lower()))
+
+
+def dup_findings(notes):
+    out = []
+    bags = {n: words(t) for n, t in notes.items() if n != INDEX}
+    names = sorted(bags)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            union = bags[a] | bags[b]
+            ratio = len(bags[a] & bags[b]) / len(union) if union else 0
+            if ratio >= DUP_RATIO:
+                out.append(
+                    (a, "near-duplicate", f"{b} overlaps {ratio:.0%}")
+                )
+    return out
+
+
+def index_findings(notes):
+    out = []
+    linked = index_links(notes.get(INDEX, ""))
+    for n in linked:
+        if n not in notes:
+            out.append((INDEX, "index-dead-link", f"{n} does not exist"))
+    for n in notes:
+        if n != INDEX and n not in linked:
+            out.append((n, "not-indexed", "no line in MEMORY.md"))
+    for n in {x for x in linked if linked.count(x) > 1}:
+        out.append((INDEX, "index-duplicate", f"{n} listed twice"))
+    return out
+
+
+def scan(notes, today):
+    found = index_findings(notes)
+    found += dup_findings(notes)
+    for name, text in notes.items():
+        if name == INDEX:
+            continue
+        if not frontmatter(text, "name") or not note_type(text):
+            found.append((name, "frontmatter", "missing name or type"))
+        if len(text) > LONG_NOTE:
+            found.append((name, "long", f"{len(text)} characters"))
+        found += path_findings(name, text)
+        found += date_findings(name, text, today)
+    return [
+        {"id": f"f{i}", "file": f, "kind": k, "detail": d}
+        for i, (f, k, d) in enumerate(found, 1)
+    ]
+
+
+def touched(p):
+    return {p["file"], p["into"]} if p["action"] == "merge" else {p["file"]}
+
+
+def valid(p, notes):
+    if not isinstance(p, dict) or p.get("file") not in notes:
+        return "unknown file"
+    if p["file"] == INDEX:
+        return "index is edited through index_line only"
+    act = p.get("action")
+    if act not in ("delete", "rewrite", "merge"):
+        return "unknown action"
+    has_text = p.get("new_content", "").startswith("---")
+    if act in ("rewrite", "merge") and not has_text:
+        return "new_content missing or has no frontmatter"
+    if act == "merge":
+        into = p.get("into")
+        if into not in notes or into in (INDEX, p["file"]):
+            return "bad merge target"
+    return None
+
+
+def same(a, b):
+    keys = ("action", "file", "into", "new_content")
+    return all(a.get(k) == b.get(k) for k in keys)
+
+
+def reconcile(by_source, notes):
+    """Merge proposals from independent agents into ready/conflicts."""
+    dropped, items = [], []
+    for src, props in by_source.items():
+        for p in props:
+            why = valid(p, notes)
+            if why:
+                dropped.append({"source": src, "why": why, "proposal": p})
+            else:
+                items.append({**p, "source": src})
+    groups = []
+    for it in items:
+        hit = [g for g in groups if g["files"] & touched(it)]
+        merged = {"files": set(touched(it)), "items": [it]}
+        for g in hit:
+            merged["files"] |= g["files"]
+            merged["items"] = g["items"] + merged["items"]
+            groups.remove(g)
+        groups.append(merged)
+    ready, conflicts = [], []
+    for g in groups:
+        first = g["items"][0]
+        if all(same(first, x) for x in g["items"]):
+            srcs = sorted({x["source"] for x in g["items"]})
+            ready.append({
+                **first,
+                "sources": srcs,
+                "reason": " | ".join(
+                    dict.fromkeys(x["reason"] for x in g["items"])
+                ),
+                "evidence": " | ".join(
+                    dict.fromkeys(x["evidence"] for x in g["items"])
+                ),
+            })
+        else:
+            conflicts.append(g["items"])
+    for i, r in enumerate(ready, 1):
+        r["id"] = f"p{i}"
+        r.pop("source", None)
+        r["base"] = {n: sha(notes[n]) for n in touched(r)}
+    return {"ready": ready, "conflicts": conflicts, "dropped": dropped}
+
+
+def diff_text(old, new, name):
+    return "".join(
+        difflib.unified_diff(
+            old.splitlines(True), new.splitlines(True),
+            f"a/{name}", f"b/{name}",
+        )
+    )
+
+
+def render_review(result, notes, failures, run):
+    ready, conflicts = result["ready"], result["conflicts"]
+    out = [
+        f"# Memory audit {run.name}",
+        "",
+        f"{len(ready)} ready, {len(conflicts)} conflicts, "
+        f"{len(result['dropped'])} dropped.",
+    ]
+    for src, why in failures.items():
+        out.append(f"\n**Agent {src} produced nothing:** {why}")
+    out += [
+        "",
+        f"Dry run: `memory-audit apply {run}`. Apply some: "
+        "`memory-audit apply LATEST --yes --only p1,p3`.",
+    ]
+    for p in ready:
+        out += [
+            "",
+            f"## {p['id']} {p['action']} {p['file']}"
+            + (f" into {p['into']}" if p["action"] == "merge" else ""),
+            f"Proposed by: {', '.join(p['sources'])}",
+            f"Reason: {p['reason']}",
+            f"Evidence: {p['evidence']}",
+        ]
+        if p["action"] in ("rewrite", "merge"):
+            tgt = p["into"] if p["action"] == "merge" else p["file"]
+            out += ["```diff", diff_text(notes[tgt], p["new_content"], tgt)
+                    .rstrip(), "```"]
+    if conflicts:
+        out += ["", "# Conflicts (not applicable; decide by hand)"]
+    for i, group in enumerate(conflicts, 1):
+        out.append(f"\n## c{i}")
+        for x in group:
+            out += [
+                f"- {x['source']}: {x['action']} {x['file']}"
+                + (f" into {x['into']}" if x.get("into") else ""),
+                f"  reason: {x['reason']}",
+                f"  evidence: {x['evidence']}",
+            ]
+    if result["dropped"]:
+        out += ["", "# Dropped"]
+        out += [
+            f"- {d['source']}: {d['why']} "
+            f"({d['proposal'].get('file')})"
+            for d in result["dropped"]
+        ]
+    return "\n".join(out) + "\n"
+
+
+def edit_index(text, remove=(), replace=None):
+    lines = text.splitlines()
+    for name in remove:
+        lines = [x for x in lines if f"({name})" not in x]
+    for name, line in (replace or {}).items():
+        hit = [i for i, x in enumerate(lines) if f"({name})" in x]
+        if hit:
+            lines[hit[0]] = line
+        else:
+            lines.append(line)
+    return "\n".join(lines) + "\n"
+
+
+def cmd_apply(args):
+    run = resolve_run(args.run)
+    src = Path((run / "source.txt").read_text())
+    result = json.loads((run / "proposals.json").read_text())
+    only = set(args.only.split(",")) if args.only else None
+    index = (src / INDEX).read_text()
+    new_index, applied = index, []
+    for p in result["ready"]:
+        if only and p["id"] not in only:
+            continue
+        names = sorted(touched(p))
+        stale = [
+            n for n in names
+            if not (src / n).exists()
+            or sha((src / n).read_text()) != p["base"][n]
+        ]
+        head = f"{p['id']} {p['action']} {p['file']}"
+        if stale:
+            print(f"SKIP {head}: changed since snapshot: {stale}")
+            continue
+        print(f"{'APPLY' if args.yes else 'WOULD'} {head}: {p['reason']}")
+        if p["action"] != "delete":
+            tgt = p["into"] if p["action"] == "merge" else p["file"]
+            print(diff_text((src / tgt).read_text(), p["new_content"], tgt))
+        gone = [p["file"]] if p["action"] in ("delete", "merge") else []
+        new_index = edit_index(
+            new_index, gone,
+            {p["file"]: p["index_line"]} if p.get("index_line") else None,
+        )
+        if args.yes:
+            backup = run / "backup"
+            backup.mkdir(exist_ok=True)
+            for n in names:
+                shutil.copy2(src / n, backup / n)
+            if p["action"] == "delete":
+                (src / p["file"]).unlink()
+            else:
+                tgt = p["into"] if p["action"] == "merge" else p["file"]
+                (src / tgt).write_text(p["new_content"])
+                if p["action"] == "merge":
+                    (src / p["file"]).unlink()
+        applied.append(p["id"])
+    if new_index != index:
+        print(diff_text(index, new_index, INDEX))
+    if args.yes and applied:
+        (src / INDEX).write_text(new_index)
+        print(f"applied {', '.join(applied)}; originals in {run}/backup")
+    elif not args.yes:
+        print("dry run: nothing written; add --yes (and --only) to apply")
+
+
+def resolve_run(arg):
+    run = STATE / "latest" if arg in (None, "latest") else Path(arg)
+    if not (run / "proposals.json").exists():
+        sys.exit(f"no proposals.json in {run}")
+    return run.resolve()
+
+
+def make_view(run, name, notes, extra=None):
+    view = run / name
+    (view / "notes").mkdir(parents=True)
+    for n, t in notes.items():
+        (view / "notes" / n).write_text(t)
+        (view / "notes" / n).chmod(0o444)
+    for fname, text in (extra or {}).items():
+        (view / fname).write_text(text)
+    return view
+
+
+def run_agent(name, prompt, cwd, run, budget, timeout):
+    cmd = [
+        "claude", "-p", "--output-format", "json",
+        "--json-schema", json.dumps(SCHEMA),
+        "--permission-mode", "dontAsk",
+        "--tools", "Read,Grep,Glob,Bash",
+        "--allowedTools", *READ_ONLY_TOOLS,
+        "--disallowedTools", "Edit", "Write", "NotebookEdit",
+        "--add-dir", str(HOME / "dotfiles"), str(HOME / "projects"),
+        "--no-session-persistence",
+        "--max-budget-usd", str(budget),
+    ]
+    try:
+        r = subprocess.run(
+            cmd, input=prompt, cwd=cwd, capture_output=True, text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return name, None, f"timed out after {timeout}s"
+    (run / f"{name}.raw.json").write_text(r.stdout + r.stderr)
+    try:
+        out = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return name, None, f"unreadable output (exit {r.returncode})"
+    data = out.get("structured_output")
+    if data is None and isinstance(out.get("result"), str):
+        with contextlib.suppress(json.JSONDecodeError):
+            data = json.loads(out["result"])
+    if out.get("is_error") or not isinstance(data, dict):
+        why = str(out.get("result", "no structured output"))
+        return name, None, why[:200]
+    return name, data.get("proposals", []), None
+
+
+def cmd_scan(args):
+    notes = load_notes(args.dir)
+    for f in scan(notes, dt.date.today()):
+        print(f"{f['kind']:15} {f['file']}: {f['detail']}")
+
+
+def cmd_run(args):
+    src = Path(args.dir)
+    notes = load_notes(src)
+    if INDEX not in notes:
+        sys.exit(f"no {INDEX} in {src}")
+    STATE.mkdir(parents=True, exist_ok=True)
+    lock = os.open(STATE / "lock", os.O_CREAT | os.O_WRONLY)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        sys.exit("another memory-audit run is in progress")
+    today = dt.date.today()
+    run = STATE / dt.datetime.now().strftime("%Y-%m-%d-%H%M")
+    run.mkdir()
+    (run / "source.txt").write_text(str(src.resolve()))
+    findings = scan(notes, today)
+    (run / "scan.json").write_text(json.dumps(findings, indent=1))
+    view_a = make_view(
+        run, "a", notes, {"findings.json": json.dumps(findings, indent=1)}
+    )
+    view_b = make_view(run, "b", notes)
+    rules = {"today": today.isoformat()}
+    jobs = [
+        ("a", PROMPT_A.format(**rules), view_a),
+        ("b", PROMPT_B.format(**rules), view_b),
+    ]
+    with ThreadPoolExecutor(2) as pool:
+        futs = [
+            pool.submit(
+                run_agent, n, p, v, run, args.budget, args.timeout
+            )
+            for n, p, v in jobs
+        ]
+        results = [f.result() for f in futs]
+    by_source = {n.upper(): props for n, props, err in results if err is None}
+    failures = {n.upper(): err for n, props, err in results if err}
+    if not by_source:
+        note(args, "Memory audit failed", "; ".join(failures.values()))
+        sys.exit("both agents failed: " + str(failures))
+    result = reconcile(by_source, notes)
+    result["failures"] = failures
+    (run / "proposals.json").write_text(json.dumps(result, indent=1))
+    (run / "review.md").write_text(
+        render_review(result, notes, failures, run)
+    )
+    latest = STATE / "latest"
+    latest.unlink(missing_ok=True)
+    latest.symlink_to(run.name)
+    summary = (
+        f"{len(result['ready'])} ready, {len(result['conflicts'])} "
+        f"conflicts: {run / 'review.md'}"
+    )
+    print(summary)
+    note(args, "Memory audit ready", summary)
+
+
+def note(args, title, body):
+    if args.no_notify:
+        return
+    subprocess.run(
+        ["notify-send", "-a", "memory-audit", title, body], check=False
+    )
+
+
+def cmd_selftest(_args):
+    note_t = (
+        "---\nname: {s}\ndescription: {d}\nmetadata:\n  type: project\n"
+        "---\n\n{b}\n"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp)
+        notes = {}
+        for n in ("a", "b", "c"):
+            notes[f"{n}.md"] = note_t.format(s=n, d=n, b=f"body {n}")
+        notes[INDEX] = "".join(
+            f"- [{n}]({n}.md) — hook {n}\n" for n in "abc"
+        )
+        for n, t in notes.items():
+            (src / n).write_text(t)
+        new_a = note_t.format(s="a", d="a", b="shorter")
+        other = new_a.replace("shorter", "different")
+        delete_b = {"file": "b.md", "action": "delete",
+                    "reason": "r", "evidence": "e"}
+        res = reconcile(
+            {
+                "A": [delete_b, {"file": "a.md", "action": "rewrite",
+                                 "new_content": new_a, "reason": "r",
+                                 "evidence": "e"},
+                      {"file": "ghost.md", "action": "delete",
+                       "reason": "r", "evidence": "e"}],
+                "B": [delete_b, {"file": "a.md", "action": "rewrite",
+                                 "new_content": other, "reason": "r",
+                                 "evidence": "e"}],
+            },
+            notes,
+        )
+        assert len(res["ready"]) == 1, res["ready"]
+        assert res["ready"][0]["sources"] == ["A", "B"]
+        assert len(res["conflicts"]) == 1
+        assert [d["why"] for d in res["dropped"]] == ["unknown file"]
+        merge = {"file": "c.md", "action": "merge", "into": "a.md",
+                 "new_content": new_a, "reason": "r", "evidence": "e"}
+        res2 = reconcile({"A": [merge], "B": [delete_b, {
+            "file": "a.md", "action": "delete", "reason": "r",
+            "evidence": "e"}]}, notes)
+        assert len(res2["conflicts"]) == 1, res2
+        run = Path(tmp) / "run"
+        run.mkdir()
+        (run / "source.txt").write_text(str(src))
+        (run / "proposals.json").write_text(json.dumps(res))
+        ns = argparse.Namespace(run=str(run), yes=False, only=None)
+        cmd_apply(ns)
+        assert (src / "b.md").exists(), "dry run wrote"
+        (src / "b.md").write_text("changed meanwhile")
+        cmd_apply(argparse.Namespace(run=str(run), yes=True, only=None))
+        assert (src / "b.md").read_text() == "changed meanwhile"
+        (src / "b.md").write_text(notes["b.md"])
+        cmd_apply(argparse.Namespace(run=str(run), yes=True, only=None))
+        assert not (src / "b.md").exists()
+        assert (run / "backup" / "b.md").read_text() == notes["b.md"]
+        assert "b.md" not in (src / INDEX).read_text()
+        assert "a.md" in (src / INDEX).read_text()
+    print("selftest ok")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name, fn in (("run", cmd_run), ("scan", cmd_scan)):
+        p = sub.add_parser(name)
+        p.add_argument("--dir", default=str(DEFAULT_DIR))
+        if name == "run":
+            p.add_argument("--budget", type=float, default=5)
+            p.add_argument("--timeout", type=int, default=1800)
+            p.add_argument("--no-notify", action="store_true")
+        p.set_defaults(fn=fn)
+    p = sub.add_parser("apply")
+    p.add_argument("run", nargs="?")
+    p.add_argument("--yes", action="store_true")
+    p.add_argument("--only")
+    p.set_defaults(fn=cmd_apply)
+    sub.add_parser("selftest").set_defaults(fn=cmd_selftest)
+    args = ap.parse_args()
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    main()
