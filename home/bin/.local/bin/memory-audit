@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-# Weekly cleanup of Claude Code memory notes by two independent agents.
+# Weekly cleanup of Claude Code memory notes by two independent agents,
+# for every project memory directory under ~/.claude/projects.
 #
-#   memory-audit run [--dir DIR]   snapshot, scan, run both agents,
-#                                  reconcile; writes review.md
-#   memory-audit scan [--dir DIR]  print the mechanical findings only
-#   memory-audit apply [RUN] [--yes] [--only p1,p3]
+#   memory-audit run [--dir DIR]   snapshot, scan, run both agents per
+#                                  project, reconcile; notifies when done
+#   memory-audit summary [RUN]     the short plain-text summary
+#   memory-audit review [RUN]      TUI: pick changes, apply them
+#   memory-audit apply [RUN] [--dir NAME] [--yes] [--only p1,p3 | --all]
 #                                  dry run by default; RUN is a run
 #                                  directory or "latest"
-#   memory-audit selftest          check reconcile and apply on a scratch
-#                                  directory
+#   memory-audit scan [--dir DIR]  print the mechanical findings only
+#   memory-audit selftest          check reconcile, apply, summary and
+#                                  the notification click path
 #
 # Agent A gets the scan findings and only judges those. Agent B never
 # sees them and reads every note cold. Each works in its own copy of the
@@ -19,6 +22,7 @@
 # changed since the snapshot. Replaced files go to RUN/backup.
 import argparse
 import contextlib
+import curses
 import datetime as dt
 import difflib
 import fcntl
@@ -26,15 +30,17 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 HOME = Path.home()
-DEFAULT_DIR = HOME / ".claude/projects/-home-jaeho-dotfiles/memory"
+PROJECTS = HOME / ".claude/projects"
 STATE = (
     Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
     / "memory-audit"
@@ -64,8 +70,11 @@ SCHEMA = {
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["file", "action", "reason", "evidence"],
+                "required": [
+                    "file", "action", "summary", "reason", "evidence",
+                ],
                 "properties": {
+                    "summary": {"type": "string"},
                     "file": {"type": "string"},
                     "action": {"enum": ["delete", "rewrite", "merge"]},
                     "into": {"type": "string"},
@@ -112,7 +121,9 @@ Actions:
   Why or How to apply. Add index_line if the hook line changes.
 - merge: fold file into `into`; new_content is the full new text of
   `into`; file is deleted.
-Each proposal needs reason and evidence (what you ran or read). Propose
+Each proposal needs summary (one plain line, at most 60 characters,
+saying what changes and why, for a quick skim), reason and evidence
+(what you ran or read). Propose
 at most one action per note. Reads only: you have no way to edit. Read
 notes with the Read tool, one call per file (shell loops are refused),
 and list every note you read in notes_read.
@@ -336,6 +347,14 @@ def diff_text(old, new, name):
     )
 
 
+def target(p):
+    return p["into"] if p["action"] == "merge" else p["file"]
+
+
+def label(slug):
+    return re.sub(r"^-home-jaeho-(projects-)?", "", slug) or slug
+
+
 def render_coverage(coverage, notes):
     out = []
     want = set(notes) - {INDEX}
@@ -355,23 +374,18 @@ def render_coverage(coverage, notes):
     return out
 
 
-def render_review(result, notes, failures, run):
+def render_review(result, notes, failures, title):
     ready, conflicts = result["ready"], result["conflicts"]
     out = [
-        f"# Memory audit {run.name}",
+        f"# {title}",
         "",
-        f"{len(ready)} ready, {len(conflicts)} conflicts, "
-        f"{len(result['dropped'])} dropped.",
+        (f"{len(ready)} ready, {len(conflicts)} conflicts, "
+         f"{len(result['dropped'])} dropped."),
     ]
     for src, why in failures.items():
         out.append(f"\n**Agent {src} produced nothing:** {why}")
     out += ["", "## Coverage", *render_coverage(
         result.get("coverage", {}), notes)]
-    out += [
-        "",
-        f"Dry run: `memory-audit apply {run}`. Apply some: "
-        "`memory-audit apply LATEST --yes --only p1,p3`.",
-    ]
     for p in ready:
         out += [
             "",
@@ -382,13 +396,13 @@ def render_review(result, notes, failures, run):
             f"Evidence: {p['evidence']}",
         ]
         if p["action"] in ("rewrite", "merge"):
-            tgt = p["into"] if p["action"] == "merge" else p["file"]
+            tgt = target(p)
             out += ["```diff", diff_text(notes[tgt], p["new_content"], tgt)
                     .rstrip(), "```"]
     if conflicts:
-        out += ["", "# Conflicts (not applicable; decide by hand)"]
+        out += ["", "## Conflicts (not applicable; decide by hand)"]
     for i, group in enumerate(conflicts, 1):
-        out.append(f"\n## c{i}")
+        out.append(f"\n### c{i}")
         for x in group:
             out += [
                 f"- {x['source']}: {x['action']} {x['file']}"
@@ -397,7 +411,7 @@ def render_review(result, notes, failures, run):
                 f"  evidence: {x['evidence']}",
             ]
     if result["dropped"]:
-        out += ["", "# Dropped"]
+        out += ["", "## Dropped"]
         out += [
             f"- {d['source']}: {d['why']} "
             f"({d['proposal'].get('file')})"
@@ -419,15 +433,15 @@ def edit_index(text, remove=(), replace=None):
     return "\n".join(lines) + "\n"
 
 
-def cmd_apply(args):
-    run = resolve_run(args.run)
-    src = Path((run / "source.txt").read_text())
-    result = json.loads((run / "proposals.json").read_text())
-    only = set(args.only.split(",")) if args.only else None
+def apply_dir(sub, yes=False, only=None, say=print):
+    """Apply (or preview) one project's ready proposals; returns ids."""
+    src = Path((sub / "source.txt").read_text())
+    result = json.loads((sub / "proposals.json").read_text())
+    done = set(result.get("applied", []))
     index = (src / INDEX).read_text()
     new_index, applied = index, []
     for p in result["ready"]:
-        if only and p["id"] not in only:
+        if p["id"] in done or (only and p["id"] not in only):
             continue
         names = sorted(touched(p))
         stale = [
@@ -437,48 +451,307 @@ def cmd_apply(args):
         ]
         head = f"{p['id']} {p['action']} {p['file']}"
         if stale:
-            print(f"SKIP {head}: changed since snapshot: {stale}")
+            say(f"SKIP {head}: changed since snapshot: {stale}")
             continue
-        print(f"{'APPLY' if args.yes else 'WOULD'} {head}: {p['reason']}")
+        say(f"{'APPLY' if yes else 'WOULD'} {head}: {p['reason']}")
         if p["action"] != "delete":
-            tgt = p["into"] if p["action"] == "merge" else p["file"]
-            print(diff_text((src / tgt).read_text(), p["new_content"], tgt))
+            tgt = target(p)
+            say(diff_text((src / tgt).read_text(), p["new_content"], tgt))
         gone = [p["file"]] if p["action"] in ("delete", "merge") else []
         new_index = edit_index(
             new_index, gone,
             {p["file"]: p["index_line"]} if p.get("index_line") else None,
         )
-        if args.yes:
-            backup = run / "backup"
+        if yes:
+            backup = sub / "backup"
             backup.mkdir(exist_ok=True)
             for n in names:
                 shutil.copy2(src / n, backup / n)
             if p["action"] == "delete":
                 (src / p["file"]).unlink()
             else:
-                tgt = p["into"] if p["action"] == "merge" else p["file"]
-                (src / tgt).write_text(p["new_content"])
+                (src / target(p)).write_text(p["new_content"])
                 if p["action"] == "merge":
                     (src / p["file"]).unlink()
         applied.append(p["id"])
     if new_index != index:
-        print(diff_text(index, new_index, INDEX))
-    if args.yes and applied:
+        say(diff_text(index, new_index, INDEX))
+    if yes and applied:
         (src / INDEX).write_text(new_index)
-        print(f"applied {', '.join(applied)}; originals in {run}/backup")
-    elif not args.yes:
-        print("dry run: nothing written; add --yes (and --only) to apply")
+        result["applied"] = sorted(done | set(applied))
+        (sub / "proposals.json").write_text(json.dumps(result, indent=1))
+        say(f"applied {', '.join(applied)}; originals in {sub}/backup")
+    return applied
 
 
 def resolve_run(arg):
     run = STATE / "latest" if arg in (None, "latest") else Path(arg)
-    if not (run / "proposals.json").exists():
-        sys.exit(f"no proposals.json in {run}")
+    if not run.is_dir():
+        sys.exit(f"no such run: {run}")
     return run.resolve()
 
 
-def make_view(run, name, notes, extra=None):
-    view = run / name
+def load_run(run):
+    recs = []
+    for sub in sorted(run.iterdir()):
+        if not (sub / "source.txt").exists():
+            continue
+        pj, failed = sub / "proposals.json", sub / "failed.txt"
+        recs.append({
+            "label": label(sub.name),
+            "sub": sub,
+            "result": json.loads(pj.read_text()) if pj.exists() else None,
+            "error": failed.read_text() if failed.exists() else "",
+        })
+    return recs
+
+
+def pending(rec):
+    res = rec["result"] or {"ready": []}
+    done = set(res.get("applied", []))
+    return [p for p in res["ready"] if p["id"] not in done]
+
+
+def clip(text, width):
+    return text if len(text) <= width else text[: width - 1] + "…"
+
+
+def render_summary(run, width=78):
+    recs = load_run(run)
+    n_ready = sum(len(pending(r)) for r in recs)
+    n_conf = sum(len(r["result"]["conflicts"]) for r in recs if r["result"])
+    out = [
+        clip(
+            f"Memory audit {run.name}: {n_ready} change"
+            f"{'' if n_ready == 1 else 's'} ready, {n_conf} conflict"
+            f"{'' if n_conf == 1 else 's'}, {len(recs)} projects", width),
+        "",
+    ]
+    for r in recs:
+        rows = pending(r)
+        if r["result"] is None:
+            out.append(f"{r['label']}: audit failed ({r['error'][:50]})")
+            continue
+        conf = len(r["result"]["conflicts"])
+        if not rows and not conf:
+            out.append(f"{r['label']}: nothing to change")
+            continue
+        out.append(r["label"])
+        for p in rows:
+            stem = p["file"].removesuffix(".md")
+            line = f"  {p['id']:<4}{p['action']:<8}{stem}: {p['summary']}"
+            out.append(clip(line, width))
+        if conf:
+            out.append(f"  {conf} conflict(s): agents disagree, see review")
+    out += [
+        "",
+        "Review and apply:  memory-audit review",
+        f"Everything:        {run}/review.md",
+    ]
+    return "\n".join(out) + "\n"
+
+
+def tui_rows(recs):
+    rows = []
+    for di, r in enumerate(recs):
+        rows.append(("head", di, None))
+        res = r["result"]
+        if res is None:
+            rows.append(("fail", di, r["error"] or "no result"))
+            continue
+        done = set(res.get("applied", []))
+        for p in res["ready"]:
+            rows.append(("done" if p["id"] in done else "ready", di, p))
+        for i, g in enumerate(res["conflicts"], 1):
+            rows.append(("conflict", di, (i, g)))
+        if not res["ready"] and not res["conflicts"]:
+            rows.append(("empty", di, None))
+    return rows
+
+
+def row_text(recs, row, sel):
+    kind, di, p = row
+    r = recs[di]
+    if kind == "head":
+        n = len(pending(r))
+        conf = len(r["result"]["conflicts"]) if r["result"] else 0
+        return f"{r['label']}  ({n} ready, {conf} conflicts)"
+    if kind == "ready":
+        mark = "x" if (di, p["id"]) in sel else " "
+        stem = p["file"].removesuffix(".md")
+        return f"  [{mark}] {p['id']:<4}{p['action']:<8}{stem}: {p['summary']}"
+    if kind == "done":
+        return f"  [✓] {p['id']:<4}applied {p['file']}"
+    if kind == "conflict":
+        i, g = p
+        files = ", ".join(sorted({x["file"] for x in g}))
+        return f"  [!] c{i}  conflict: {files}"
+    if kind == "fail":
+        return f"  audit failed: {p[:60]}"
+    return "  nothing to change"
+
+
+def detail_lines(recs, row, width):
+    kind, di, p = row
+    wrap = textwrap.TextWrapper(width=max(width - 2, 20)).wrap
+    notes = recs[di]["sub"] / "b" / "notes"
+    if kind == "conflict":
+        i, group = p
+        out = [f"c{i}: the agents disagree; decide by hand", ""]
+        for x in group:
+            out += [f"{x['source']}: {x['action']} {x['file']}"]
+            out += wrap(f"why: {x['reason']}") + wrap(
+                f"evidence: {x['evidence']}") + [""]
+        return out
+    out = [f"{p['id']}  {p['action']}  {p['file']}", ""]
+    out += [*wrap(f"Why: {p['reason']}"), ""]
+    out += [*wrap(f"Evidence: {p['evidence']}"), ""]
+    if p["action"] in ("rewrite", "merge"):
+        tgt = target(p)
+        old = (notes / tgt).read_text() if (notes / tgt).exists() else ""
+        out += diff_text(old, p["new_content"], tgt).splitlines()
+    else:
+        out += ["(the note is deleted; a copy is kept in the run's backup/)"]
+    return out
+
+
+def tui(stdscr, run):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    if curses.has_colors():
+        curses.init_pair(1, curses.COLOR_GREEN, -1)
+        curses.init_pair(2, curses.COLOR_RED, -1)
+        curses.init_pair(3, curses.COLOR_CYAN, -1)
+    recs, sel, cur, top, msg = load_run(run), set(), 0, 0, ""
+
+    def put(y, text, attr=0):
+        h, w = stdscr.getmaxyx()
+        if 0 <= y < h:
+            stdscr.addnstr(y, 0, text.ljust(w - 1), w - 1, attr)
+
+    def ask(prompt):
+        put(stdscr.getmaxyx()[0] - 2, prompt, curses.A_BOLD)
+        stdscr.refresh()
+        return stdscr.getch() in (ord("y"), ord("Y"))
+
+    def show(row):
+        pos = 0
+        while True:
+            h, w = stdscr.getmaxyx()
+            lines = detail_lines(recs, row, w)
+            stdscr.erase()
+            for i, ln in enumerate(lines[pos: pos + h - 2]):
+                attr = 0
+                if ln.startswith("+") and not ln.startswith("+++"):
+                    attr = curses.color_pair(1)
+                elif ln.startswith("-") and not ln.startswith("---"):
+                    attr = curses.color_pair(2)
+                put(i, ln, attr)
+            put(h - 1, "j/k scroll   q or enter: back", curses.A_REVERSE)
+            key = stdscr.getch()
+            if key in (ord("q"), 27, 10, ord("h")):
+                return
+            if key in (ord("j"), curses.KEY_DOWN):
+                pos = min(pos + 1, max(len(lines) - 1, 0))
+            elif key in (ord("k"), curses.KEY_UP):
+                pos = max(pos - 1, 0)
+            elif key == curses.KEY_NPAGE:
+                pos = min(pos + h - 3, max(len(lines) - 1, 0))
+            elif key == curses.KEY_PPAGE:
+                pos = max(pos - (h - 3), 0)
+
+    while True:
+        rows = tui_rows(recs)
+        cur = max(0, min(cur, len(rows) - 1))
+        h = stdscr.getmaxyx()[0]
+        span = max(h - 4, 1)
+        top = min(max(top, cur - span + 1), cur)
+        stdscr.erase()
+        put(0, f"Memory audit {run.name}   {len(sel)} selected",
+            curses.A_BOLD)
+        for i, row in enumerate(rows[top: top + span]):
+            idx = top + i
+            attr = curses.A_REVERSE if idx == cur else 0
+            if row[0] == "head" and idx != cur:
+                attr = curses.A_BOLD | curses.color_pair(3)
+            elif row[0] in ("done", "empty") and idx != cur:
+                attr = curses.A_DIM
+            put(2 + i, row_text(recs, row, sel), attr)
+        put(h - 2, msg, curses.A_BOLD)
+        put(h - 1, "j/k move  space select  a all in project  "
+            "enter details  A apply  q quit", curses.A_REVERSE)
+        key = stdscr.getch()
+        msg = ""
+        row = rows[cur] if rows else None
+        if key in (ord("q"), 27):
+            return
+        if key in (ord("j"), curses.KEY_DOWN):
+            cur += 1
+        elif key in (ord("k"), curses.KEY_UP):
+            cur -= 1
+        elif key == ord(" ") and row and row[0] == "ready":
+            sel ^= {(row[1], row[2]["id"])}
+            cur += 1
+        elif key == ord("a") and row:
+            ids = {(row[1], p["id"]) for p in pending(recs[row[1]])}
+            sel = sel - ids if ids <= sel else sel | ids
+        elif key in (10, curses.KEY_ENTER, ord("l")) and row:
+            if row[0] in ("ready", "done", "conflict"):
+                show(row)
+        elif key == ord("A"):
+            if not sel:
+                msg = "nothing selected (space selects)"
+            elif ask(f"Apply {len(sel)} change(s) to your memory notes? "
+                     "Originals are kept in the run's backup/. (y/N)"):
+                msg = apply_selected(recs, sel)
+                recs, sel = load_run(run), set()
+
+
+def apply_selected(recs, sel):
+    done, notes = 0, []
+    for di in sorted({d for d, _ in sel}):
+        ids = {i for d, i in sel if d == di}
+        out = []
+        done += len(apply_dir(recs[di]["sub"], True, ids, out.append))
+        notes += [x for x in out if x.startswith("SKIP")]
+    skipped = f"; {len(notes)} skipped (note changed since the audit)" * (
+        bool(notes))
+    return f"applied {done}{skipped}"
+
+
+def cmd_review(args):
+    run = resolve_run(args.run)
+    if not sys.stdout.isatty():
+        sys.stdout.write(render_summary(run))
+        return
+    os.environ.setdefault("ESCDELAY", "25")
+    curses.wrapper(tui, run)
+
+
+def cmd_summary(args):
+    sys.stdout.write(render_summary(resolve_run(args.run)))
+
+
+def cmd_apply(args):
+    run = resolve_run(args.run)
+    recs = [
+        r for r in load_run(run)
+        if r["result"] and (not args.dir or r["label"] in args.dir)
+    ]
+    if args.yes and not (args.only or args.all):
+        sys.exit("--yes needs --only IDS (with --dir) or --all")
+    if args.only and len(recs) != 1:
+        sys.exit("--only ids are per project: pass one --dir")
+    only = set(args.only.split(",")) if args.only else None
+    for r in recs:
+        print(f"== {r['label']}")
+        apply_dir(r["sub"], args.yes, only)
+    if not args.yes:
+        print("dry run: nothing written; add --yes to apply")
+
+
+def make_view(sub, name, notes, extra=None):
+    view = sub / name
     (view / "notes").mkdir(parents=True)
     for n, t in notes.items():
         (view / "notes" / n).write_text(t)
@@ -488,7 +761,7 @@ def make_view(run, name, notes, extra=None):
     return view
 
 
-def run_agent(name, prompt, cwd, run, budget, timeout):
+def run_agent(name, prompt, cwd, sub, budget, timeout):
     cmd = [
         "claude", "-p", "--output-format", "json",
         "--json-schema", json.dumps(SCHEMA),
@@ -500,15 +773,16 @@ def run_agent(name, prompt, cwd, run, budget, timeout):
         "--no-session-persistence",
         "--max-budget-usd", str(budget),
     ]
+    env = {**os.environ, "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
     try:
         r = subprocess.run(
             cmd, input=prompt, cwd=cwd, capture_output=True, text=True,
-            timeout=timeout,
+            timeout=timeout, env=env,
         )
     except subprocess.TimeoutExpired:
         return name, None, f"timed out after {timeout}s"
-    (run / f"{name}.raw.json").write_text(r.stdout)
-    (run / f"{name}.err").write_text(r.stderr)
+    (sub / f"{name}.raw.json").write_text(r.stdout)
+    (sub / f"{name}.err").write_text(r.stderr)
     try:
         out = json.loads(r.stdout)
     except json.JSONDecodeError:
@@ -523,33 +797,34 @@ def run_agent(name, prompt, cwd, run, budget, timeout):
     return name, data, None
 
 
-def cmd_scan(args):
-    notes = load_notes(args.dir)
-    for f in scan(notes, dt.date.today()):
-        print(f"{f['kind']:15} {f['file']}: {f['detail']}")
+def slug_of(mem):
+    mem = Path(mem).resolve()
+    return mem.parent.name if mem.name == "memory" else mem.name
 
 
-def cmd_run(args):
-    src = Path(args.dir)
-    notes = load_notes(src)
-    if INDEX not in notes:
-        sys.exit(f"no {INDEX} in {src}")
-    STATE.mkdir(parents=True, exist_ok=True)
-    lock = os.open(STATE / "lock", os.O_CREAT | os.O_WRONLY)
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        sys.exit("another memory-audit run is in progress")
-    today = dt.date.today()
-    run = STATE / dt.datetime.now().strftime("%Y-%m-%d-%H%M")
-    run.mkdir()
-    (run / "source.txt").write_text(str(src.resolve()))
+def discover():
+    found = []
+    for mem in sorted(PROJECTS.glob("*/memory")):
+        slug = mem.parent.name
+        if slug.startswith("-tmp-") or "memory-audit" in slug:
+            continue
+        notes = [p for p in mem.glob("*.md") if p.name != INDEX]
+        if (mem / INDEX).exists() and notes:
+            found.append(mem)
+    return found
+
+
+def audit_dir(mem, run, today, args):
+    notes = load_notes(mem)
+    sub = run / slug_of(mem)
+    sub.mkdir()
+    (sub / "source.txt").write_text(str(Path(mem).resolve()))
     findings = scan(notes, today)
-    (run / "scan.json").write_text(json.dumps(findings, indent=1))
+    (sub / "scan.json").write_text(json.dumps(findings, indent=1))
     view_a = make_view(
-        run, "a", notes, {"findings.json": json.dumps(findings, indent=1)}
+        sub, "a", notes, {"findings.json": json.dumps(findings, indent=1)}
     )
-    view_b = make_view(run, "b", notes)
+    view_b = make_view(sub, "b", notes)
     rules = {"today": today.isoformat()}
     jobs = [
         ("a", PROMPT_A.format(**rules), view_a),
@@ -557,75 +832,148 @@ def cmd_run(args):
     ]
     with ThreadPoolExecutor(2) as pool:
         futs = [
-            pool.submit(
-                run_agent, n, p, v, run, args.budget, args.timeout
-            )
+            pool.submit(run_agent, n, p, v, sub, args.budget, args.timeout)
             for n, p, v in jobs
         ]
         results = [f.result() for f in futs]
-    by_source = {
-        n.upper(): d.get("proposals", []) for n, d, err in results if not err
-    }
-    coverage = {n.upper(): d for n, d, err in results if not err}
+    ok = {n.upper(): d for n, d, err in results if not err}
     failures = {n.upper(): err for n, d, err in results if err}
-    if not by_source:
-        note(args, "Memory audit failed", "; ".join(failures.values()))
-        sys.exit("both agents failed: " + str(failures))
-    result = reconcile(by_source, notes)
-    result["failures"] = failures
-    result["coverage"] = coverage
-    (run / "proposals.json").write_text(json.dumps(result, indent=1))
-    (run / "review.md").write_text(
-        render_review(result, notes, failures, run)
+    if not ok:
+        (sub / "failed.txt").write_text("; ".join(failures.values()))
+        return False
+    result = reconcile(
+        {s: d.get("proposals", []) for s, d in ok.items()}, notes
     )
+    result["failures"], result["coverage"] = failures, ok
+    (sub / "proposals.json").write_text(json.dumps(result, indent=1))
+    (sub / "review.md").write_text(
+        render_review(result, notes, failures, label(sub.name))
+    )
+    return True
+
+
+def cmd_scan(args):
+    for mem in args.dir or discover():
+        print(f"== {label(slug_of(mem))}")
+        for f in scan(load_notes(mem), dt.date.today()):
+            print(f"{f['kind']:15} {f['file']}: {f['detail']}")
+
+
+def cmd_run(args):
+    dirs = [Path(d) for d in args.dir] or discover()
+    for mem in dirs:
+        if not (mem / INDEX).exists():
+            sys.exit(f"no {INDEX} in {mem}")
+    STATE.mkdir(parents=True, exist_ok=True)
+    lock = os.open(STATE / "lock", os.O_CREAT | os.O_WRONLY)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        sys.exit("another memory-audit run is in progress")
+    run = STATE / dt.datetime.now().strftime("%Y-%m-%d-%H%M")
+    run.mkdir()
+    today = dt.date.today()
+    with ThreadPoolExecutor(3) as pool:
+        oks = list(pool.map(
+            lambda m: audit_dir(m, run, today, args), dirs))
+    if not any(oks):
+        tell(args, "Memory audit failed", f"no project finished: {run}")
+        sys.exit("every project failed; see failed.txt under " + str(run))
+    pieces = [
+        f"# {label(r['sub'].name)}\n\n" + (r["sub"] / "review.md").read_text()
+        for r in load_run(run) if r["result"]
+    ]
+    (run / "review.md").write_text("\n".join(pieces))
+    summary = render_summary(run)
+    (run / "summary.txt").write_text(summary)
     latest = STATE / "latest"
     latest.unlink(missing_ok=True)
     latest.symlink_to(run.name)
-    summary = (
-        f"{len(result['ready'])} ready, {len(result['conflicts'])} "
-        f"conflicts: {run / 'review.md'}"
-    )
-    print(summary)
-    note(args, "Memory audit ready", summary)
+    sys.stdout.write(summary)
+    recs = load_run(run)
+    n = sum(len(pending(r)) for r in recs)
+    conf = sum(len(r["result"]["conflicts"]) for r in recs if r["result"])
+    body = (f"{n} change{'' if n == 1 else 's'} ready"
+            f"{f', {conf} conflicts' if conf else ''}. Click to review.")
+    notify(args, run, "Memory audit finished", body)
 
 
-def note(args, title, body):
+def notify_cmd():
+    return shlex.split(os.environ.get("MEMORY_AUDIT_NOTIFY", "notify-send"))
+
+
+def open_cmd():
+    return shlex.split(os.environ.get("MEMORY_AUDIT_OPEN", "hypr-pane --"))
+
+
+def tell(args, title, body):
+    if not args.no_notify:
+        subprocess.run(
+            [*notify_cmd(), "-a", "memory-audit", title, body], check=False
+        )
+
+
+def notify(args, run, title, body):
+    """Send a toast whose click opens the review in a tmux pane."""
     if args.no_notify:
         return
-    subprocess.run(
-        ["notify-send", "-a", "memory-audit", title, body], check=False
+    me = [sys.executable, str(Path(__file__).resolve()), "notify-wait",
+          str(run), title, body]
+    # A oneshot service kills its leftovers when it exits, so the waiter
+    # runs as its own transient unit.
+    unit = ["systemd-run", "--user", "--collect", "--quiet",
+            "-p", "RuntimeMaxSec=3d", *me]
+    try:
+        subprocess.run(unit, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        subprocess.Popen(me, start_new_session=True)
+
+
+def cmd_notify_wait(args):
+    r = subprocess.run(
+        [*notify_cmd(), "--wait", "--action=default=Review",
+         "-a", "memory-audit", args.title, args.body],
+        capture_output=True, text=True, check=False,
     )
+    if r.stdout.strip() == "default":
+        subprocess.run(
+            [*open_cmd(), "memory-audit", "review", args.run], check=False
+        )
 
 
-def cmd_selftest(_args):
+def selftest_fixture(tmp):
     note_t = (
         "---\nname: {s}\ndescription: {d}\nmetadata:\n  type: project\n"
         "---\n\n{b}\n"
     )
+    notes = {
+        f"{n}.md": note_t.format(s=n, d=n, b=f"body {n}") for n in "abc"
+    }
+    notes[INDEX] = "".join(f"- [{n}]({n}.md) — hook {n}\n" for n in "abc")
+    return note_t, notes
+
+
+def cmd_selftest(_args):
     with tempfile.TemporaryDirectory() as tmp:
-        src = Path(tmp)
-        notes = {}
-        for n in ("a", "b", "c"):
-            notes[f"{n}.md"] = note_t.format(s=n, d=n, b=f"body {n}")
-        notes[INDEX] = "".join(
-            f"- [{n}]({n}.md) — hook {n}\n" for n in "abc"
-        )
+        tmp = Path(tmp)
+        note_t, notes = selftest_fixture(tmp)
+        src = tmp / "-home-jaeho-projects-demo" / "memory"
+        src.mkdir(parents=True)
         for n, t in notes.items():
             (src / n).write_text(t)
         new_a = note_t.format(s="a", d="a", b="shorter")
         other = new_a.replace("shorter", "different")
-        delete_b = {"file": "b.md", "action": "delete",
-                    "reason": "r", "evidence": "e"}
+
+        def prop(f, act, **kw):
+            return {"file": f, "action": act, "summary": "s",
+                    "reason": "r", "evidence": "e", **kw}
+
+        delete_b = prop("b.md", "delete")
         res = reconcile(
             {
-                "A": [delete_b, {"file": "a.md", "action": "rewrite",
-                                 "new_content": new_a, "reason": "r",
-                                 "evidence": "e"},
-                      {"file": "ghost.md", "action": "delete",
-                       "reason": "r", "evidence": "e"}],
-                "B": [delete_b, {"file": "a.md", "action": "rewrite",
-                                 "new_content": other, "reason": "r",
-                                 "evidence": "e"}],
+                "A": [delete_b, prop("a.md", "rewrite", new_content=new_a),
+                      prop("ghost.md", "delete")],
+                "B": [delete_b, prop("a.md", "rewrite", new_content=other)],
             },
             notes,
         )
@@ -633,52 +981,94 @@ def cmd_selftest(_args):
         assert res["ready"][0]["sources"] == ["A", "B"]
         assert len(res["conflicts"]) == 1
         assert [d["why"] for d in res["dropped"]] == ["unknown file"]
-        merge = {"file": "c.md", "action": "merge", "into": "a.md",
-                 "new_content": new_a, "reason": "r", "evidence": "e"}
-        res2 = reconcile({"A": [merge], "B": [delete_b, {
-            "file": "a.md", "action": "delete", "reason": "r",
-            "evidence": "e"}]}, notes)
+        merge = prop("c.md", "merge", into="a.md", new_content=new_a)
+        res2 = reconcile(
+            {"A": [merge], "B": [delete_b, prop("a.md", "delete")]}, notes
+        )
         assert len(res2["conflicts"]) == 1, res2
-        run = Path(tmp) / "run"
-        run.mkdir()
+        run = tmp / "run"
+        sub = run / src.parent.name
+        (sub / "b" / "notes").mkdir(parents=True)
+        for n, t in notes.items():
+            (sub / "b" / "notes" / n).write_text(t)
+        (sub / "source.txt").write_text(str(src))
         res["coverage"] = {"B": {"notes_read": ["a.md"], "dismissed": [
             {"finding": "f1", "why": "w"}]}}
-        text = render_review(res, notes, {"B": "boom"}, run)
+        (sub / "proposals.json").write_text(json.dumps(res))
+        text = render_review(res, notes, {"A": "boom"}, "demo")
         assert "read 1/3" in text and "not read: b.md, c.md" in text
         assert "dismissed f1: w" in text and "produced nothing" in text
-        (run / "source.txt").write_text(str(src))
-        (run / "proposals.json").write_text(json.dumps(res))
-        ns = argparse.Namespace(run=str(run), yes=False, only=None)
-        cmd_apply(ns)
+        summary = render_summary(run)
+        assert "1 change ready, 1 conflict, 1 projects" in summary, summary
+        assert "demo" in summary and "p1  delete  b: s" in summary, summary
+        assert max(map(len, summary.splitlines())) <= 78
+        rows = tui_rows(load_run(run))
+        assert [r[0] for r in rows] == ["head", "ready", "conflict"]
+        assert "agents disagree" in "\n".join(
+            detail_lines(load_run(run), rows[2], 60)).replace(
+            "the agents disagree", "agents disagree")
+        apply_dir(sub)
         assert (src / "b.md").exists(), "dry run wrote"
         (src / "b.md").write_text("changed meanwhile")
-        cmd_apply(argparse.Namespace(run=str(run), yes=True, only=None))
+        out = []
+        apply_dir(sub, True, None, out.append)
         assert (src / "b.md").read_text() == "changed meanwhile"
+        assert any(x.startswith("SKIP") for x in out)
         (src / "b.md").write_text(notes["b.md"])
-        cmd_apply(argparse.Namespace(run=str(run), yes=True, only=None))
+        apply_dir(sub, True)
         assert not (src / "b.md").exists()
-        assert (run / "backup" / "b.md").read_text() == notes["b.md"]
+        assert (sub / "backup" / "b.md").read_text() == notes["b.md"]
         assert "b.md" not in (src / INDEX).read_text()
         assert "a.md" in (src / INDEX).read_text()
+        assert json.loads((sub / "proposals.json").read_text())["applied"] \
+            == ["p1"]
+        assert not pending(load_run(run)[0])
+        apply_dir(sub, True)  # a second apply must be a no-op
+        # click path: the stub toast "is clicked", the pane opener runs
+        log = tmp / "calls.txt"
+        stub = tmp / "stub.sh"
+        stub.write_text(
+            f'#!/bin/sh\necho "$@" >> {log}\n'
+            '[ "$1" = "--wait" ] && echo default\nexit 0\n'
+        )
+        stub.chmod(0o755)
+        os.environ["MEMORY_AUDIT_NOTIFY"] = str(stub)
+        os.environ["MEMORY_AUDIT_OPEN"] = f"{stub} PANE --"
+        cmd_notify_wait(argparse.Namespace(
+            run=str(run), title="T", body="B"))
+        calls = log.read_text()
+        assert "--wait --action=default=Review" in calls, calls
+        assert f"PANE -- memory-audit review {run}" in calls, calls
     print("selftest ok")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name, fn in (("run", cmd_run), ("scan", cmd_scan)):
+    p = sub.add_parser("run")
+    p.add_argument("--dir", action="append", default=[])
+    p.add_argument("--budget", type=float, default=5)
+    p.add_argument("--timeout", type=int, default=1800)
+    p.add_argument("--no-notify", action="store_true")
+    p.set_defaults(fn=cmd_run)
+    p = sub.add_parser("scan")
+    p.add_argument("--dir", action="append", type=Path, default=[])
+    p.set_defaults(fn=cmd_scan)
+    for name, fn in (("summary", cmd_summary), ("review", cmd_review)):
         p = sub.add_parser(name)
-        p.add_argument("--dir", default=str(DEFAULT_DIR))
-        if name == "run":
-            p.add_argument("--budget", type=float, default=5)
-            p.add_argument("--timeout", type=int, default=1800)
-            p.add_argument("--no-notify", action="store_true")
+        p.add_argument("run", nargs="?")
         p.set_defaults(fn=fn)
     p = sub.add_parser("apply")
     p.add_argument("run", nargs="?")
+    p.add_argument("--dir", action="append")
     p.add_argument("--yes", action="store_true")
     p.add_argument("--only")
+    p.add_argument("--all", action="store_true")
     p.set_defaults(fn=cmd_apply)
+    p = sub.add_parser("notify-wait")
+    for a in ("run", "title", "body"):
+        p.add_argument(a)
+    p.set_defaults(fn=cmd_notify_wait)
     sub.add_parser("selftest").set_defaults(fn=cmd_selftest)
     args = ap.parse_args()
     args.fn(args)
