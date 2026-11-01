@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Claude Code memory audit
+
+[Timer]
+OnCalendar=Mon 07:30
+# A laptop that was asleep or off at 07:30 runs it on the next wake.
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

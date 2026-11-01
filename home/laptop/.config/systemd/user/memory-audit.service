@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Claude Code memory audit (two read-only agents, review file)
+
+[Service]
+Type=oneshot
+# Writes only under ~/.local/state/memory-audit; memory itself changes
+# only when `memory-audit apply --yes` is run by hand.
+ExecStart=%h/.local/bin/memory-audit run
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
+TimeoutStartSec=50min
+Nice=10
