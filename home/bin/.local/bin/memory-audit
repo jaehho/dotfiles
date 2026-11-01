@@ -539,8 +539,11 @@ def render_summary(run, width=78):
         out.append(r["label"])
         for p in rows:
             stem = p["file"].removesuffix(".md")
-            line = f"  {p['id']:<4}{p['action']:<8}{stem}: {p['summary']}"
-            out.append(clip(line, width))
+            out.append(clip(f"  {p['id']:<4}{p['action']:<8}{stem}", width))
+            out += textwrap.wrap(
+                p["summary"], width, initial_indent="      ",
+                subsequent_indent="      ",
+            )
         if conf:
             out.append(f"  {conf} conflict(s): agents disagree, see review")
     out += [
@@ -814,6 +817,12 @@ def discover():
     return found
 
 
+def drop_agent_projects(run):
+    """Remove the project dirs Claude Code made for the agents' cwds."""
+    for d in PROJECTS.glob(f"*memory-audit-{run.name}-*"):
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def audit_dir(mem, run, today, args):
     notes = load_notes(mem)
     sub = run / slug_of(mem)
@@ -876,6 +885,7 @@ def cmd_run(args):
     with ThreadPoolExecutor(3) as pool:
         oks = list(pool.map(
             lambda m: audit_dir(m, run, today, args), dirs))
+    drop_agent_projects(run)
     if not any(oks):
         tell(args, "Memory audit failed", f"no project finished: {run}")
         sys.exit("every project failed; see failed.txt under " + str(run))
@@ -1000,7 +1010,7 @@ def cmd_selftest(_args):
         assert "dismissed f1: w" in text and "produced nothing" in text
         summary = render_summary(run)
         assert "1 change ready, 1 conflict, 1 projects" in summary, summary
-        assert "demo" in summary and "p1  delete  b: s" in summary, summary
+        assert "p1  delete  b\n      s\n" in summary, summary
         assert max(map(len, summary.splitlines())) <= 78
         rows = tui_rows(load_run(run))
         assert [r[0] for r in rows] == ["head", "ready", "conflict"]
