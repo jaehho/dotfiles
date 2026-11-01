@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Toggle Easel as a floating panel. Focused: hide it, silently, on the special
-# workspace special:easel (waybar shows that pill while it holds the window).
-# Otherwise bring an Easel window (the hidden one first) to the workspace on
-# screen, floating at 80% of the monitor, centred and focused; with none,
-# start Easel and do the same once its window maps. No window rule: Easel
-# opened from the launcher or the CLI tiles as usual until this shows it.
+# Super+E: show or hide Easel. Focused: Easel hides to its tray icon, its
+# boards still open. Shown but not focused: bring it to the workspace on
+# screen, floating at 80% of the monitor, centred and focused. Hidden, or
+# not running: launch it, which shows the windows it hid or starts it;
+# hyprland.lua's easel-float rule floats each window that way as it maps.
 # A board floating over the screen (Easel's transparent mode, Ctrl+Shift+T)
 # is a layer surface named after the app, and its window is hidden
 # meanwhile: this then only ends the board's click-through (Ctrl+Shift+Y),
@@ -12,30 +11,27 @@
 # The development window (dev.jaeho.Easel.Devel) is never matched.
 
 class=dev.jaeho.Easel
-hidden=easel   # special:easel
 
-# The window to show: the hidden one first, else the last focused.
+# The window to show: the last focused.
 easel_window() {
-    hyprctl clients -j | jq -r --arg c "$class" --arg h "special:$hidden" '
-        map(select(.class == $c))
-        | sort_by(.workspace.name != $h, .focusHistoryID)
-        | .[0].address // empty'
+    hyprctl clients -j | jq -r --arg c "$class" '
+        map(select(.class == $c)) | sort_by(.focusHistoryID) | .[0].address // empty'
 }
 
 # Place and focus window $1 in one eval, so it never shows half placed. The
 # target is what the focused monitor shows: a raised special workspace (the
 # scratchpad) covers the regular one, which is all activeworkspace reports.
-# The resize dispatcher takes pixels, so 80% of the area waybar leaves is
-# worked out here.
+# The resize dispatcher takes pixels, so easel-float's 80% of the monitor
+# is worked out here.
 show() {
     local width height ws lua
-    read -r width height ws < <(hyprctl monitors -j | jq -r --arg h "special:$hidden" '
+    read -r width height ws < <(hyprctl monitors -j | jq -r '
         .[] | select(.focused)
         | (if .transform % 2 == 1 then [.height, .width] else [.width, .height] end) as [$pw, $ph]
-        | (($pw / .scale - .reserved[0] - .reserved[2]) * 0.8 | floor) as $w
-        | (($ph / .scale - .reserved[1] - .reserved[3]) * 0.8 | floor) as $hh
-        | (if .specialWorkspace.name != "" and .specialWorkspace.name != $h
-           then .specialWorkspace.name else .activeWorkspace.id end | tojson) as $ws
+        | ($pw / .scale * 0.8 | floor) as $w
+        | ($ph / .scale * 0.8 | floor) as $hh
+        | (if .specialWorkspace.name != "" then .specialWorkspace.name
+           else .activeWorkspace.id end | tojson) as $ws
         | "\($w) \($hh) \($ws)"')
     [[ -n $ws ]] || return 1
     lua="local w = 'address:$1'"
@@ -53,35 +49,23 @@ floating_pid() {
         [.[].levels[][] | select(.namespace == $c) | .pid] | .[0] // empty'
 }
 
-# End click-through in Easel $1, with the CLI built beside its binary, so
-# a branch build answers too.
-end_click_through() {
+# Run the easel CLI built beside Easel $1's binary, so a branch build
+# answers too.
+easel_of() {
     local cli
     cli=$(dirname "$(readlink "/proc/$1/exe")")/easel
     [[ -x $cli ]] || cli=easel
-    EASEL_NO_REBUILD=1 "$cli" click-through off >/dev/null
+    shift
+    EASEL_NO_REBUILD=1 "$cli" "$@" >/dev/null
 }
 
 active=$(hyprctl activewindow -j)
 if pid=$(floating_pid) && [[ -n $pid ]]; then
-    end_click_through "$pid"
+    easel_of "$pid" click-through off
 elif [[ $(jq -r '.class // empty' <<<"$active") == "$class" ]]; then
-    addr=$(jq -r '.address' <<<"$active")
-    if [[ $(jq -r '.workspace.name' <<<"$active") == "special:$hidden" ]]; then
-        # Raised from waybar: it is already on special:easel, so close that.
-        hyprctl dispatch "hl.dsp.workspace.toggle_special('$hidden')" >/dev/null
-    else
-        hyprctl dispatch "hl.dsp.window.move({ workspace = 'special:$hidden', follow = false, window = 'address:$addr' })" >/dev/null
-    fi
+    easel_of "$(jq -r '.pid' <<<"$active")" hide
 elif addr=$(easel_window) && [[ -n $addr ]]; then
     show "$addr"
 else
-    # A launch that rebuilds Easel first (sources newer than the binary)
-    # outlasts the wait; its window then tiles, and the next press shows it.
     setsid -f easel-gtk >/dev/null 2>&1
-    for _ in $(seq 100); do   # up to 10s, enough for a cold start
-        addr=$(easel_window)
-        [[ -n $addr ]] && { show "$addr"; exit; }
-        sleep 0.1
-    done
 fi

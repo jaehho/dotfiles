@@ -781,6 +781,21 @@ hl.window_rule({
     center = true,
 })
 
+-- Easel opens and comes back floating at 80% of the monitor, centred: from
+-- the launcher, its tray icon, Super+E (hypr-easel-toggle) or the floating
+-- board (Ctrl+Shift+T). Hiding takes the window off the screen, so each
+-- return maps it anew and this applies again. Sizes are expressions: 0.56
+-- does not parse "80% 80%". The dev window (dev.jaeho.Easel.Devel) is not
+-- matched.
+hl.window_rule({
+    name  = "easel-float",
+    match = { class = [[^(dev\.jaeho\.Easel)$]] },
+
+    float  = true,
+    size   = "monitor_w*0.8 monitor_h*0.8",
+    center = true,
+})
+
 hl.window_rule({
     name  = "spotify-float",
     match = { class = "^([Ss]potify)$" },
