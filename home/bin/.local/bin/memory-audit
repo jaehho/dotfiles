@@ -46,9 +46,20 @@ OLD_PROJECT_DAYS = 45
 
 SCHEMA = {
     "type": "object",
-    "required": ["notes_reviewed", "proposals"],
+    "required": ["notes_read", "proposals"],
     "properties": {
-        "notes_reviewed": {"type": "integer"},
+        "notes_read": {"type": "array", "items": {"type": "string"}},
+        "dismissed": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["finding", "why"],
+                "properties": {
+                    "finding": {"type": "string"},
+                    "why": {"type": "string"},
+                },
+            },
+        },
         "proposals": {
             "type": "array",
             "items": {
@@ -74,7 +85,7 @@ READ_ONLY_TOOLS = [
     "Bash(tail:*)", "Bash(wc:*)", "Bash(stat:*)", "Bash(test:*)",
     "Bash(rg:*)", "Bash(grep:*)", "Bash(command -v:*)",
     "Bash(git log:*)", "Bash(git show:*)", "Bash(git status:*)",
-    "Bash(git diff:*)", "Bash(gh issue list:*)",
+    "Bash(git diff:*)", "Bash(which:*)", "Bash(gh issue list:*)",
     "Bash(gh issue view:*)", "Bash(systemctl --user is-active:*)",
     "Bash(systemctl --user status:*)",
 ]
@@ -102,7 +113,9 @@ Actions:
 - merge: fold file into `into`; new_content is the full new text of
   `into`; file is deleted.
 Each proposal needs reason and evidence (what you ran or read). Propose
-at most one action per note. Reads only: you have no way to edit.
+at most one action per note. Reads only: you have no way to edit. Read
+notes with the Read tool, one call per file (shell loops are refused),
+and list every note you read in notes_read.
 Today is {today}.
 """
 
@@ -111,7 +124,8 @@ You are the mechanical pass. ./findings.json lists what a script found
 (dead paths, expired dates, index mismatches, near-duplicates, long
 notes). The notes are in ./notes/. For each finding, check it against
 reality and either propose the fix or skip it. Propose nothing that no
-finding points at. Return the structured result only.
+finding points at. For every finding you do not act on, add a
+dismissed entry (finding id and why). Return the structured result only.
 """
 
 PROMPT_B = RULES + """
@@ -322,6 +336,25 @@ def diff_text(old, new, name):
     )
 
 
+def render_coverage(coverage, notes):
+    out = []
+    want = set(notes) - {INDEX}
+    for src, d in sorted(coverage.items()):
+        read = set(d.get("notes_read", [])) - {INDEX}
+        if src == "A":
+            out.append(f"Agent A read {len(read)} notes (its findings)")
+        else:
+            missing = sorted(want - read)
+            n = len(want) - len(missing)
+            line = f"Agent {src} read {n}/{len(want)} notes"
+            if missing:
+                line += f"; not read: {', '.join(missing)}"
+            out.append(line)
+        for x in d.get("dismissed", []):
+            out.append(f"  - dismissed {x['finding']}: {x['why']}")
+    return out
+
+
 def render_review(result, notes, failures, run):
     ready, conflicts = result["ready"], result["conflicts"]
     out = [
@@ -332,6 +365,8 @@ def render_review(result, notes, failures, run):
     ]
     for src, why in failures.items():
         out.append(f"\n**Agent {src} produced nothing:** {why}")
+    out += ["", "## Coverage", *render_coverage(
+        result.get("coverage", {}), notes)]
     out += [
         "",
         f"Dry run: `memory-audit apply {run}`. Apply some: "
@@ -472,7 +507,8 @@ def run_agent(name, prompt, cwd, run, budget, timeout):
         )
     except subprocess.TimeoutExpired:
         return name, None, f"timed out after {timeout}s"
-    (run / f"{name}.raw.json").write_text(r.stdout + r.stderr)
+    (run / f"{name}.raw.json").write_text(r.stdout)
+    (run / f"{name}.err").write_text(r.stderr)
     try:
         out = json.loads(r.stdout)
     except json.JSONDecodeError:
@@ -484,7 +520,7 @@ def run_agent(name, prompt, cwd, run, budget, timeout):
     if out.get("is_error") or not isinstance(data, dict):
         why = str(out.get("result", "no structured output"))
         return name, None, why[:200]
-    return name, data.get("proposals", []), None
+    return name, data, None
 
 
 def cmd_scan(args):
@@ -527,13 +563,17 @@ def cmd_run(args):
             for n, p, v in jobs
         ]
         results = [f.result() for f in futs]
-    by_source = {n.upper(): props for n, props, err in results if err is None}
-    failures = {n.upper(): err for n, props, err in results if err}
+    by_source = {
+        n.upper(): d.get("proposals", []) for n, d, err in results if not err
+    }
+    coverage = {n.upper(): d for n, d, err in results if not err}
+    failures = {n.upper(): err for n, d, err in results if err}
     if not by_source:
         note(args, "Memory audit failed", "; ".join(failures.values()))
         sys.exit("both agents failed: " + str(failures))
     result = reconcile(by_source, notes)
     result["failures"] = failures
+    result["coverage"] = coverage
     (run / "proposals.json").write_text(json.dumps(result, indent=1))
     (run / "review.md").write_text(
         render_review(result, notes, failures, run)
@@ -601,6 +641,11 @@ def cmd_selftest(_args):
         assert len(res2["conflicts"]) == 1, res2
         run = Path(tmp) / "run"
         run.mkdir()
+        res["coverage"] = {"B": {"notes_read": ["a.md"], "dismissed": [
+            {"finding": "f1", "why": "w"}]}}
+        text = render_review(res, notes, {"B": "boom"}, run)
+        assert "read 1/3" in text and "not read: b.md, c.md" in text
+        assert "dismissed f1: w" in text and "produced nothing" in text
         (run / "source.txt").write_text(str(src))
         (run / "proposals.json").write_text(json.dumps(res))
         ns = argparse.Namespace(run=str(run), yes=False, only=None)
