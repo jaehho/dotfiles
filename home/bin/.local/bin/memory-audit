@@ -347,6 +347,80 @@ def diff_text(old, new, name):
     )
 
 
+TOKEN = re.compile(r"\s+|\S+")
+WORD_DIFF_MIN_RATIO = 0.35
+
+
+def word_spans(old, new):
+    """Styled "-" and "+" lines with the changed words marked."""
+    a, b = TOKEN.findall(old), TOKEN.findall(new)
+    sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
+    if sm.ratio() < WORD_DIFF_MIN_RATIO:
+        return [("- " + old, "del")], [("+ " + new, "add")]
+    dels, adds = [("- ", "del")], [("+ ", "add")]
+    for op, i1, i2, j1, j2 in sm.get_opcodes():
+        if op == "equal":
+            dels.append(("".join(a[i1:i2]), "del"))
+            adds.append(("".join(b[j1:j2]), "add"))
+            continue
+        if i2 > i1:
+            dels.append(("".join(a[i1:i2]), "delw"))
+        if j2 > j1:
+            adds.append(("".join(b[j1:j2]), "addw"))
+    return dels, adds
+
+
+def diff_spans(old, new, name, context=2):
+    """Unified diff as styled lines, changed words marked inside."""
+    a, b = old.splitlines(), new.splitlines()
+    sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
+    out = [[(f"--- a/{name}", "hdr")], [(f"+++ b/{name}", "hdr")]]
+    for group in sm.get_grouped_opcodes(context):
+        first, last = group[0], group[-1]
+        out.append([(f"@@ line {first[1] + 1}-{last[2]} @@", "hunk")])
+        for op, i1, i2, j1, j2 in group:
+            if op == "equal":
+                out += [[("  " + x, "ctx")] for x in a[i1:i2]]
+                continue
+            olds, news = a[i1:i2], b[j1:j2]
+            pairs = [word_spans(x, y) for x, y in zip(olds, news)]
+            out += [d for d, _ in pairs]
+            out += [[("- " + x, "del")] for x in olds[len(pairs):]]
+            out += [ad for _, ad in pairs]
+            out += [[("+ " + x, "add")] for x in news[len(pairs):]]
+    return out
+
+
+def as_spans(line):
+    return [(line, "plain")] if isinstance(line, str) else line
+
+
+def line_text(line):
+    return "".join(text for text, _ in as_spans(line))
+
+
+def wrap_spans(spans, width, indent=2):
+    """Wrap one styled line at word breaks; continuations are indented."""
+    width = max(width, indent + 8)
+    out, cur, used = [], [], 0
+    for text, style in spans:
+        for tok in TOKEN.findall(text):
+            if used + len(tok) > width and used > indent:
+                if tok.isspace():
+                    continue
+                out.append(cur)
+                cur, used = [(" " * indent, "plain")], indent
+            while len(tok) > width - used:
+                cut = width - used
+                cur.append((tok[:cut], style))
+                out.append(cur)
+                cur, used, tok = [(" " * indent, "plain")], indent, tok[cut:]
+            cur.append((tok, style))
+            used += len(tok)
+    out.append(cur)
+    return out
+
+
 def target(p):
     return p["into"] if p["action"] == "merge" else p["file"]
 
@@ -634,9 +708,9 @@ def detail_lines(recs, row, width):
                     *wrap(f"evidence: {x['evidence']}")]
             if x["action"] in ("rewrite", "merge"):
                 tgt = target(x)
-                out += diff_text(
+                out += diff_spans(
                     snapshot_text(recs[di]["sub"], tgt),
-                    x["new_content"], tgt).splitlines()
+                    x["new_content"], tgt)
             out.append("")
         return out
     out = [f"{p['id']}  {p['action']}  {p['file']}", ""]
@@ -645,7 +719,7 @@ def detail_lines(recs, row, width):
     if p["action"] in ("rewrite", "merge"):
         tgt = target(p)
         old = (notes / tgt).read_text() if (notes / tgt).exists() else ""
-        out += diff_text(old, p["new_content"], tgt).splitlines()
+        out += diff_spans(old, p["new_content"], tgt)
     else:
         out += ["(the note is deleted; a copy is kept in the run's backup/)"]
     return out
@@ -665,6 +739,23 @@ def tui(stdscr, run):
         if 0 <= y < h:
             stdscr.addnstr(y, 0, text.ljust(w - 1), w - 1, attr)
 
+    green, red = curses.color_pair(1), curses.color_pair(2)
+    marked = curses.A_REVERSE | curses.A_BOLD
+    styles = {
+        "plain": 0, "ctx": curses.A_DIM, "hdr": curses.A_BOLD,
+        "hunk": curses.color_pair(3), "add": green, "del": red,
+        "addw": green | marked, "delw": red | marked,
+    }
+
+    def put_spans(y, spans):
+        h, w = stdscr.getmaxyx()
+        x = 0
+        for text, style in spans:
+            if y >= h or x >= w - 1:
+                return
+            stdscr.addnstr(y, x, text, w - 1 - x, styles[style])
+            x += len(text)
+
     def ask(prompt):
         put(stdscr.getmaxyx()[0] - 2, prompt, curses.A_BOLD)
         stdscr.refresh()
@@ -675,15 +766,13 @@ def tui(stdscr, run):
         conflict = row[0] == "conflict"
         while True:
             h, w = stdscr.getmaxyx()
-            lines = detail_lines(recs, row, w)
+            lines = [
+                piece for ln in detail_lines(recs, row, w)
+                for piece in wrap_spans(as_spans(ln), w - 1)
+            ]
             stdscr.erase()
             for i, ln in enumerate(lines[pos: pos + h - 2]):
-                attr = 0
-                if ln.startswith("+") and not ln.startswith("+++"):
-                    attr = curses.color_pair(1)
-                elif ln.startswith("-") and not ln.startswith("---"):
-                    attr = curses.color_pair(2)
-                put(i, ln, attr)
+                put_spans(i, ln)
             put(h - 1, "1-9 use that side   d keep notes as they are   "
                 "j/k scroll   q back" if conflict else
                 "j/k scroll   q or enter: back", curses.A_REVERSE)
@@ -1063,8 +1152,17 @@ def cmd_selftest(_args):
         assert max(map(len, summary.splitlines())) <= 78
         rows = tui_rows(load_run(run))
         assert [r[0] for r in rows] == ["head", "ready", "conflict"]
-        detail = "\n".join(detail_lines(load_run(run), rows[2], 60))
+        detail = "\n".join(
+            map(line_text, detail_lines(load_run(run), rows[2], 60)))
         assert "[1] agent A" in detail and "[2] agent B" in detail, detail
+        old_p = "keep this part, but old words change here, then more text"
+        new_p = "keep this part, but new words change here, then more text"
+        spans = diff_spans(old_p + "\nfixed", new_p + "\nfixed", "n.md")
+        marks = [(s, t) for ln in spans for s, t in ln if t.endswith("w")]
+        assert marks == [("old", "delw"), ("new", "addw")], marks
+        for ln in wrap_spans([("+ ", "add"), ("word " * 30, "add")], 40):
+            assert len(line_text(ln)) <= 40, line_text(ln)
+        assert len(wrap_spans([("x" * 100, "add")], 40)) == 3
         probe = tmp / "probe"
         shutil.copytree(sub, probe)
         pid = promote(probe, 0, 1)
