@@ -433,6 +433,32 @@ def edit_index(text, remove=(), replace=None):
     return "\n".join(lines) + "\n"
 
 
+def snapshot_text(sub, name):
+    f = sub / "b" / "notes" / name
+    return f.read_text() if f.exists() else ""
+
+
+def promote(sub, ci, k):
+    """Make side k of conflict ci a ready change; drop the other sides."""
+    res = json.loads((sub / "proposals.json").read_text())
+    group = res["conflicts"].pop(ci)
+    item = {**group[k], "sources": [group[k]["source"]]}
+    item.pop("source")
+    item["id"] = f"p{len(res['ready']) + 1}"
+    item["base"] = {n: sha(snapshot_text(sub, n)) for n in touched(item)}
+    res["ready"].append(item)
+    res.setdefault("resolved", []).append(group)
+    (sub / "proposals.json").write_text(json.dumps(res, indent=1))
+    return item["id"]
+
+
+def dismiss(sub, ci):
+    """Leave the notes in conflict as they are."""
+    res = json.loads((sub / "proposals.json").read_text())
+    res.setdefault("resolved", []).append(res["conflicts"].pop(ci))
+    (sub / "proposals.json").write_text(json.dumps(res, indent=1))
+
+
 def apply_dir(sub, yes=False, only=None, say=print):
     """Apply (or preview) one project's ready proposals; returns ids."""
     src = Path((sub / "source.txt").read_text())
@@ -545,7 +571,7 @@ def render_summary(run, width=78):
                 subsequent_indent="      ",
             )
         if conf:
-            out.append(f"  {conf} conflict(s): agents disagree, see review")
+            out.append(f"  {conf} conflict(s): pick a side in the review")
     out += [
         "",
         "Review and apply:  memory-audit review",
@@ -600,11 +626,18 @@ def detail_lines(recs, row, width):
     notes = recs[di]["sub"] / "b" / "notes"
     if kind == "conflict":
         i, group = p
-        out = [f"c{i}: the agents disagree; decide by hand", ""]
-        for x in group:
-            out += [f"{x['source']}: {x['action']} {x['file']}"]
-            out += wrap(f"why: {x['reason']}") + wrap(
-                f"evidence: {x['evidence']}") + [""]
+        out = [f"c{i}: the two agents want different things; pick one",
+               ""]
+        for n, x in enumerate(group, 1):
+            out += [f"[{n}] agent {x['source']}: {x['action']} {x['file']}"]
+            out += [*wrap(f"why: {x['reason']}"),
+                    *wrap(f"evidence: {x['evidence']}")]
+            if x["action"] in ("rewrite", "merge"):
+                tgt = target(x)
+                out += diff_text(
+                    snapshot_text(recs[di]["sub"], tgt),
+                    x["new_content"], tgt).splitlines()
+            out.append("")
         return out
     out = [f"{p['id']}  {p['action']}  {p['file']}", ""]
     out += [*wrap(f"Why: {p['reason']}"), ""]
@@ -639,6 +672,7 @@ def tui(stdscr, run):
 
     def show(row):
         pos = 0
+        conflict = row[0] == "conflict"
         while True:
             h, w = stdscr.getmaxyx()
             lines = detail_lines(recs, row, w)
@@ -650,10 +684,20 @@ def tui(stdscr, run):
                 elif ln.startswith("-") and not ln.startswith("---"):
                     attr = curses.color_pair(2)
                 put(i, ln, attr)
-            put(h - 1, "j/k scroll   q or enter: back", curses.A_REVERSE)
+            put(h - 1, "1-9 use that side   d keep notes as they are   "
+                "j/k scroll   q back" if conflict else
+                "j/k scroll   q or enter: back", curses.A_REVERSE)
             key = stdscr.getch()
             if key in (ord("q"), 27, 10, ord("h")):
-                return
+                return "", None
+            if conflict and ord("1") <= key <= ord("9"):
+                group, sub_dir = row[2][1], recs[row[1]]["sub"]
+                if key - ord("1") < len(group):
+                    pid = promote(sub_dir, row[2][0] - 1, key - ord("1"))
+                    return f"chose side {chr(key)}; selected {pid}", pid
+            if conflict and key == ord("d"):
+                dismiss(recs[row[1]]["sub"], row[2][0] - 1)
+                return "conflict dismissed; notes left as they are", None
             if key in (ord("j"), curses.KEY_DOWN):
                 pos = min(pos + 1, max(len(lines) - 1, 0))
             elif key in (ord("k"), curses.KEY_UP):
@@ -682,7 +726,7 @@ def tui(stdscr, run):
             put(2 + i, row_text(recs, row, sel), attr)
         put(h - 2, msg, curses.A_BOLD)
         put(h - 1, "j/k move  space select  a all in project  "
-            "enter details  A apply  q quit", curses.A_REVERSE)
+            "enter details/resolve  A apply  q quit", curses.A_REVERSE)
         key = stdscr.getch()
         msg = ""
         row = rows[cur] if rows else None
@@ -700,7 +744,12 @@ def tui(stdscr, run):
             sel = sel - ids if ids <= sel else sel | ids
         elif key in (10, curses.KEY_ENTER, ord("l")) and row:
             if row[0] in ("ready", "done", "conflict"):
-                show(row)
+                msg, pid = show(row)
+                if row[0] == "conflict" and msg:
+                    recs = load_run(run)
+                if pid:
+                    sel.add((row[1], pid))
+                    msg += "; press A to apply"
         elif key == ord("A"):
             if not sel:
                 msg = "nothing selected (space selects)"
@@ -1014,9 +1063,16 @@ def cmd_selftest(_args):
         assert max(map(len, summary.splitlines())) <= 78
         rows = tui_rows(load_run(run))
         assert [r[0] for r in rows] == ["head", "ready", "conflict"]
-        assert "agents disagree" in "\n".join(
-            detail_lines(load_run(run), rows[2], 60)).replace(
-            "the agents disagree", "agents disagree")
+        detail = "\n".join(detail_lines(load_run(run), rows[2], 60))
+        assert "[1] agent A" in detail and "[2] agent B" in detail, detail
+        probe = tmp / "probe"
+        shutil.copytree(sub, probe)
+        pid = promote(probe, 0, 1)
+        got = json.loads((probe / "proposals.json").read_text())
+        assert got["conflicts"] == [] and got["ready"][-1]["id"] == pid
+        assert got["ready"][-1]["new_content"] == other
+        assert set(got["ready"][-1]["base"]) == {"a.md"}
+        dismiss(probe, 0) if got["conflicts"] else None
         apply_dir(sub)
         assert (src / "b.md").exists(), "dry run wrote"
         (src / "b.md").write_text("changed meanwhile")
