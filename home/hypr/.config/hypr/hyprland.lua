@@ -683,8 +683,8 @@ hl.window_rule({
     float             = true,
     pin               = true,
     keep_aspect_ratio = true,
-    size              = "25% 25%",
-    move              = "73% 72%",
+    size              = "monitor_w*0.25 monitor_h*0.25",
+    move              = "monitor_w*0.73 monitor_h*0.72",
 })
 
 -- OpenClaw's agent browser (a Chrome the gateway launches; the daily browser
@@ -782,8 +782,8 @@ hl.window_rule({
 })
 
 -- Easel opens and comes back floating at 80% of the monitor, centred: from
--- the launcher, its tray icon, Super+E (hypr-easel-toggle) or the floating
--- board (Ctrl+Shift+T). Hiding takes the window off the screen, so each
+-- the launcher, its tray icon, Super+E (hypr-easel-toggle) or overlay mode
+-- (Ctrl+Shift+O). Hiding takes the window off the screen, so each
 -- return maps it anew and this applies again. Sizes are expressions: 0.56
 -- does not parse "80% 80%". The dev window (dev.jaeho.Easel.Devel) is not
 -- matched.
