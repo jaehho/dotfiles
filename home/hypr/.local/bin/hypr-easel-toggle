@@ -4,7 +4,7 @@
 # screen, floating at 80% of the monitor, centred and focused. Hidden, or
 # not running: launch it, which shows the windows it hid or starts it;
 # hyprland.lua's easel-float rule floats each window that way as it maps.
-# A board floating over the screen (Easel's transparent mode, Ctrl+Shift+T)
+# A board floating over the screen (Easel's overlay mode, Ctrl+Shift+O)
 # is a layer surface named after the app, and its window is hidden
 # meanwhile: this then only ends the board's click-through (Ctrl+Shift+Y),
 # the one way back from it, since the board takes no input while it lasts.
