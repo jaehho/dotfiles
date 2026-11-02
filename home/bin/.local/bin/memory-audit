@@ -347,6 +347,7 @@ def diff_text(old, new, name):
     )
 
 
+DELTA = shutil.which("delta") is not None
 TOKEN = re.compile(r"\s+|\S+")
 WORD_DIFF_MIN_RATIO = 0.35
 
@@ -533,7 +534,13 @@ def dismiss(sub, ci):
     (sub / "proposals.json").write_text(json.dumps(res, indent=1))
 
 
-def apply_dir(sub, yes=False, only=None, say=print):
+def show_diff(old, new, name, pretty):
+    if pretty and DELTA:
+        return delta_diff(old, new, name, shutil.get_terminal_size().columns)
+    return diff_text(old, new, name)
+
+
+def apply_dir(sub, yes=False, only=None, say=print, pretty=False):
     """Apply (or preview) one project's ready proposals; returns ids."""
     src = Path((sub / "source.txt").read_text())
     result = json.loads((sub / "proposals.json").read_text())
@@ -556,7 +563,8 @@ def apply_dir(sub, yes=False, only=None, say=print):
         say(f"{'APPLY' if yes else 'WOULD'} {head}: {p['reason']}")
         if p["action"] != "delete":
             tgt = target(p)
-            say(diff_text((src / tgt).read_text(), p["new_content"], tgt))
+            say(show_diff((src / tgt).read_text(), p["new_content"], tgt,
+                          pretty))
         gone = [p["file"]] if p["action"] in ("delete", "merge") else []
         new_index = edit_index(
             new_index, gone,
@@ -575,7 +583,7 @@ def apply_dir(sub, yes=False, only=None, say=print):
                     (src / p["file"]).unlink()
         applied.append(p["id"])
     if new_index != index:
-        say(diff_text(index, new_index, INDEX))
+        say(show_diff(index, new_index, INDEX, pretty))
     if yes and applied:
         (src / INDEX).write_text(new_index)
         result["applied"] = sorted(done | set(applied))
@@ -694,35 +702,79 @@ def row_text(recs, row, sel):
     return "  nothing to change"
 
 
-def detail_lines(recs, row, width):
+def detail_parts(recs, row, width):
+    """Detail view as ("text", lines) and ("diff", old, new, name)."""
     kind, di, p = row
     wrap = textwrap.TextWrapper(width=max(width - 2, 20)).wrap
-    notes = recs[di]["sub"] / "b" / "notes"
+    sub = recs[di]["sub"]
     if kind == "conflict":
         i, group = p
-        out = [f"c{i}: the two agents want different things; pick one",
-               ""]
+        parts = [("text", [
+            f"c{i}: the two agents want different things; pick one", ""])]
         for n, x in enumerate(group, 1):
-            out += [f"[{n}] agent {x['source']}: {x['action']} {x['file']}"]
-            out += [*wrap(f"why: {x['reason']}"),
-                    *wrap(f"evidence: {x['evidence']}")]
+            lines = [f"[{n}] agent {x['source']}: {x['action']} {x['file']}",
+                     *wrap(f"why: {x['reason']}"),
+                     *wrap(f"evidence: {x['evidence']}"), ""]
+            parts.append(("text", lines))
             if x["action"] in ("rewrite", "merge"):
                 tgt = target(x)
-                out += diff_spans(
-                    snapshot_text(recs[di]["sub"], tgt),
-                    x["new_content"], tgt)
-            out.append("")
-        return out
-    out = [f"{p['id']}  {p['action']}  {p['file']}", ""]
-    out += [*wrap(f"Why: {p['reason']}"), ""]
-    out += [*wrap(f"Evidence: {p['evidence']}"), ""]
+                parts.append(("diff", snapshot_text(sub, tgt),
+                              x["new_content"], tgt))
+        return parts
+    parts = [("text", [
+        f"{p['id']}  {p['action']}  {p['file']}", "",
+        *wrap(f"Why: {p['reason']}"), "",
+        *wrap(f"Evidence: {p['evidence']}"), ""])]
     if p["action"] in ("rewrite", "merge"):
         tgt = target(p)
-        old = (notes / tgt).read_text() if (notes / tgt).exists() else ""
-        out += diff_spans(old, p["new_content"], tgt)
+        parts.append(("diff", snapshot_text(sub, tgt),
+                      p["new_content"], tgt))
     else:
-        out += ["(the note is deleted; a copy is kept in the run's backup/)"]
+        parts.append(("text", [
+            "(the note is deleted; a copy is kept in the run's backup/)"]))
+    return parts
+
+
+def detail_lines(recs, row, width):
+    """The built-in view: text lines and styled diff lines."""
+    out = []
+    for part in detail_parts(recs, row, width):
+        if part[0] == "text":
+            out += part[1]
+        else:
+            out += diff_spans(*part[1:])
     return out
+
+
+def delta_diff(old, new, name, cols, side=False):
+    """The diff as git shows it: git diff --no-index through delta."""
+    with tempfile.TemporaryDirectory() as d:
+        for tag, text in (("a", old), ("b", new)):
+            f = Path(d) / tag / name
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(text)
+        git = subprocess.run(
+            ["git", "--no-pager", "diff", "--no-index", "--no-color",
+             f"a/{name}", f"b/{name}"],
+            cwd=d, capture_output=True, text=True, check=False,
+        )
+    cmd = ["delta", "--paging=never", f"--width={cols}"]
+    if side:
+        cmd += ["--features", "side"]
+    out = subprocess.run(
+        cmd, input=git.stdout, capture_output=True, text=True, check=False
+    )
+    return out.stdout or git.stdout
+
+
+def pager_text(recs, row, cols, side=False):
+    out = []
+    for part in detail_parts(recs, row, cols):
+        if part[0] == "text":
+            out += part[1]
+        else:
+            out.append(delta_diff(*part[1:], cols, side))
+    return "\n".join(out) + "\n"
 
 
 def tui(stdscr, run):
@@ -755,6 +807,15 @@ def tui(stdscr, run):
                 return
             stdscr.addnstr(y, x, text, w - 1 - x, styles[style])
             x += len(text)
+
+    def open_pager(row, side=False):
+        text = pager_text(recs, row, shutil.get_terminal_size().columns,
+                          side)
+        curses.def_prog_mode()
+        curses.endwin()
+        subprocess.run(["less", "-R"], input=text.encode(), check=False)
+        curses.reset_prog_mode()
+        stdscr.refresh()
 
     def ask(prompt):
         put(stdscr.getmaxyx()[0] - 2, prompt, curses.A_BOLD)
@@ -814,8 +875,9 @@ def tui(stdscr, run):
                 attr = curses.A_DIM
             put(2 + i, row_text(recs, row, sel), attr)
         put(h - 2, msg, curses.A_BOLD)
-        put(h - 1, "j/k move  space select  a all in project  "
-            "enter details/resolve  A apply  q quit", curses.A_REVERSE)
+        put(h - 1, "j/k move  space select  a project  enter diff  "
+            "s side-by-side  1-9/d resolve  A apply  q quit",
+            curses.A_REVERSE)
         key = stdscr.getch()
         msg = ""
         row = rows[cur] if rows else None
@@ -832,13 +894,29 @@ def tui(stdscr, run):
             ids = {(row[1], p["id"]) for p in pending(recs[row[1]])}
             sel = sel - ids if ids <= sel else sel | ids
         elif key in (10, curses.KEY_ENTER, ord("l")) and row:
-            if row[0] in ("ready", "done", "conflict"):
+            if row[0] in ("ready", "done", "conflict") and DELTA:
+                open_pager(row)
+            elif row[0] in ("ready", "done", "conflict"):
                 msg, pid = show(row)
                 if row[0] == "conflict" and msg:
                     recs = load_run(run)
                 if pid:
                     sel.add((row[1], pid))
                     msg += "; press A to apply"
+        elif key == ord("s") and row and DELTA:
+            if row[0] in ("ready", "done", "conflict"):
+                open_pager(row, side=True)
+        elif row and row[0] == "conflict" and ord("1") <= key <= ord("9"):
+            group, ci = row[2][1], row[2][0] - 1
+            if key - ord("1") < len(group):
+                pid = promote(recs[row[1]]["sub"], ci, key - ord("1"))
+                recs = load_run(run)
+                sel.add((row[1], pid))
+                msg = f"chose side {chr(key)}; selected {pid}; A applies"
+        elif row and row[0] == "conflict" and key == ord("d"):
+            dismiss(recs[row[1]]["sub"], row[2][0] - 1)
+            recs = load_run(run)
+            msg = "conflict dismissed; notes left as they are"
         elif key == ord("A"):
             if not sel:
                 msg = "nothing selected (space selects)"
@@ -886,7 +964,7 @@ def cmd_apply(args):
     only = set(args.only.split(",")) if args.only else None
     for r in recs:
         print(f"== {r['label']}")
-        apply_dir(r["sub"], args.yes, only)
+        apply_dir(r["sub"], args.yes, only, pretty=sys.stdout.isatty())
     if not args.yes:
         print("dry run: nothing written; add --yes to apply")
 
@@ -1163,6 +1241,11 @@ def cmd_selftest(_args):
         for ln in wrap_spans([("+ ", "add"), ("word " * 30, "add")], 40):
             assert len(line_text(ln)) <= 40, line_text(ln)
         assert len(wrap_spans([("x" * 100, "add")], 40)) == 3
+        if DELTA:
+            shown = delta_diff(old_p, new_p, "n.md", 80)
+            assert "old" in shown and "new" in shown, shown
+            side = delta_diff(old_p, new_p, "n.md", 100, side=True)
+            assert "new" in side, side
         probe = tmp / "probe"
         shutil.copytree(sub, probe)
         pid = promote(probe, 0, 1)
