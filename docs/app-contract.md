@@ -29,7 +29,7 @@ Links today:
 
 | Consumer | Owner | What it calls | Consumer code |
 |---|---|---|---|
-| steno | asst | `add --literal --source --list`, `ls`, `completed -n`, `show`, `done`, `reopen`, `edit --list`, `edit --title`, `rm`, `lists`, `open`; the `Changed` signal | `steno/src/steno/asstlink.py` |
+| steno | asst | `add --literal --source --list --due --note`, `ls`, `completed -n`, `show`, `done`, `reopen`, `edit --list`, `edit --title`, `rm`, `lists`, `open`; the `Changed` signal | `steno/src/steno/asstlink.py` |
 | asst | steno | `open-session` with a meeting's folder name, through `ActivateAction`; Open meeting shows only while `steno` is on `PATH` | `asst/crates/asst-gtk/src/steno.rs` |
 | dash | asst | `today`, `ls LIST`, `lists` | `dash/bin/dash-data` |
 | asst | ActivityWatch | `/api/0/buckets`, `/api/0/query` on port 5600, buckets that aw-watchers fills | `asst/crates/asst-core/src/track.rs` |
