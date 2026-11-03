@@ -82,6 +82,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("~/.local/bin/hypr-urgent-focus")
     hl.exec_cmd("~/.local/bin/hypr-swaync-keys")
     hl.exec_cmd("hypridle")
+    hl.exec_cmd("fcitx5 -d")                       -- Korean input, Right Alt toggles (home/fcitx5)
     -- Night light on the schedule in hyprsunset.conf. Not the packaged user
     -- unit: it requires graphical-session.target, which Hyprland never starts.
     hl.exec_cmd("hyprsunset")
@@ -144,6 +145,9 @@ hl.env("HYPRCURSOR_SIZE", "24")
 hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 hl.env("XDG_SESSION_TYPE", "wayland")
 hl.env("XDG_SESSION_DESKTOP", "Hyprland")
+
+-- Input method: Wayland apps use text-input-v3; XMODIFIERS covers XWayland
+hl.env("XMODIFIERS", "@im=fcitx")
 
 -- Qt
 hl.env("QT_QPA_PLATFORM", "wayland;xcb")
