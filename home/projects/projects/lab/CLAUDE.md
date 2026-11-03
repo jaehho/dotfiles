@@ -28,7 +28,7 @@ Fly visual system and locomotion.
 
 ## Notes
 
-- A note names another note, a meeting summary, or a cell type that has a note with an Obsidian link, never a path in a code span: `[[connectomics]]` by filename, a path suffix only where the name is not unique (`[[types/README]]`), an alias for a date-stamped name (`[[2026-10-20-1014-lc-connectome-analysis-review|2026-10-20 meeting]]`). The vault is `~/Obsidian`, where `lab/` is a symlink to `notes/`.
+- A note names another note, a meeting summary, or a cell type that has a note with an Obsidian link, never a path in a code span: `[[connectomics]]` by filename, a path suffix only where the name is not unique, an alias for a date-stamped name (`[[2026-10-20-1014-lc-connectome-analysis-review|2026-10-20 meeting]]`). The vault is `~/Obsidian`, where `lab/` is a symlink to `notes/`.
 - Link a type at its first mention in each heading section (the intro before the first heading is one) and not again in that section. Repeat the link in a table or a list that works as data. Do not link in a heading, a code span, a quotation, or frontmatter.
 - A type with no note yet gets the same link once a notebook or a meeting talks about it: a dangling link is a note still to write. Other cell types stay plain text.
-- A type note has no "See also" section; the first-mention links carry the edges.
+- A type note (`types/<Codex type>.md`) is a `#` title, a line on what the cell is, and quotes inserted with `gz` in nvim (author, year, page, PDF and DOI links); personal communication is attributed by name and date. It has no frontmatter (Codex has the counts, family and category) and no "See also" section; the first-mention links carry the edges.
