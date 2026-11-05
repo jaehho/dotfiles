@@ -82,7 +82,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("~/.local/bin/hypr-urgent-focus")
     hl.exec_cmd("~/.local/bin/hypr-swaync-keys")
     hl.exec_cmd("hypridle")
-    hl.exec_cmd("fcitx5 -d")                       -- Korean input, Super+Shift+Space toggles (home/fcitx5)
+    hl.exec_cmd("fcitx5 -d")                       -- Korean input, the AI key toggles (home/fcitx5)
     hl.exec_cmd("~/.local/bin/hypr-hangul-hint")   -- key hint, shown while typing Hangul
     -- Night light on the schedule in hyprsunset.conf. Not the packaged user
     -- unit: it requires graphical-session.target, which Hyprland never starts.
@@ -417,11 +417,6 @@ hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("~/.local/bin/hypr-nightlight-toggle"
 -- Keybind cheatsheet
 hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheatsheet"))
 
--- Korean: switch the focused window between English and Hangul. fcitx5's own
--- toggle keys are cleared in home/fcitx5, so apps never see this key and
--- nothing else switches the language.
-hl.bind(mainMod .. " + SHIFT + space", hl.dsp.exec_cmd("fcitx5-remote -t")) -- Korean: toggle English / Hangul
-
 -- Korean key hint: it shows and hides itself with the language (started at
 -- login above). This only picks its look: a floating overlay, or a docked
 -- strip the windows tile around. Remembered.
@@ -652,8 +647,9 @@ bind_media_keys()
 hl.bind("XF86Calculator", hl.dsp.exec_cmd("~/.local/bin/hypr-pane --float qalc-kitty -- qalc")) -- calculator
 
 -- Copilot (AI) key, sent by the firmware as Super+Shift+F23: switches the
--- focused window between English and Hangul. It used to open Claude Code in a
--- tmux pane; Super+Shift+Space above does the same job from the main keys.
+-- focused window between English and Hangul. It is the only thing that does:
+-- fcitx5's own toggle keys are cleared in home/fcitx5, and Hyprland takes this
+-- key before any app sees it.
 hl.bind(mainMod .. " + SHIFT + F23", hl.dsp.exec_cmd("fcitx5-remote -t")) -- AI key: toggle English / Hangul
 
 --------------------------------
