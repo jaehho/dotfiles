@@ -32,7 +32,7 @@ The laptop panel, sometimes with external monitors whose rules `monitors.lua` co
 
 ## Brand Commitments
 
-- Everforest Dark Medium for all desktop chrome, read at runtime from `home/hypr/.config/hypr/themes/everforest.conf` (one `$name = rgb(rrggbb)` per line), never restated.
+- Everforest Dark Medium for all desktop chrome (decision #71), under Everforest's own token names. The `hypr-*` panels and the polkit prompt read `home/hypr/.config/hypr/themes/everforest.conf` at runtime (one `$name = rgb(rrggbb)` per line); hyprland.lua, waybar, swaync and rofi keep same-named copies in their own packages, with no palette compiler (`home/theme/.config/theme/README.md`).
 - Corner radii: 12px for windows and containers, 8px for nested controls, a pill when fully round.
 
 ## Product Principles
