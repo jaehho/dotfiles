@@ -417,11 +417,6 @@ hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("~/.local/bin/hypr-nightlight-toggle"
 -- Keybind cheatsheet
 hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheatsheet"))
 
--- Korean key hint: it shows and hides itself with the language (started at
--- login above). This only picks its look: a floating overlay, or a docked
--- strip the windows tile around. Remembered.
-hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("~/.local/bin/hypr-hangul-hint --dock")) -- Korean key hint: overlay / docked
-
 -- Settings menu: entries live in hypr-settings-menu
 hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("~/.local/bin/hypr-settings-menu")) -- settings menu
 
@@ -651,6 +646,11 @@ hl.bind("XF86Calculator", hl.dsp.exec_cmd("~/.local/bin/hypr-pane --float qalc-k
 -- fcitx5's own toggle keys are cleared in home/fcitx5, and Hyprland takes this
 -- key before any app sees it.
 hl.bind(mainMod .. " + SHIFT + F23", hl.dsp.exec_cmd("fcitx5-remote -t")) -- AI key: toggle English / Hangul
+
+-- Ctrl + the AI key: the Korean key hint's look. The hint shows and hides
+-- itself with the language (started at login above); this only picks a
+-- floating overlay or a docked strip the windows tile around. Remembered.
+hl.bind(mainMod .. " + SHIFT + CTRL + F23", hl.dsp.exec_cmd("~/.local/bin/hypr-hangul-hint --dock")) -- Ctrl + AI key: Korean key hint overlay / docked
 
 --------------------------------
 ---- WINDOWS AND WORKSPACES ----
