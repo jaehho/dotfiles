@@ -1,0 +1,454 @@
+#!/usr/bin/env python3
+# Read Reddit as plain text through its public RSS feeds.
+#
+#   reddit sub NAME [--sort hot|new|top|rising|controversial]
+#                   [--time hour|day|week|month|year|all] [-n N]
+#   reddit thread ID|URL [-n N]   the post, then its comments
+#   reddit search QUERY [--sub NAME] [--sort relevance|new|top|comments]
+#                       [--time ...] [-n N]
+#   reddit user NAME [-n N]       recent posts and comments
+#   reddit get URL|PATH           any reddit page that has a feed
+#
+# Reddit closed self-serve API keys in November 2025, and its .json
+# endpoints answer anonymous clients with 403. The Atom feeds stay
+# open at about one request a minute per address (the response says
+# x-ratelimit-remaining 0 and a reset near 60 s after each request).
+# Every request takes a lock in the cache directory and waits out that
+# reset before it goes, so a run of calls queues instead of tripping a
+# 429. Responses are cached for ten minutes; --fresh skips the cache.
+# The feeds carry no scores and no reply nesting: a thread's comments
+# come back flat, in feed order.
+import argparse
+import fcntl
+import hashlib
+import html
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
+from pathlib import Path
+from typing import NamedTuple
+
+USER_AGENT = "linux:reddit-rss-cli:0.1 (personal read-only)"
+CACHE_SECONDS = 600
+DEFAULT_MAX_WAIT = 100
+ATOM = {"a": "http://www.w3.org/2005/Atom"}
+# Path endings reddit serves as NAME.rss rather than NAME/.rss.
+DOTTED_ENDINGS = {"hot", "new", "top", "rising", "controversial", "search"}
+THREAD_ID = re.compile(r"(?:t3_)?([a-z0-9]{5,10})")
+MARKDOWN_PART = re.compile(r"<!-- SC_OFF -->(.*?)<!-- SC_ON -->", re.S)
+LINK_ANCHOR = re.compile(r'<a href="([^"]+)">\[link\]</a>')
+
+
+class Entry(NamedTuple):
+    kind: str  # "post" or "comment"
+    id: str  # without the t3_/t1_ prefix
+    title: str
+    author: str
+    subreddit: str
+    when: str  # "YYYY-MM-DD HH:MM", UTC
+    url: str
+    link: str  # a link post's target, else ""
+    text: str
+
+
+class FetchError(Exception):
+    pass
+
+
+class RateLimited(FetchError):
+    pass
+
+
+# --- feed addresses ---------------------------------------------------
+
+
+def feed_url(ref: str) -> str:
+    """The www.reddit.com feed URL for a reddit URL or a bare path."""
+    if "://" not in ref:
+        ref = "https://www.reddit.com/" + ref.lstrip("/")
+    parts = urllib.parse.urlsplit(ref)
+    host = parts.hostname or ""
+    if host != "reddit.com" and not host.endswith(".reddit.com"):
+        raise ValueError(f"not a reddit address: {ref}")
+    path = parts.path.rstrip("/")
+    if not path.endswith(".rss"):
+        last = path.rsplit("/", 1)[-1]
+        path += ".rss" if last in DOTTED_ENDINGS else "/.rss"
+    return urllib.parse.urlunsplit(
+        ("https", "www.reddit.com", path, parts.query, "")
+    )
+
+
+def with_query(path: str, **params: str | int | None) -> str:
+    """`path` with the non-empty `params` as its query string."""
+    kept = {k: v for k, v in params.items() if v not in (None, "")}
+    return path + ("?" + urllib.parse.urlencode(kept) if kept else "")
+
+
+def subreddit_path(name: str, *, sort: str, time_range: str | None,
+                   limit: int) -> str:
+    sub = name.removeprefix("r/").removeprefix("/r/")
+    return with_query(f"r/{sub}/{sort}", t=time_range, limit=limit)
+
+
+def thread_path(ref: str, *, limit: int) -> str:
+    """A thread's feed path from its id (1xoltn8, t3_1xoltn8) or URL."""
+    match = THREAD_ID.fullmatch(ref)
+    if match:
+        return with_query(f"comments/{match[1]}", limit=limit)
+    url = feed_url(ref)
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}limit={limit}"
+
+
+def search_path(query: str, *, subreddit: str | None, sort: str,
+                time_range: str | None, limit: int) -> str:
+    if subreddit:
+        sub = subreddit.removeprefix("r/")
+        return with_query(f"r/{sub}/search", q=query, restrict_sr="on",
+                          sort=sort, t=time_range, limit=limit)
+    return with_query("search", q=query, sort=sort, t=time_range,
+                      limit=limit)
+
+
+def user_path(name: str, *, limit: int) -> str:
+    user = name.removeprefix("u/").removeprefix("/u/")
+    return with_query(f"user/{user}", limit=limit)
+
+
+# --- parsing ----------------------------------------------------------
+
+
+class _TextCollector(HTMLParser):
+    """Plain text from reddit's rendered-markdown HTML."""
+
+    BLOCKS = {"p", "div", "ul", "ol", "table", "tr", "hr",
+              "h1", "h2", "h3", "h4", "h5", "h6"}
+    # Nested blocks whose lines get a prefix when they close.
+    PREFIXED = {"blockquote": "> ", "pre": "    "}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.buffers: list[list[str]] = [[]]
+        self.anchors: list[tuple[str, int]] = []
+        self.in_pre = 0
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag in self.BLOCKS:
+            self.write("\n\n")
+        elif tag == "br":
+            self.write("\n")
+        elif tag == "li":
+            self.write("\n- ")
+        elif tag in self.PREFIXED:
+            self.write("\n\n")
+            self.buffers.append([])
+            self.in_pre += tag == "pre"
+        elif tag in ("td", "th"):
+            self.write(" | ")
+        elif tag == "code" and not self.in_pre:
+            self.write("`")
+        elif tag == "a":
+            start = len(self.buffers[-1])
+            self.anchors.append((attributes.get("href") or "", start))
+        elif tag == "img":
+            self.write(f"[image {attributes.get('src', '')}]")
+
+    def handle_endtag(self, tag):
+        if tag in self.BLOCKS:
+            self.write("\n\n")
+        elif tag in self.PREFIXED and len(self.buffers) > 1:
+            inner = re.sub(r"\n{3,}", "\n\n",
+                           "".join(self.buffers.pop()).strip("\n"))
+            prefix = self.PREFIXED[tag]
+            lines = (prefix + line for line in inner.split("\n"))
+            self.write("\n".join(lines) + "\n\n")
+            self.in_pre -= tag == "pre"
+        elif tag == "code" and not self.in_pre:
+            self.write("`")
+        elif tag == "a" and self.anchors:
+            href, start = self.anchors.pop()
+            shown = "".join(self.buffers[-1][start:]).strip()
+            if href and shown != href:
+                self.write(f" <{href}>")
+
+    def handle_data(self, data):
+        if not self.in_pre:
+            data = re.sub(r"\s+", " ", data)
+            if self.at_line_start():
+                data = data.lstrip()
+        self.write(data)
+
+    def at_line_start(self) -> bool:
+        written = "".join(self.buffers[-1])
+        return not written or written.endswith("\n")
+
+    def write(self, text: str) -> None:
+        self.buffers[-1].append(text)
+
+    def text(self) -> str:
+        while len(self.buffers) > 1:
+            inner = self.buffers.pop()
+            self.buffers[-1].extend(inner)
+        lines = (line.rstrip() for line in "".join(self.buffers[0]).split(
+            "\n"))
+        text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
+        # A loose list item opens a paragraph right after its bullet.
+        return re.sub(r"(?m)^- *\n+", "- ", text).strip()
+
+
+def text_from_html(fragment: str) -> str:
+    collector = _TextCollector()
+    collector.feed(fragment)
+    collector.close()
+    return collector.text()
+
+
+def entry_from_atom(element: ET.Element) -> Entry:
+    raw_id = element.findtext("a:id", "", ATOM)
+    kind = "comment" if raw_id.startswith("t1_") else "post"
+    url = element.find("a:link", ATOM).get("href", "")
+    content = element.findtext("a:content", "", ATOM)
+    markdown = MARKDOWN_PART.search(content)
+    anchor = LINK_ANCHOR.search(content)
+    link = html.unescape(anchor[1]) if anchor else ""
+    stamp = (element.findtext("a:published", "", ATOM)
+             or element.findtext("a:updated", "", ATOM))
+    category = element.find("a:category", ATOM)
+    return Entry(
+        kind=kind,
+        id=raw_id.split("_", 1)[-1],
+        title=element.findtext("a:title", "", ATOM),
+        author=element.findtext("a:author/a:name", "", ATOM)
+        .removeprefix("/u/"),
+        subreddit=category.get("label", "") if category is not None
+        else "",
+        when=stamp[:16].replace("T", " "),
+        url=url,
+        link="" if link == url else link,
+        text=text_from_html(markdown[1]) if markdown else "",
+    )
+
+
+def entries_from_feed(xml_text: str) -> list[Entry]:
+    root = ET.fromstring(xml_text)
+    return [entry_from_atom(e) for e in root.findall("a:entry", ATOM)]
+
+
+# --- rendering --------------------------------------------------------
+
+
+def byline(entry: Entry) -> str:
+    return " · ".join(
+        part for part in (entry.subreddit, f"u/{entry.author}", entry.when)
+        if part
+    )
+
+
+def one_line(text: str, *, width: int) -> str:
+    flat = " ".join(text.split())
+    return flat if len(flat) <= width else flat[: width - 1] + "…"
+
+
+def listing_text(entries: list[Entry], *, preview_width: int = 240) -> str:
+    """Numbered entries with a byline and a one-line preview each."""
+    blocks = []
+    for number, entry in enumerate(entries, 1):
+        if entry.kind == "post":
+            head = f"{number}. {entry.title}"
+            where = f"{byline(entry)} · {entry.id}"
+        else:
+            post_title = entry.title.removeprefix(f"/u/{entry.author} on ")
+            head = f"{number}. comment on: {post_title}"
+            where = f"{byline(entry)} · {entry.url}"
+        lines = [head, f"   {where}"]
+        if entry.link:
+            lines.append(f"   link: {entry.link}")
+        if entry.text:
+            lines.append("   " + one_line(entry.text, width=preview_width))
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks) if blocks else "(no entries)"
+
+
+def thread_text(entries: list[Entry]) -> str:
+    """The post in full, then every comment in full, in feed order."""
+    if not entries:
+        return "(no entries)"
+    post, comments = entries[0], entries[1:]
+    head = [post.title, f"{byline(post)} · {post.url}"]
+    if post.link:
+        head.append(f"link: {post.link}")
+    blocks = ["\n".join(head)]
+    if post.text:
+        blocks.append(post.text)
+    blocks.append(f"── {len(comments)} comments, flat, in feed order")
+    for comment in comments:
+        blocks.append(f"u/{comment.author} · {comment.when} · {comment.id}"
+                      f"\n{comment.text}")
+    return "\n\n".join(blocks)
+
+
+# --- fetching ---------------------------------------------------------
+
+
+def next_request_time(headers, *, now: float) -> float:
+    """When reddit's rate-limit headers next allow a request."""
+    remaining = float(headers.get("x-ratelimit-remaining") or 1)
+    reset = float(headers.get("x-ratelimit-reset") or 0)
+    return now + reset + 1 if remaining < 1 else now
+
+
+def http_get(url: str) -> tuple[int, object, str]:
+    request = urllib.request.Request(url,
+                                     headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.status, response.headers, response.read(
+            ).decode()
+    except urllib.error.HTTPError as error:
+        return error.code, error.headers, error.read().decode(
+            errors="replace")
+
+
+def wait_for_turn(state: Path, *, max_wait: float) -> None:
+    try:
+        allowed = float(state.read_text())
+    except (FileNotFoundError, ValueError):
+        return
+    delay = allowed - time.time()
+    if delay > max_wait:
+        raise RateLimited(
+            f"reddit allows about one feed request a minute; the next "
+            f"is due in {delay:.0f}s (--max-wait {max_wait:.0f})")
+    if delay > 0:
+        print(f"waiting {delay:.0f}s for reddit's rate limit",
+              file=sys.stderr)
+        time.sleep(delay)
+
+
+def fetch_feed(url: str, *, cache_dir: Path, max_wait: float,
+               fresh: bool) -> str:
+    cached = cache_dir / (hashlib.sha1(url.encode()).hexdigest() + ".xml")
+    if (not fresh and cached.exists()
+            and time.time() - cached.stat().st_mtime < CACHE_SECONDS):
+        return cached.read_text()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    state = cache_dir / "next-request"
+    with open(cache_dir / "lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        for attempt in (1, 2):
+            wait_for_turn(state, max_wait=max_wait)
+            status, headers, body = http_get(url)
+            state.write_text(
+                str(next_request_time(headers, now=time.time())))
+            if status == 429 and attempt == 1:
+                continue
+            if status != 200:
+                raise FetchError(f"{url}: HTTP {status}"
+                                 + refusal_reason(body))
+            cached.write_text(body)
+            return body
+    raise RateLimited(f"{url}: still rate-limited after waiting")
+
+
+def refusal_reason(body: str) -> str:
+    if "blocked by network security" in body:
+        return " (blocked by network security)"
+    return ""
+
+
+# --- command line -----------------------------------------------------
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--fresh", action="store_true",
+                        help="skip the ten-minute cache")
+    common.add_argument("--max-wait", type=float, default=DEFAULT_MAX_WAIT,
+                        help="longest wait for the rate limit, in seconds"
+                        f" (default {DEFAULT_MAX_WAIT})")
+    common.add_argument("--xml", action="store_true",
+                        help="print the raw Atom feed")
+    times = ["hour", "day", "week", "month", "year", "all"]
+
+    parser = argparse.ArgumentParser(
+        prog="reddit", description="Read Reddit through its RSS feeds.")
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    sub = commands.add_parser("sub", parents=[common],
+                              help="a subreddit's posts")
+    sub.add_argument("name")
+    sub.add_argument("--sort", default="hot", choices=[
+        "hot", "new", "top", "rising", "controversial"])
+    sub.add_argument("--time", choices=times)
+    sub.add_argument("-n", "--limit", type=int, default=25)
+
+    thread = commands.add_parser("thread", parents=[common],
+                                 help="a post and its comments")
+    thread.add_argument("ref", help="post id (1xoltn8) or URL")
+    thread.add_argument("-n", "--limit", type=int, default=100)
+
+    search = commands.add_parser("search", parents=[common],
+                                 help="search posts")
+    search.add_argument("query")
+    search.add_argument("--sub", help="search only this subreddit")
+    search.add_argument("--sort", default="relevance", choices=[
+        "relevance", "new", "top", "comments"])
+    search.add_argument("--time", choices=times)
+    search.add_argument("-n", "--limit", type=int, default=25)
+
+    user = commands.add_parser("user", parents=[common],
+                               help="a user's recent posts and comments")
+    user.add_argument("name")
+    user.add_argument("-n", "--limit", type=int, default=25)
+
+    get = commands.add_parser("get", parents=[common],
+                              help="any reddit URL or path, as a listing")
+    get.add_argument("ref")
+    return parser.parse_args(argv)
+
+
+def feed_ref(args: argparse.Namespace) -> str:
+    if args.command == "sub":
+        return subreddit_path(args.name, sort=args.sort,
+                              time_range=args.time, limit=args.limit)
+    if args.command == "thread":
+        return thread_path(args.ref, limit=args.limit)
+    if args.command == "search":
+        return search_path(args.query, subreddit=args.sub,
+                           sort=args.sort, time_range=args.time,
+                           limit=args.limit)
+    if args.command == "user":
+        return user_path(args.name, limit=args.limit)
+    return args.ref
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    cache_dir = Path(os.environ.get("XDG_CACHE_HOME")
+                     or Path.home() / ".cache") / "reddit-rss"
+    try:
+        url = feed_url(feed_ref(args))
+        body = fetch_feed(url, cache_dir=cache_dir,
+                          max_wait=args.max_wait, fresh=args.fresh)
+    except (ValueError, FetchError) as error:
+        print(f"reddit: {error}", file=sys.stderr)
+        return 75 if isinstance(error, RateLimited) else 1
+    if args.xml:
+        print(body)
+        return 0
+    entries = entries_from_feed(body)
+    print(thread_text(entries) if args.command == "thread"
+          else listing_text(entries))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
