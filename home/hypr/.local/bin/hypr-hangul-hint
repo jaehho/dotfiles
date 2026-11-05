@@ -49,8 +49,9 @@ def toggle_key():
             if line.startswith("["):
                 section = line
             elif section == "[Hotkey/TriggerKeys]" and line.startswith("0="):
-                return line[2:].replace("_R", " (right)").replace(
-                    "_L", " (left)").replace("_", " ")
+                return (line[2:].replace("Control", "Ctrl")
+                        .replace("space", "Space").replace("_R", " (right)")
+                        .replace("_L", " (left)"))
     except OSError:
         pass
     return "Ctrl+Space"  # fcitx5's own default
