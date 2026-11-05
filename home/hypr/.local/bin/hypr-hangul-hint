@@ -13,12 +13,9 @@ It follows fcitx5: the hint shows while the focused window is typing Hangul
 and goes away when you switch back, so there is no key to remember. fcitx5
 keeps input state per window, so the hint follows focus too.
 
-    hypr-hangul-hint            start the follower; run again to flip the hint
+    hypr-hangul-hint            start the follower (at login)
     hypr-hangul-hint --dock     switch between overlay and docked
     hypr-hangul-hint --always   show it regardless of fcitx5 (for testing)
-
-A plain second run flips what you see now. Automatic mode comes back the next
-time the focused window's input method changes.
 
 The layout table is what fcitx5-hangul's "2" keyboard produces, and
 tests/test_hangul_hint.py checks it against libhangul, so it cannot drift.
@@ -190,33 +187,21 @@ def key_events(data):
 
 
 class Visibility:
-    """Whether the hint shows: follow fcitx5, unless flipped by hand.
-
-    A flip holds until the focused window's input method changes, then
-    automatic mode takes over again.
-    """
+    """The hint shows while the focused window is typing Hangul."""
 
     def __init__(self, always=False):
         self.always = always
         self.hangul = False
-        self.override = None
 
     def update(self, hangul):
         """Feed the current state; True when the visible state changed."""
         before = self.visible
-        if hangul != self.hangul:
-            self.hangul = hangul
-            self.override = None
+        self.hangul = hangul
         return self.visible != before
-
-    def flip(self):
-        self.override = not self.visible
 
     @property
     def visible(self):
-        if self.always:
-            return True
-        return self.hangul if self.override is None else self.override
+        return self.always or self.hangul
 
 
 def palette():
@@ -442,7 +427,6 @@ def gui(always):
                              flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
             self.window = None
             self.mode = read_mode()
-            self.started = False
             self.state = Visibility(always)
             self.bus = None
             self.keys = {}      # letter -> key widget
@@ -455,17 +439,12 @@ def gui(always):
 
         def do_command_line(self, command_line):
             # The first run starts the follower; later runs reach it here.
-            # --dock flips between overlay and dock, anything else flips what
-            # is on screen.
+            # --dock flips between overlay and dock.
             dock = "--dock" in command_line.get_arguments()[1:]
             if self.window is None:
                 self.start()
             if dock:
                 self.set_mode(other_mode(self.mode))
-            elif self.started:
-                self.state.flip()
-                self.sync()
-            self.started = True
             return 0
 
         def start(self):

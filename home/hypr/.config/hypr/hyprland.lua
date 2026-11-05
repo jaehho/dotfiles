@@ -414,11 +414,10 @@ hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("~/.local/bin/hypr-nightlight-toggle"
 -- Keybind cheatsheet
 hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheatsheet"))
 
--- Korean key hint: follows the language on its own (started at login above).
--- This flips it for now; the next language switch puts it back on automatic.
-hl.bind(mainMod .. " + comma", hl.dsp.exec_cmd("~/.local/bin/hypr-hangul-hint")) -- Korean key hint: show / hide for now
--- Floating overlay, or a docked strip the windows tile around; remembered.
-hl.bind(mainMod .. " + SHIFT + comma", hl.dsp.exec_cmd("~/.local/bin/hypr-hangul-hint --dock")) -- Korean key hint: overlay / docked
+-- Korean key hint: it shows and hides itself with Ctrl+Space (started at
+-- login above). This only picks its look: a floating overlay, or a docked
+-- strip the windows tile around. Remembered.
+hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("~/.local/bin/hypr-hangul-hint --dock")) -- Korean key hint: overlay / docked
 
 -- Settings menu: entries live in hypr-settings-menu
 hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("~/.local/bin/hypr-settings-menu")) -- settings menu

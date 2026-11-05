@@ -98,7 +98,7 @@ class KeyTable(unittest.TestCase):
 
 
 class Follow(unittest.TestCase):
-    """Visibility follows fcitx5; a flip holds until the language changes."""
+    """The hint shows exactly while the focused window types Hangul."""
 
     def setUp(self):
         self.state = load_script().Visibility()
@@ -109,33 +109,18 @@ class Follow(unittest.TestCase):
         self.assertTrue(self.state.update(True))
         self.assertTrue(self.state.visible)
 
+    def test_hides_again_on_english(self):
+        self.state.update(True)
+        self.assertTrue(self.state.update(False))
+        self.assertFalse(self.state.visible)
+
     def test_unchanged_state_reports_no_change(self):
         self.state.update(True)
         self.assertFalse(self.state.update(True))
 
-    def test_flip_hides_and_holds(self):
-        self.state.update(True)
-        self.state.flip()
-        self.assertFalse(self.state.visible)
-        self.assertFalse(self.state.update(True))
-        self.assertFalse(self.state.visible)
-
-    def test_flip_shows_in_english(self):
-        self.state.update(False)
-        self.state.flip()
-        self.assertTrue(self.state.visible)
-
-    def test_language_change_ends_a_flip(self):
-        self.state.update(True)
-        self.state.flip()
-        self.state.update(False)
-        self.state.update(True)
-        self.assertTrue(self.state.visible)
-
-    def test_always_ignores_everything(self):
+    def test_always_ignores_fcitx5(self):
         state = load_script().Visibility(always=True)
         state.update(False)
-        state.flip()
         self.assertTrue(state.visible)
 
 
