@@ -93,9 +93,47 @@ class KeyTable(unittest.TestCase):
             self.assertEqual(self.hangul.single(latin.upper()),
                              shifted or jamo, latin.upper())
 
-    def test_example_types_what_it_says(self):
-        keys, text = self.hint.EXAMPLE
-        self.assertEqual(self.hangul.type(keys), text)
+
+class Follow(unittest.TestCase):
+    """Visibility follows fcitx5; a flip holds until the language changes."""
+
+    def setUp(self):
+        self.state = load_script().Visibility()
+
+    def test_hidden_until_hangul(self):
+        self.state.update(False)
+        self.assertFalse(self.state.visible)
+        self.assertTrue(self.state.update(True))
+        self.assertTrue(self.state.visible)
+
+    def test_unchanged_state_reports_no_change(self):
+        self.state.update(True)
+        self.assertFalse(self.state.update(True))
+
+    def test_flip_hides_and_holds(self):
+        self.state.update(True)
+        self.state.flip()
+        self.assertFalse(self.state.visible)
+        self.assertFalse(self.state.update(True))
+        self.assertFalse(self.state.visible)
+
+    def test_flip_shows_in_english(self):
+        self.state.update(False)
+        self.state.flip()
+        self.assertTrue(self.state.visible)
+
+    def test_language_change_ends_a_flip(self):
+        self.state.update(True)
+        self.state.flip()
+        self.state.update(False)
+        self.state.update(True)
+        self.assertTrue(self.state.visible)
+
+    def test_always_ignores_everything(self):
+        state = load_script().Visibility(always=True)
+        state.update(False)
+        state.flip()
+        self.assertTrue(state.visible)
 
 
 if __name__ == "__main__":

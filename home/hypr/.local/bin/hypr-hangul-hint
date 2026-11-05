@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """hypr-hangul-hint -- the Korean 2-set (dubeolsik) layout over the QWERTY keys.
 
-A layer-shell overlay at the bottom of the screen. It takes no keyboard and
-no pointer, so you type through it; run it again to close it.
+A translucent layer-shell overlay at the bottom of the screen. It takes no
+keyboard and no pointer, so you type and click through it.
 
-    hypr-hangul-hint            toggle
-    hypr-hangul-hint --seconds 8   close itself after 8 seconds
+It follows fcitx5: the hint shows while the focused window is typing Hangul
+and goes away when you switch back, so there is no key to remember. fcitx5
+keeps input state per window, so the hint follows focus too.
+
+    hypr-hangul-hint            start the follower; run again to flip the hint
+    hypr-hangul-hint --always   show it regardless of fcitx5 (for testing)
+
+A second run flips what you see now. Automatic mode comes back the next time
+the focused window's input method changes.
 
 The layout table is what fcitx5-hangul's "2" keyboard produces, and
 tests/test_hangul_hint.py checks it against libhangul, so it cannot drift.
@@ -29,10 +36,9 @@ ROWS = [
 ]
 ROW_OFFSETS = [0.0, 0.25, 0.75]
 
-# Typed on the board, as a first thing to try: dkssud -> 안녕.
-EXAMPLE = ("dkssud", "안녕")
-
-FCITX_CONFIG = Path.home() / ".config/fcitx5/config"
+# The fcitx5 input method name of the Hangul engine.
+HANGUL_IM = "hangul"
+POLL_MS = 250
 
 
 def is_vowel(jamo):
@@ -40,21 +46,34 @@ def is_vowel(jamo):
     return 0x314F <= ord(jamo) <= 0x3163
 
 
-def toggle_key():
-    """The first fcitx5 trigger key, as written in the stowed config."""
-    try:
-        section = ""
-        for line in FCITX_CONFIG.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("["):
-                section = line
-            elif section == "[Hotkey/TriggerKeys]" and line.startswith("0="):
-                return (line[2:].replace("Control", "Ctrl")
-                        .replace("space", "Space").replace("_R", " (right)")
-                        .replace("_L", " (left)"))
-    except OSError:
-        pass
-    return "Ctrl+Space"  # fcitx5's own default
+class Visibility:
+    """Whether the hint shows: follow fcitx5, unless flipped by hand.
+
+    A flip holds until the focused window's input method changes, then
+    automatic mode takes over again.
+    """
+
+    def __init__(self, always=False):
+        self.always = always
+        self.hangul = False
+        self.override = None
+
+    def update(self, hangul):
+        """Feed the current state; True when the visible state changed."""
+        before = self.visible
+        if hangul != self.hangul:
+            self.hangul = hangul
+            self.override = None
+        return self.visible != before
+
+    def flip(self):
+        self.override = not self.visible
+
+    @property
+    def visible(self):
+        if self.always:
+            return True
+        return self.hangul if self.override is None else self.override
 
 
 def palette():
@@ -76,24 +95,32 @@ def palette():
 PITCH = 62
 GAP = 6
 
+# Translucent: the board and keys are tinted glass, and the layer rule blurs
+# what is behind them. The glyphs stay opaque so they read over any window.
 CSS = """
 window.hangul-hint {{ background: transparent; }}
 
 .board {{
-  background: alpha({bg_dim}, 0.97);
-  border: 1px solid {bg2};
+  background: alpha({bg_dim}, 0.62);
+  border: 1px solid alpha({bg3}, 0.6);
   border-radius: 12px;
-  padding: 16px 20px 12px 20px;
+  padding: 14px 18px 10px 18px;
 }}
 
 .key {{
-  background: {bg1};
-  border: 1px solid {bg2};
-  border-bottom: 3px solid {bg_dim};
+  background: alpha({bg1}, 0.4);
+  border: 1px solid alpha({bg3}, 0.5);
+  border-bottom: 3px solid alpha({bg_dim}, 0.6);
   border-radius: 8px;
 }}
-.key.vowel {{ background: alpha({blue}, 0.16); border-color: alpha({blue}, 0.45); }}
-.key.consonant {{ background: alpha({orange}, 0.14); border-color: alpha({orange}, 0.4); }}
+.key.vowel {{
+  background: alpha({blue}, 0.14);
+  border-color: alpha({blue}, 0.45);
+}}
+.key.consonant {{
+  background: alpha({orange}, 0.12);
+  border-color: alpha({orange}, 0.4);
+}}
 
 .jamo {{
   font-family: "Noto Sans CJK KR", sans-serif;
@@ -107,26 +134,17 @@ window.hangul-hint {{ background: transparent; }}
   font-family: "JetBrainsMono Nerd Font", monospace;
   font-size: 10px;
   font-weight: 700;
-  color: {grey1};
+  color: {grey2};
 }}
 .shifted {{
   font-family: "Noto Sans CJK KR", sans-serif;
   font-size: 12px;
-  color: {grey2};
+  color: {fg};
 }}
-
-.legend, .note {{
-  font-family: "Adwaita Sans", sans-serif;
-  font-size: 12px;
-  color: {grey1};
-}}
-.legend.vowel {{ color: {blue}; }}
-.legend.consonant {{ color: {orange}; }}
-.note b {{ color: {fg}; }}
 """
 
 
-def gui(seconds):
+def gui(always):
     # gtk4-layer-shell must be loaded before libwayland-client, and PyGObject
     # pulls libwayland in the moment Gdk is imported, so re-exec once with the
     # library preloaded (see hypr-keybind-cheatsheet).
@@ -168,17 +186,9 @@ def gui(seconds):
             box.add_overlay(top)
         return box
 
-    def legend(text, kind):
-        label = Gtk.Label(label=text, xalign=0.0)
-        label.add_css_class("legend")
-        label.add_css_class(kind)
-        return label
-
     def build():
-        board = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
-                        halign=Gtk.Align.CENTER, valign=Gtk.Align.END)
+        board = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.END)
         board.add_css_class("board")
-
         fixed = Gtk.Fixed()
         for top, (row, offset) in enumerate(zip(ROWS, ROW_OFFSETS)):
             for col, (latin, jamo, shifted) in enumerate(row):
@@ -186,17 +196,6 @@ def gui(seconds):
                           (col + offset) * PITCH, top * PITCH)
         fixed.set_size_request(int(10.25 * PITCH), 3 * PITCH)
         board.append(fixed)
-
-        foot = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16,
-                       halign=Gtk.Align.CENTER)
-        foot.append(legend("consonants  자음", "consonant"))
-        foot.append(legend("vowels  모음", "vowel"))
-        note = Gtk.Label(use_markup=True, label=(
-            f"<b>{toggle_key()}</b> switches  ·  Shift gives the small "
-            f"jamo  ·  {EXAMPLE[0]} → {EXAMPLE[1]}"))
-        note.add_css_class("note")
-        foot.append(note)
-        board.append(foot)
         return board
 
     class Hint(Gtk.Application):
@@ -204,13 +203,18 @@ def gui(seconds):
             super().__init__(application_id="dev.jaeho.hangulhint",
                              flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
             self.window = None
+            self.state = Visibility(always)
+            self.bus = None
 
         def do_activate(self):
-            # A second press reaches the running instance: it closes.
+            # The first run starts the follower; later runs reach it here and
+            # flip what is on screen.
             if self.window:
-                self.window.close()
+                self.state.flip()
+                self.sync()
                 return
 
+            self.hold()
             provider = Gtk.CssProvider()
             provider.load_from_string(CSS.format(**palette()))
             Gtk.StyleContext.add_provider_for_display(
@@ -219,7 +223,6 @@ def gui(seconds):
 
             self.window = Gtk.ApplicationWindow(application=self)
             self.window.add_css_class("hangul-hint")
-            self.window.connect("close-request", lambda *_: self.quit())
 
             LayerShell.init_for_window(self.window)
             LayerShell.set_namespace(self.window, "hangul-hint")
@@ -232,9 +235,35 @@ def gui(seconds):
             # No input region: clicks fall through to what is underneath.
             self.window.connect("realize", self.pass_input_through)
             self.window.set_child(build())
-            self.window.present()
-            if seconds:
-                GLib.timeout_add_seconds(seconds, self.quit)
+
+            if always:
+                self.sync()
+            else:
+                self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+                GLib.timeout_add(POLL_MS, self.poll)
+
+        def sync(self):
+            if self.state.visible:
+                self.window.present()
+            else:
+                self.window.set_visible(False)
+
+        def poll(self):
+            # NO_AUTO_START: an fcitx5 that is not running stays that way.
+            self.bus.call(
+                "org.fcitx.Fcitx5", "/controller",
+                "org.fcitx.Fcitx.Controller1", "CurrentInputMethod", None,
+                GLib.VariantType("(s)"), Gio.DBusCallFlags.NO_AUTO_START,
+                200, None, self.on_input_method)
+            return True
+
+        def on_input_method(self, bus, result):
+            try:
+                name = bus.call_finish(result).unpack()[0]
+            except GLib.Error:
+                name = ""
+            if self.state.update(name == HANGUL_IM):
+                self.sync()
 
         @staticmethod
         def pass_input_through(window):
@@ -244,11 +273,7 @@ def gui(seconds):
 
 
 def main():
-    seconds = 0
-    args = sys.argv[1:]
-    if "--seconds" in args:
-        seconds = int(args[args.index("--seconds") + 1])
-    sys.exit(gui(seconds))
+    sys.exit(gui("--always" in sys.argv[1:]))
 
 
 if __name__ == "__main__":

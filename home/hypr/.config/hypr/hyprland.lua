@@ -82,7 +82,8 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("~/.local/bin/hypr-urgent-focus")
     hl.exec_cmd("~/.local/bin/hypr-swaync-keys")
     hl.exec_cmd("hypridle")
-    hl.exec_cmd("fcitx5 -d")                       -- Korean input, Right Alt toggles (home/fcitx5)
+    hl.exec_cmd("fcitx5 -d")                       -- Korean input, Ctrl+Space toggles (home/fcitx5)
+    hl.exec_cmd("~/.local/bin/hypr-hangul-hint")   -- key hint, shown while typing Hangul
     -- Night light on the schedule in hyprsunset.conf. Not the packaged user
     -- unit: it requires graphical-session.target, which Hyprland never starts.
     hl.exec_cmd("hyprsunset")
@@ -413,8 +414,9 @@ hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("~/.local/bin/hypr-nightlight-toggle"
 -- Keybind cheatsheet
 hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheatsheet"))
 
--- Korean key hint: the 2-set jamo over the QWERTY keys, press again to close
-hl.bind(mainMod .. " + comma", hl.dsp.exec_cmd("~/.local/bin/hypr-hangul-hint")) -- Korean key hint overlay
+-- Korean key hint: follows the language on its own (started at login above).
+-- This flips it for now; the next language switch puts it back on automatic.
+hl.bind(mainMod .. " + comma", hl.dsp.exec_cmd("~/.local/bin/hypr-hangul-hint")) -- Korean key hint: show / hide for now
 
 -- Settings menu: entries live in hypr-settings-menu
 hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("~/.local/bin/hypr-settings-menu")) -- settings menu
