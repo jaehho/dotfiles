@@ -5,6 +5,7 @@ import ctypes.util
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
+import re
 import string
 import unittest
 
@@ -134,6 +135,45 @@ class Follow(unittest.TestCase):
         state.update(False)
         state.flip()
         self.assertTrue(state.visible)
+
+
+class Lighting(unittest.TestCase):
+    """Key presses reach the right key, read from raw input_event bytes."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.hint = load_script()
+
+    def event(self, kind, code, value):
+        return self.hint.INPUT_EVENT.pack(0, 0, kind, code, value)
+
+    def test_codes_match_the_kernel_header(self):
+        header = Path("/usr/include/linux/input-event-codes.h")
+        if not header.exists():
+            self.skipTest("linux headers are not installed")
+        text = header.read_text()
+        for code, letter in self.hint.KEY_CODES.items():
+            match = re.search(
+                rf"#define KEY_{letter.upper()}\s+(\d+)\b", text)
+            self.assertEqual(int(match.group(1)), code, letter)
+
+    def test_every_key_on_the_board_can_light(self):
+        board = {latin for row in self.hint.ROWS for latin, _, _ in row}
+        self.assertEqual(set(self.hint.KEY_CODES.values()), board)
+
+    def test_down_and_up(self):
+        data = self.event(1, 33, 1) + self.event(1, 33, 0)
+        self.assertEqual(self.hint.key_events(data),
+                         [("f", True), ("f", False)])
+
+    def test_repeat_other_keys_and_sync_are_ignored(self):
+        data = (self.event(1, 33, 2) + self.event(1, 57, 1)
+                + self.event(0, 0, 0) + self.event(4, 4, 33))
+        self.assertEqual(self.hint.key_events(data), [])
+
+    def test_a_cut_off_event_is_dropped(self):
+        data = self.event(1, 36, 1) + self.event(1, 37, 1)[:10]
+        self.assertEqual(self.hint.key_events(data), [("j", True)])
 
 
 if __name__ == "__main__":

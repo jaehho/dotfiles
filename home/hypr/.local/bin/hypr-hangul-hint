@@ -20,6 +20,7 @@ tests/test_hangul_hint.py checks it against libhangul, so it cannot drift.
 
 import os
 from pathlib import Path
+import struct
 import sys
 
 # The 2-set layout: (QWERTY key, jamo, jamo with Shift or "") per row. Rows are
@@ -39,6 +40,48 @@ ROW_OFFSETS = [0.0, 0.25, 0.75]
 # The fcitx5 input method name of the Hangul engine.
 HANGUL_IM = "hangul"
 POLL_MS = 250
+
+# Lighting keys as they are pressed reads the same post-remap stream apps see,
+# keyd's virtual keyboard (Caps held = Ctrl), read-only and only while the hint
+# is on screen. Nothing is stored or printed: just which keys are down now.
+# HANGUL_HINT_DEVICE points it at another file, for tests.
+KEYBOARD_NAME = "keyd virtual keyboard"
+INPUT_EVENT = struct.Struct("llHHi")  # struct input_event on 64-bit Linux
+EV_KEY = 1
+KEY_CODES = {  # linux/input-event-codes.h
+    16: "q", 17: "w", 18: "e", 19: "r", 20: "t", 21: "y", 22: "u", 23: "i",
+    24: "o", 25: "p", 30: "a", 31: "s", 32: "d", 33: "f", 34: "g", 35: "h",
+    36: "j", 37: "k", 38: "l", 44: "z", 45: "x", 46: "c", 47: "v", 48: "b",
+    49: "n", 50: "m",
+}
+
+
+def keyboard_device():
+    """Path of the evdev node to read, or None when there is none."""
+    if os.environ.get("HANGUL_HINT_DEVICE"):
+        return os.environ["HANGUL_HINT_DEVICE"]
+    try:
+        text = Path("/proc/bus/input/devices").read_text()
+    except OSError:
+        return None
+    for block in text.split("\n\n"):
+        if f'Name="{KEYBOARD_NAME}"' in block:
+            for token in block.split():
+                if token.startswith("event"):
+                    return f"/dev/input/{token}"
+    return None
+
+
+def key_events(data):
+    """[(letter, down)] for the letter keys in a chunk of input_event bytes.
+
+    Auto-repeat (value 2) and every other key are left out.
+    """
+    whole = len(data) - len(data) % INPUT_EVENT.size
+    return [(KEY_CODES[code], bool(value))
+            for _, _, kind, code, value
+            in INPUT_EVENT.iter_unpack(data[:whole])
+            if kind == EV_KEY and code in KEY_CODES and value in (0, 1)]
 
 
 class Visibility:
@@ -147,6 +190,18 @@ window.hangul-hint {{ background: transparent; }}
   background: {grey1};
   border-radius: 2px;
 }}
+
+/* A key lights the instant it goes down and fades out when it is let go. */
+.key {{ transition: background-color 220ms ease-out, border-color 220ms ease-out; }}
+.key.lit {{
+  transition: none;
+  background: {green};
+  border-color: {green};
+  border-bottom-color: shade({green}, 0.6);
+}}
+.key.lit .jamo {{ color: {bg_dim}; }}
+.key.lit .latin, .key.lit .shifted {{ color: alpha({bg_dim}, 0.7); }}
+.key.lit .bump {{ background: alpha({bg_dim}, 0.6); }}
 """
 
 
@@ -197,14 +252,15 @@ def gui(always):
             box.add_overlay(top)
         return box
 
-    def build():
+    def build(keys):
+        """The board; `keys` is filled with each key's widget by letter."""
         board = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.END)
         board.add_css_class("board")
         fixed = Gtk.Fixed()
         for top, (row, offset) in enumerate(zip(ROWS, ROW_OFFSETS)):
             for col, (latin, jamo, shifted) in enumerate(row):
-                fixed.put(key_widget(latin, jamo, shifted),
-                          (col + offset) * PITCH, top * PITCH)
+                keys[latin] = key_widget(latin, jamo, shifted)
+                fixed.put(keys[latin], (col + offset) * PITCH, top * PITCH)
         fixed.set_size_request(*board_size())
         board.append(fixed)
         return board
@@ -216,6 +272,9 @@ def gui(always):
             self.window = None
             self.state = Visibility(always)
             self.bus = None
+            self.keys = {}      # letter -> key widget
+            self.fd = None      # the keyboard device, open while visible
+            self.watch = None
 
         def do_activate(self):
             # The first run starts the follower; later runs reach it here and
@@ -245,7 +304,7 @@ def gui(always):
 
             # No input region: clicks fall through to what is underneath.
             self.window.connect("realize", self.pass_input_through)
-            self.window.set_child(build())
+            self.window.set_child(build(self.keys))
 
             if always:
                 self.sync()
@@ -258,6 +317,48 @@ def gui(always):
                 self.window.present()
             else:
                 self.window.set_visible(False)
+            self.listen(self.state.visible)
+
+        def listen(self, on):
+            """Read the keyboard while the hint is up, and only then."""
+            if on and self.fd is None:
+                path = keyboard_device()
+                try:
+                    self.fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+                except (OSError, TypeError):
+                    return  # no device or no permission: the hint just stays plain
+                self.watch = GLib.io_add_watch(
+                    self.fd, GLib.PRIORITY_DEFAULT,
+                    GLib.IOCondition.IN | GLib.IOCondition.HUP
+                    | GLib.IOCondition.ERR, self.on_keys)
+            elif not on and self.fd is not None:
+                GLib.source_remove(self.watch)
+                self.close_device()
+
+        def close_device(self):
+            os.close(self.fd)
+            self.fd = self.watch = None
+            for key in self.keys.values():
+                key.remove_css_class("lit")
+
+        def on_keys(self, fd, condition):
+            data = b""
+            if not condition & (GLib.IOCondition.HUP | GLib.IOCondition.ERR):
+                try:
+                    data = os.read(fd, INPUT_EVENT.size * 64)
+                except BlockingIOError:
+                    return True
+                except OSError:
+                    pass
+            if not data:  # device gone or end of file: stop reading
+                self.close_device()
+                return False
+            for letter, down in key_events(data):
+                if down:
+                    self.keys[letter].add_css_class("lit")
+                else:
+                    self.keys[letter].remove_css_class("lit")
+            return True
 
         def poll(self):
             # NO_AUTO_START: an fcitx5 that is not running stays that way.
