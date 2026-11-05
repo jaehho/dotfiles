@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""hypr-hangul-hint -- the Korean 2-set (dubeolsik) layout over the QWERTY keys.
+
+A layer-shell overlay at the bottom of the screen. It takes no keyboard and
+no pointer, so you type through it; run it again to close it.
+
+    hypr-hangul-hint            toggle
+    hypr-hangul-hint --seconds 8   close itself after 8 seconds
+
+The layout table is what fcitx5-hangul's "2" keyboard produces, and
+tests/test_hangul_hint.py checks it against libhangul, so it cannot drift.
+"""
+
+import os
+from pathlib import Path
+import sys
+
+# The 2-set layout: (QWERTY key, jamo, jamo with Shift or "") per row. Rows are
+# staggered like the physical keys, so ROW_OFFSETS is in key units.
+ROWS = [
+    [("q", "ㅂ", "ㅃ"), ("w", "ㅈ", "ㅉ"), ("e", "ㄷ", "ㄸ"),
+     ("r", "ㄱ", "ㄲ"), ("t", "ㅅ", "ㅆ"), ("y", "ㅛ", ""),
+     ("u", "ㅕ", ""), ("i", "ㅑ", ""), ("o", "ㅐ", "ㅒ"), ("p", "ㅔ", "ㅖ")],
+    [("a", "ㅁ", ""), ("s", "ㄴ", ""), ("d", "ㅇ", ""), ("f", "ㄹ", ""),
+     ("g", "ㅎ", ""), ("h", "ㅗ", ""), ("j", "ㅓ", ""), ("k", "ㅏ", ""),
+     ("l", "ㅣ", "")],
+    [("z", "ㅋ", ""), ("x", "ㅌ", ""), ("c", "ㅊ", ""), ("v", "ㅍ", ""),
+     ("b", "ㅠ", ""), ("n", "ㅜ", ""), ("m", "ㅡ", "")],
+]
+ROW_OFFSETS = [0.0, 0.25, 0.75]
+
+# Typed on the board, as a first thing to try: dkssud -> 안녕.
+EXAMPLE = ("dkssud", "안녕")
+
+FCITX_CONFIG = Path.home() / ".config/fcitx5/config"
+
+
+def is_vowel(jamo):
+    """Compatibility jamo ㅏ..ㅣ are U+314F..U+3163; the rest are consonants."""
+    return 0x314F <= ord(jamo) <= 0x3163
+
+
+def toggle_key():
+    """The first fcitx5 trigger key, as written in the stowed config."""
+    try:
+        section = ""
+        for line in FCITX_CONFIG.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("["):
+                section = line
+            elif section == "[Hotkey/TriggerKeys]" and line.startswith("0="):
+                return line[2:].replace("_R", " (right)").replace(
+                    "_L", " (left)").replace("_", " ")
+    except OSError:
+        pass
+    return "Ctrl+Space"  # fcitx5's own default
+
+
+def palette():
+    """name -> '#rrggbb' from the shared Everforest file."""
+    colors = {}
+    path = Path.home() / ".config/hypr/themes/everforest.conf"
+    try:
+        for line in path.read_text().splitlines():
+            name, _, val = line.strip().partition("=")
+            val = val.strip()
+            if (name.startswith("$") and not name.endswith("Alpha")
+                    and val.startswith("rgb(")):
+                colors[name[1:].strip()] = "#" + val[4:-1]
+    except OSError:
+        pass
+    return colors
+
+
+PITCH = 62
+GAP = 6
+
+CSS = """
+window.hangul-hint {{ background: transparent; }}
+
+.board {{
+  background: alpha({bg_dim}, 0.97);
+  border: 1px solid {bg2};
+  border-radius: 12px;
+  padding: 16px 20px 12px 20px;
+}}
+
+.key {{
+  background: {bg1};
+  border: 1px solid {bg2};
+  border-bottom: 3px solid {bg_dim};
+  border-radius: 8px;
+}}
+.key.vowel {{ background: alpha({blue}, 0.16); border-color: alpha({blue}, 0.45); }}
+.key.consonant {{ background: alpha({orange}, 0.14); border-color: alpha({orange}, 0.4); }}
+
+.jamo {{
+  font-family: "Noto Sans CJK KR", sans-serif;
+  font-size: 26px;
+  font-weight: 500;
+}}
+.vowel .jamo {{ color: {blue}; }}
+.consonant .jamo {{ color: {orange}; }}
+
+.latin {{
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: {grey1};
+}}
+.shifted {{
+  font-family: "Noto Sans CJK KR", sans-serif;
+  font-size: 12px;
+  color: {grey2};
+}}
+
+.legend, .note {{
+  font-family: "Adwaita Sans", sans-serif;
+  font-size: 12px;
+  color: {grey1};
+}}
+.legend.vowel {{ color: {blue}; }}
+.legend.consonant {{ color: {orange}; }}
+.note b {{ color: {fg}; }}
+"""
+
+
+def gui(seconds):
+    # gtk4-layer-shell must be loaded before libwayland-client, and PyGObject
+    # pulls libwayland in the moment Gdk is imported, so re-exec once with the
+    # library preloaded (see hypr-keybind-cheatsheet).
+    preload = "/usr/lib/libgtk4-layer-shell.so"
+    if (os.path.exists(preload)
+            and preload not in os.environ.get("LD_PRELOAD", "")):
+        existing = os.environ.get("LD_PRELOAD", "")
+        os.environ["LD_PRELOAD"] = f"{preload}:{existing}".rstrip(":")
+        os.execv(sys.executable, [sys.executable, *sys.argv])
+
+    import cairo
+    import gi
+
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Gdk", "4.0")
+    gi.require_version("Gtk4LayerShell", "1.0")
+    from gi.repository import Gdk, Gio, GLib, Gtk
+    from gi.repository import Gtk4LayerShell as LayerShell
+
+    def key_widget(latin, jamo, shifted):
+        box = Gtk.Overlay()
+        box.add_css_class("key")
+        box.add_css_class("vowel" if is_vowel(jamo) else "consonant")
+        box.set_size_request(PITCH - GAP, PITCH - GAP)
+        main = Gtk.Label(label=jamo, halign=Gtk.Align.CENTER,
+                         valign=Gtk.Align.CENTER)
+        main.add_css_class("jamo")
+        box.set_child(main)
+        small = Gtk.Label(label=latin.upper(), halign=Gtk.Align.START,
+                          valign=Gtk.Align.END, margin_start=6,
+                          margin_bottom=3)
+        small.add_css_class("latin")
+        box.add_overlay(small)
+        if shifted:
+            top = Gtk.Label(label=shifted, halign=Gtk.Align.END,
+                            valign=Gtk.Align.START, margin_end=6,
+                            margin_top=3)
+            top.add_css_class("shifted")
+            box.add_overlay(top)
+        return box
+
+    def legend(text, kind):
+        label = Gtk.Label(label=text, xalign=0.0)
+        label.add_css_class("legend")
+        label.add_css_class(kind)
+        return label
+
+    def build():
+        board = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                        halign=Gtk.Align.CENTER, valign=Gtk.Align.END)
+        board.add_css_class("board")
+
+        fixed = Gtk.Fixed()
+        for top, (row, offset) in enumerate(zip(ROWS, ROW_OFFSETS)):
+            for col, (latin, jamo, shifted) in enumerate(row):
+                fixed.put(key_widget(latin, jamo, shifted),
+                          (col + offset) * PITCH, top * PITCH)
+        fixed.set_size_request(int(10.25 * PITCH), 3 * PITCH)
+        board.append(fixed)
+
+        foot = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16,
+                       halign=Gtk.Align.CENTER)
+        foot.append(legend("consonants  자음", "consonant"))
+        foot.append(legend("vowels  모음", "vowel"))
+        note = Gtk.Label(use_markup=True, label=(
+            f"<b>{toggle_key()}</b> switches  ·  Shift gives the small "
+            f"jamo  ·  {EXAMPLE[0]} → {EXAMPLE[1]}"))
+        note.add_css_class("note")
+        foot.append(note)
+        board.append(foot)
+        return board
+
+    class Hint(Gtk.Application):
+        def __init__(self):
+            super().__init__(application_id="dev.jaeho.hangulhint",
+                             flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+            self.window = None
+
+        def do_activate(self):
+            # A second press reaches the running instance: it closes.
+            if self.window:
+                self.window.close()
+                return
+
+            provider = Gtk.CssProvider()
+            provider.load_from_string(CSS.format(**palette()))
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(), provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+            self.window = Gtk.ApplicationWindow(application=self)
+            self.window.add_css_class("hangul-hint")
+            self.window.connect("close-request", lambda *_: self.quit())
+
+            LayerShell.init_for_window(self.window)
+            LayerShell.set_namespace(self.window, "hangul-hint")
+            LayerShell.set_layer(self.window, LayerShell.Layer.OVERLAY)
+            LayerShell.set_keyboard_mode(
+                self.window, LayerShell.KeyboardMode.NONE)
+            LayerShell.set_anchor(self.window, LayerShell.Edge.BOTTOM, True)
+            LayerShell.set_margin(self.window, LayerShell.Edge.BOTTOM, 56)
+
+            # No input region: clicks fall through to what is underneath.
+            self.window.connect("realize", self.pass_input_through)
+            self.window.set_child(build())
+            self.window.present()
+            if seconds:
+                GLib.timeout_add_seconds(seconds, self.quit)
+
+        @staticmethod
+        def pass_input_through(window):
+            window.get_surface().set_input_region(cairo.Region())
+
+    return Hint().run([sys.argv[0]])
+
+
+def main():
+    seconds = 0
+    args = sys.argv[1:]
+    if "--seconds" in args:
+        seconds = int(args[args.index("--seconds") + 1])
+    sys.exit(gui(seconds))
+
+
+if __name__ == "__main__":
+    main()

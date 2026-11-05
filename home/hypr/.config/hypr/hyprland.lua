@@ -413,6 +413,9 @@ hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("~/.local/bin/hypr-nightlight-toggle"
 -- Keybind cheatsheet
 hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheatsheet"))
 
+-- Korean key hint: the 2-set jamo over the QWERTY keys, press again to close
+hl.bind(mainMod .. " + comma", hl.dsp.exec_cmd("~/.local/bin/hypr-hangul-hint")) -- Korean key hint overlay
+
 -- Settings menu: entries live in hypr-settings-menu
 hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("~/.local/bin/hypr-settings-menu")) -- settings menu
 
@@ -906,6 +909,14 @@ hl.layer_rule({
 hl.layer_rule({
     name  = "keybind-cheatsheet-blur",
     match = { namespace = "keybinds" },
+
+    blur         = true,
+    ignore_alpha = 0.5,
+})
+
+hl.layer_rule({
+    name  = "hangul-hint-blur",
+    match = { namespace = "hangul-hint" },
 
     blur         = true,
     ignore_alpha = 0.5,
