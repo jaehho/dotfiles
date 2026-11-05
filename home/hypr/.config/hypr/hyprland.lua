@@ -89,7 +89,10 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("hyprsunset")
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
     hl.exec_cmd("wl-paste --type image --watch cliphist store")
-    hl.exec_cmd("/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1")
+    -- Polkit prompt: the Quickshell config in quickshell/polkit/, which
+    -- shows the Howdy face check, then the password if PAM asks. Started as
+    -- `quickshell`, not `qs`, because `dash stop` runs `pkill -x qs`.
+    hl.exec_cmd("quickshell -c polkit")
     -- swayosd-server is a user unit; a copy launched here grabs its app id and
     -- makes the unit crash-loop "already running" (issue #14). Start the unit
     -- only once WAYLAND_DISPLAY is in the manager, or its condition skips it.
@@ -648,11 +651,10 @@ bind_media_keys()
 -- Calculator key: qalc in a new tmux pane if focused terminal has tmux, else floating kitty
 hl.bind("XF86Calculator", hl.dsp.exec_cmd("~/.local/bin/hypr-pane --float qalc-kitty -- qalc")) -- calculator
 
--- Copilot key, sent by the firmware as Super+Shift+F23: Claude in a tmux pane
--- beside the focused one, in that pane's directory; with no tmux focused, a
--- new terminal in ~/dotfiles.
-hl.bind(mainMod .. " + SHIFT + F23", -- copilot key: Claude Code in a tmux pane
-    hl.dsp.exec_cmd("~/.local/bin/hypr-pane --cwd ~/dotfiles -- claude --model opus --effort high"))
+-- Copilot (AI) key, sent by the firmware as Super+Shift+F23: switches the
+-- focused window between English and Hangul. It used to open Claude Code in a
+-- tmux pane; Super+Shift+Space above does the same job from the main keys.
+hl.bind(mainMod .. " + SHIFT + F23", hl.dsp.exec_cmd("fcitx5-remote -t")) -- AI key: toggle English / Hangul
 
 --------------------------------
 ---- WINDOWS AND WORKSPACES ----
@@ -944,6 +946,14 @@ hl.layer_rule({
 
     blur         = true,
     ignore_alpha = 0.5,
+})
+
+hl.layer_rule({
+    name  = "polkit-prompt",
+    match = { namespace = "polkit" },
+
+    -- The prompt animates itself: the sheet drops from the top edge.
+    no_anim = true,
 })
 
 -- Vim-style navigation inside the control center. `hypr-swaync-keys` enters
