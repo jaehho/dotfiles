@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """hypr-hangul-hint -- the Korean 2-set (dubeolsik) layout over the QWERTY keys.
 
-A translucent layer-shell overlay at the bottom of the screen. It takes no
-keyboard and no pointer, so you type and click through it.
+A layer-shell surface at the bottom of the screen that takes no keyboard and
+no pointer, so you type and click through it. Two looks, and the choice is
+remembered:
+
+  overlay  translucent, floating over your windows, clearing around the mouse
+  docked   a strip across the bottom that reserves its own space, so windows
+           tile around it like they do around the bar and nothing is covered
 
 It follows fcitx5: the hint shows while the focused window is typing Hangul
 and goes away when you switch back, so there is no key to remember. fcitx5
 keeps input state per window, so the hint follows focus too.
 
     hypr-hangul-hint            start the follower; run again to flip the hint
+    hypr-hangul-hint --dock     switch between overlay and docked
     hypr-hangul-hint --always   show it regardless of fcitx5 (for testing)
 
-A second run flips what you see now. Automatic mode comes back the next time
-the focused window's input method changes.
+A plain second run flips what you see now. Automatic mode comes back the next
+time the focused window's input method changes.
 
 The layout table is what fcitx5-hangul's "2" keyboard produces, and
 tests/test_hangul_hint.py checks it against libhangul, so it cannot drift.
@@ -66,6 +72,36 @@ HOLE_RADIUS = 96
 CURSOR_MS = 33
 GEOMETRY_EVERY = 15  # cursor polls between looks at where the layer sits
 NAMESPACE = "hangul-hint"
+
+# Two ways to show the board. The overlay floats over your windows. The dock is
+# a strip across the bottom that reserves its own space, so windows tile around
+# it the way they do around the bar and nothing is covered. `--dock` flips
+# between them, and the choice is remembered.
+MODES = ("overlay", "docked")
+DOCK_PADDING = 8
+
+
+def mode_file():
+    state = os.environ.get("XDG_STATE_HOME") or f"{Path.home()}/.local/state"
+    return Path(state) / "hypr-hangul-hint" / "mode"
+
+
+def read_mode():
+    try:
+        mode = mode_file().read_text().strip()
+    except OSError:
+        return MODES[0]
+    return mode if mode in MODES else MODES[0]
+
+
+def write_mode(mode):
+    path = mode_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(mode + "\n")
+
+
+def other_mode(mode):
+    return MODES[1] if mode == MODES[0] else MODES[0]
 
 
 def hypr_request(command):
@@ -228,6 +264,15 @@ window.hangul-hint {{ background: transparent; }}
   padding: 16px;
 }}
 
+/* Docked: a full-width strip that owns its space, so no glass and no card. */
+window.docked .board {{
+  background: {bg_dim};
+  border: none;
+  border-top: 1px solid {bg2};
+  border-radius: 0;
+  padding: {dock_padding}px 0;
+}}
+
 .key {{
   background: alpha({bg2}, 0.94);
   border: 1px solid {bg3};
@@ -307,8 +352,10 @@ def gui(always):
         # (offset from the cursor, how much of the board still shows)
         PROFILE = [(0.0, 0.07), (0.4, 0.1), (0.7, 0.55), (1.0, 1.0)]
 
-        def __init__(self, child):
-            super().__init__(halign=Gtk.Align.CENTER, valign=Gtk.Align.END)
+        def __init__(self, child, docked=False):
+            super().__init__(
+                halign=Gtk.Align.FILL if docked else Gtk.Align.CENTER,
+                valign=Gtk.Align.END)
             self.set_layout_manager(Gtk.BinLayout())
             self.child = child
             child.set_parent(self)
@@ -374,24 +421,28 @@ def gui(always):
             box.add_overlay(top)
         return box
 
-    def build(keys):
+    def build(keys, docked):
         """The board; `keys` is filled with each key's widget by letter."""
-        board = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.END)
+        board = Gtk.Box(
+            halign=Gtk.Align.FILL if docked else Gtk.Align.CENTER,
+            valign=Gtk.Align.END)
         board.add_css_class("board")
-        fixed = Gtk.Fixed()
+        fixed = Gtk.Fixed(halign=Gtk.Align.CENTER, hexpand=True)
         for top, (row, offset) in enumerate(zip(ROWS, ROW_OFFSETS)):
             for col, (latin, jamo, shifted) in enumerate(row):
                 keys[latin] = key_widget(latin, jamo, shifted)
                 fixed.put(keys[latin], (col + offset) * PITCH, top * PITCH)
         fixed.set_size_request(*board_size())
         board.append(fixed)
-        return Fader(board)
+        return Fader(board, docked)
 
     class Hint(Gtk.Application):
         def __init__(self):
             super().__init__(application_id="dev.jaeho.hangulhint",
-                             flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+                             flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
             self.window = None
+            self.mode = read_mode()
+            self.started = False
             self.state = Visibility(always)
             self.bus = None
             self.keys = {}      # letter -> key widget
@@ -402,36 +453,30 @@ def gui(always):
             self.polls = 0
             self.overlay = None  # where this layer sits, global pixels
 
-        def do_activate(self):
-            # The first run starts the follower; later runs reach it here and
-            # flip what is on screen.
-            if self.window:
+        def do_command_line(self, command_line):
+            # The first run starts the follower; later runs reach it here.
+            # --dock flips between overlay and dock, anything else flips what
+            # is on screen.
+            dock = "--dock" in command_line.get_arguments()[1:]
+            if self.window is None:
+                self.start()
+            if dock:
+                self.set_mode(other_mode(self.mode))
+            elif self.started:
                 self.state.flip()
                 self.sync()
-                return
+            self.started = True
+            return 0
 
+        def start(self):
             self.hold()
             provider = Gtk.CssProvider()
-            provider.load_from_string(CSS.format(**palette()))
+            provider.load_from_string(CSS.format(
+                dock_padding=DOCK_PADDING, **palette()))
             Gtk.StyleContext.add_provider_for_display(
                 Gdk.Display.get_default(), provider,
                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-
-            self.window = Gtk.ApplicationWindow(application=self)
-            self.window.add_css_class("hangul-hint")
-
-            LayerShell.init_for_window(self.window)
-            LayerShell.set_namespace(self.window, NAMESPACE)
-            LayerShell.set_layer(self.window, LayerShell.Layer.OVERLAY)
-            LayerShell.set_keyboard_mode(
-                self.window, LayerShell.KeyboardMode.NONE)
-            LayerShell.set_anchor(self.window, LayerShell.Edge.BOTTOM, True)
-            LayerShell.set_margin(self.window, LayerShell.Edge.BOTTOM, 56)
-
-            # No input region: clicks fall through to what is underneath.
-            self.window.connect("realize", self.pass_input_through)
-            self.fader = build(self.keys)
-            self.window.set_child(self.fader)
+            self.make_window()
 
             if always:
                 self.sync()
@@ -439,16 +484,60 @@ def gui(always):
                 self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
                 GLib.timeout_add(POLL_MS, self.poll)
 
+        def make_window(self):
+            """The layer surface for the current mode.
+
+            Overlay: floats at the bottom over the windows. Dock: a strip
+            across the bottom edge whose exclusive zone is its own height, so
+            windows tile around it like they do around the bar.
+            """
+            docked = self.mode == "docked"
+            self.keys = {}
+            self.window = Gtk.ApplicationWindow(application=self)
+            self.window.add_css_class("hangul-hint")
+            self.window.add_css_class(self.mode)
+
+            LayerShell.init_for_window(self.window)
+            LayerShell.set_namespace(self.window, NAMESPACE)
+            LayerShell.set_keyboard_mode(
+                self.window, LayerShell.KeyboardMode.NONE)
+            LayerShell.set_anchor(self.window, LayerShell.Edge.BOTTOM, True)
+            if docked:
+                LayerShell.set_layer(self.window, LayerShell.Layer.TOP)
+                LayerShell.set_anchor(self.window, LayerShell.Edge.LEFT, True)
+                LayerShell.set_anchor(self.window, LayerShell.Edge.RIGHT, True)
+                LayerShell.auto_exclusive_zone_enable(self.window)
+            else:
+                LayerShell.set_layer(self.window, LayerShell.Layer.OVERLAY)
+                LayerShell.set_margin(
+                    self.window, LayerShell.Edge.BOTTOM, 56)
+
+            # No input region: clicks fall through to what is underneath.
+            self.window.connect("realize", self.pass_input_through)
+            self.fader = build(self.keys, docked)
+            self.window.set_child(self.fader)
+
+        def set_mode(self, mode):
+            """Rebuild the surface in `mode`: a layer's anchors and zone are
+            fixed once it is mapped, so it is made again, not edited."""
+            self.track(False)
+            self.window.destroy()
+            self.mode = mode
+            write_mode(mode)
+            self.make_window()
+            self.sync()
+
         def sync(self):
             if self.state.visible:
                 self.window.present()
             else:
                 self.window.set_visible(False)
             self.listen(self.state.visible)
-            self.track(self.state.visible)
+            # The dock covers nothing, so only the overlay clears for the mouse.
+            self.track(self.state.visible and self.mode == "overlay")
 
         def track(self, on):
-            """Follow the cursor while the hint is up, to clear around it."""
+            """Follow the cursor while the overlay is up, to clear around it."""
             if on and self.tick is None:
                 self.polls = 0
                 self.overlay = None
@@ -528,7 +617,7 @@ def gui(always):
         def pass_input_through(window):
             window.get_surface().set_input_region(cairo.Region())
 
-    return Hint().run([sys.argv[0]])
+    return Hint().run(sys.argv)
 
 
 def main():

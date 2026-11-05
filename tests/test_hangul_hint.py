@@ -7,7 +7,9 @@ from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
 import re
 import string
+import tempfile
 import unittest
+import unittest.mock
 
 SCRIPT = (Path(__file__).resolve().parent.parent
           / "home/hypr/.local/bin/hypr-hangul-hint")
@@ -226,6 +228,37 @@ class Cursor(unittest.TestCase):
     def test_unknown_cursor_or_layer_clears_nothing(self):
         self.assertIsNone(self.hint.hole_centre(None, (0, 0, 10, 10)))
         self.assertIsNone(self.hint.hole_centre((5, 5), None))
+
+
+class Mode(unittest.TestCase):
+    """The overlay/docked choice survives restarts, in a state file."""
+
+    def setUp(self):
+        self.hint = load_script()
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        patcher = unittest.mock.patch.dict(
+            "os.environ", {"XDG_STATE_HOME": self.dir.name})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_overlay_until_told_otherwise(self):
+        self.assertEqual(self.hint.read_mode(), "overlay")
+
+    def test_the_choice_is_remembered(self):
+        self.hint.write_mode("docked")
+        self.assertEqual(self.hint.read_mode(), "docked")
+
+    def test_a_garbled_file_falls_back_to_overlay(self):
+        self.hint.write_mode("sideways")
+        self.assertEqual(self.hint.read_mode(), "overlay")
+
+    def test_flipping_goes_both_ways(self):
+        self.assertEqual(self.hint.other_mode("overlay"), "docked")
+        self.assertEqual(self.hint.other_mode("docked"), "overlay")
+
+    def test_the_state_stays_under_the_state_dir(self):
+        self.assertTrue(str(self.hint.mode_file()).startswith(self.dir.name))
 
 
 if __name__ == "__main__":
