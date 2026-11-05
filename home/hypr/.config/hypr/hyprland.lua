@@ -819,15 +819,47 @@ hl.window_rule({
     center = true,
 })
 
--- wallhelper (the day's photo + the kept collection)
+-- wallhelper (wallhelper #24): a strip along the bottom of an empty
+-- workspace, so the wallpaper above it is the preview. 226 is the app's
+-- STRIP_H. Opened over windows, it hops to this display's first free slot
+-- (as Super+0 does) and goes back when it closes. A window can only be
+-- moved once it has mapped, so the strip may show for a frame where it
+-- opened.
 hl.window_rule({
-    name  = "wallhelper-float",
+    name  = "wallhelper-strip",
     match = { class = [[^(dev\.jaeho\.Wallhelper)$]] },
 
-    float  = true,
-    size   = "1120 760",
-    center = true,
+    float     = true,
+    size      = "monitor_w 226",
+    move      = "0 monitor_h-226",
+    animation = "slide bottom",
 })
+
+local wallhelper_came_from
+
+hl.on("window.open", function(w)
+    if w.class ~= "dev.jaeho.Wallhelper" then return end
+    wallhelper_came_from = nil
+    local here = w.workspace
+    if here == nil or (here.windows or 0) <= 1 then return end
+    local target = first_free_workspace()
+    if target == nil then return end
+    wallhelper_came_from = here.id
+    hl.dispatch(hl.dsp.window.move({ workspace = target, window = w }))
+end)
+
+-- Back only if the strip's workspace is still the one on screen: closing
+-- it from elsewhere must not pull focus away.
+hl.on("window.close", function(w)
+    if w.class ~= "dev.jaeho.Wallhelper" then return end
+    local back = wallhelper_came_from
+    wallhelper_came_from = nil
+    local active, there = hl.get_active_workspace(), w.workspace
+    if back and hl.get_workspace(back) and active and there
+            and active.id == there.id then
+        focus_workspace(back)
+    end
+end)
 
 -- Betterbird — float compose/reply windows, keep main tiled
 hl.window_rule({
