@@ -1,6 +1,6 @@
 /* ── Minimal floating islands ────────────────────────────────────────────────
    Layout : transparent bar; modules-left / -center / -right float as 3 islands.
-   Colour : Everforest Dark Medium (everforest.css, Everforest's names).
+   Colour : Everforest Dark Medium (jaehho.css, Everforest's names).
               fg / grey2 / grey0  primary / resting / off
               blue    you are here: active workspace, hover pills
               purple  special workspace
@@ -11,7 +11,7 @@
               green   charging, and nothing else */
 
 /* Everforest Dark Medium palette — file sits next to style.css. */
-@import "everforest.css";
+@import "jaehho.css";
 
 /* Layout tints only. Values come from palette tokens via alpha(). */
 @define-color bg0-88 alpha(@bg0, 0.88);

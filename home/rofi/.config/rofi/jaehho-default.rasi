@@ -1,4 +1,4 @@
-// Stock rofi role map over the Everforest names in themes/everforest.rasi.
+// Stock rofi role map over the Everforest names in themes/jaehho.rasi.
 
 * {
   selected-active-foreground:  @background;

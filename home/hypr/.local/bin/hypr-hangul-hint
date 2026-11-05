@@ -207,7 +207,7 @@ class Visibility:
 def palette():
     """name -> '#rrggbb' from the shared Everforest file."""
     colors = {}
-    path = Path.home() / ".config/hypr/themes/everforest.conf"
+    path = Path.home() / ".config/hypr/themes/jaehho.conf"
     try:
         for line in path.read_text().splitlines():
             name, _, val = line.strip().partition("=")

@@ -2,7 +2,7 @@
 name: Omnibook Desktop
 description: "Everforest Dark Medium chrome for one keyboard-driven Hyprland laptop: gray at rest, a hue only when it carries news."
 colors:
-  # A copy of home/hypr/.config/hypr/themes/everforest.conf for DESIGN.md
+  # A copy of home/hypr/.config/hypr/themes/jaehho.conf for DESIGN.md
   # tooling. Code reads that file by these names at runtime, never this one.
   green: "#a7c080"
   blue: "#7fbbb3"
@@ -150,7 +150,7 @@ Density is compact and keyboard-paced: 13px words, 11px labels, controls 8px apa
 
 **Key Characteristics:**
 
-- Everforest Dark Medium (decision #71), read by token name from `home/hypr/.config/hypr/themes/everforest.conf`.
+- Everforest Dark Medium (decision #71), read by token name from `home/hypr/.config/hypr/themes/jaehho.conf`.
 - Gray at rest; a hue only for news, with one meaning per state hue.
 - Dark `bg_dim` sheets with a 1px `bg2` hairline; `bg0` controls that step lighter on hover.
 - State as a tint of its tone; a solid tone fill only for the one active marker in a row.
@@ -162,7 +162,7 @@ Density is compact and keyboard-paced: 13px words, 11px labels, controls 8px apa
 
 Everforest Dark Medium (sainnhe/everforest): dark green-gray grounds, warm parchment text and muted role hues, chosen over Catppuccin Mocha because its text is warmer, about 5,100 K against 8,900 K (decision #71).
 
-**Where the values live.** `home/hypr/.config/hypr/themes/everforest.conf` defines each of the 24 tokens once, as `$name = rgb(rrggbb)` under Everforest's own names. hyprlock sources it; the `hypr-*` panels, speaker-eq, waybar's `scripts/load.py` and the polkit prompt's `Colors.qml` parse it at runtime and use token names, never hexes. Four packages keep same-named copies in their own formats, as decision #71 and the theme README record (hand recolors, no palette compiler): `themes/everforest.lua` for `hyprland.lua`, an `everforest.css` of `@define-color` lines each for waybar and swaync, and `themes/everforest.rasi` for rofi. All four matched every token on 2026-11-05; nothing checks them. The frontmatter above is one more copy, for DESIGN.md tooling only.
+**Where the values live.** `home/hypr/.config/hypr/themes/jaehho.conf` defines each of the 24 tokens once, as `$name = rgb(rrggbb)` under Everforest's own names. hyprlock sources it; the `hypr-*` panels, speaker-eq, waybar's `scripts/load.py` and the polkit prompt's `Colors.qml` parse it at runtime and use token names, never hexes. Four packages keep same-named copies in their own formats, as decision #71 and the theme README record (hand recolors, no palette compiler): `themes/jaehho.lua` for `hyprland.lua`, an `jaehho.css` of `@define-color` lines each for waybar and swaync, and `themes/jaehho.rasi` for rofi. All four matched every token on 2026-11-05; nothing checks them. The frontmatter above is one more copy, for DESIGN.md tooling only.
 
 ### Primary
 
@@ -198,13 +198,13 @@ Two widgets also use hues to tell meters apart rather than to report state: sway
 
 The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` tints and `aqua`) are not chrome colors; `aqua` appears only as the RAM label in waybar's load tooltip and in hypr-confetti's paper.
 
-**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `everforest.lua` fails to load), waybar's `scripts/load.py` (8) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines on the settings and display sheets and in speaker-eq, the keybind sheet's tallies, footers and filter placeholder, its unbound key labels (3.21:1 on `bg0`), and waybar's resting workspace numbers (3.27:1 on an island). PRODUCT.md says the palette is never restated; the four package copies above are the exception decision #71 allows.
+**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `jaehho.lua` fails to load), waybar's `scripts/load.py` (8) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines on the settings and display sheets and in speaker-eq, the keybind sheet's tallies, footers and filter placeholder, its unbound key labels (3.21:1 on `bg0`), and waybar's resting workspace numbers (3.27:1 on an island). PRODUCT.md says the palette is never restated; the four package copies above are the exception decision #71 allows.
 
 ### Color Rules
 
 **The Dark Cockpit Rule.** At rest the chrome is `fg`, `grey2` and `grey0` on dark grounds. A hue appears when it carries news, and a state hue means the same thing on every surface.
 
-**The One Source Rule.** Hex values are defined in `everforest.conf`. Surface code names tokens and parses that file at runtime; when the file cannot be read it falls back to neutral grays, never to palette hexes.
+**The One Source Rule.** Hex values are defined in `jaehho.conf`. Surface code names tokens and parses that file at runtime; when the file cannot be read it falls back to neutral grays, never to palette hexes.
 
 **The Tint Rule.** A control's state is its tone at low alpha behind (0.12 to 0.2) and at mid alpha on the 1px edge (0.45 to 0.55). Words on a band stay `fg` unless the tone holds 4.5:1 on its own band: green words measure 5.46:1 on the green band, red only 4.28:1, so error words stay `fg` (6.94:1). A solid tone fill is kept for the single active marker in a row: the current workspace, a lit key, rofi's selected row, a suggested action.
 
@@ -375,7 +375,7 @@ hyprlock: a blurred screenshot of the session (3 passes, size 8, brightness 0.6)
 
 ### Do
 
-- **Do** read colors at runtime from `home/hypr/.config/hypr/themes/everforest.conf` by Everforest's token names, and fall back to neutral grays when it is missing (`Colors.qml`).
+- **Do** read colors at runtime from `home/hypr/.config/hypr/themes/jaehho.conf` by Everforest's token names, and fall back to neutral grays when it is missing (`Colors.qml`).
 - **Do** build an overlay as a `bg_dim` sheet at 0.985 with a 1px `bg2` hairline, 12px corners, about 20px side padding and controls 8px apart.
 - **Do** draw controls as `bg0` with a 1px `bg1` edge, hover to `bg1` with a `bg3` edge, and ring keyboard focus with an `fg` border and a 2px `blue` outline offset 1px.
 - **Do** show a control's state as a tint of its tone (0.12 to 0.2 behind, 0.45 to 0.55 on the edge), and keep its words `fg` unless the tone holds 4.5:1 on its band.

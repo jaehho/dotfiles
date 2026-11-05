@@ -6,7 +6,7 @@ busy, pegged) rather than by metric; hovering drops a panel with bars and
 details, labeled in each metric's own hue. One process samples everything, so each GPU is queried
 once per tick.
 
-Colors are Everforest Dark Medium role hues (hypr/themes/everforest.conf).
+Colors are Everforest Dark Medium role hues (hypr/themes/jaehho.conf).
 
 Intel (xe) has no busy-percent file, but each GT reports how long it has been
 idle; busy = 1 - idle delta / wall delta, from the render GT (gt*-rc). NVIDIA
@@ -33,11 +33,11 @@ def read(path):
 
 
 def colors():
-    """Role hues from the Everforest tokens (hyprlock everforest.conf)."""
+    """Role hues from the Everforest tokens (hyprlock jaehho.conf)."""
     from pathlib import Path as _P
     hexes = {}
     try:
-        for line in (_P.home() / ".config/hypr/themes/everforest.conf").read_text().splitlines():
+        for line in (_P.home() / ".config/hypr/themes/jaehho.conf").read_text().splitlines():
             line = line.strip()
             if line.startswith("$") and "=" in line:
                 name, _, val = line.partition("=")

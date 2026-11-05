@@ -1,5 +1,5 @@
-/* Everforest Dark Medium (themes/everforest.rasi) through the stock role
-   map in everforest-default.rasi. Layout prefs (font, width, Papirus icons)
+/* Everforest Dark Medium (themes/jaehho.rasi) through the stock role
+   map in jaehho-default.rasi. Layout prefs (font, width, Papirus icons)
    stay on top of the stock theme. */
 
 configuration {
@@ -17,8 +17,8 @@ configuration {
   display-filebrowser: "";
 }
 
-@import "themes/everforest.rasi"
-@import "everforest-default.rasi"
+@import "themes/jaehho.rasi"
+@import "jaehho-default.rasi"
 
 * {
   font: "JetBrainsMono Nerd Font 11";

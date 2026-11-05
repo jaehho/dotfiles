@@ -1,6 +1,6 @@
 // Everforest Dark Medium for the polkit prompt, read at runtime from the
 // palette file hyprlock and the hypr-* panels share. Token names are
-// Everforest's; the hexes live only in themes/everforest.conf. The neutral
+// Everforest's; the hexes live only in themes/jaehho.conf. The neutral
 // fallbacks keep the prompt readable if that file is missing, because an
 // authentication prompt has to render whatever else is broken.
 import QtQuick
@@ -41,7 +41,7 @@ Scope {
 
     FileView {
         id: file
-        path: Quickshell.env("HOME") + "/.config/hypr/themes/everforest.conf"
+        path: Quickshell.env("HOME") + "/.config/hypr/themes/jaehho.conf"
         blockLoading: true
     }
 }
