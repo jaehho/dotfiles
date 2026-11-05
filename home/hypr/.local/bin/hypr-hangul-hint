@@ -18,8 +18,10 @@ The layout table is what fcitx5-hangul's "2" keyboard produces, and
 tests/test_hangul_hint.py checks it against libhangul, so it cannot drift.
 """
 
+import json
 import os
 from pathlib import Path
+import socket
 import struct
 import sys
 
@@ -54,6 +56,73 @@ KEY_CODES = {  # linux/input-event-codes.h
     36: "j", 37: "k", 38: "l", 44: "z", 45: "x", 46: "c", 47: "v", 48: "b",
     49: "n", 50: "m",
 }
+
+
+# The overlay has no input region, so it cannot hear the pointer. Hyprland can
+# say where the cursor is, and where this layer sits, over its IPC socket.
+# Where the cursor is over the board, the board clears around it.
+# HANGUL_HINT_CURSOR="x,y" pins the cursor (global pixels), for tests.
+HOLE_RADIUS = 96
+CURSOR_MS = 33
+GEOMETRY_EVERY = 15  # cursor polls between looks at where the layer sits
+NAMESPACE = "hangul-hint"
+
+
+def hypr_request(command):
+    """Hyprland's JSON answer to an IPC command such as 'j/cursorpos'."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    signature = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+    if not runtime or not signature:
+        return None
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.1)
+            sock.connect(f"{runtime}/hypr/{signature}/.socket.sock")
+            sock.sendall(command.encode())
+            chunks = []
+            while chunk := sock.recv(65536):
+                chunks.append(chunk)
+        return json.loads(b"".join(chunks))
+    except (OSError, ValueError):
+        return None
+
+
+def cursor_position():
+    """(x, y) of the pointer in global pixels, or None."""
+    pinned = os.environ.get("HANGUL_HINT_CURSOR")
+    if pinned:
+        x, y = pinned.split(",")
+        return float(x), float(y)
+    answer = hypr_request("j/cursorpos")
+    return (answer["x"], answer["y"]) if answer else None
+
+
+def find_overlay(layers, monitors):
+    """(x, y, width, height) of this overlay in global pixels, or None.
+
+    `layers` and `monitors` are Hyprland's 'j/layers' and 'j/monitors'; a
+    layer's position is relative to the monitor it is on.
+    """
+    origins = {m["name"]: (m["x"], m["y"]) for m in monitors or []}
+    for name, monitor in (layers or {}).items():
+        for found in monitor.get("levels", {}).values():
+            for layer in found:
+                if layer.get("namespace") == NAMESPACE:
+                    ox, oy = origins.get(name, (0, 0))
+                    return (ox + layer["x"], oy + layer["y"],
+                            layer["w"], layer["h"])
+    return None
+
+
+def hole_centre(cursor, overlay, radius=HOLE_RADIUS):
+    """The cursor in the overlay's own pixels while it is near enough to
+    matter (within `radius` of the overlay), else None."""
+    if cursor is None or overlay is None:
+        return None
+    x, y = cursor[0] - overlay[0], cursor[1] - overlay[1]
+    if -radius < x < overlay[2] + radius and -radius < y < overlay[3] + radius:
+        return round(x), round(y)
+    return None
 
 
 def keyboard_device():
@@ -222,8 +291,61 @@ def gui(always):
     gi.require_version("Gtk", "4.0")
     gi.require_version("Gdk", "4.0")
     gi.require_version("Gtk4LayerShell", "1.0")
-    from gi.repository import Gdk, Gio, GLib, Gtk
+    gi.require_version("Gsk", "4.0")
+    gi.require_version("Graphene", "1.0")
+    from gi.repository import Gdk, Gio, GLib, Graphene, Gsk, Gtk
     from gi.repository import Gtk4LayerShell as LayerShell
+
+    class Fader(Gtk.Widget):
+        """Draws its child, nearly clear around `hole` (a point, or None).
+
+        The clear patch is a radial mask: almost see-through at the cursor,
+        back to solid at HOLE_RADIUS, so the board never has an edge to it.
+        """
+
+        __gtype_name__ = "HangulHintFader"
+        # (offset from the cursor, how much of the board still shows)
+        PROFILE = [(0.0, 0.07), (0.4, 0.1), (0.7, 0.55), (1.0, 1.0)]
+
+        def __init__(self, child):
+            super().__init__(halign=Gtk.Align.CENTER, valign=Gtk.Align.END)
+            self.set_layout_manager(Gtk.BinLayout())
+            self.child = child
+            child.set_parent(self)
+            self.hole = None
+
+        def set_hole(self, hole):
+            if hole != self.hole:
+                self.hole = hole
+                self.queue_draw()
+
+        def do_snapshot(self, snapshot):
+            if self.hole is None:
+                self.snapshot_child(self.child, snapshot)
+                return
+            stops = []
+            for offset, alpha in self.PROFILE:
+                # Build the colour, then assign it: PyGObject hands back a
+                # copy of a struct field, so `stop.color.alpha = x` is lost.
+                colour = Gdk.RGBA()
+                colour.alpha = alpha
+                stop = Gsk.ColorStop()
+                stop.offset = offset
+                stop.color = colour
+                stops.append(stop)
+            bounds = Graphene.Rect().init(
+                0, 0, self.get_width(), self.get_height())
+            centre = Graphene.Point().init(*self.hole)
+            snapshot.push_mask(Gsk.MaskMode.ALPHA)
+            snapshot.append_radial_gradient(
+                bounds, centre, HOLE_RADIUS, HOLE_RADIUS, 0.0, 1.0, stops)
+            snapshot.pop()
+            self.snapshot_child(self.child, snapshot)
+            snapshot.pop()
+
+        def do_dispose(self):
+            self.child.unparent()
+            Gtk.Widget.do_dispose(self)
 
     def key_widget(latin, jamo, shifted):
         box = Gtk.Overlay()
@@ -263,7 +385,7 @@ def gui(always):
                 fixed.put(keys[latin], (col + offset) * PITCH, top * PITCH)
         fixed.set_size_request(*board_size())
         board.append(fixed)
-        return board
+        return Fader(board)
 
     class Hint(Gtk.Application):
         def __init__(self):
@@ -273,8 +395,12 @@ def gui(always):
             self.state = Visibility(always)
             self.bus = None
             self.keys = {}      # letter -> key widget
+            self.fader = None   # the board, which can clear around the cursor
             self.fd = None      # the keyboard device, open while visible
             self.watch = None
+            self.tick = None    # the cursor poll, running while visible
+            self.polls = 0
+            self.overlay = None  # where this layer sits, global pixels
 
         def do_activate(self):
             # The first run starts the follower; later runs reach it here and
@@ -295,7 +421,7 @@ def gui(always):
             self.window.add_css_class("hangul-hint")
 
             LayerShell.init_for_window(self.window)
-            LayerShell.set_namespace(self.window, "hangul-hint")
+            LayerShell.set_namespace(self.window, NAMESPACE)
             LayerShell.set_layer(self.window, LayerShell.Layer.OVERLAY)
             LayerShell.set_keyboard_mode(
                 self.window, LayerShell.KeyboardMode.NONE)
@@ -304,7 +430,8 @@ def gui(always):
 
             # No input region: clicks fall through to what is underneath.
             self.window.connect("realize", self.pass_input_through)
-            self.window.set_child(build(self.keys))
+            self.fader = build(self.keys)
+            self.window.set_child(self.fader)
 
             if always:
                 self.sync()
@@ -318,6 +445,26 @@ def gui(always):
             else:
                 self.window.set_visible(False)
             self.listen(self.state.visible)
+            self.track(self.state.visible)
+
+        def track(self, on):
+            """Follow the cursor while the hint is up, to clear around it."""
+            if on and self.tick is None:
+                self.polls = 0
+                self.overlay = None
+                self.tick = GLib.timeout_add(CURSOR_MS, self.follow_cursor)
+            elif not on and self.tick is not None:
+                GLib.source_remove(self.tick)
+                self.tick = None
+                self.fader.set_hole(None)
+
+        def follow_cursor(self):
+            if self.overlay is None or self.polls % GEOMETRY_EVERY == 0:
+                self.overlay = find_overlay(hypr_request("j/layers"),
+                                            hypr_request("j/monitors"))
+            self.polls += 1
+            self.fader.set_hole(hole_centre(cursor_position(), self.overlay))
+            return True
 
         def listen(self, on):
             """Read the keyboard while the hint is up, and only then."""

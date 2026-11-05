@@ -176,5 +176,57 @@ class Lighting(unittest.TestCase):
         self.assertEqual(self.hint.key_events(data), [("j", True)])
 
 
+class Cursor(unittest.TestCase):
+    """Where the cursor is against the overlay, from Hyprland's IPC."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.hint = load_script()
+
+    def layers(self, namespace="hangul-hint"):
+        return {"eDP-1": {"levels": {
+            "0": [{"namespace": "waybar", "x": 0, "y": 0, "w": 1920, "h": 40}],
+            "3": [{"namespace": namespace, "x": 636, "y": 810,
+                   "w": 648, "h": 214}]}}}
+
+    def test_finds_the_layer_by_namespace(self):
+        monitors = [{"name": "eDP-1", "x": 0, "y": 0}]
+        self.assertEqual(self.hint.find_overlay(self.layers(), monitors),
+                         (636, 810, 648, 214))
+
+    def test_the_namespace_matches_the_one_the_window_sets(self):
+        # hyprland.lua's blur rule and the IPC lookup both key on it.
+        source = SCRIPT.read_text()
+        self.assertIn("set_namespace(self.window, NAMESPACE)", source)
+        self.assertEqual(self.hint.NAMESPACE, "hangul-hint")
+
+    def test_a_monitor_offset_is_added(self):
+        monitors = [{"name": "eDP-1", "x": 2560, "y": 100}]
+        self.assertEqual(self.hint.find_overlay(self.layers(), monitors),
+                         (3196, 910, 648, 214))
+
+    def test_no_layer_no_position(self):
+        self.assertIsNone(self.hint.find_overlay(self.layers("other"), []))
+        self.assertIsNone(self.hint.find_overlay(None, None))
+
+    def test_cursor_over_the_board_is_in_its_own_pixels(self):
+        overlay = (636, 810, 648, 214)
+        self.assertEqual(self.hint.hole_centre((700, 900), overlay), (64, 90))
+
+    def test_cursor_just_outside_still_clears_its_edge(self):
+        overlay = (636, 810, 648, 214)
+        self.assertEqual(self.hint.hole_centre((600, 900), overlay),
+                         (-36, 90))
+
+    def test_cursor_far_away_clears_nothing(self):
+        overlay = (636, 810, 648, 214)
+        self.assertIsNone(self.hint.hole_centre((100, 100), overlay))
+        self.assertIsNone(self.hint.hole_centre((700, 100), overlay))
+
+    def test_unknown_cursor_or_layer_clears_nothing(self):
+        self.assertIsNone(self.hint.hole_centre(None, (0, 0, 10, 10)))
+        self.assertIsNone(self.hint.hole_centre((5, 5), None))
+
+
 if __name__ == "__main__":
     unittest.main()
