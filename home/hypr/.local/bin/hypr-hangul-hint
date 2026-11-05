@@ -41,11 +41,6 @@ HANGUL_IM = "hangul"
 POLL_MS = 250
 
 
-def is_vowel(jamo):
-    """Compatibility jamo ㅏ..ㅣ are U+314F..U+3163; the rest are consonants."""
-    return 0x314F <= ord(jamo) <= 0x3163
-
-
 class Visibility:
     """Whether the hint shows: follow fcitx5, unless flipped by hand.
 
@@ -94,52 +89,63 @@ def palette():
 
 PITCH = 62
 GAP = 6
+KEY = PITCH - GAP
 
-# Translucent: the board and keys are tinted glass, and the layer rule blurs
-# what is behind them. The glyphs stay opaque so they read over any window.
+# The keys with a tactile bump on a real keyboard.
+HOME_BUMPS = ("f", "j")
+
+
+def board_size():
+    """(width, height) of the keys exactly: no slack on any side, so the
+    board's padding is the same all round."""
+    width = max((len(row) - 1 + offset) * PITCH + KEY
+                for row, offset in zip(ROWS, ROW_OFFSETS))
+    height = (len(ROWS) - 1) * PITCH + KEY
+    return int(width), int(height)
+
+
+# The board is dark glass the layer rule blurs behind; the keys sit on it
+# nearly solid so the glyphs read over any window.
 CSS = """
 window.hangul-hint {{ background: transparent; }}
 
 .board {{
-  background: alpha({bg_dim}, 0.62);
-  border: 1px solid alpha({bg3}, 0.6);
+  background: alpha({bg_dim}, 0.72);
+  border: 1px solid alpha({bg3}, 0.7);
   border-radius: 12px;
-  padding: 14px 18px 10px 18px;
+  padding: 16px;
 }}
 
 .key {{
-  background: alpha({bg1}, 0.4);
-  border: 1px solid alpha({bg3}, 0.5);
-  border-bottom: 3px solid alpha({bg_dim}, 0.6);
+  background: alpha({bg2}, 0.94);
+  border: 1px solid {bg3};
+  border-bottom: 3px solid {bg_dim};
   border-radius: 8px;
-}}
-.key.vowel {{
-  background: alpha({blue}, 0.14);
-  border-color: alpha({blue}, 0.45);
-}}
-.key.consonant {{
-  background: alpha({orange}, 0.12);
-  border-color: alpha({orange}, 0.4);
 }}
 
 .jamo {{
   font-family: "Noto Sans CJK KR", sans-serif;
-  font-size: 26px;
-  font-weight: 500;
+  font-size: 28px;
+  font-weight: 600;
+  color: {fg};
 }}
-.vowel .jamo {{ color: {blue}; }}
-.consonant .jamo {{ color: {orange}; }}
 
 .latin {{
   font-family: "JetBrainsMono Nerd Font", monospace;
   font-size: 10px;
   font-weight: 700;
-  color: {grey2};
+  color: {grey1};
 }}
 .shifted {{
   font-family: "Noto Sans CJK KR", sans-serif;
-  font-size: 12px;
-  color: {fg};
+  font-size: 13px;
+  font-weight: 500;
+  color: {grey2};
+}}
+
+.bump {{
+  background: {grey1};
+  border-radius: 2px;
 }}
 """
 
@@ -167,8 +173,7 @@ def gui(always):
     def key_widget(latin, jamo, shifted):
         box = Gtk.Overlay()
         box.add_css_class("key")
-        box.add_css_class("vowel" if is_vowel(jamo) else "consonant")
-        box.set_size_request(PITCH - GAP, PITCH - GAP)
+        box.set_size_request(KEY, KEY)
         main = Gtk.Label(label=jamo, halign=Gtk.Align.CENTER,
                          valign=Gtk.Align.CENTER)
         main.add_css_class("jamo")
@@ -178,6 +183,12 @@ def gui(always):
                           margin_bottom=3)
         small.add_css_class("latin")
         box.add_overlay(small)
+        if latin in HOME_BUMPS:
+            bump = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.END,
+                           margin_bottom=5)
+            bump.set_size_request(20, 3)
+            bump.add_css_class("bump")
+            box.add_overlay(bump)
         if shifted:
             top = Gtk.Label(label=shifted, halign=Gtk.Align.END,
                             valign=Gtk.Align.START, margin_end=6,
@@ -194,7 +205,7 @@ def gui(always):
             for col, (latin, jamo, shifted) in enumerate(row):
                 fixed.put(key_widget(latin, jamo, shifted),
                           (col + offset) * PITCH, top * PITCH)
-        fixed.set_size_request(int(10.25 * PITCH), 3 * PITCH)
+        fixed.set_size_request(*board_size())
         board.append(fixed)
         return board
 
