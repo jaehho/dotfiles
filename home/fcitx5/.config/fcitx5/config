@@ -1,2 +1,6 @@
+# The language is switched by a Hyprland bind (`fcitx5-remote -t`, see
+# hyprland.lua), so fcitx5's own toggle keys are cleared: no Ctrl+Space, no
+# bare Left Shift tap.
 [Hotkey/TriggerKeys]
-0=Control+space
+
+[Hotkey/AltTriggerKeys]

@@ -82,7 +82,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("~/.local/bin/hypr-urgent-focus")
     hl.exec_cmd("~/.local/bin/hypr-swaync-keys")
     hl.exec_cmd("hypridle")
-    hl.exec_cmd("fcitx5 -d")                       -- Korean input, Ctrl+Space toggles (home/fcitx5)
+    hl.exec_cmd("fcitx5 -d")                       -- Korean input, Super+Shift+Space toggles (home/fcitx5)
     hl.exec_cmd("~/.local/bin/hypr-hangul-hint")   -- key hint, shown while typing Hangul
     -- Night light on the schedule in hyprsunset.conf. Not the packaged user
     -- unit: it requires graphical-session.target, which Hyprland never starts.
@@ -414,7 +414,12 @@ hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("~/.local/bin/hypr-nightlight-toggle"
 -- Keybind cheatsheet
 hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheatsheet"))
 
--- Korean key hint: it shows and hides itself with Ctrl+Space (started at
+-- Korean: switch the focused window between English and Hangul. fcitx5's own
+-- toggle keys are cleared in home/fcitx5, so apps never see this key and
+-- nothing else switches the language.
+hl.bind(mainMod .. " + SHIFT + space", hl.dsp.exec_cmd("fcitx5-remote -t")) -- Korean: toggle English / Hangul
+
+-- Korean key hint: it shows and hides itself with the language (started at
 -- login above). This only picks its look: a floating overlay, or a docked
 -- strip the windows tile around. Remembered.
 hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("~/.local/bin/hypr-hangul-hint --dock")) -- Korean key hint: overlay / docked
