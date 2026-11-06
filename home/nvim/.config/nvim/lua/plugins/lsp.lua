@@ -1,4 +1,21 @@
 -- LSP / format / treesitter / completion overrides on top of LazyVim.
+
+---Obsidian lets a [[link]] name a note that is not written yet, so marksman's
+---"Link to non-existent document" on a wiki-link is noise. A [text](path) link
+---to a missing file is a real mistake and keeps its diagnostic.
+---@param bufnr integer
+---@param diagnostic lsp.Diagnostic
+---@return boolean
+local function is_unwritten_wikilink(bufnr, diagnostic)
+  if not diagnostic.message:find '^Link to non%-existent document' then
+    return false
+  end
+  local start = diagnostic.range.start
+  local line = vim.api.nvim_buf_get_lines(bufnr, start.line, start.line + 1, false)[1] or ''
+  local ok, col = pcall(vim.str_byteindex, line, 'utf-16', start.character)
+  return ok and line:sub(col + 1, col + 2) == '[['
+end
+
 return {
   {
     'neovim/nvim-lspconfig',
@@ -32,7 +49,19 @@ return {
       },
       servers = {
         bashls = {},
-        marksman = {},
+        marksman = {
+          handlers = {
+            ['textDocument/publishDiagnostics'] = function(err, result, ctx)
+              local bufnr = result and vim.uri_to_bufnr(result.uri)
+              if bufnr and vim.api.nvim_buf_is_loaded(bufnr) then
+                result.diagnostics = vim.tbl_filter(function(diagnostic)
+                  return not is_unwritten_wikilink(bufnr, diagnostic)
+                end, result.diagnostics)
+              end
+              vim.lsp.diagnostic.on_publish_diagnostics(err, result, ctx)
+            end,
+          },
+        },
         rust_analyzer = {},
         tinymist = {},
         ty = {},
