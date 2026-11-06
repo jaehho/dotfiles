@@ -1,4 +1,4 @@
--- jaehho palette, forked from Everforest Dark Medium (sainnhe/everforest palette.md) on 2026-11-05; edit the values here.
+-- foliage palette, forked from Everforest Dark Medium (sainnhe/everforest palette.md) on 2026-11-05; edit the values here.
 -- Names are Everforest's. hyprland.lua reads the *Alpha forms.
 local M = {}
 

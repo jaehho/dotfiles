@@ -1,8 +1,8 @@
-/* swaync style — Everforest Dark Medium (jaehho.css, Everforest's names),
+/* swaync style — Everforest Dark Medium (foliage.css, Everforest's names),
    recolored over the release theme CSS this file started from.
    Font and corner radii snapped to this repo's scale (JetBrainsMono, 12/8/pill).
    config.json and hypr-swaync-keys are unchanged. */
-@import "jaehho.css";
+@import "foliage.css";
 
 * {
   all: unset;

@@ -223,8 +223,8 @@ from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
 # Everforest Dark Medium, read from the hyprlock palette file.
 # Token names are Everforest's. Do not restate hexes here.
 def _palette_hex():
-    """name -> bare rrggbb, from hypr/themes/jaehho.conf."""
-    path = Path.home() / ".config/hypr/themes/jaehho.conf"
+    """name -> bare rrggbb, from hypr/themes/foliage.conf."""
+    path = Path.home() / ".config/hypr/themes/foliage.conf"
     colors = {}
     try:
         for line in path.read_text().splitlines():

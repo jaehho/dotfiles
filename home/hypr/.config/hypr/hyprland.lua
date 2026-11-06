@@ -38,12 +38,12 @@ end
 if not ok_ws then
     hl.notification.create({ text = "workspaces.lua failed: " .. tostring(workspaces), timeout = 10000, icon = "error" })
 end
--- Colors only from the Everforest Dark Medium module (themes/jaehho.lua).
+-- Colors only from the Everforest Dark Medium module (themes/foliage.lua).
 -- Active border is fixed green, the Everforest accent.
-package.loaded["themes.jaehho"] = nil
-local ok_theme, palette = pcall(require, "themes.jaehho")
+package.loaded["themes.foliage"] = nil
+local ok_theme, palette = pcall(require, "themes.foliage")
 if not ok_theme or type(palette) ~= "table" or palette.greenAlpha == nil then
-    hl.notification.create({ text = "jaehho.lua failed to load", timeout = 10000, icon = "error" })
+    hl.notification.create({ text = "foliage.lua failed to load", timeout = 10000, icon = "error" })
     palette = { greenAlpha = "a7c080", grey1Alpha = "859289", bg_dimAlpha = "232a2e" }
 end
 local clr = {
