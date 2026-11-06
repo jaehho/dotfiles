@@ -23,6 +23,8 @@ else
     rm -f "$PIDFILE"
 fi
 
-# Refresh the waybar idle-inhibitor module so the icon updates immediately
-# instead of waiting for its 30-second poll.
+# Refresh the bar's stay-awake glyph so it updates immediately instead of
+# waiting for its 30-second poll: waybar by signal, the Quickshell bar
+# (issue #75) over IPC. Whichever is not running ignores it.
 pkill -RTMIN+11 waybar 2>/dev/null || true
+qs -c bar ipc call bar refreshAwake >/dev/null 2>&1 || true

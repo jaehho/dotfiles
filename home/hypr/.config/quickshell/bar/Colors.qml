@@ -19,8 +19,14 @@ Scope {
     readonly property color bg3: tokens.bg3 ?? "#444444"
     readonly property color fg: tokens.fg ?? "#e0e0e0"
     readonly property color grey0: tokens.grey0 ?? "#808080"
+    readonly property color grey1: tokens.grey1 ?? "#989898"
     readonly property color grey2: tokens.grey2 ?? "#b0b0b0"
     readonly property color blue: tokens.blue ?? "#80b0e0"
+    readonly property color aqua: tokens.aqua ?? "#80c0a0"
+    readonly property color green: tokens.green ?? "#a0c080"
+    readonly property color orange: tokens.orange ?? "#e09070"
+    readonly property color red: tokens.red ?? "#e08080"
+    readonly property color purple: tokens.purple ?? "#d0a0c0"
 
     function withAlpha(c, a) {
         return Qt.rgba(c.r, c.g, c.b, a);

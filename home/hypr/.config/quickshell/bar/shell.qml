@@ -1,10 +1,14 @@
+//@ pragma IconTheme Papirus-Dark
 // The session's top bar, rebuilt in Quickshell to replace waybar
-// (home/waybar) one island at a time. Only the center island exists so
-// far, and hyprland.lua does not start it: waybar is still the bar. Try
-// it with `quickshell -c bar`.
+// (home/waybar, issue #75). All three islands exist, but hyprland.lua
+// does not start it yet: waybar is still the bar. Try it with
+// `quickshell -c bar`.
 //
 // `quickshell -c bar ipc call bar toggle` opens or closes the center
-// island on the focused monitor.
+// island on the focused monitor; `... ipc call bar refreshAwake` makes
+// the stay-awake glyph look again (hypr-idle-toggle calls it).
+//
+// App icons resolve through Papirus-Dark, as waybar's did.
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
@@ -30,6 +34,7 @@ ShellRoot {
     }
 
     Variants {
+        id: bars
         model: Quickshell.screens
 
         Bar {
@@ -50,6 +55,11 @@ ShellRoot {
 
         function toggle(): void {
             root.toggle(Hyprland.focusedMonitor?.name ?? "");
+        }
+
+        function refreshAwake(): void {
+            for (const bar of bars.instances)
+                bar.rightIsland.attention.probeAwake();
         }
     }
 }
