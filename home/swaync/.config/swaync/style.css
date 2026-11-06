@@ -123,6 +123,16 @@ trough {
   background-color: @bg3;
 }
 
+/* The fork's corner badge naming the key that runs an action (fork commit
+   675ea9c). Its rule shipped only in the fork's packaged style.css; the
+   stock /etc/xdg/swaync/style.css from extra/swaync lacks it. */
+.notification-row .notification-background .notification .notification-action > button .action-key-hint {
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.5;
+  margin: 2px 5px 0 0;
+}
+
 .notification.critical progress {
   background-color: @red;
 }
