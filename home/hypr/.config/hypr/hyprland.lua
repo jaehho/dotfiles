@@ -822,16 +822,6 @@ hl.window_rule({
     center = true,
 })
 
--- Wallpaper picker
-hl.window_rule({
-    name  = "waypaper-float",
-    match = { class = "^(waypaper)$" },
-
-    float  = true,
-    size   = "1000 700",
-    center = true,
-})
-
 -- wallhelper (wallhelper #24): a strip along the bottom of an empty
 -- workspace, so the wallpaper above it is the preview. 226 is the app's
 -- STRIP_H. Opened over windows, it hops to this display's first free slot
