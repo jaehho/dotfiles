@@ -129,11 +129,13 @@ Island {
                 width: pill.width + 4
                 height: 24
 
+                // 7px before the number and after the last icon, whose
+                // slot already holds 4 of them.
                 Rectangle {
                     id: pill
                     x: 2
                     y: 3
-                    width: content.width + 14
+                    width: content.width + (slot.windows.length > 0 ? 10 : 14)
                     height: 18
                     radius: 8
                     color: slot.current ? (slot.special ? leftIsland.colors.purple : leftIsland.colors.blue) : slot.workspace.urgent ? leftIsland.colors.red : hover.hovered ? leftIsland.colors.withAlpha(slot.special ? leftIsland.colors.purple : leftIsland.colors.blue, 0.14) : "transparent"
@@ -162,7 +164,7 @@ Island {
                             anchors.verticalCenter: parent.verticalCenter
                             mono: true
                             text: slot.workspace.name.replace(/^special:/, "")
-                            color: slot.current || slot.workspace.urgent ? leftIsland.colors.bg0 : hover.hovered ? leftIsland.colors.fg : slot.special ? leftIsland.colors.grey1 : leftIsland.colors.grey0
+                            color: slot.current || slot.workspace.urgent ? leftIsland.colors.bg0 : hover.hovered ? leftIsland.colors.fg : slot.special ? leftIsland.colors.grey1 : leftIsland.colors.grey2
 
                             Behavior on color {
                                 ColorAnimation {
@@ -171,8 +173,9 @@ Island {
                             }
                         }
 
-                        // Waybar's label kept 3px more; each window was a
-                        // button 42px apart, its icon centered.
+                        // 3px after the number, then a 22px slot per
+                        // window: its 14px icon centered, icons 8px apart.
+                        // (Waybar spaced them 42px.)
                         Item {
                             visible: slot.windows.length > 0
                             width: 3
@@ -188,7 +191,7 @@ Island {
                                 required property var modelData
                                 readonly property bool focused: Hyprland.activeToplevel === modelData && ToplevelManager.activeToplevel !== null
 
-                                width: 42
+                                width: 22
                                 height: 18
 
                                 IconImage {
