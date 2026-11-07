@@ -56,7 +56,8 @@ Island {
             workspace.activate();
     }
 
-    function focus(toplevel, workspace) {
+    // Not `focus`: every Item has a focus property, which wins.
+    function focusWindow(toplevel, workspace) {
         if (workspace.name === leftIsland.raisedSpecial)
             Hyprland.dispatch(`hl.dsp.workspace.toggle_special("${workspace.name.slice(8)}")`);
         else
@@ -203,7 +204,7 @@ Island {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: leftIsland.focus(entry.modelData, slot.workspace)
+                                    onClicked: leftIsland.focusWindow(entry.modelData, slot.workspace)
                                 }
                             }
                         }
