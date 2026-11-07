@@ -24,7 +24,5 @@ else
 fi
 
 # Refresh the bar's stay-awake glyph so it updates immediately instead of
-# waiting for its 30-second poll: waybar by signal, the Quickshell bar
-# (issue #75) over IPC. Whichever is not running ignores it.
-pkill -RTMIN+11 waybar 2>/dev/null || true
+# waiting for its 30-second poll.
 qs -c bar ipc call bar refreshAwake >/dev/null 2>&1 || true

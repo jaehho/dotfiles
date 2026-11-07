@@ -66,14 +66,11 @@ local menu     = "rofi -show drun"
 hl.on("hyprland.start", function()
     -- sni-watcher owns org.kde.StatusNotifierWatcher before the bar claims
     -- it. Pure D-Bus, so no WAYLAND_DISPLAY gate. Sequenced in one command
-    -- so waybar cannot take the name first (issues #52 / #63 -- a bar that
+    -- so the bar cannot take the name first (issues #52 / #63 -- a bar that
     -- owns the watcher drops it on restart and pops tray-hidden Spotify).
-    -- Started from its own config dir on purpose: waybar's reload_style_on_change
-    -- follows the style.css symlink with a raw read_symlink and resolves stow's
-    -- *relative* target (../../dotfiles/...) against its working directory, not
-    -- the link's. From anywhere else it watches a path that does not exist and
-    -- CSS edits never apply live. Same in the Super+B bind below.
-    hl.exec_cmd([[systemctl --user start sni-watcher && cd ~/.config/waybar && waybar 2>&1 | grep -v 'Gtk-CRITICAL\|GTK_IS_ACCEL_GROUP' &]])
+    -- The bar is the Quickshell config in quickshell/bar/ (issue #75);
+    -- `quickshell`, not `qs`, because `dash stop` runs `pkill -x qs`.
+    hl.exec_cmd("systemctl --user start sni-watcher && quickshell -c bar")
     hl.exec_cmd("hyprpaper")
     -- swaync is a user unit pointed at the fork in ~/.local/bin (the packaged
     -- one runs the stock /usr/bin/swaync and used to be masked, which also
@@ -403,11 +400,10 @@ hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("firefox-developer-edition"))
 hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("~/.local/bin/hypr-spotify-toggle")) -- spotify: show / hide to tray
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd("~/.local/bin/hypr-easel-toggle")) -- easel: show / hide the board panel
 
--- Toggle waybar: waybar-toggle reads the bar's real visibility from the
--- compositor and sends the matching signal (see its header). Killing the bar
--- instead left each custom module's child orphaned to PID 1, one more per
--- press.
-hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("~/.local/bin/waybar-toggle toggle")) -- show/hide bar
+-- The bar (quickshell/bar/) over its IPC. Hidden, it gives its 40px back
+-- to the windows. Super+B starts the bar again if it is not running.
+hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("qs -c bar ipc call bar toggleShown || quickshell -c bar")) -- show/hide bar
+hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("qs -c bar ipc call bar toggle")) -- open bar: player and calendar
 
 -- Notifications
 hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("swaync-client -t"))
@@ -717,7 +713,7 @@ hl.window_rule({
 
 -- Claude's Playwright browser (~/.claude/playwright-mcp.json launches Chrome
 -- with --class=playwright). Silent on its own named workspace, a normal one
--- (a special workspace always overlays 1-9): it shows in waybar while Chrome is
+-- (a special workspace always overlays 1-9): it shows in the bar while Chrome is
 -- open, switching to it replaces the screen like any other, and it vanishes
 -- when Chrome closes. no_initial_focus only covers the first map. Chrome asks
 -- for activation again on a new tab or tab select, and misc.focus_on_activate
@@ -882,8 +878,8 @@ hl.window_rule({
 ---------------------
 
 hl.layer_rule({
-    name  = "waybar-blur",
-    match = { namespace = "waybar" },
+    name  = "bar-blur",
+    match = { namespace = "bar" },
 
     blur         = true,
     xray         = true,

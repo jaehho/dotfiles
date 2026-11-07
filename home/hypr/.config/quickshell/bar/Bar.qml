@@ -52,6 +52,8 @@ PanelWindow {
 
     onOpenChanged: if (open)
         menu.close()
+    onVisibleChanged: if (!visible)
+        menu.close()
 
     anchors {
         top: true
