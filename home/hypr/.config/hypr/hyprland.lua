@@ -237,14 +237,6 @@ hl.config({
             popups   = true,
             vibrancy = 0.1696,
         },
-
-        -- Windows flex as they move, dragged or animated, and settle on
-        -- their own spring (0.57). Intensity is at its maximum, 2
-        -- (upstream's default is 0.2). Fullscreen windows never wobble.
-        wobble = {
-            enabled   = true,
-            intensity = 2,
-        },
     },
 
     animations = {
