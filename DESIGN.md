@@ -198,7 +198,7 @@ Two widgets also use hues to tell meters apart rather than to report state: sway
 
 The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` tints and `aqua`) are not chrome colors; `aqua` appears only as the RAM label in the bar's load tip and in hypr-confetti's paper.
 
-**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines on the settings and display sheets and in speaker-eq, the keybind sheet's tallies, footers and filter placeholder, its unbound key labels (3.21:1 on `bg0`), and the bar's resting workspace numbers (3.27:1 on an island). PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
+**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines on the settings and display sheets and in speaker-eq, the keybind sheet's tallies, footers and filter placeholder, and its unbound key labels (3.21:1 on `bg0`). PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
 
 ### Color Rules
 
@@ -241,15 +241,13 @@ rofi sets its list in JetBrainsMono Nerd Font 11 with Papirus-Dark app icons; hy
 
 ## Layout
 
-**Screen and bar.** The laptop panel is 1920×1080 at scale 1 (`eDP-1`); external monitors get rules computed in `monitors.lua`. Workspaces run 1 to 9. The bar (Quickshell, `home/hypr/.config/quickshell/bar/`) reserves 40px at the top. Its modules gather into three floating islands (left, center, right), 26px tall, 10px below the top edge and 8px from the sides, with a short 1px hairline (`blue` at 0.28, 14px tall) before each cluster on the right island.
+**Screen and bar.** The laptop panel is 1920×1080 at scale 1 (`eDP-1`); external monitors get rules computed in `monitors.lua`. Workspaces run 1 to 9. The bar (Quickshell, `home/hypr/.config/quickshell/bar/`) reserves 40px at the top. Its modules gather into three floating islands (left, center, right), 26px tall, 10px below the top edge and 8px from the sides, with a short 1px hairline (`blue` at 0.28, 14px tall) before each cluster on the right island. The islands keep 8px apart: the right island holds its width, the center island cuts its track to fit, and the left island its window title.
 
-**Windows.** Dwindle tiling with a 2px border and `gaps_in` of 5, so tiled windows sit 10px apart. Floating helper TUIs open centered at 800×600 (btop at 1400×900). Game mode (`hypr-gamemode`) drops gaps, rounding, blur, shadows and animations until a reload restores them.
+**Windows.** Dwindle tiling with a 2px border, `gaps_in` of 5 and `gaps_out` of 8 (6 under the bar), so tiled windows sit 10px apart and 10px below the islands, their edges in line with the islands' 8px inset. A gap table must be keyed (`top`, `right`, `bottom`, `left`): Hyprland reads a positional one as 0 without an error. Floating helper TUIs open centered at 800×600 (btop at 1400×900). Game mode (`hypr-gamemode`) drops gaps, rounding, blur, shadows and animations until a reload restores them.
 
 **Overlays.** The sheets are layer-shell surfaces on the overlay layer that take the keyboard while open. The settings (480px), display (520px) and keybind sheets center on screen; the keybind sheet sizes to its content. The polkit prompt covers the focused monitor with a 40% black scrim and hangs a 440px sheet flush from the top edge, centered under the IR camera. The hangul hint takes no input: it floats 56px above the bottom edge, or docks as a full-width strip that reserves its own height. swaync stacks 380px popups at the top right; its control center is 420×600 with 10px margins.
 
 **Rhythm.** Controls and rows sit 8px apart in grids of equal columns (settings: three toggle columns, two "Open" columns, five session columns). Stacked labels sit 2 to 4px apart, controls pad 12px inline, and sheets pad about 20px at the sides (settings and display 18/20/14/20, polkit 26/22/20, keybinds 20/26/16/26). The hangul board pads 16px all round.
-
-**Drift.** `hyprland.lua` sets `gaps_out = { 10, 20, 20, 20 }`, but Hyprland 0.56.2's Lua parser reads a gap table only through its `top`, `right`, `bottom` and `left` keys (`src/config/lua/types/LuaConfigCssGap.cpp`), so the positional table resolves to 0 on every side without an error. `hyprctl getoption general:gaps_out` reports `0 0 0 0`, and tiled windows meet the screen edges and the bar's reserved zone.
 
 ## Elevation & Depth
 
@@ -307,7 +305,7 @@ Quiet tiles that brighten under the pointer and ring under the keyboard.
 - **Focus:** an `fg` border plus a 2px `blue` outline offset 1px.
 - **On:** `blue` at 0.18 behind and 0.55 on the edge; the icon and state line turn `blue` (4.69:1 on that band).
 - **Primary:** the polkit Approve button: `blue` at 0.18 (0.28 on hover) behind and 0.55 on the edge, an `fg` label, 30px tall, 12px inline padding, and its key in Mono beside the label ("Enter"). Cancel is the default button with "Esc" beside it in `grey2`.
-- **Armed:** Log out, Reboot and Shut down take a second press. The first arms the button for 3 seconds: `red` at 0.2 behind, a full `red` edge, and the label "Again?" in `red`.
+- **Armed:** Log out, Reboot and Shut down take a second press. The first arms the button for 3 seconds: `red` at 0.2 behind, a full `red` edge, and the label "Again?" in `red`. The bar's power menu arms its rows the same way, with the edge at 0.55 and "Again?" in `fg`, as the Tint Rule asks.
 - **Disabled:** 0.5 opacity on the polkit sheet; GTK's insensitive state elsewhere.
 
 ### Inputs / Fields
@@ -330,11 +328,12 @@ A tinted line for the frames the owner must not miss.
 The bar: three quiet islands, with only the active workspace filled.
 
 - **Islands:** `bg0` at 0.88, a 1px `blue` edge at 0.18, 12px corners, 6px inline padding.
-- **Modules:** glyphs in `grey2` in 8px-corner pills; hover brightens the glyph to `fg` over a `blue` pill at 0.14, in 200ms. The clock is bold `fg`; the window title is italic and collapses on an empty workspace.
-- **Workspaces:** each number is followed by its windows' app icons at 0.45 opacity (0.68 on the active pill, 0.88 for the focused window). The active workspace is a solid `blue` pill with `bg0` text, an urgent one solid `red`, an active special workspace solid `purple`.
-- **State:** glyphs change color by the Signal roles; critical load pulses opacity to 0.35 every 0.5s, and a critical battery blinks toward `fg`.
+- **Modules:** glyphs in `grey2` in 8px-corner pills; hover brightens the glyph to `fg` over a `blue` pill at 0.14, in 200ms. The clock is bold `fg`; the window title is italic, collapses on an empty workspace, and gives way before the center island.
+- **Workspaces:** each number, `grey2` at rest, is followed by its windows' app icons, 8px apart, at 0.45 opacity (0.68 on the active pill, 0.88 for the focused window). The active workspace is a solid `blue` pill with `bg0` text, an urgent one solid `red`, an active special workspace solid `purple`.
+- **State:** glyphs change color by the Signal roles; critical load pulses opacity to 0.35 every 0.5s, and a critical battery blinks toward `fg`. Stay awake is `orange` while either half is on (hypridle stopped, or its lid inhibitor held), and its tip names a half that is on alone.
+- **Tray:** behind a chevron that points the way the drawer will move. Icons rest desaturated at 0.8 and take their colours under the pointer, or while the app asks for attention, on an `orange` pill at 0.18; with the drawer shut, such an app turns the chevron `orange`.
 - **Sheet:** a click on the center island, or Super+Shift+B, grows it in place into the player beside the month; it fades from the island's glass to `bg_dim` at 0.985 as it opens. Esc or a click outside closes it.
-- **Menus:** the power menu, the reboot confirmation and tray menus drop from the control that opened them as small sheets: `bg_dim` at 0.985 over a shadow, a 1px `blue` edge at 0.18, 12px corners, 30px rows in Adwaita Sans with a `bg1` hover. A submenu opens in place under a back row.
+- **Menus:** the power menu, the reboot confirmation and tray menus drop from the control that opened them as small sheets: `bg_dim` at 0.985 over a shadow, a 1px `blue` edge at 0.18, 12px corners, 30px rows in Adwaita Sans with a `bg1` hover. A submenu opens in place under a back row. Log out, Reboot and Shut down arm on the first click and run on a second within 3 seconds (see Buttons, Armed).
 - **Tips:** after half a second's hover, `bg0` with mono `fg` text, a 1px `blue` edge at 0.28 and 8px corners, centered under the control and drawn inside the bar's own surface.
 
 ### Notifications
