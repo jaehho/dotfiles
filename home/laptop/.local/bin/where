@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Which place the laptop is in, from the Wi-Fi or wired connection it is
+# on. Places are named by you in ~/.config/where/places, one per line:
+#     home  <NetworkManager connection UUID>
+# A connection that is not listed is "away", so a new room is treated as
+# shared until you name it. `where mark home` names the current one.
+#
+#   where              print the place (home, a name you gave, or away)
+#   where --is PLACE   exit 0 when the laptop is there, 1 otherwise
+#   where mark PLACE   add the active connection under PLACE
+set -euo pipefail
+places="${XDG_CONFIG_HOME:-$HOME/.config}/where/places"
+
+active_uuids() {
+    nmcli -t -f UUID,TYPE connection show --active 2>/dev/null |
+        awk -F: '$2 ~ /wireless|ethernet/ { print $1 }'
+}
+
+place() {
+    local uuid name
+    [[ -f $places ]] || { echo away; return; }
+    for uuid in $(active_uuids); do
+        name=$(awk -v u="$uuid" '$2 == u { print $1; exit }' "$places")
+        if [[ -n $name ]]; then echo "$name"; return; fi
+    done
+    echo away
+}
+
+case "${1:-}" in
+    "") place ;;
+    --is) [[ $(place) == "${2:?place}" ]] ;;
+    mark)
+        uuid=$(active_uuids | head -1)
+        [[ -n $uuid ]] || { echo "where: no active Wi-Fi or wired connection" >&2; exit 1; }
+        mkdir -p "$(dirname "$places")"
+        echo "${2:?place} $uuid" >> "$places"
+        echo "${2} = $(nmcli -t -f NAME,UUID connection show --active | awk -F: -v u="$uuid" '$2 == u { print $1 }')"
+        ;;
+    *) echo "usage: where [--is PLACE | mark PLACE]" >&2; exit 2 ;;
+esac
