@@ -191,7 +191,11 @@ hl.permission("/usr/(lib|libexec|lib64)/xdg-desktop-portal-hyprland", "screencop
 hl.config({
     general = {
         gaps_in         = 5,
-        gaps_out        = { 10, 20, 20, 20 },
+        -- In line with the bar's islands (8px from the sides): 8 at the
+        -- sides and bottom, and 6 under the bar, so the islands sit 10px
+        -- above the windows, as far as tiled windows sit apart. Keyed: a
+        -- positional table reads as 0 0 0 0, without an error.
+        gaps_out        = { top = 6, right = 8, bottom = 8, left = 8 },
         gaps_workspaces = 50,
 
         border_size = 2,
