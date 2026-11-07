@@ -82,6 +82,7 @@ Island {
             },
             {
                 text: "Log out",
+                confirm: true,
                 run: () => session("logout")
             },
             {
@@ -93,10 +94,12 @@ Island {
             },
             {
                 text: "Reboot",
+                confirm: true,
                 run: () => session("reboot")
             },
             {
                 text: "Shut down",
+                confirm: true,
                 run: () => session("shutdown")
             }
         ])

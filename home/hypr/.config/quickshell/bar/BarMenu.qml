@@ -6,6 +6,10 @@
 // Entries are plain objects ({ text, run } or { separator: true }) or a
 // tray item's DBus menu, whose submenus open in place under a row back.
 // A click outside or Esc closes it (the bar's focus grab).
+//
+// An entry with `confirm: true` (Log out, Reboot, Shut down) takes a
+// second press, as in hypr-settings-menu's sheet (DESIGN.md, the Second
+// Press Rule): the first arms its row for 3 seconds, red and "Again?".
 import QtQuick
 import QtQuick.Effects
 import Quickshell
@@ -22,11 +26,14 @@ Item {
     // A tray item's menu, and the submenus opened inside it.
     property var handle: null
     property var path: []
+    // The row a first press armed, by index, or -1.
+    property int armed: -1
 
     readonly property bool open: anchor !== null
     readonly property var rows: handle ? opener.children.values : entries
 
     function show(anchorItem, list, menuHandle) {
+        menu.disarm();
         menu.entries = list;
         menu.handle = menuHandle;
         menu.path = [];
@@ -36,10 +43,16 @@ Item {
     }
 
     function close() {
+        menu.disarm();
         menu.anchor = null;
         menu.handle = null;
         menu.path = [];
         menu.entries = [];
+    }
+
+    function disarm() {
+        armTimer.stop();
+        menu.armed = -1;
     }
 
     // Right-aligned under a control on the right half, left-aligned on
@@ -51,9 +64,14 @@ Item {
         menu.x = Math.round(Math.max(8, Math.min(menu.bar.width - menu.width - 8, wanted)));
     }
 
-    function choose(entry) {
+    function choose(entry, index) {
         if (entry.hasChildren) {
             menu.path = menu.path.concat([entry]);
+            return;
+        }
+        if (entry.confirm && menu.armed !== index) {
+            menu.armed = index;
+            armTimer.restart();
             return;
         }
         if (entry.run)
@@ -95,6 +113,12 @@ Item {
     }
 
     Keys.onEscapePressed: menu.close()
+
+    Timer {
+        id: armTimer
+        interval: 3000
+        onTriggered: menu.armed = -1
+    }
 
     QsMenuOpener {
         id: opener
@@ -142,6 +166,7 @@ Item {
                 id: slot
 
                 required property var modelData
+                required property int index
                 readonly property bool separator: modelData.isSeparator ?? modelData.separator ?? false
 
                 implicitWidth: separator ? 0 : row.implicitWidth
@@ -158,18 +183,19 @@ Item {
                 }
 
                 MenuRow {
-                colors: menu.colors
                     id: row
+                    colors: menu.colors
                     visible: !slot.separator
                     width: parent.width
                     enabled: slot.modelData.enabled ?? true
+                    armed: menu.armed === slot.index
                     // DBus menus mark mnemonics with an underscore.
-                    text: (slot.modelData.text ?? "").replace(/_(?!_)/g, "")
+                    text: armed ? "Again?" : (slot.modelData.text ?? "").replace(/_(?!_)/g, "")
                     icon: slot.modelData.icon ?? ""
                     checkable: (slot.modelData.buttonType ?? 0) !== 0
                     checked: slot.modelData.checkState === Qt.Checked
                     more: slot.modelData.hasChildren ?? false
-                    onChosen: menu.choose(slot.modelData)
+                    onChosen: menu.choose(slot.modelData, slot.index)
                 }
             }
         }
@@ -185,6 +211,9 @@ Item {
         property bool checkable: false
         property bool checked: false
         property bool more: false
+        // Waiting for its second press: red as a tint (the Tint Rule), so
+        // the words stay fg.
+        property bool armed: false
 
         signal chosen
 
@@ -192,7 +221,9 @@ Item {
         height: 30
         radius: 8
         opacity: enabled ? 1 : 0.5
-        color: hover.hovered && enabled ? entry.colors.bg1 : "transparent"
+        color: armed ? entry.colors.withAlpha(entry.colors.red, 0.2) : hover.hovered && enabled ? entry.colors.bg1 : "transparent"
+        border.width: armed ? 1 : 0
+        border.color: entry.colors.withAlpha(entry.colors.red, 0.55)
 
         Behavior on color {
             ColorAnimation {
