@@ -271,7 +271,7 @@ local function apply()
     end
 
     -- Closed set 1-9: fold any stray (temp leak, Super+scroll mint, 9003) back
-    -- into the slots so waybar and Super+N only ever see 1-9.
+    -- into the slots so the bar and Super+N only ever see 1-9.
     local ws_mod = package.loaded["workspaces"]
     if ws_mod and ws_mod.reclaim then
         ws_mod.reclaim()

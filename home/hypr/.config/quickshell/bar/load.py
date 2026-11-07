@@ -2,7 +2,8 @@
 """Stream CPU, RAM and GPU load for the bar's load glance, as JSON lines.
 
 One line every five seconds; LoadGlance.qml draws and colours it. The
-samples are waybar's scripts/load.py, minus its Pango markup:
+samples are those of waybar's old scripts/load.py, minus its Pango
+markup:
 
 - CPU busy share from /proc/stat between ticks, and the mean clock.
 - RAM in use (MemTotal - MemAvailable) and swap in use.

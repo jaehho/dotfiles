@@ -142,7 +142,7 @@ components:
 <!-- markdownlint-disable-next-line MD036 -->
 **Creative North Star: "The Dark Cockpit"**
 
-This is the chrome of one Arch Linux laptop running Hyprland: window borders and shadows, waybar, swaync, rofi, hyprlock, the `hypr-*` GTK4 overlays and the Quickshell polkit prompt. Every surface is a native Wayland client styled in its own language: GTK4 CSS loaded from Python through gtk4-layer-shell (`home/hypr/.local/bin/hypr-*`, `home/laptop/.local/bin/speaker-eq`), GTK3 CSS for waybar and swaync, rasi for rofi, QML for Quickshell (`home/hypr/.config/quickshell/polkit/`) and Hyprland's Lua config (`home/hypr/.config/hypr/hyprland.lua`). There are no web pages. The terminal and CLI tools share the palette through vendored ports (`home/theme/.config/theme/README.md`); GUI apps that are not the owner's keep their stock colors (`docs/gui-app-colors.md`), and nothing in this system restyles them.
+This is the chrome of one Arch Linux laptop running Hyprland: window borders and shadows, the Quickshell bar, swaync, rofi, hyprlock, the `hypr-*` GTK4 overlays and the Quickshell polkit prompt. Every surface is a native Wayland client styled in its own language: GTK4 CSS loaded from Python through gtk4-layer-shell (`home/hypr/.local/bin/hypr-*`, `home/laptop/.local/bin/speaker-eq`), GTK3 CSS for swaync, rasi for rofi, QML for Quickshell (`home/hypr/.config/quickshell/bar/` and `polkit/`) and Hyprland's Lua config (`home/hypr/.config/hypr/hyprland.lua`). There are no web pages. The terminal and CLI tools share the palette through vendored ports (`home/theme/.config/theme/README.md`); GUI apps that are not the owner's keep their stock colors (`docs/gui-app-colors.md`), and nothing in this system restyles them.
 
 The name comes from the aviation principle that a normal state lights nothing. At rest the chrome is parchment and gray on dark green-gray grounds; a hue appears when it carries news, and a state hue means the same thing on every surface: blue is focus and "you are here," orange is worth a glance, red is act now, green is charging or approved, purple is a special workspace, yellow is caution. Overlays appear when called, say what they need in plain words, and leave; a sheet that takes the keyboard holds it only while open, and nothing takes focus unasked.
 
@@ -162,7 +162,7 @@ Density is compact and keyboard-paced: 13px words, 11px labels, controls 8px apa
 
 Everforest Dark Medium (sainnhe/everforest): dark green-gray grounds, warm parchment text and muted role hues, chosen over Catppuccin Mocha because its text is warmer, about 5,100 K against 8,900 K (decision #71).
 
-**Where the values live.** `home/hypr/.config/hypr/themes/foliage.conf` defines each of the 24 tokens once, as `$name = rgb(rrggbb)` under Everforest's own names. hyprlock sources it; the `hypr-*` panels, speaker-eq, waybar's `scripts/load.py` and the polkit prompt's `Colors.qml` parse it at runtime and use token names, never hexes. Four packages keep same-named copies in their own formats, as decision #71 and the theme README record (hand recolors, no palette compiler): `themes/foliage.lua` for `hyprland.lua`, an `foliage.css` of `@define-color` lines each for waybar and swaync, and `themes/foliage.rasi` for rofi. All four matched every token on 2026-11-05; nothing checks them. The frontmatter above is one more copy, for DESIGN.md tooling only.
+**Where the values live.** `home/hypr/.config/hypr/themes/foliage.conf` defines each of the 24 tokens once, as `$name = rgb(rrggbb)` under Everforest's own names. hyprlock sources it; the `hypr-*` panels, speaker-eq and the Quickshell bar's and polkit prompt's `Colors.qml` parse it at runtime and use token names, never hexes. Three packages keep same-named copies in their own formats, as decision #71 and the theme README record (hand recolors, no palette compiler): `themes/foliage.lua` for `hyprland.lua`, a `foliage.css` of `@define-color` lines for swaync, and `themes/foliage.rasi` for rofi. All matched every token on 2026-11-05; nothing checks them. The frontmatter above is one more copy, for DESIGN.md tooling only.
 
 ### Primary
 
@@ -182,7 +182,7 @@ Everforest Dark Medium (sainnhe/everforest): dark green-gray grounds, warm parch
 - **Dusty Coral** (`red`): act now: screen sharing, failed units, critical battery, an urgent workspace, pegged CPU or RAM, do-not-disturb, a pending reboot, an armed destructive button, a wrong password, the power glyph under the pointer. 5.31:1 on `bg_dim`, 4.55:1 on `bg0`.
 - **Straw** (`yellow`): caution: the polkit prompt when the camera gives up and the password takes over, Caps Lock on the lock screen, speaker-eq's warning notices.
 
-Two widgets also use hues to tell meters apart rather than to report state: swaync's volume (`blue`) and backlight (`yellow`) sliders, and the per-metric labels in waybar's load tooltip.
+Two widgets also use hues to tell meters apart rather than to report state: swaync's volume (`blue`) and backlight (`yellow`) sliders, and the per-metric labels in the bar's load tip (CPU `grey2`, RAM `aqua`, GPU `blue`).
 
 ### Neutral
 
@@ -196,9 +196,9 @@ Two widgets also use hues to tell meters apart rather than to report state: sway
 - **Lichen Gray** (`grey1`): the inactive window border (at `aa` alpha) and a resting special workspace. 4.49:1 on `bg_dim`, so not for text.
 - **Moss Gray** (`grey0`): off: muted audio, Bluetooth off, a display that is switched off, a disabled control. 3.74:1 on `bg_dim`, 3.21:1 on `bg0`.
 
-The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` tints and `aqua`) are not chrome colors; `aqua` appears only as the RAM label in waybar's load tooltip and in hypr-confetti's paper.
+The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` tints and `aqua`) are not chrome colors; `aqua` appears only as the RAM label in the bar's load tip and in hypr-confetti's paper.
 
-**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load), waybar's `scripts/load.py` (8) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines on the settings and display sheets and in speaker-eq, the keybind sheet's tallies, footers and filter placeholder, its unbound key labels (3.21:1 on `bg0`), and waybar's resting workspace numbers (3.27:1 on an island). PRODUCT.md says the palette is never restated; the four package copies above are the exception decision #71 allows.
+**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines on the settings and display sheets and in speaker-eq, the keybind sheet's tallies, footers and filter placeholder, its unbound key labels (3.21:1 on `bg0`), and the bar's resting workspace numbers (3.27:1 on an island). PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
 
 ### Color Rules
 
@@ -227,7 +227,7 @@ The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` 
 - **Heading** (Adwaita Sans 700, 11px, uppercase): group headings on the settings and display sheets ("TOGGLES", "OPEN", "SESSION") and in speaker-eq.
 - **Mono** (JetBrainsMono Nerd Font 400, 11px; 700 on keycaps; 10px for the key hint inside a button): identifiers such as the polkit action id, key names on keycaps, "Esc" and "Enter" beside button labels.
 - **Icon** (JetBrainsMono Nerd Font, 17px on tiles, 22px for the polkit shield, 16px for status glyphs): Material Design Icons in `fg` or the state's tone.
-- **Bar** (JetBrainsMono Nerd Font 400, 13px; the clock bold, the window title italic, the power glyph 15px): everything on waybar.
+- **Bar** (JetBrainsMono Nerd Font 400, 13px; the clock bold, the window title italic, the power glyph 15px): everything on the bar.
 - **Notification** (JetBrainsMono Nerd Font 400, 14px): swaync popups and the control center.
 - **Hangul** (Noto Sans CJK KR 600, 28px; shifted jamo 500, 13px): the jamo on the hint's keycaps.
 
@@ -241,7 +241,7 @@ rofi sets its list in JetBrainsMono Nerd Font 11 with Papirus-Dark app icons; hy
 
 ## Layout
 
-**Screen and bar.** The laptop panel is 1920×1080 at scale 1 (`eDP-1`); external monitors get rules computed in `monitors.lua`. Workspaces run 1 to 9. Waybar sits on top, 34px tall with a 6px top margin and 8px side margins, reserving 40px. Its modules gather into three floating islands (left, center, right), 4px apart, with a short 1px hairline (`blue` at 0.28, 14px tall) before each cluster on the right island.
+**Screen and bar.** The laptop panel is 1920×1080 at scale 1 (`eDP-1`); external monitors get rules computed in `monitors.lua`. Workspaces run 1 to 9. The bar (Quickshell, `home/hypr/.config/quickshell/bar/`) reserves 40px at the top. Its modules gather into three floating islands (left, center, right), 26px tall, 10px below the top edge and 8px from the sides, with a short 1px hairline (`blue` at 0.28, 14px tall) before each cluster on the right island.
 
 **Windows.** Dwindle tiling with a 2px border and `gaps_in` of 5, so tiled windows sit 10px apart. Floating helper TUIs open centered at 800×600 (btop at 1400×900). Game mode (`hypr-gamemode`) drops gaps, rounding, blur, shadows and animations until a reload restores them.
 
@@ -262,7 +262,7 @@ Depth is tone and edge, not lift. A sheet is the darkest plane on screen (`bg_di
 - **Notification card** (`box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.8), inset 0 0 0 1px @bg2`): swaync popups; the control center uses the same shadow with an inset `bg1` line. Both come from swaync's release theme.
 - **Keycap lip** (`border-bottom: 3px solid` in `bg_dim`; 2px on the keybind sheet's caps): a key's front edge, drawn as a border, on the hangul hint and the keybind sheet.
 
-**Blur and glass.** Hyprland blurs at size 5 with 2 passes and vibrancy 0.1696, popups included. Layer rules blur behind waybar (with xray), the swaync control center, the keybind sheet, the hangul hint, the settings sheet and rofi, each with `ignore_alpha 0.5`; swaync popups are not blurred, and the polkit layer has `no_anim` because it animates itself. Glass shows only where a surface is translucent: the bar islands (`bg0` at 0.88) and the hangul board (`bg_dim` at 0.72, so the hint reads over any window). Sheets at 0.985 are effectively opaque.
+**Blur and glass.** Hyprland blurs at size 5 with 2 passes and vibrancy 0.1696, popups included. Layer rules blur behind the bar (with xray; its surface runs 360px down for the sheet, menus and tips, and `ignore_alpha` keeps the blur to what it draws), the swaync control center, the keybind sheet, the hangul hint, the settings sheet and rofi, each with `ignore_alpha 0.5`; swaync popups are not blurred, and the polkit layer has `no_anim` because it animates itself. Glass shows only where a surface is translucent: the bar islands (`bg0` at 0.88) and the hangul board (`bg_dim` at 0.72, so the hint reads over any window). Sheets at 0.985 are effectively opaque.
 
 **Scrim.** Only the polkit prompt dims the screen: black at 40%, faded in over 220ms.
 
@@ -278,7 +278,7 @@ Depth is tone and edge, not lift. A sheet is the darkest plane on screen (`bg_di
 
 Corners follow one scale: 12px for windows and containers (Hyprland's `decoration.rounding`, with `rounding_power` 2), 8px for controls nested inside them, and a pill for anything fully round. A corner that meets a screen edge stays square: the polkit sheet's top corners, the docked hangul strip. Edges are 1px hairlines; the only heavier lines are the 2px window border, the 2px focus ring, the keycap lip and hyprlock's 3px input outline.
 
-On the scale today: the polkit sheet, the hangul board, the bar islands, waybar's menus, swaync's cards, rofi's window and hyprlock's input field at 12px; the polkit buttons, field and band, the hangul keys, waybar's pills and menu items, swaync's nested cards and buttons, rofi's input bar and rows at 8px; the polkit lens dot, swaync's slider troughs and the hangul home-key bumps as pills.
+On the scale today: the polkit sheet, the hangul board, the bar islands, the bar's menus and open sheet, swaync's cards, rofi's window and hyprlock's input field at 12px; the polkit buttons, field and band, the hangul keys, the bar's pills, menu rows and tips, swaync's nested cards and buttons, rofi's input bar and rows at 8px; the polkit lens dot, swaync's slider troughs and the hangul home-key bumps as pills.
 
 **Drift.** The older GTK4 sheets run one step larger than the scale: the settings, display and keybind sheets use 16px, their tiles, cards, layout and session buttons 12px, and the settings rows and the keybind filter and chips 9px. speaker-eq's notices use 10px, the keybind sheet's key buttons 6px and its caps 5px. Waybar's tooltips, which are popups, use 8px.
 
@@ -333,7 +333,9 @@ The bar: three quiet islands, with only the active workspace filled.
 - **Modules:** glyphs in `grey2` in 8px-corner pills; hover brightens the glyph to `fg` over a `blue` pill at 0.14, in 200ms. The clock is bold `fg`; the window title is italic and collapses on an empty workspace.
 - **Workspaces:** each number is followed by its windows' app icons at 0.45 opacity (0.68 on the active pill, 0.88 for the focused window). The active workspace is a solid `blue` pill with `bg0` text, an urgent one solid `red`, an active special workspace solid `purple`.
 - **State:** glyphs change color by the Signal roles; critical load pulses opacity to 0.35 every 0.5s, and a critical battery blinks toward `fg`.
-- **Menus and tooltips:** `bg0` with `fg` text and a 1px `blue` edge at 0.18 (tooltips 0.28). Menus have 12px corners and 8px items padded 4px 12px, with a `blue` hover at 0.14.
+- **Sheet:** a click on the center island, or Super+Shift+B, grows it in place into the player beside the month; it fades from the island's glass to `bg_dim` at 0.985 as it opens. Esc or a click outside closes it.
+- **Menus:** the power menu, the reboot confirmation and tray menus drop from the control that opened them as small sheets: `bg_dim` at 0.985 over a shadow, a 1px `blue` edge at 0.18, 12px corners, 30px rows in Adwaita Sans with a `bg1` hover. A submenu opens in place under a back row.
+- **Tips:** after half a second's hover, `bg0` with mono `fg` text, a 1px `blue` edge at 0.28 and 8px corners, centered under the control and drawn inside the bar's own surface.
 
 ### Notifications
 

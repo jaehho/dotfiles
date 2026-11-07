@@ -14,7 +14,7 @@
 #
 # The 2026-07 attempt at this toggled the submap next to the open command and
 # desynced the moment the panel closed by another route -- Escape handled inside
-# swaync, a click outside, waybar's `swaync-client -t` -- latching the submap
+# swaync, a click outside, the bar bell's `swaync-client -t` -- latching the submap
 # with the keyboard captured. swaync publishes `visible` on its subscribe
 # stream, so follow that instead of trying to predict it.
 

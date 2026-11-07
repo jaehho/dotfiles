@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# hypr-failed-units — the waybar 󰀨 click handler (and the settings panel row).
+# hypr-failed-units — the bar's 󰀨 click handler (and the settings panel row).
 #
 # Opens the failed unit(s) in a tmux pane: status first, then the journalctl
 # line to copy, then a shell. No picker. If nothing has failed, a notify.
 # Each unit is a fake prompt block (OSC 133;A), so prefix C-y copies the last
 # unit's status and journal hint the same way it copies a real command's
-# output. Waybar is never restarted for this (a bar load drops the SNI tray
+# output. The bar is never restarted for this (a bar load drops the SNI tray
 # host and pops tray-hidden apps such as Spotify).
 #
 #   hypr-failed-units          open the failed unit(s) in a tmux pane

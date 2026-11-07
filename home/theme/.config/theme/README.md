@@ -17,7 +17,7 @@ Static vendor tree of Everforest Dark Medium theme files for terminal and CLI ap
 
 `.config/qt5ct/colors/` and `.config/Kvantum/catppuccin-mocha-lavender/` are leftover Catppuccin Mocha ports; GUI apps run on stock colors and nothing selects them.
 
-Apps with their own stow package carry their theme files there: kitty (`themes/everforest_dark_medium.conf`), fish (`themes/everforest-dark-medium.theme`, plus `BAT_THEME` and the fzf colors in `conf.d/theme.fish`), tmux (`@ef_*` tokens in `.tmux.conf`), nvim (the sainnhe/everforest plugin), zathura (`everforest-dark-medium`) and git (`color.diff` and delta's `syntax-theme` in `.gitconfig`). Desktop chrome (hypr, waybar, rofi, swaync) also keeps its colors in its own package.
+Apps with their own stow package carry their theme files there: kitty (`themes/everforest_dark_medium.conf`), fish (`themes/everforest-dark-medium.theme`, plus `BAT_THEME` and the fzf colors in `conf.d/theme.fish`), tmux (`@ef_*` tokens in `.tmux.conf`), nvim (the sainnhe/everforest plugin), zathura (`everforest-dark-medium`) and git (`color.diff` and delta's `syntax-theme` in `.gitconfig`). Desktop chrome (hypr and its Quickshell bar, rofi, swaync) also keeps its colors in its own package.
 
 ## Palette
 

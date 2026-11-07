@@ -3,14 +3,14 @@
 // hyprland/workspaces (taskbar mode) and custom/window drew them.
 //
 // A click on a pill goes to that workspace; on an icon, to that window
-// (or hides the special workspace it is raised on, as
-// hypr-waybar-window-click does). The wheel steps through this monitor's
+// (or hides the special workspace it is raised on, as waybar's
+// hypr-waybar-window-click did). The wheel steps through this monitor's
 // workspaces. asstdev, the asst test harness's parking workspace, never
 // shows.
 //
 // The title follows the focused toplevel itself, not the active
 // workspace, so a raised special workspace names its own window (why
-// waybar needed hypr-active-window).
+// waybar needed a hypr-active-window script).
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland

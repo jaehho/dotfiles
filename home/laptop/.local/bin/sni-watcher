@@ -240,7 +240,8 @@ def main() -> int:
 
     def on_name_lost(_conn: Gio.DBusConnection, name: str) -> None:
         # Another owner took it, or the session bus is gone. Exit so
-        # systemd can restart us; a clean stop lets waybar fall back.
+        # systemd can restart us. After a clean stop the bar's tray takes
+        # the name only when the bar next starts.
         print(f"name lost {name}", flush=True)
         loop.quit()
 

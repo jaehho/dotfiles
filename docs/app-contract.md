@@ -4,7 +4,7 @@ What the apps in `~/projects` share at their edges, so they work together and a 
 
 An app that departs from a rule here has a gap. Track it as an issue in that app and close the gaps one app at a time. When a rule changes, change it here and open an issue in each app it leaves behind.
 
-Owned elsewhere: live `make install`, `packaging/PKGBUILD`, root docs and issues are in `~/.claude/CLAUDE.md`. Desktop integration (hyprland.lua, waybar, units) lives in dotfiles (`~/dotfiles/CLAUDE.md`). How to test a GUI without taking the screen is the `gui-testing` skill.
+Owned elsewhere: live `make install`, `packaging/PKGBUILD`, root docs and issues are in `~/.claude/CLAUDE.md`. Desktop integration (hyprland.lua, the Quickshell bar, units) lives in dotfiles (`~/dotfiles/CLAUDE.md`). How to test a GUI without taking the screen is the `gui-testing` skill.
 
 ## Names
 
@@ -38,9 +38,9 @@ Links today:
 
 - **The window is a view.** Work that has to keep going (listening, sync, reminders, sampling) lives in a daemon or in the app process held without a window, so closing the window loses nothing.
 - **`--background`** starts the app with no window. Start at login is a switch in the app and a CLI command, and it writes one XDG autostart entry. A line in the compositor's config that runs `<command> --background` counts as on: the app reports it and leaves it for the user to remove. On this machine those lines are in dotfiles' `hyprland.lua`.
-- **Tray:** a StatusNotifierItem. Left click brings up the window, middle click does the app's main action (steno records, asst opens quick add), right click opens the menu, which ends with Quit. Its `IconThemePath` is a folder with an `index.theme` (asst writes one to `$XDG_RUNTIME_DIR/asst/icons`, steno ships one in its package); without the index, waybar does not search the folder.
+- **Tray:** a StatusNotifierItem. Left click brings up the window, middle click does the app's main action (steno records, asst opens quick add), right click opens the menu, which ends with Quit. Its `IconThemePath` is a folder with an `index.theme` (asst writes one to `$XDG_RUNTIME_DIR/asst/icons`, steno ships one in its package); hosts that search it as a theme need the index, and the bar (`home/hypr/.config/quickshell/bar/TrayIcon.qml`) looks the icon up file by file under `hicolor/scalable/<context>/`.
 - **Closing** hides the window while a tray icon or a bar module shows the app is still running, and quits otherwise, so the app never runs with nothing to click. Ctrl+Q quits. When quitting stops something the user counts on (steno's listener), it asks first and says what stops.
-- **Bar module:** `<name> bar` streams waybar JSON, one line per change, with `text`, `tooltip` and a `class` per state (asst: `overdue`, `due`, `clear`, `offline`, `error`). The module's config lives in dotfiles' waybar config.
+- **Bar module:** `<name> bar` streams JSON in waybar's custom-module format, one line per change, with `text`, `tooltip` and a `class` per state (asst: `overdue`, `due`, `clear`, `offline`, `error`). The bar shows no app modules today; one would be a component in dotfiles' `home/hypr/.config/quickshell/bar/` that reads this stream.
 - **Notifications** carry their actions as buttons, and a click opens what the notification is about through the app action above.
 
 ## Window keys

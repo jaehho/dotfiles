@@ -16,7 +16,7 @@ These dotfiles are the live desktop: the stow packages under `home/` are the run
 
 ## Positioning
 
-A personal, single-machine configuration. The owner's apps under `~/projects/` own their implementation; this repo owns how they join the desktop (hyprland.lua, waybar, units, stowed configs). There are no per-host branches and no machine-setup or `/etc` layer.
+A personal, single-machine configuration. The owner's apps under `~/projects/` own their implementation; this repo owns how they join the desktop (hyprland.lua, the Quickshell bar, units, stowed configs). There are no per-host branches and no machine-setup or `/etc` layer.
 
 ## Operating Context
 
@@ -32,7 +32,7 @@ The laptop panel, sometimes with external monitors whose rules `monitors.lua` co
 
 ## Brand Commitments
 
-- Everforest Dark Medium for all desktop chrome (decision #71), under Everforest's own token names. The `hypr-*` panels and the polkit prompt read `home/hypr/.config/hypr/themes/foliage.conf` at runtime (one `$name = rgb(rrggbb)` per line); hyprland.lua, waybar, swaync and rofi keep same-named copies in their own packages, with no palette compiler (`home/theme/.config/theme/README.md`).
+- Everforest Dark Medium for all desktop chrome (decision #71), under Everforest's own token names. The `hypr-*` panels, the Quickshell bar and the polkit prompt read `home/hypr/.config/hypr/themes/foliage.conf` at runtime (one `$name = rgb(rrggbb)` per line); hyprland.lua, swaync and rofi keep same-named copies in their own packages, with no palette compiler (`home/theme/.config/theme/README.md`).
 - Corner radii: 12px for windows and containers, 8px for nested controls, a pill when fully round.
 
 ## Product Principles

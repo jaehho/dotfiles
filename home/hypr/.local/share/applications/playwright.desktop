@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Playwright Browser
-Comment=Chrome that Claude drives through Playwright; waybar resolves its window icon from this entry
+Comment=Chrome that Claude drives through Playwright; the bar resolves its window icon from this entry
 Exec=google-chrome-stable --class=playwright
 Icon=google-chrome
 StartupWMClass=playwright

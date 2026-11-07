@@ -16,9 +16,9 @@
 -- Renumbering uses hl.dsp.workspace.change_id (same workspace object, windows
 -- stay). The target id must be free globally, so movers go through temp ids
 -- first; a plain low-to-high walk is not enough when off-slot ids swap.
--- Each change_id is followed by a same-name rename so waybar hears the name
--- (see the comment in pack_now; hyprland renames silently). Quickshell (dash)
--- has no changeworkspaceid handler either; dash's shell.qml confirms
+-- Each change_id is followed by a same-name rename so the bars hear the name
+-- (see the comment in pack_now; hyprland renames silently). Waybar did not
+-- handle changeworkspaceid, and Quickshell (the bar, dash) has no handler; dash's shell.qml confirms
 -- emptiness with hyprctl so a stale toplevels list cannot draw over windows.
 
 local M = {}
@@ -103,7 +103,7 @@ local packing = false
 
 -- Ids outside 1..9 (including leftover TEMP_BASE temps). Merge their windows
 -- onto a real slot on the same monitor, then leave — the empty non-persistent
--- workspace is destroyed when unfocused. Keeps Super+N / Super+Tab / waybar on
+-- workspace is destroyed when unfocused. Keeps Super+N / Super+Tab / the bar on
 -- the closed set.
 local function reclaim_strays()
     local monitors = package.loaded["monitors"]
