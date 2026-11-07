@@ -207,20 +207,22 @@ Row {
         }
     }
 
-    // Stay awake has two halves (hypr-idle-toggle): hypridle stopped, and
-    // a hypr-lid-inhibit lid inhibitor held. Either alone is drift; it
-    // shows as on, and a click (the toggle) then turns both off.
+    // Stay awake is a hypr-lid-inhibit inhibitor for idle and the lid
+    // (hypr-idle-toggle); hypridle pauses its listeners while it is held.
+    // hypridle must run in both states, since it alone answers logind's
+    // Lock: without it every Lock does nothing, which shows in red, and a
+    // click then only starts hypridle, leaving stay awake as it was.
     BarButton {
         id: awake
 
         property bool idleOff: false
         property bool lidHeld: false
-        readonly property bool on: idleOff || lidHeld
+        readonly property bool on: lidHeld
 
         bar: attention.bar
         text: String.fromCodePoint(on ? 0xf0176 : 0xf0faa)
-        tint: on ? attention.colors.orange : attention.colors.grey2
-        tip: idleOff && lidHeld ? "Stay awake: ON (idle + lid)" : idleOff ? "Stay awake: idle only, the lid still suspends" : lidHeld ? "Stay awake: lid only, idle still locks" : "Stay awake: OFF"
+        tint: idleOff ? attention.colors.red : on ? attention.colors.orange : attention.colors.grey2
+        tip: idleOff ? `hypridle is not running, so Lock does nothing. Click to start it${on ? "; stay awake stays on" : ""}` : on ? "Stay awake: ON (no dim, screen off or suspend; Lock works)" : "Stay awake: OFF"
         onClicked: attention.run([attention.bin + "hypr-settings-menu", "awake"])
 
         // hypridle's pgrep status, then how many of our inhibitors logind
@@ -245,7 +247,8 @@ Row {
             onTriggered: attention.probeAwake()
         }
 
-        // A toggle's halves land a moment after its refresh call.
+        // A toggle's inhibitor and hypridle land a moment after its
+        // refresh call.
         Timer {
             id: awakeRecheck
             interval: 1500

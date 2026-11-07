@@ -179,7 +179,7 @@ Everforest Dark Medium (sainnhe/everforest): dark green-gray grounds, warm parch
 ### Signal
 
 - **Soft Apricot** (`orange`): on and worth a glance: stay-awake engaged, the mic in use, pending notifications, low battery, busy load, a tray app asking for attention.
-- **Dusty Coral** (`red`): act now: screen sharing, failed units, critical battery, an urgent workspace, pegged CPU or RAM, do-not-disturb, a pending reboot, an armed destructive button, a wrong password, the power glyph under the pointer. 5.31:1 on `bg_dim`, 4.55:1 on `bg0`.
+- **Dusty Coral** (`red`): act now: screen sharing, failed units, critical battery, an urgent workspace, pegged CPU or RAM, do-not-disturb, a pending reboot, an armed destructive button, a wrong password, the power glyph under the pointer, stay awake's glyph while hypridle is not running. 5.31:1 on `bg_dim`, 4.55:1 on `bg0`.
 - **Straw** (`yellow`): caution: the polkit prompt when the camera gives up and the password takes over, Caps Lock on the lock screen, speaker-eq's warning notices.
 
 Two widgets also use hues to tell meters apart rather than to report state: swaync's volume (`blue`) and backlight (`yellow`) sliders, and the per-metric labels in the bar's load tip (CPU `grey2`, RAM `aqua`, GPU `blue`).
@@ -330,7 +330,7 @@ The bar: three quiet islands, with only the active workspace filled.
 - **Islands:** `bg0` at 0.88, a 1px `blue` edge at 0.18, 12px corners, 6px inline padding.
 - **Modules:** glyphs in `grey2` in 8px-corner pills; hover brightens the glyph to `fg` over a `blue` pill at 0.14, in 200ms. The clock is bold `fg`; the window title is italic, collapses on an empty workspace, and gives way before the center island.
 - **Workspaces:** each number, `grey2` at rest, is followed by its windows' app icons, 8px apart, at 0.45 opacity (0.68 on the active pill, 0.88 for the focused window). The active workspace is a solid `blue` pill with `bg0` text, an urgent one solid `red`, an active special workspace solid `purple`.
-- **State:** glyphs change color by the Signal roles; critical load pulses opacity to 0.35 every 0.5s, and a critical battery blinks toward `fg`. Stay awake is `orange` while either half is on (hypridle stopped, or its lid inhibitor held), and its tip names a half that is on alone.
+- **State:** glyphs change color by the Signal roles; critical load pulses opacity to 0.35 every 0.5s, and a critical battery blinks toward `fg`. Stay awake is `orange` while its inhibitor is held; its glyph turns `red` while hypridle is not running, since then nothing answers Lock, and its tip says so.
 - **Tray:** behind a chevron that points the way the drawer will move. Icons rest desaturated at 0.8 and take their colours under the pointer, or while the app asks for attention, on an `orange` pill at 0.18; with the drawer shut, such an app turns the chevron `orange`.
 - **Sheet:** a click on the center island, or Super+Shift+B, grows it in place into the player beside the month; it fades from the island's glass to `bg_dim` at 0.985 as it opens. Esc or a click outside closes it.
 - **Menus:** the power menu, the reboot confirmation and tray menus drop from the control that opened them as small sheets: `bg_dim` at 0.985 over a shadow, a 1px `blue` edge at 0.18, 12px corners, 30px rows in Adwaita Sans with a `bg1` hover. A submenu opens in place under a back row. Log out, Reboot and Shut down arm on the first click and run on a second within 3 seconds (see Buttons, Armed).

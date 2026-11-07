@@ -2,7 +2,13 @@
 # Polls CPU temp + lid state, alerts via ntfy.sh on:
 #   - Critical:    CPU >= 95°C sustained for >= 60s (filters turbo spikes)
 #   - Bag risk:    lid closed AND CPU >= 80°C sustained for >= 60s
-#   - Stay-awake:  lid just closed while inhibitor pidfile is live
+#   - Stay-awake:  lid shut with hypr-idle-toggle's stay awake on and
+#                  nothing docked, where logind would have suspended and
+#                  hypridle locked: lock the session and warn, once on
+#                  entering that state (lid closed, or undocked with the
+#                  lid shut). Docked (a dock, or an external display),
+#                  logind ignores the lid anyway (HandleLidSwitchDocked),
+#                  so closing it at a desk neither locks nor warns.
 # Hysteresis re-arms each alert after temp drops 5°C below threshold for 5 min.
 #
 # Why poll lid state here instead of using Hyprland's `bindl switch:on:Lid`?
@@ -18,7 +24,6 @@ CRIT_THRESHOLD=95             # °C
 CRIT_SUSTAIN_CYCLES=6         # 6 * INTERVAL = 60s sustained
 REARM_DELTA=5                 # °C below threshold to count as "cooled"
 REARM_CYCLES=30               # 30 * INTERVAL = 5 min cooled to re-arm
-INHIBIT_PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-inhibit.pid"
 
 read_cpu_temp() {
     local max=0 t type
@@ -47,27 +52,45 @@ notify() {
     "$HOME/.local/bin/laptop-ntfy" "$@" || true
 }
 
+# hypr-idle-toggle's stay awake, as logind lists it (the toggle, the bar
+# and the menu read the same list).
+stay_awake_on() {
+    systemd-inhibit --list --no-legend --no-pager 2>/dev/null |
+        awk '$1 == "hypr-lid-inhibit" { held = 1 } END { exit !held }'
+}
+
+# logind's own docked test, the one HandleLidSwitchDocked goes by: a dock,
+# or an enabled external display connected. Unknown counts as undocked.
+docked() {
+    [[ $(busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+        org.freedesktop.login1.Manager Docked 2>/dev/null) == "b true" ]]
+}
+
 lid_streak=0
 crit_streak=0
 crit_alerted=0
 crit_cool=0
 lid_alerted=0
 lid_cool=0
-prev_lid=""
+prev_bag=0
 
 while :; do
     temp=$(read_cpu_temp)
     lid=$(read_lid)
 
-    # Lid just transitioned open -> closed: warn if stay-awake inhibitor held.
-    if [[ "$prev_lid" == "open" ]] && [[ "$lid" == "closed" ]]; then
-        if [[ -f "$INHIBIT_PIDFILE" ]] && kill -0 "$(cat "$INHIBIT_PIDFILE")" 2>/dev/null; then
-            notify "Lid closed with stay-awake ON" \
-                "Laptop will keep running. Toggle stay-awake off if it's in your bag." \
-                high warning,laptop
-        fi
+    # Stay awake with the lid shut and nothing docked: logind would have
+    # suspended, and hypridle locked before it. Lock and warn on entering.
+    bag=0
+    if [[ "$lid" == "closed" ]] && stay_awake_on && ! docked; then
+        bag=1
     fi
-    prev_lid=$lid
+    if (( bag && ! prev_bag )); then
+        loginctl lock-session 2>/dev/null || true
+        notify "Lid closed with stay-awake ON" \
+            "Locked, and it keeps running. Toggle stay-awake off if it's in your bag." \
+            high warning,laptop
+    fi
+    prev_bag=$bag
 
     # Critical (sustained — filters out brief turbo spikes)
     if (( temp >= CRIT_THRESHOLD )); then

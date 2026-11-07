@@ -118,14 +118,13 @@ def gamemode_on():
 
 
 def awake_on():
-    """Either half of hypr-idle-toggle's stay awake: hypridle stopped,
-    or its hypr-lid-inhibit lid inhibitor held. The bar reads it the
-    same way."""
+    """hypr-idle-toggle's stay awake: its hypr-lid-inhibit inhibitor
+    held, as logind lists it. hypridle runs in both states; the bar
+    shows it missing in red."""
     held = output(["systemd-inhibit", "--list", "--no-legend",
                    "--no-pager"])
-    return not running("hypridle") or any(
-        line.split()[:1] == ["hypr-lid-inhibit"]
-        for line in held.splitlines())
+    return any(line.split()[:1] == ["hypr-lid-inhibit"]
+               for line in held.splitlines())
 
 
 # ── the table ────────────────────────────────────────────────────────────────

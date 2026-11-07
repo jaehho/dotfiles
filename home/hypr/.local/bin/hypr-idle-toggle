@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
-# Stay awake: hypridle stopped (no idle lock or suspend) AND a
-# handle-lid-switch inhibitor held, so closing the lid doesn't suspend.
+# Stay awake: one logind inhibitor for idle and handle-lid-switch. While
+# it is held hypridle pauses every listener (no dim, screen off or idle
+# suspend; hypridle reads logind's BlockInhibited) and closing the lid
+# doesn't suspend. hypridle keeps running in both states: its lock_cmd is
+# the only thing that answers logind's Lock, and it answers whatever is
+# inhibited, so Super+Escape, the bar's and the menu's Lock and the lock
+# before a menu Suspend work with stay awake on.
 #
-#   hypr-idle-toggle        on, or off when either half is on
+#   hypr-idle-toggle        on, or off when it is on; with hypridle
+#                           missing it only starts hypridle and leaves
+#                           stay awake as it was (the bar shows that red)
 #   hypr-idle-toggle off    off: Hyprland's start runs this in place of
 #                           a bare `hypridle`
 #
@@ -19,6 +26,12 @@ holders() {
         awk -v who="$WHO" '$1 == who { print $4 }'
 }
 
+start_hypridle() {
+    if ! pgrep -x hypridle > /dev/null; then
+        hypridle &
+    fi
+}
+
 off() {
     local pid
     for pid in $(holders); do
@@ -26,22 +39,23 @@ off() {
         pkill -P "$pid" 2>/dev/null
         kill "$pid" 2>/dev/null
     done
-    if ! pgrep -x hypridle > /dev/null; then
-        hypridle &
-    fi
+    start_hypridle
 }
 
 on() {
-    pkill -x hypridle
     nohup systemd-inhibit \
-        --what=handle-lid-switch \
+        --what=idle:handle-lid-switch \
         --who="$WHO" \
-        --why="Stay awake (idle + lid) inhibitor" \
+        --why="Stay awake: no idle dim, screen off or suspend, no lid suspend" \
         --mode=block \
         sleep infinity </dev/null >/dev/null 2>&1 &
 }
 
-if [[ $1 == off ]] || ! pgrep -x hypridle > /dev/null || [[ -n $(holders) ]]; then
+if [[ $1 == off ]]; then
+    off
+elif ! pgrep -x hypridle > /dev/null; then
+    start_hypridle
+elif [[ -n $(holders) ]]; then
     off
 else
     on
