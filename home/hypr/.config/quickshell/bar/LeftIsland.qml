@@ -24,6 +24,11 @@ Island {
     readonly property var monitor: Hyprland.monitorFor(bar.screen)
     // The special workspace raised on this monitor, by full name, or "".
     property string raisedSpecial: ""
+    // The x the island must stop at (Bar.qml: short of the center
+    // island). The title gives way first: it takes what the workspaces
+    // leave, up to waybar's 470px, and goes when that is under 40px.
+    property real limit: Infinity
+    readonly property real titleRoom: Math.min(470, limit - x - 28 - spaces.width)
 
     // Numbered workspaces by id, then named ones, then the specials.
     readonly property var workspaces: Hyprland.workspaces.values.filter(w => w.monitor === leftIsland.monitor && w.name !== "asstdev").sort((a, b) => leftIsland.rank(a) - leftIsland.rank(b) || a.id - b.id)
@@ -92,6 +97,7 @@ Island {
 
     // Waybar's workspaces module: 2px inside either end.
     Row {
+        id: spaces
         leftPadding: 2
         rightPadding: 2
 
@@ -221,19 +227,19 @@ Island {
     }
 
     // Context, not a control: italic and quiet, purple in a special
-    // workspace, cut at about waybar's 60 characters, gone with no window.
+    // workspace, cut to titleRoom, gone with no window.
     BarButton {
         id: title
 
         readonly property var toplevel: ToplevelManager.activeToplevel
         readonly property bool special: Hyprland.activeToplevel?.workspace?.name.startsWith("special:") ?? false
 
-        visible: toplevel !== null
+        visible: toplevel !== null && leftIsland.titleRoom >= 40
         width: visible ? implicitWidth : 0
         bar: leftIsland.bar
         interactive: false
         italic: true
-        maxWidth: 470
+        maxWidth: leftIsland.titleRoom
         text: toplevel ? (toplevel.title || toplevel.appId) : ""
         tint: special ? leftIsland.colors.purple : leftIsland.colors.grey2
         tip: toplevel ? [toplevel.appId, toplevel.title].filter(s => s !== "").join("  ·  ") : ""

@@ -18,6 +18,11 @@ Item {
     property var player: null
     property bool open: false
     property date now: clock.date
+    // How far right of the screen's center the island may reach at rest
+    // (Bar.qml: short of the right island). Centered, it keeps both halves
+    // in by cutting the track first, and drops it under 40px.
+    property real room: Infinity
+    readonly property real mediaRoom: Math.min(360, 2 * room - 12 - 4 - (timeText.width + 14) - 14)
 
     signal toggleRequested
     signal closeRequested
@@ -118,7 +123,7 @@ Item {
         // middle the previous one, as before.
         Rectangle {
             id: media
-            visible: island.hasTrack
+            visible: island.hasTrack && island.mediaRoom >= 40
             width: mediaText.width + 14
             height: 24
             radius: 8
@@ -151,7 +156,7 @@ Item {
                 id: mediaText
                 anchors.centerIn: parent
                 // Waybar cut its line at 45 characters.
-                width: Math.min(implicitWidth, 360)
+                width: Math.min(implicitWidth, island.mediaRoom)
                 elide: Text.ElideRight
                 mono: true
                 text: island.hasTrack ? String.fromCodePoint(island.player.isPlaying ? glyphFor(island.player) : 0xf03e4) + " " + [island.player.trackTitle, island.player.trackArtist].filter(s => s !== "").join(" · ") : ""

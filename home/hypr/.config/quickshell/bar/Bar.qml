@@ -106,11 +106,17 @@ PanelWindow {
     }
 
     // Waybar's islands sat 4px inside its 34px bar, 8px from either edge.
+    // They keep 8px apart: the right island holds its width, the center
+    // island cuts its track to fit, and the left island its title (and as
+    // a last resort clips).
     LeftIsland {
         id: leftSide
         x: 8
         y: 10
         bar: bar
+        limit: (bar.width - center.restWidth) / 2 - 8
+        width: Math.min(implicitWidth, limit - x)
+        clip: true
     }
 
     CenterIsland {
@@ -120,6 +126,7 @@ PanelWindow {
         colors: bar.colors
         player: bar.player
         open: bar.open
+        room: rightSide.x - 8 - bar.width / 2
         onToggleRequested: bar.toggleRequested()
         onCloseRequested: bar.closeRequested()
     }
