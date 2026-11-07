@@ -1,26 +1,50 @@
 #!/usr/bin/env bash
-# Toggle "stay awake": kills hypridle (idle inhibitor) AND holds a
-# handle-lid-switch inhibitor so closing the lid doesn't suspend.
+# Stay awake: hypridle stopped (no idle lock or suspend) AND a
+# handle-lid-switch inhibitor held, so closing the lid doesn't suspend.
+#
+#   hypr-idle-toggle        on, or off when either half is on
+#   hypr-idle-toggle off    off: Hyprland's start runs this in place of
+#                           a bare `hypridle`
+#
+# The state is what is running, not a pidfile. The pidfile named only the
+# newest inhibitor: a Hyprland restart relaunched hypridle under a held
+# inhibitor, the next toggle saw hypridle and started a second one, and
+# the first held the lid until a reboot. Off ends every inhibitor of ours.
 
-PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-inhibit.pid"
+WHO=hypr-lid-inhibit
 
-if pgrep -x hypridle > /dev/null; then
-    # Currently OFF → turn ON
+# The systemd-inhibit processes holding our inhibitor, as logind lists them.
+holders() {
+    systemd-inhibit --list --no-legend --no-pager 2>/dev/null |
+        awk -v who="$WHO" '$1 == who { print $4 }'
+}
+
+off() {
+    local pid
+    for pid in $(holders); do
+        # Its `sleep infinity` first, so systemd-inhibit exits on its own.
+        pkill -P "$pid" 2>/dev/null
+        kill "$pid" 2>/dev/null
+    done
+    if ! pgrep -x hypridle > /dev/null; then
+        hypridle &
+    fi
+}
+
+on() {
     pkill -x hypridle
     nohup systemd-inhibit \
         --what=handle-lid-switch \
-        --who=hypr-lid-inhibit \
+        --who="$WHO" \
         --why="Stay awake (idle + lid) inhibitor" \
         --mode=block \
         sleep infinity </dev/null >/dev/null 2>&1 &
-    echo $! > "$PIDFILE"
+}
+
+if [[ $1 == off ]] || ! pgrep -x hypridle > /dev/null || [[ -n $(holders) ]]; then
+    off
 else
-    # Currently ON → turn OFF
-    hypridle &
-    if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-        kill "$(cat "$PIDFILE")"
-    fi
-    rm -f "$PIDFILE"
+    on
 fi
 
 # Refresh the bar's stay-awake glyph so it updates immediately instead of

@@ -79,7 +79,9 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("systemctl --user start swaync")
     hl.exec_cmd("~/.local/bin/hypr-urgent-focus")
     hl.exec_cmd("~/.local/bin/hypr-swaync-keys")
-    hl.exec_cmd("hypridle")
+    -- hypridle, through stay-awake's off so a lid inhibitor a previous
+    -- Hyprland left held goes too (hypr-idle-toggle).
+    hl.exec_cmd("~/.local/bin/hypr-idle-toggle off")
     hl.exec_cmd("fcitx5 -d")                       -- Korean input, the AI key toggles (home/fcitx5)
     hl.exec_cmd("~/.local/bin/hypr-hangul-hint")   -- key hint, shown while typing Hangul
     -- Night light on the schedule in hyprsunset.conf. Not the packaged user

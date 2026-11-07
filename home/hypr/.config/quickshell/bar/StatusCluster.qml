@@ -25,6 +25,7 @@ Row {
     // Refreshed by hypr-idle-toggle over IPC, and every 30 seconds.
     function probeAwake() {
         awakeProbe.running = true;
+        awakeRecheck.restart();
     }
 
     function run(command) {
@@ -170,22 +171,34 @@ Row {
         }
     }
 
-    // Stay awake is on while hypridle is not running.
+    // Stay awake has two halves (hypr-idle-toggle): hypridle stopped, and
+    // a hypr-lid-inhibit lid inhibitor held. Either alone is drift; it
+    // shows as on, and a click (the toggle) then turns both off.
     BarButton {
         id: awake
 
-        property bool on: false
+        property bool idleOff: false
+        property bool lidHeld: false
+        readonly property bool on: idleOff || lidHeld
 
         bar: attention.bar
         text: String.fromCodePoint(on ? 0xf0176 : 0xf0faa)
         tint: on ? attention.colors.orange : attention.colors.grey2
-        tip: on ? "Stay awake: ON (idle + lid)" : "Stay awake: OFF"
+        tip: idleOff && lidHeld ? "Stay awake: ON (idle + lid)" : idleOff ? "Stay awake: idle only, the lid still suspends" : lidHeld ? "Stay awake: lid only, idle still locks" : "Stay awake: OFF"
         onClicked: attention.run([attention.bin + "hypr-settings-menu", "awake"])
 
+        // hypridle's pgrep status, then how many of our inhibitors logind
+        // lists.
         Process {
             id: awakeProbe
-            command: ["pgrep", "-x", "hypridle"]
-            onExited: code => awake.on = code !== 0
+            command: ["sh", "-c", "pgrep -x hypridle >/dev/null; echo $? $(systemd-inhibit --list --no-legend --no-pager | awk '$1 == \"hypr-lid-inhibit\"' | wc -l)"]
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    const [idle, lid] = text.trim().split(" ").map(Number);
+                    awake.idleOff = idle !== 0;
+                    awake.lidHeld = lid > 0;
+                }
+            }
         }
 
         Timer {
@@ -194,6 +207,13 @@ Row {
             interval: 30000
             repeat: true
             onTriggered: attention.probeAwake()
+        }
+
+        // A toggle's halves land a moment after its refresh call.
+        Timer {
+            id: awakeRecheck
+            interval: 1500
+            onTriggered: awakeProbe.running = true
         }
     }
 
