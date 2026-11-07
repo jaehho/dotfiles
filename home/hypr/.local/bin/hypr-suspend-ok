@@ -2,13 +2,20 @@
 # hypridle condition_cmd for the idle-suspend listener. Exit 0 allows
 # `systemctl suspend`; non-zero defers it.
 #
-# Defer only while a Claude session is mid-turn (status "busy") and the lid
-# is open, so a long turn is not cut by the idle timer. A session sitting
-# at a prompt must not block sleep. Lid close is logind's HandleLidSwitch
-# and is not gated here: closing the lid still suspends.
+# Defer while stay awake is on (hypr-idle-toggle's hypr-lid-inhibit
+# inhibitor, as logind lists it): stay awake blocks suspend and nothing
+# else, so the screen still dims and turns off. Also defer while a Claude
+# session is mid-turn (status "busy") and the lid is open, so a long turn
+# is not cut by the idle timer. A session sitting at a prompt must not
+# block sleep. Lid close is logind's HandleLidSwitch and is not gated here.
 #
 # Status lives in ~/.claude/sessions/<pid>.json (written by Claude Code;
 # claude-open execs into claude, so the same store covers both).
+
+if systemd-inhibit --list --no-legend --no-pager 2>/dev/null |
+    awk '$1 == "hypr-lid-inhibit" { held = 1 } END { exit !held }'; then
+    exit 1
+fi
 
 shopt -s nullglob
 for f in "$HOME"/.claude/sessions/*.json; do

@@ -207,8 +207,8 @@ Row {
         }
     }
 
-    // Stay awake is a hypr-lid-inhibit inhibitor for idle and the lid
-    // (hypr-idle-toggle); hypridle pauses its listeners while it is held.
+    // Stay awake blocks suspend only: a hypr-lid-inhibit lid inhibitor
+    // (hypr-idle-toggle), which hypr-suspend-ok also reads.
     // hypridle must run in both states, since it alone answers logind's
     // Lock: without it every Lock does nothing, which shows in red, and a
     // click then only starts hypridle, leaving stay awake as it was.
@@ -222,7 +222,7 @@ Row {
         bar: attention.bar
         text: String.fromCodePoint(on ? 0xf0176 : 0xf0faa)
         tint: idleOff ? attention.colors.red : on ? attention.colors.orange : attention.colors.grey2
-        tip: idleOff ? `hypridle is not running, so Lock does nothing. Click to start it${on ? "; stay awake stays on" : ""}` : on ? "Stay awake: ON (no dim, screen off or suspend; Lock works)" : "Stay awake: OFF"
+        tip: idleOff ? `hypridle is not running, so Lock does nothing. Click to start it${on ? "; stay awake stays on" : ""}` : on ? "Stay awake: ON (no suspend; the screen still dims and turns off)" : "Stay awake: OFF"
         onClicked: attention.run([attention.bin + "hypr-settings-menu", "awake"])
 
         // hypridle's pgrep status, then how many of our inhibitors logind

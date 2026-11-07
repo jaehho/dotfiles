@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Stay awake: one logind inhibitor for idle and handle-lid-switch. While
-# it is held hypridle pauses every listener (no dim, screen off or idle
-# suspend; hypridle reads logind's BlockInhibited) and closing the lid
-# doesn't suspend. hypridle keeps running in both states: its lock_cmd is
-# the only thing that answers logind's Lock, and it answers whatever is
-# inhibited, so Super+Escape, the bar's and the menu's Lock and the lock
-# before a menu Suspend work with stay awake on.
+# Stay awake: no suspend, nothing else. One logind handle-lid-switch
+# inhibitor, so closing the lid doesn't suspend; hypr-suspend-ok sees it
+# and defers hypridle's idle suspend. The screen still dims, turns off and
+# locks as usual. hypridle keeps running in both states: its lock_cmd is
+# the only thing that answers logind's Lock, so Super+Escape, the bar's and
+# the menu's Lock and the lock before a menu Suspend work with stay awake
+# on. A menu Suspend still suspends.
 #
 #   hypr-idle-toggle        on, or off when it is on; with hypridle
 #                           missing it only starts hypridle and leaves
@@ -44,9 +44,9 @@ off() {
 
 on() {
     nohup systemd-inhibit \
-        --what=idle:handle-lid-switch \
+        --what=handle-lid-switch \
         --who="$WHO" \
-        --why="Stay awake: no idle dim, screen off or suspend, no lid suspend" \
+        --why="Stay awake: no idle or lid suspend" \
         --mode=block \
         sleep infinity </dev/null >/dev/null 2>&1 &
 }
