@@ -47,3 +47,12 @@ vim.g.ts_parsers = {
 vim.diagnostic.config {
   jump = { on_jump = vim.diagnostic.open_float },
 }
+
+-- LazyVim turns on undofile, which keeps every edit of a file in
+-- ~/.local/state/nvim/undo, rotated tokens and deleted files included.
+-- Credential files keep no undo history.
+vim.api.nvim_create_autocmd({ 'BufReadPre', 'BufNewFile', 'BufWritePre' }, {
+  desc = 'No persistent undo for credential files',
+  pattern = { '*.env', '.env', '.env.*', '*/.tokens/*', '*/.ssh/*', '*/restic/password', '*password*', '*secret*' },
+  callback = function() vim.opt_local.undofile = false end,
+})
