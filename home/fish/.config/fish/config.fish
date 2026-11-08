@@ -8,12 +8,6 @@ set -gx VISUAL nvim
 # of disabling it, so bytecode caching still works.
 set -gx PYTHONPYCACHEPREFIX ~/.cache/python
 
-# ── GitHub ───────────────────────────────────────────────────────────────────
-if test -f ~/dotfiles/.env
-    set -l pat (string match -r 'GITHUB_PERSONAL_ACCESS_TOKEN="([^"]+)"' < ~/dotfiles/.env)[2]
-    test -n "$pat"; and set -gx GITHUB_PERSONAL_ACCESS_TOKEN $pat
-end
-
 # ── Puppeteer (mermaid-cli / mermaid-filter) ─────────────────────────────────
 # Use the system Chromium-based browser instead of puppeteer's bundled ~150MB
 # Chrome download. First match wins.

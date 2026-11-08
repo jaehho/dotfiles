@@ -1,0 +1,13 @@
+#!/bin/sh
+# gog with its file-keyring password read from a private file, so the
+# password reaches gog alone instead of every process in the session
+# (it used to sit in ~/.config/environment.d). Create the file with
+# install -m 600 /dev/null ~/.config/gogcli/keyring-password
+if [ -z "${GOG_KEYRING_PASSWORD:-}" ]; then
+    f=${GOG_KEYRING_PASSWORD_FILE:-$HOME/.config/gogcli/keyring-password}
+    if [ -r "$f" ]; then
+        GOG_KEYRING_PASSWORD=$(cat "$f")
+        export GOG_KEYRING_PASSWORD
+    fi
+fi
+exec /usr/bin/gog "$@"
