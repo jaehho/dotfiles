@@ -1,14 +1,17 @@
 // Stock rofi role map over the Everforest names in themes/foliage.rasi.
+// Two departures for DESIGN.md: edges and separators are the bg2
+// hairline, not fg, and the counts and placeholder are grey2 (5.12:1
+// on bg0) where the stock theme names the CSS color Gray.
 
 * {
   selected-active-foreground:  @background;
   lightfg:                     @fg;
-  separatorcolor:              @foreground;
+  separatorcolor:              @bg2;
   urgent-foreground:           @red;
   alternate-urgent-background: @lightbg;
   lightbg:                     @bg-dim;
   background-color:            transparent;
-  border-color:                @foreground;
+  border-color:                @bg2;
   normal-background:           @background;
   selected-urgent-background:  @red;
   alternate-active-background: @lightbg;
@@ -130,16 +133,16 @@ button selected {
 }
 num-filtered-rows {
     expand:     false;
-    text-color: Gray;
+    text-color: @grey2;
 }
 num-rows {
     expand:     false;
-    text-color: Gray;
+    text-color: @grey2;
 }
 textbox-num-sep {
     expand:     false;
     str:        "/";
-    text-color: Gray;
+    text-color: @grey2;
 }
 inputbar {
     padding:    1px ;
@@ -155,7 +158,7 @@ entry {
     text-color:        @normal-foreground;
     cursor:            text;
     spacing:           0;
-    placeholder-color: Gray;
+    placeholder-color: @grey2;
     placeholder:       "Type to filter";
 }
 prompt {

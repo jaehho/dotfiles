@@ -189,7 +189,7 @@ Two widgets also use hues to tell meters apart rather than to report state: sway
 - **Forest Shade** (`bg_dim`): the darkest plane. Overlay sheets (at 0.985), notification cards, the docked hangul strip, text on solid tone fills, keycap lips, and the color of every shadow.
 - **Dark Slate** (`bg0`): controls on sheets, the bar's islands (at 0.88), menus, tooltips, the swaync control center and rofi's window.
 - **Raised Slate** (`bg1`): control edges, hover fill, slider and meter tracks, hyprlock's input fill.
-- **Hairline Slate** (`bg2`): sheet and card hairlines, a resting field's edge, the hangul hint's keys.
+- **Hairline Slate** (`bg2`): sheet and card hairlines, a resting field's edge, rofi's window edge and list separator, the hangul hint's keys.
 - **Lifted Slate** (`bg3`): hover edges and raised keycap faces.
 - **Parchment** (`fg`): primary text and glyphs. 8.62:1 on `bg_dim`, 7.38:1 on `bg0`.
 - **Sage Gray** (`grey2`): secondary text, resting bar glyphs, the polkit action id, placeholders. 5.97:1 on `bg_dim`, 5.12:1 on `bg0`.
@@ -278,7 +278,7 @@ Corners follow one scale: 12px for windows and containers (Hyprland's `decoratio
 
 On the scale today: the polkit sheet, the keybind sheet, the hangul board, the bar islands, the bar's menus and open sheets, swaync's cards, rofi's window and hyprlock's input field at 12px; the polkit buttons, field and band, the keybind sheet's filter, chips, keys and caps, the hangul keys, the bar's pills, menu rows, tips and quick settings controls, swaync's nested cards and buttons, rofi's input bar and rows at 8px; the polkit lens dot, swaync's slider troughs, the quick settings sliders and switch, and the hangul home-key bumps as pills.
 
-**Drift.** speaker-eq's notices use 10px.
+**Drift.** speaker-eq's notices use 10px. rofi keeps the stock theme's 2px dashed list separator, a heavier line than a hairline.
 
 ### Shape Rules
 
@@ -347,7 +347,7 @@ The bar: three quiet islands, with only the active workspace filled.
 
 ### Launcher
 
-rofi: a `bg0` window, 42em wide with 12px corners; the input bar and rows at 8px. The selected row is solid `fg` with `bg_dim` text (8.62:1); active entries are `blue` and urgent ones `red`.
+rofi: a `bg0` window, 42em wide with 12px corners and a 1px `bg2` edge; the input bar and rows at 8px, with a dashed `bg2` line between them. The selected row is solid `fg` with `bg_dim` text (8.62:1); active entries are `blue` and urgent ones `red`; the placeholder and the match counts are `grey2`.
 
 ### Keycaps
 
@@ -367,7 +367,7 @@ The signature surface (`home/hypr/.config/quickshell/polkit/`), an approval shee
 
 hyprlock: a blurred screenshot of the session (3 passes, size 8, brightness 0.6) behind a clock in `fg`, the date in `grey2` and a greeting in `green`; a 300×50 input with a 3px `green` outline on `bg1` and 12px corners, whose `check_color` is `green`, `fail_color` `red` and `capslock_color` `yellow`; battery and network in the top right.
 
-**Drift.** The hangul hint's Latin letters measure 2.98:1 and its shifted jamo 3.97:1 on their keys; rofi edges its window in full `fg` (`border-color: @foreground` in the stock role map) where other surfaces use a `bg2` hairline, and colors its counts and placeholder with the CSS name `Gray`. hyprlock shows the battery in `green` at any charge, where the bar keeps `green` for charging.
+**Drift.** The hangul hint's Latin letters measure 2.98:1 and its shifted jamo 3.97:1 on their keys. hyprlock shows the battery in `green` at any charge, where the bar keeps `green` for charging.
 
 ### Component Rules
 
