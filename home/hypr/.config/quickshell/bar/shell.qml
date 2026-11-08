@@ -6,7 +6,7 @@
 // shows the bar on every monitor (Super+B), `toggle` opens or closes the
 // center island on the focused monitor (Super+Shift+B), `settings` the
 // right island's quick settings (Super+;), `settingsPage <page>` the same
-// at a page (wifi), and `refreshAwake` makes the stay-awake glyph look
+// at a page (wifi, bluetooth or sound), and `refreshAwake` makes the stay-awake glyph look
 // again (hypr-idle-toggle calls it).
 //
 // App icons resolve through Papirus-Dark, as waybar's did.

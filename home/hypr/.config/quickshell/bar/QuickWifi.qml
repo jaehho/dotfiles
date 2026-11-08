@@ -34,7 +34,7 @@ Column {
     readonly property var openTypes: [WifiSecurityType.Open, WifiSecurityType.Owe]
 
     function first() {
-        return list.count > 0 ? list.itemAt(0).rowItem : radio;
+        return list.count > 0 ? list.itemAt(0).rowItem : head.toggle;
     }
 
     function reorder() {
@@ -162,58 +162,20 @@ Column {
 
     spacing: 8
 
-    Item {
-        width: parent.width
-        height: 32
-
-        QuickControl {
-            id: back
-            sheet: wifi.sheet
-            flat: true
-            width: title.implicitWidth + 20
-            height: 32
-            onActivated: wifi.sheet.back()
-
-            Row {
-                id: title
-                x: 6
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 4
-
-                Line {
-                    anchors.verticalCenter: parent.verticalCenter
-                    mono: true
-                    size: 16
-                    text: String.fromCodePoint(0xf0141)
-                    color: wifi.colors.grey2
-                }
-
-                Line {
-                    anchors.verticalCenter: parent.verticalCenter
-                    size: 15
-                    weight: Font.DemiBold
-                    text: "Wi-Fi"
-                    color: wifi.colors.fg
-                }
-            }
-        }
-
-        QuickSwitch {
-            id: radio
-            sheet: wifi.sheet
-            anchors.right: parent.right
-            anchors.rightMargin: 4
-            anchors.verticalCenter: parent.verticalCenter
-            enabled: wifi.device !== null && Networking.wifiHardwareEnabled
-            on: Networking.wifiEnabled
-            onActivated: Networking.wifiEnabled = !Networking.wifiEnabled
-        }
+    QuickBack {
+        id: head
+        sheet: wifi.sheet
+        title: "Wi-Fi"
+        switchable: true
+        toggle.enabled: wifi.device !== null && Networking.wifiHardwareEnabled
+        toggle.on: Networking.wifiEnabled
+        onSwitched: Networking.wifiEnabled = !Networking.wifiEnabled
     }
 
     // Why the list is empty, and a wired link, in a quiet line each.
     Line {
-        x: 10
-        width: parent.width - 20
+        x: 13
+        width: parent.width - 26
         visible: text !== ""
         wrapMode: Text.Wrap
         text: wifi.device === null ? "There is no Wi-Fi device." : !Networking.wifiHardwareEnabled ? "Wi-Fi is off at the hardware switch." : !Networking.wifiEnabled ? "Wi-Fi is off." : wifi.order.length === 0 ? "Looking for networks…" : ""
@@ -221,275 +183,207 @@ Column {
     }
 
     Line {
-        x: 10
-        width: parent.width - 20
+        x: 13
+        width: parent.width - 26
         visible: wifi.wired !== null
         elide: Text.ElideRight
         text: `Wired: ${wifi.wired?.name ?? ""} is connected.`
         color: wifi.colors.grey2
     }
 
-    Flickable {
+    QuickList {
         id: scroller
-        width: parent.width
-        height: Math.min(contentHeight, 304)
+        colors: wifi.colors
         visible: list.count > 0
-        contentHeight: networks.implicitHeight
-        clip: true
-        interactive: contentHeight > height
-        boundsBehavior: Flickable.StopAtBounds
 
-        // Inset by the focus ring's reach, so the clip doesn't cut it.
-        Column {
-            id: networks
-            x: 3
-            width: scroller.width - 6 - (scroller.interactive ? 6 : 0)
-            topPadding: 3
-            bottomPadding: 3
-            spacing: 2
+        Repeater {
+            id: list
+            model: wifi.order
 
-            Repeater {
-                id: list
-                model: wifi.order
+            Column {
+                id: entry
 
-                Column {
-                    id: entry
+                required property var modelData
+                readonly property var net: modelData
+                property alias rowItem: row
+                property alias fieldItem: field
 
-                    required property var modelData
-                    readonly property var net: modelData
-                    property alias rowItem: row
-                    property alias fieldItem: field
+                width: scroller.rowWidth
+                spacing: 4
 
-                    width: networks.width
-                    spacing: 4
+                Connections {
+                    target: entry.net
 
-                    Connections {
-                        target: entry.net
-
-                        function onConnectionFailed(reason) {
-                            wifi.fail(entry.net, reason);
-                        }
-
-                        function onConnectedChanged() {
-                            if (entry.net?.connected && wifi.failed === entry.net)
-                                wifi.failed = null;
-                            Qt.callLater(wifi.reorder);
-                        }
-
-                        function onKnownChanged() {
-                            Qt.callLater(wifi.reorder);
-                        }
+                    function onConnectionFailed(reason) {
+                        wifi.fail(entry.net, reason);
                     }
 
-                    QuickControl {
-                        id: row
-
-                        readonly property var net: entry.net
-
-                        sheet: wifi.sheet
-                        flat: true
-                        on: entry.net?.connected ?? false
-                        width: parent.width
-                        height: 34
-                        onActivated: if (entry.net)
-                            wifi.choose(entry.net)
-
-                        Line {
-                            id: strength
-                            x: 10
-                            anchors.verticalCenter: parent.verticalCenter
-                            mono: true
-                            size: 16
-                            text: String.fromCodePoint(wifi.glyph(entry.net))
-                            color: row.on ? wifi.colors.blue : wifi.colors.fg
-                        }
-
-                        Line {
-                            x: 38
-                            width: parent.width - x - note.width - 22
-                            anchors.verticalCenter: parent.verticalCenter
-                            elide: Text.ElideRight
-                            text: entry.net?.name ?? ""
-                            color: wifi.colors.fg
-                        }
-
-                        Line {
-                            id: note
-                            anchors.right: parent.right
-                            anchors.rightMargin: 10
-                            anchors.verticalCenter: parent.verticalCenter
-                            size: 11
-                            text: wifi.status(entry.net)
-                            color: row.on ? wifi.colors.blue : wifi.colors.grey2
-                        }
+                    function onConnectedChanged() {
+                        if (entry.net?.connected && wifi.failed === entry.net)
+                            wifi.failed = null;
+                        Qt.callLater(wifi.reorder);
                     }
 
-                    // The password, masked and kept out of the input method.
-                    QuickControl {
-                        id: field
+                    function onKnownChanged() {
+                        Qt.callLater(wifi.reorder);
+                    }
+                }
 
-                        readonly property var net: entry.net
+                QuickControl {
+                    id: row
 
-                        sheet: wifi.sheet
-                        visible: wifi.asking === entry.net
+                    readonly property var net: entry.net
+
+                    sheet: wifi.sheet
+                    flat: true
+                    on: entry.net?.connected ?? false
+                    width: parent.width
+                    height: 34
+                    onActivated: if (entry.net)
+                        wifi.choose(entry.net)
+
+                    Line {
+                        id: strength
+                        x: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        mono: true
+                        size: 16
+                        text: String.fromCodePoint(wifi.glyph(entry.net))
+                        color: row.on ? wifi.colors.blue : wifi.colors.fg
+                    }
+
+                    Line {
                         x: 38
-                        width: parent.width - x - 4
-                        height: 36
-                        color: wifi.colors.bg0
-                        border.color: input.activeFocus ? wifi.colors.blue : wifi.colors.bg2
-                        onActivated: input.forceActiveFocus()
-                        onActiveFocusChanged: if (activeFocus)
-                            input.forceActiveFocus()
+                        width: parent.width - x - note.width - 22
+                        anchors.verticalCenter: parent.verticalCenter
+                        elide: Text.ElideRight
+                        text: entry.net?.name ?? ""
+                        color: wifi.colors.fg
+                    }
 
-                        TextInput {
-                            id: input
-                            anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 12
-                            verticalAlignment: TextInput.AlignVCenter
-                            clip: true
-                            echoMode: TextInput.Password
-                            passwordCharacter: "•"
-                            inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhHiddenText
-                            color: wifi.colors.fg
-                            selectionColor: wifi.colors.withAlpha(wifi.colors.blue, 0.35)
-                            selectedTextColor: wifi.colors.fg
-                            selectByMouse: true
-                            font.family: "Adwaita Sans"
-                            font.pixelSize: 14
-                            renderType: Text.NativeRendering
-                            text: wifi.password
-                            onTextChanged: wifi.password = text
-                            Keys.onReturnPressed: wifi.submit()
-                            Keys.onEnterPressed: wifi.submit()
-                            Keys.onEscapePressed: wifi.cancel()
+                    Line {
+                        id: note
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: 11
+                        text: wifi.status(entry.net)
+                        color: row.on ? wifi.colors.blue : wifi.colors.grey2
+                    }
+                }
 
-                            cursorDelegate: Rectangle {
-                                width: 1
-                                color: wifi.colors.blue
-                                visible: input.activeFocus
+                // The password, masked and kept out of the input method.
+                QuickControl {
+                    id: field
 
-                                SequentialAnimation on opacity {
-                                    running: input.activeFocus
-                                    loops: Animation.Infinite
-                                    NumberAnimation {
-                                        to: 0
-                                        duration: 500
-                                        easing.type: Easing.InOutSine
-                                    }
-                                    NumberAnimation {
-                                        to: 1
-                                        duration: 500
-                                        easing.type: Easing.InOutSine
-                                    }
+                    readonly property var net: entry.net
+
+                    sheet: wifi.sheet
+                    visible: wifi.asking === entry.net
+                    x: 38
+                    width: parent.width - x - 4
+                    height: 36
+                    color: wifi.colors.bg0
+                    border.color: input.activeFocus ? wifi.colors.blue : wifi.colors.bg2
+                    onActivated: input.forceActiveFocus()
+                    onActiveFocusChanged: if (activeFocus)
+                        input.forceActiveFocus()
+
+                    TextInput {
+                        id: input
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        verticalAlignment: TextInput.AlignVCenter
+                        clip: true
+                        echoMode: TextInput.Password
+                        passwordCharacter: "•"
+                        inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhHiddenText
+                        color: wifi.colors.fg
+                        selectionColor: wifi.colors.withAlpha(wifi.colors.blue, 0.35)
+                        selectedTextColor: wifi.colors.fg
+                        selectByMouse: true
+                        font.family: "Adwaita Sans"
+                        font.pixelSize: 14
+                        renderType: Text.NativeRendering
+                        text: wifi.password
+                        onTextChanged: wifi.password = text
+                        Keys.onReturnPressed: wifi.submit()
+                        Keys.onEnterPressed: wifi.submit()
+                        Keys.onEscapePressed: wifi.cancel()
+
+                        cursorDelegate: Rectangle {
+                            width: 1
+                            color: wifi.colors.blue
+                            visible: input.activeFocus
+
+                            SequentialAnimation on opacity {
+                                running: input.activeFocus
+                                loops: Animation.Infinite
+                                NumberAnimation {
+                                    to: 0
+                                    duration: 500
+                                    easing.type: Easing.InOutSine
+                                }
+                                NumberAnimation {
+                                    to: 1
+                                    duration: 500
+                                    easing.type: Easing.InOutSine
                                 }
                             }
-
-                            Text {
-                                anchors.fill: parent
-                                verticalAlignment: Text.AlignVCenter
-                                visible: input.text === "" && input.preeditText === ""
-                                text: `Password for ${entry.net?.name ?? ""}`
-                                color: wifi.colors.grey2
-                                font: input.font
-                                elide: Text.ElideRight
-                                renderType: Text.NativeRendering
-                            }
-                        }
-                    }
-
-                    // The failure, as the polkit sheet bands a wrong
-                    // password: red in the glyph, fill and edge, words fg.
-                    Rectangle {
-                        visible: wifi.failed === entry.net && wifi.why !== ""
-                        x: 38
-                        width: parent.width - x - 4
-                        height: words.implicitHeight + 14
-                        radius: 8
-                        color: wifi.colors.withAlpha(wifi.colors.red, 0.14)
-                        border.width: 1
-                        border.color: wifi.colors.withAlpha(wifi.colors.red, 0.45)
-
-                        Line {
-                            id: mark
-                            x: 10
-                            y: 7
-                            mono: true
-                            text: String.fromCodePoint(0xf0028)
-                            color: wifi.colors.red
                         }
 
-                        Line {
-                            id: words
-                            x: 32
-                            y: 7
-                            width: parent.width - x - 10
-                            wrapMode: Text.Wrap
-                            text: wifi.why
-                            color: wifi.colors.fg
+                        Text {
+                            anchors.fill: parent
+                            verticalAlignment: Text.AlignVCenter
+                            visible: input.text === "" && input.preeditText === ""
+                            text: `Password for ${entry.net?.name ?? ""}`
+                            color: wifi.colors.grey2
+                            font: input.font
+                            elide: Text.ElideRight
+                            renderType: Text.NativeRendering
                         }
                     }
                 }
-            }
-        }
 
-        // More below: the list fades into the sheet.
-        Rectangle {
-            x: 0
-            y: scroller.contentY + scroller.height - height
-            width: scroller.width
-            height: 24
-            visible: scroller.interactive && !scroller.atYEnd
-            gradient: Gradient {
-                GradientStop {
-                    position: 0
-                    color: wifi.colors.withAlpha(wifi.colors.bg_dim, 0)
-                }
-                GradientStop {
-                    position: 1
-                    color: wifi.colors.withAlpha(wifi.colors.bg_dim, 0.985)
+                // The failure, as the polkit sheet bands a wrong
+                // password: red in the glyph, fill and edge, words fg.
+                Rectangle {
+                    visible: wifi.failed !== null && wifi.failed === entry.net && wifi.why !== ""
+                    x: 38
+                    width: parent.width - x - 4
+                    height: words.implicitHeight + 14
+                    radius: 8
+                    color: wifi.colors.withAlpha(wifi.colors.red, 0.14)
+                    border.width: 1
+                    border.color: wifi.colors.withAlpha(wifi.colors.red, 0.45)
+
+                    Line {
+                        id: mark
+                        x: 10
+                        y: 7
+                        mono: true
+                        text: String.fromCodePoint(0xf0028)
+                        color: wifi.colors.red
+                    }
+
+                    Line {
+                        id: words
+                        x: 32
+                        y: 7
+                        width: parent.width - x - 10
+                        wrapMode: Text.Wrap
+                        text: wifi.why
+                        color: wifi.colors.fg
+                    }
                 }
             }
-        }
-
-        Rectangle {
-            visible: scroller.interactive
-            x: scroller.width - 3
-            y: scroller.contentY + scroller.visibleArea.yPosition * scroller.height
-            width: 3
-            height: scroller.visibleArea.heightRatio * scroller.height
-            radius: 1.5
-            color: wifi.colors.bg3
         }
     }
 
-    QuickControl {
+    QuickFoot {
         sheet: wifi.sheet
-        flat: true
-        visible: wifi.sheet.entries.some(entry => entry.id === "wifi")
-        x: 3
-        width: parent.width - 6
-        height: 32
-        onActivated: wifi.sheet.launch("wifi")
-
-        Row {
-            x: 10
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 12
-
-            Line {
-                anchors.verticalCenter: parent.verticalCenter
-                mono: true
-                size: 16
-                text: String.fromCodePoint(0xf018d)
-                color: wifi.colors.fg
-            }
-
-            Line {
-                anchors.verticalCenter: parent.verticalCenter
-                text: "More in nmtui"
-                color: wifi.colors.fg
-            }
-        }
+        entry: "wifi"
+        text: "More in nmtui"
     }
 }

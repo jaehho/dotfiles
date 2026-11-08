@@ -1,7 +1,7 @@
 // What the machine puts out: screen brightness and the speaker, as
 // waybar's backlight and pulseaudio modules. The wheel steps both through
 // hypr-level, the same perceptual steps and OSD the keys use. A click
-// mutes the default sink; a right click opens its quick settings.
+// mutes the default sink; a right click opens quick settings at Sound.
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -80,7 +80,7 @@ Row {
         tint: muted ? output.colors.grey0 : output.colors.grey2
         tip: sink ? `${sink.description || sink.nickname || sink.name}  ·  ${Math.round(level * 100)}%` : ""
         onClicked: Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])
-        onRightClicked: Quickshell.execDetached([output.bin + "hypr-settings-menu", "audio"])
+        onRightClicked: output.bar.openQuick("sound")
         onScrolled: steps => output.step("volume", steps)
 
         PwObjectTracker {

@@ -2,8 +2,8 @@
 // profile slides out to its left under the pointer), Bluetooth and the
 // network, as waybar's group/link. A click swaps a glyph for its detail
 // (time left, connected devices, the address), as waybar's format-alt
-// did; a right click opens its settings: the network's in the quick
-// settings sheet, the others in their own tools.
+// did; a right click opens its settings: Bluetooth and the network at
+// their quick settings pages, the battery its history.
 import QtQuick
 import Quickshell
 import Quickshell.Bluetooth
@@ -143,7 +143,7 @@ Row {
         tint: off ? link.colors.grey0 : link.colors.grey2
         tip: !adapter ? "No adapter" : [adapter.name, ...(linked.length > 0 ? ["", ...linked.map(d => d.batteryAvailable ? `${d.name}\t${Math.round(d.battery * 100)}%` : d.name)] : [])].join("\n")
         onClicked: detail = !detail
-        onRightClicked: link.settings("bluetooth")
+        onRightClicked: link.bar.openQuick("bluetooth")
     }
 
     BarButton {

@@ -6,8 +6,8 @@
 // It opens into the quick settings sheet (QuickSettings.qml) the way the
 // center island opens into the player: it grows out of itself, leftward
 // and down, and its glyph row stays where it was, live, as the sheet's
-// header. Super + ;, its glyph, or a right click on the network glyph
-// opens it.
+// header. Super + ;, its glyph, or a right click on the speaker,
+// Bluetooth or network glyph opens it (at that glyph's page).
 import QtQuick
 import QtQuick.Effects
 import Quickshell

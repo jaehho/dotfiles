@@ -1,5 +1,6 @@
 // The quick settings sheet the right island opens into: the main page,
-// and pages that open in place under a row back (Wi-Fi). While open it
+// and pages that open in place under a row back (Wi-Fi, Bluetooth and
+// Sound). While open it
 // holds the keyboard: j/k and h/l (or the arrows) move between controls,
 // h/l step a focused slider, Tab and Shift+Tab go in reading order, Enter
 // or Space presses, and Esc or q backs out of a page, then closes. Focus
@@ -34,7 +35,7 @@ FocusScope {
     property var pending: ({})
     property bool again: false
 
-    readonly property Item current: page === "wifi" ? wifiPage : mainPage
+    readonly property Item current: page === "wifi" ? wifiPage : page === "bluetooth" ? bluetoothPage : page === "sound" ? soundPage : mainPage
 
     signal pageRequested(string page)
     signal closeRequested
@@ -355,6 +356,38 @@ FocusScope {
         opacity: sheet.page === "wifi" ? 1 : 0
         visible: opacity > 0
         enabled: sheet.page === "wifi"
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 150
+            }
+        }
+    }
+
+    QuickBluetooth {
+        id: bluetoothPage
+        sheet: sheet
+        width: parent.width
+        shown: sheet.open && sheet.page === "bluetooth"
+        opacity: sheet.page === "bluetooth" ? 1 : 0
+        visible: opacity > 0
+        enabled: sheet.page === "bluetooth"
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 150
+            }
+        }
+    }
+
+    QuickSound {
+        id: soundPage
+        sheet: sheet
+        width: parent.width
+        shown: sheet.open && sheet.page === "sound"
+        opacity: sheet.page === "sound" ? 1 : 0
+        visible: opacity > 0
+        enabled: sheet.page === "sound"
 
         Behavior on opacity {
             NumberAnimation {

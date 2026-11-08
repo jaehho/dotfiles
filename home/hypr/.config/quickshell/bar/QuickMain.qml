@@ -25,7 +25,7 @@ Column {
     readonly property var station: wifiDevice ? wifiDevice.networks.values.find(n => n.connected) ?? null : null
     readonly property var adapter: Bluetooth.defaultAdapter
     readonly property var linked: adapter ? adapter.devices.values.filter(d => d.connected) : []
-    // Wi-Fi, Bluetooth and Audio open from their tiles instead.
+    // Their tools are a row away on the Wi-Fi, Bluetooth and Sound pages.
     readonly property var paged: ["wifi", "bluetooth", "audio"]
 
     // Where the keyboard starts, and where it lands back from a page.
@@ -34,7 +34,7 @@ Column {
     }
 
     function tileFor(page) {
-        return page === "wifi" ? wifiTile : null;
+        return page === "wifi" ? wifiTile : page === "bluetooth" ? bluetoothTile : page === "sound" ? soundTile : null;
     }
 
     // The ramp glyph for a 0..1 level, as the bar picks it.
@@ -204,21 +204,23 @@ Column {
             id: bluetoothTile
             sheet: main.sheet
             width: main.third
+            more: true
             off: !main.adapter || !main.adapter.enabled
             icon: String.fromCodePoint(off ? 0xf00b2 : main.linked.length > 0 ? 0xf00b1 : 0xf00af)
             name: "Bluetooth"
             detail: !main.adapter ? "No adapter" : !main.adapter.enabled ? "Off" : main.linked.length === 1 ? main.linked[0].name : main.linked.length > 1 ? `${main.linked.length} connected` : "On"
-            onActivated: main.sheet.launch("bluetooth")
+            onActivated: main.sheet.pageRequested("bluetooth")
         }
 
         QuickTile {
             id: soundTile
             sheet: main.sheet
             width: main.third
+            more: true
             icon: String.fromCodePoint(volume.bluetooth ? 0xf00b0 : 0xf04c3)
             name: "Sound"
             detail: main.sink ? main.sink.nickname || main.sink.description || main.sink.name : "No output"
-            onActivated: main.sheet.launch("audio")
+            onActivated: main.sheet.pageRequested("sound")
         }
     }
 
