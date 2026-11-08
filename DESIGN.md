@@ -198,7 +198,7 @@ Two widgets also use hues to tell meters apart rather than to report state: sway
 
 The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` tints and `aqua`) are not chrome colors; `aqua` appears only as the RAM label in the bar's load tip and in hypr-confetti's paper.
 
-**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines in speaker-eq, the keybind sheet's tallies, footers and filter placeholder, and its unbound key labels (3.21:1 on `bg0`). PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
+**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines in speaker-eq. PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
 
 ### Color Rules
 
@@ -276,9 +276,9 @@ Depth is tone and edge, not lift. A sheet is the darkest plane on screen (`bg_di
 
 Corners follow one scale: 12px for windows and containers (Hyprland's `decoration.rounding`, with `rounding_power` 2), 8px for controls nested inside them, and a pill for anything fully round. A corner that meets a screen edge stays square: the polkit sheet's top corners, the docked hangul strip. Edges are 1px hairlines; the only heavier lines are the 2px window border, the 2px focus ring, the keycap lip and hyprlock's 3px input outline.
 
-On the scale today: the polkit sheet, the hangul board, the bar islands, the bar's menus and open sheets, swaync's cards, rofi's window and hyprlock's input field at 12px; the polkit buttons, field and band, the hangul keys, the bar's pills, menu rows, tips and quick settings controls, swaync's nested cards and buttons, rofi's input bar and rows at 8px; the polkit lens dot, swaync's slider troughs, the quick settings sliders and switch, and the hangul home-key bumps as pills.
+On the scale today: the polkit sheet, the keybind sheet, the hangul board, the bar islands, the bar's menus and open sheets, swaync's cards, rofi's window and hyprlock's input field at 12px; the polkit buttons, field and band, the keybind sheet's filter, chips, keys and caps, the hangul keys, the bar's pills, menu rows, tips and quick settings controls, swaync's nested cards and buttons, rofi's input bar and rows at 8px; the polkit lens dot, swaync's slider troughs, the quick settings sliders and switch, and the hangul home-key bumps as pills.
 
-**Drift.** The keybind sheet runs one step larger than the scale: 16px on the sheet, 12px on its cards, and 9px on its filter and chips. speaker-eq's notices use 10px, the keybind sheet's key buttons 6px and its caps 5px.
+**Drift.** speaker-eq's notices use 10px.
 
 ### Shape Rules
 
@@ -290,7 +290,7 @@ On the scale today: the polkit sheet, the hangul board, the bar islands, the bar
 
 A dark card that appears on demand and holds the keyboard.
 
-- **Surface:** `bg_dim` at 0.985 with a 1px `bg2` hairline and 12px corners (16px on the keybind sheet, see Shapes), padded about 20px at the sides.
+- **Surface:** `bg_dim` at 0.985 with a 1px `bg2` hairline and 12px corners, padded about 20px at the sides.
 - **Content:** a Heading over each group, then a grid of controls 8px apart.
 - **Hanging variant:** the polkit sheet draws its hairline on the sides and bottom only and keeps square top corners, flush with the screen edge.
 - **Panels in app windows:** speaker-eq's panels are the same card on a `bg0` window: `bg_dim`, a 1px `bg1` edge, 12px corners, 12px padding.
@@ -310,9 +310,9 @@ Quiet tiles that brighten under the pointer and ring under the keyboard.
 
 ### Inputs / Fields
 
-- **Style:** `bg0` fill (the keybind filter uses `bg1`), a 1px `bg2` edge, 8px corners (the keybind filter 9px), 12px inline padding, Field type in `fg`; 36px tall on the polkit sheet.
+- **Style:** `bg0` fill, a 1px `bg2` edge, 8px corners, 12px inline padding, Field type in `fg`; 36px tall on the polkit sheet.
 - **Focus:** the edge turns `blue` (the keybind filter adds a 1px `blue` outline at 0.35); the caret is `blue`; a selection is `blue` at 0.35 to 0.4 under `fg` text.
-- **Placeholder:** `grey2`: "Password for" and the user's name on the polkit sheet, and the network's name on the Wi-Fi page.
+- **Placeholder:** `grey2`: "Password for" and the user's name on the polkit sheet, the network's name on the Wi-Fi page, "Filter" on the keybind sheet.
 
 ### Status Bands
 
@@ -352,7 +352,7 @@ rofi: a `bg0` window, 42em wide with 12px corners; the input bar and rows at 8px
 ### Keycaps
 
 - **Hangul hint:** 56px keys on a 62px pitch, `bg2` at 0.94 with a `bg3` edge, a 3px `bg_dim` lip and 8px corners. The jamo is in Hangul type; the Latin letter sits in the corner in Mono 10px bold `grey1`, the shifted jamo in `grey2`. A pressed key lights at once in solid `green` with `bg_dim` jamo and fades back over 220ms on release. F and J carry a 20×3px pill bump.
-- **Keybind sheet:** caps are Mono 11px bold `fg` on a `bg3` to `bg2` gradient with a 2px lip; the held prefix cap fills `blue` with `bg_dim` text. Keys on the keyboard map are `bg0` with a 3px lip: `blue` when bound, `bg3` when held, outlined in `fg` when selected.
+- **Keybind sheet:** caps are Mono 11px bold `fg` on a `bg3` to `bg2` gradient with a 2px lip and 8px corners; the held prefix cap fills `blue` with `bg_dim` text. Keys on the keyboard map are 8px keys with a 3px lip in three strengths: unbound, `bg0` with a `grey2` legend; bound under another modifier, raised to `bg1` with an `fg` legend; bound under what is held now, solid `blue`. A held modifier is `bg3`, and the selected key is outlined in `fg`. Under the map, what the key does now is `fg` and what it does with another modifier `grey2`. The mode chips above it are 8px buttons, on the `blue` tint when checked.
 
 ### Polkit Prompt
 
@@ -367,7 +367,7 @@ The signature surface (`home/hypr/.config/quickshell/polkit/`), an approval shee
 
 hyprlock: a blurred screenshot of the session (3 passes, size 8, brightness 0.6) behind a clock in `fg`, the date in `grey2` and a greeting in `green`; a 300×50 input with a 3px `green` outline on `bg1` and 12px corners, whose `check_color` is `green`, `fail_color` `red` and `capslock_color` `yellow`; battery and network in the top right.
 
-**Drift.** The hangul hint's Latin letters measure 2.98:1 and its shifted jamo 3.97:1 on their keys; the keybind filter's placeholder is `grey0`; the keybind chips and faint keys set `grey2` on `bg1` at 4.44:1, and its checked chip takes a full `blue` edge where on states elsewhere use 0.55. rofi edges its window in full `fg` (`border-color: @foreground` in the stock role map) where other surfaces use a `bg2` hairline, and colors its counts and placeholder with the CSS name `Gray`. hyprlock shows the battery in `green` at any charge, where the bar keeps `green` for charging.
+**Drift.** The hangul hint's Latin letters measure 2.98:1 and its shifted jamo 3.97:1 on their keys; rofi edges its window in full `fg` (`border-color: @foreground` in the stock role map) where other surfaces use a `bg2` hairline, and colors its counts and placeholder with the CSS name `Gray`. hyprlock shows the battery in `green` at any charge, where the bar keeps `green` for charging.
 
 ### Component Rules
 

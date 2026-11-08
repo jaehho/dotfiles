@@ -690,13 +690,17 @@ def board_binds(tmux_bindings):
 
 # ── ui ───────────────────────────────────────────────────────────────────────
 
+# DESIGN.md's sheet: 12px corners and 8px controls, words in fg or grey2
+# (the Readable Gray Rule), and an on chip on the blue tint. Keys keep three
+# strengths: lit (solid blue), bound under another modifier (raised, fg)
+# and unbound (flat, grey2).
 CSS = """
 window.keybinds {{ background: transparent; }}
 
 .sheet {{
   background: alpha({bg_dim}, 0.985);
   border: 1px solid {bg2};
-  border-radius: 16px;
+  border-radius: 12px;
   padding: 20px 26px 16px 26px;
 }}
 
@@ -704,9 +708,9 @@ window.keybinds {{ background: transparent; }}
   font-family: "Adwaita Sans", sans-serif;
   font-size: 14px;
   color: {fg};
-  background: {bg1};
+  background: {bg0};
   border: 1px solid {bg2};
-  border-radius: 9px;
+  border-radius: 8px;
   padding: 6px 12px;
   min-height: 0;
   caret-color: {blue};
@@ -716,13 +720,13 @@ window.keybinds {{ background: transparent; }}
   outline: 1px solid alpha({blue}, 0.35);
   outline-offset: 0;
 }}
-.filter placeholder {{ color: {grey0}; }}
+.filter placeholder {{ color: {grey2}; }}
 .filter selection {{ color: {fg}; background: alpha({blue}, 0.4); }}
 
 .tally, .foot, .group-note, .empty {{
   font-family: "Adwaita Sans", sans-serif;
   font-size: 11px;
-  color: {grey0};
+  color: {grey2};
 }}
 
 .label {{
@@ -733,6 +737,10 @@ window.keybinds {{ background: transparent; }}
 
 .empty {{ font-size: 13px; }}
 
+/* What the key does with what is held now, over the binds that need
+   another modifier (group-note). */
+.detail .label {{ color: {fg}; }}
+
 .cap {{
   font-family: "JetBrainsMono Nerd Font", monospace;
   font-size: 11px;
@@ -741,7 +749,7 @@ window.keybinds {{ background: transparent; }}
   background: linear-gradient(to bottom, {bg3}, {bg2});
   border: 1px solid {bg3};
   border-bottom: 2px solid {bg_dim};
-  border-radius: 5px;
+  border-radius: 8px;
   padding: 1px 5px;
   min-width: 10px;
 }}
@@ -758,18 +766,18 @@ button.key {{
   font-family: "JetBrainsMono Nerd Font", monospace;
   font-size: 11px;
   font-weight: 700;
-  color: {grey0};
+  color: {grey2};
   background: {bg0};
   border: 1px solid {bg1};
   border-bottom: 3px solid {bg_dim};
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 3px 6px;
   min-height: 0;
   min-width: 0;
   box-shadow: none;
 }}
 button.key:hover {{ border-color: {grey0}; border-bottom-color: {bg_dim}; }}
-button.key.faint {{ color: {grey2}; background: {bg1}; }}
+button.key.faint {{ color: {fg}; background: {bg1}; }}
 button.key.held {{ color: {fg}; background: {bg3}; border-color: {grey0}; }}
 button.key.bound {{
   color: {bg_dim};
@@ -784,15 +792,20 @@ button.chip {{
   font-family: "Adwaita Sans", sans-serif;
   font-size: 12px;
   color: {grey2};
-  background: {bg1};
-  border: 1px solid {bg2};
-  border-radius: 9px;
+  background: {bg0};
+  border: 1px solid {bg1};
+  border-radius: 8px;
   padding: 4px 10px;
   min-height: 0;
   box-shadow: none;
 }}
-button.chip:hover {{ border-color: {grey0}; }}
-button.chip:checked {{ color: {fg}; border-color: {blue}; background: {bg2}; }}
+button.chip:hover {{ color: {fg}; background: {bg1}; border-color: {bg3}; }}
+button.chip:checked {{
+  color: {fg};
+  background: alpha({blue}, 0.18);
+  border-color: alpha({blue}, 0.55);
+}}
+button.chip:checked:hover {{ background: alpha({blue}, 0.28); }}
 """
 
 STATE = (os.environ.get("XDG_STATE_HOME", f"{HOME}/.local/state")
@@ -1093,6 +1106,7 @@ class Sheet(Gtk.Application):
         view.append(fixed)
 
         self.detail = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        self.detail.add_css_class("detail")
         self.detail.set_size_request(-1, 6 * 24)
         view.append(self.detail)
         return view
