@@ -275,6 +275,11 @@ hl.animation({ leaf = "workspacesIn",  enabled = true, speed = 1.21, bezier = "a
 hl.animation({ leaf = "workspacesOut", enabled = true, speed = 1.94, bezier = "almostLinear", style = "fade" })
 hl.animation({ leaf = "zoomFactor",    enabled = true, speed = 7,    bezier = "quick" })
 
+-- Workspace 1 scrolls: each window gets a column half the screen wide
+-- and the row runs off-screen, focus sliding the view (Hyprland's
+-- scrolling layout, upstream defaults). The others stay on dwindle.
+hl.workspace_rule({ workspace = "1", layout = "scrolling" })
+
 -- "Smart gaps" / "No gaps when only" — uncomment all if you wish to use that.
 -- hl.workspace_rule({ workspace = "w[tv1]", gaps_out = 0, gaps_in = 0 })
 -- hl.workspace_rule({ workspace = "f[1]",   gaps_out = 0, gaps_in = 0 })
