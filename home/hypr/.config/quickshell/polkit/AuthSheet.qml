@@ -25,8 +25,8 @@ FocusScope {
     signal cancelled
 
     readonly property bool asking: phase === "password" || phase === "checking"
-    // The two frames the owner must not miss get the settings menu's tinted
-    // state (its tile.on and session.armed), not just a coloured glyph.
+    // The two frames the owner must not miss get the tinted state the
+    // quick settings tiles use (on and armed), not just a coloured glyph.
     readonly property bool banded: tone === "ok" || tone === "error"
     readonly property color toneColor: tone === "ok" ? colors.green : tone === "warn" ? colors.yellow : tone === "error" ? colors.red : colors.blue
     readonly property int statusGlyph: phase === "approved" ? 0xF05E0 // md-check_circle

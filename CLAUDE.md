@@ -19,7 +19,7 @@ Stow packages under `home/` only. No timers, no package manifests, no apply scri
 - swaync is the jaehho fork in `~/projects/upstream/swaync`. Native arrows and action digits pass through; `hypr-swaync-keys` handles Ctrl+n/p.
 - Monitor rules are computed in `home/hypr/.config/hypr/monitors.lua`. No layout daemon.
 - Corner radii: 12px windows/containers, 8px nested controls, pill when fully round. A new surface picks from that scale.
-- Keybind sheet parses `hyprland.lua` comments and tmux `-N` notes. Label new binds. `hypr-settings-menu` IDs are also called by the bar (`home/hypr/.config/quickshell/bar/`).
+- Keybind sheet parses `hyprland.lua` comments and tmux `-N` notes. Label new binds. `hypr-settings-menu`'s table feeds the bar's quick settings (`--json`), and its IDs are also called by the bar's glyphs (`home/hypr/.config/quickshell/bar/`).
 
 ## Docs
 

@@ -423,8 +423,9 @@ hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("~/.local/bin/hypr-nightlight-toggle"
 -- Keybind cheatsheet
 hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheatsheet"))
 
--- Settings menu: entries live in hypr-settings-menu
-hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("~/.local/bin/hypr-settings-menu")) -- settings menu
+-- Quick settings: the bar's right island opens into them; entries live in
+-- hypr-settings-menu
+hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("qs -c bar ipc call bar settings")) -- quick settings
 
 -- Share: Taildrop a file or the clipboard, or show the clipboard as a QR code
 hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("~/.local/bin/hypr-share-menu")) -- share menu
@@ -563,7 +564,7 @@ hl.bind("CTRL + ALT + SHIFT + SUPER + space", hl.dsp.exec_cmd("hypr-confetti")) 
 hl.bind(mainMod .. " + CTRL + R", function() monitors.apply() end) -- re-apply monitor layout
 
 -- Display key (F1), which the firmware sends as Super+P: the display menu
--- (layout, per-screen on/off, tablet). Super+; reaches it through the settings menu.
+-- (layout, per-screen on/off, tablet). Super+; reaches it through quick settings.
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("~/.local/bin/hypr-display-menu")) -- display menu (F1)
 
 -- Scroll through existing workspaces on this monitor with mainMod + scroll.
@@ -919,14 +920,6 @@ hl.layer_rule({
 hl.layer_rule({
     name  = "hangul-hint-blur",
     match = { namespace = "hangul-hint" },
-
-    blur         = true,
-    ignore_alpha = 0.5,
-})
-
-hl.layer_rule({
-    name  = "settings-menu-blur",
-    match = { namespace = "settings" },
 
     blur         = true,
     ignore_alpha = 0.5,
