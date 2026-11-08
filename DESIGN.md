@@ -198,7 +198,7 @@ Two widgets also use hues to tell meters apart rather than to report state: sway
 
 The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` tints and `aqua`) are not chrome colors; `aqua` appears only as the RAM label in the bar's load tip and in hypr-confetti's paper.
 
-**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines on the display sheet and in speaker-eq, the keybind sheet's tallies, footers and filter placeholder, and its unbound key labels (3.21:1 on `bg0`). PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
+**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines in speaker-eq, the keybind sheet's tallies, footers and filter placeholder, and its unbound key labels (3.21:1 on `bg0`). PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
 
 ### Color Rules
 
@@ -278,7 +278,7 @@ Corners follow one scale: 12px for windows and containers (Hyprland's `decoratio
 
 On the scale today: the polkit sheet, the hangul board, the bar islands, the bar's menus and open sheets, swaync's cards, rofi's window and hyprlock's input field at 12px; the polkit buttons, field and band, the hangul keys, the bar's pills, menu rows, tips and quick settings controls, swaync's nested cards and buttons, rofi's input bar and rows at 8px; the polkit lens dot, swaync's slider troughs, the quick settings sliders and switch, and the hangul home-key bumps as pills.
 
-**Drift.** The older GTK4 sheets run one step larger than the scale: the display and keybind sheets use 16px, their cards and layout buttons 12px, and the keybind filter and chips 9px. speaker-eq's notices use 10px, the keybind sheet's key buttons 6px and its caps 5px. Waybar's tooltips, which are popups, use 8px.
+**Drift.** The keybind sheet runs one step larger than the scale: 16px on the sheet, 12px on its cards, and 9px on its filter and chips. speaker-eq's notices use 10px, the keybind sheet's key buttons 6px and its caps 5px.
 
 ### Shape Rules
 
@@ -290,7 +290,7 @@ On the scale today: the polkit sheet, the hangul board, the bar islands, the bar
 
 A dark card that appears on demand and holds the keyboard.
 
-- **Surface:** `bg_dim` at 0.985 with a 1px `bg2` hairline and 12px corners (16px on the older GTK4 sheets, see Shapes), padded about 20px at the sides.
+- **Surface:** `bg_dim` at 0.985 with a 1px `bg2` hairline and 12px corners (16px on the keybind sheet, see Shapes), padded about 20px at the sides.
 - **Content:** a Heading over each group, then a grid of controls 8px apart.
 - **Hanging variant:** the polkit sheet draws its hairline on the sides and bottom only and keeps square top corners, flush with the screen edge.
 - **Panels in app windows:** speaker-eq's panels are the same card on a `bg0` window: `bg_dim`, a 1px `bg1` edge, 12px corners, 12px padding.
@@ -306,7 +306,7 @@ Quiet tiles that brighten under the pointer and ring under the keyboard.
 - **On:** `blue` at 0.18 behind (0.28 under the pointer) and 0.55 on the edge; the icon and state line turn `blue` (4.69:1 on that band).
 - **Primary:** the polkit Approve button: `blue` at 0.18 (0.28 on hover) behind and 0.55 on the edge, an `fg` label, 30px tall, 12px inline padding, and its key in Mono beside the label ("Enter"). Cancel is the default button with "Esc" beside it in `grey2`.
 - **Armed:** Log out, Reboot and Shut down take a second press. The first arms the button for 3 seconds: `red` at 0.2 behind and 0.55 on the edge, and the label "Again?" in `fg`, as the Tint Rule asks. Quick settings' session row and the bar's power menu arm alike.
-- **Disabled:** 0.5 opacity on the polkit sheet; GTK's insensitive state elsewhere.
+- **Disabled:** 0.5 opacity on the polkit sheet, quick settings and the display sheet's layout buttons; GTK's insensitive state elsewhere. A display card that can't be switched off (the last screen on) keeps its full strength, since it still marks the screen you are on.
 
 ### Inputs / Fields
 

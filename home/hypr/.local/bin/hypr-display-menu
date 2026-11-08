@@ -164,13 +164,16 @@ def palette():
     return {k: f"#{v}" for k, v in _palette_hex().items()}
 
 
+# DESIGN.md's sheet: 12px corners and 8px controls, words in fg or grey2
+# (grey0 only marks a screen that is off), a lit button brightening under
+# the pointer, and a disabled layout at half opacity, as on quick settings.
 CSS = """
 window.display {{ background: transparent; }}
 
 .sheet {{
   background: alpha({bg_dim}, 0.985);
   border: 1px solid {bg2};
-  border-radius: 16px;
+  border-radius: 12px;
   padding: 18px 20px 14px 20px;
 }}
 
@@ -178,21 +181,22 @@ window.display {{ background: transparent; }}
   font-family: "Adwaita Sans", sans-serif;
   font-size: 11px;
   font-weight: 700;
-  color: {grey0};
+  color: {grey2};
   margin: 4px 2px 0 2px;
 }}
 
 button.layout, button.card {{
   font-family: "Adwaita Sans", sans-serif;
-  color: {grey2};
+  font-size: 13px;
+  color: {fg};
   background: {bg0};
   border: 1px solid {bg1};
-  border-radius: 12px;
+  border-radius: 8px;
   box-shadow: none;
   min-height: 0;
   min-width: 0;
 }}
-button.layout {{ padding: 8px 4px; }}
+button.layout {{ padding: 6px 4px; }}
 button.card {{ padding: 10px 12px; }}
 
 button.layout:hover, button.card:hover {{
@@ -204,6 +208,9 @@ button.layout:focus-visible, button.card:focus-visible {{
   outline: 2px solid {blue};
   outline-offset: 1px;
 }}
+/* A card stays at full strength: the last screen on can't be turned
+   off, but it is still the one you are on. */
+button.layout:disabled {{ opacity: 0.5; }}
 
 .icon {{
   font-family: "JetBrainsMono Nerd Font", monospace;
@@ -211,15 +218,17 @@ button.layout:focus-visible, button.card:focus-visible {{
   color: {fg};
 }}
 .name {{ font-size: 13px; color: {fg}; }}
-.state {{ font-size: 11px; color: {grey0}; }}
+.state {{ font-size: 11px; color: {grey2}; }}
 
 button.on {{
   background: alpha({blue}, 0.18);
   border-color: alpha({blue}, 0.55);
 }}
+button.on:hover {{ background: alpha({blue}, 0.28); }}
 button.on .icon, button.on .state {{ color: {blue}; }}
 
-button.card.off .icon, button.card.off .name {{ color: {grey0}; }}
+button.card.off .icon {{ color: {grey0}; }}
+button.card.off .name {{ color: {grey2}; }}
 """
 
 POLL_MS = 1000
