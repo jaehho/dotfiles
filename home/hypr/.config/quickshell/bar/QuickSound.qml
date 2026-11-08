@@ -63,9 +63,8 @@ Column {
         font.capitalization: Font.AllUppercase
     }
 
-    // A device row: its glyph, its name, and "Default" on the tint. An
-    // inline component sees none of this file's ids, so it is handed the
-    // page.
+    // A device row: its glyph, its name, and "Default" on the tint. It
+    // takes the page it lists for as a property.
     component Device: QuickControl {
         id: device
 
