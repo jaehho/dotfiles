@@ -4,15 +4,25 @@
 # Hook mode (stdin JSON): Stop and Notification -> notify-send, with source
 # window/tmux pane carried as hints.
 # Focus mode (`notify.sh focus`, run by swaync on action): focus that source.
+# Watch mode (`notify.sh watch ...`, started detached by hook mode): close
+# one notification once its source is seen or gone.
 #
 # Click path is swaync's action script, not notify-send --action. That keeps
 # notify-send fire-and-forget: no FIFO and no action waiter.
 #
 # Lifetime: skip entirely if the source pane is already focused at send time.
-# Otherwise the toast lives in the panel until dismissed, clicked, or the user
-# focuses the source (watcher CloseNotification) or the source dies.
+# Otherwise the toast stays in the panel until the user focuses the source
+# pane, the pane closes, or the user dismisses it. The watcher has no time
+# cap: a toast left for hours must still close when its session is opened.
+# Sends, skips and closes are logged to $LOG.
 
 set -euo pipefail
+
+LOG="${XDG_STATE_HOME:-$HOME/.local/state}/claude-notify.log"
+
+log() {
+  printf '%s %s\n' "$(date +%FT%T)" "$*" >>"$LOG" 2>/dev/null || true
+}
 
 # ── Live Hyprland instance ────────────────────────────────────────────────────
 # tmux only refreshes env on client attach, so a pane created before the
@@ -36,6 +46,42 @@ recover_hypr() {
   return 1
 }
 
+active_window() {
+  hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty' 2>/dev/null \
+    || true
+}
+
+window_alive() {
+  hyprctl clients -j 2>/dev/null \
+    | jq -e --arg a "$1" '.[] | select(.address == $a)' >/dev/null 2>&1
+}
+
+# Prints gone, shown or hidden for a tmux pane id (%N). display-message
+# exits 0 even when its target is missing (a missing %N prints empty
+# fields; a missing session:window.pane silently means the current pane),
+# so the printed id is the only proof the pane still exists.
+pane_state() {
+  local pane="$1" socket="${2:-}" out
+  out=$(tmux ${socket:+-S "$socket"} display-message -t "$pane" \
+    -p '#{pane_id} #{window_active}#{pane_active}' 2>/dev/null) \
+    || { echo gone; return 0; }
+  case "$out" in
+    "$pane 11") echo shown ;;
+    "$pane "*) echo hidden ;;
+    *) echo gone ;;
+  esac
+}
+
+# Unique bus name of the notification daemon. swaync restarts drop every
+# toast and number new ones from 1 again, so a watcher must not close an
+# id once the owner has changed.
+notif_owner() {
+  gdbus call --session --dest org.freedesktop.DBus \
+    --object-path /org/freedesktop/DBus \
+    --method org.freedesktop.DBus.GetNameOwner org.freedesktop.Notifications \
+    2>/dev/null | tr -d "(),' " || true
+}
+
 # swaync exports hints via GLib Variant.print, so strings arrive single-quoted.
 unquote() {
   local v="${1:-}"
@@ -53,14 +99,51 @@ if [[ "${1:-}" == "focus" ]]; then
   target=$(unquote "${SWAYNC_HINT_CLAUDE_TMUX:-}")
 
   recover_hypr || true
-  if [[ -n "$addr" ]] && hyprctl clients -j 2>/dev/null \
-       | jq -e --arg a "$addr" ".[] | select(.address == \$a)" >/dev/null 2>&1; then
+  if [[ -n "$addr" ]] && window_alive "$addr"; then
     hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null 2>&1
   fi
   if [[ -n "$target" ]]; then
+    # target is a pane id (%N), or session:window.pane on older toasts.
+    # select-window resolves a pane id to the window holding it.
     tmux ${socket:+-S "$socket"} select-window -t "${target%.*}" 2>/dev/null || true
     tmux ${socket:+-S "$socket"} select-pane -t "$target" 2>/dev/null || true
   fi
+  exit 0
+fi
+
+# ── Watch mode: close one notification once its source is seen or gone ──────
+if [[ "${1:-}" == "watch" ]]; then
+  id="$2" addr="$3" pane="$4" socket="$5" owner="$6"
+  start=$SECONDS
+
+  finish() {
+    local reason="$1"
+    if [[ "$(notif_owner)" == "$owner" ]]; then
+      gdbus call --session \
+        --dest org.freedesktop.Notifications \
+        --object-path /org/freedesktop/Notifications \
+        --method org.freedesktop.Notifications.CloseNotification \
+        "$id" >/dev/null 2>&1 || true
+      log "close id=$id pane=${pane:-none} reason=$reason after=$((SECONDS - start))s"
+    else
+      log "drop id=$id pane=${pane:-none} reason=daemon-restarted after=$((SECONDS - start))s"
+    fi
+    exit 0
+  }
+
+  checks=0
+  while sleep 3; do
+    if [[ -n "$pane" ]]; then
+      state=$(pane_state "$pane" "$socket")
+      [[ "$state" == gone ]] && finish pane-gone
+      [[ "$state" == shown && "$(active_window)" == "$addr" ]] && finish focused
+    else
+      window_alive "$addr" || finish window-gone
+      [[ "$(active_window)" == "$addr" ]] && finish focused
+    fi
+    (( ++checks % 20 )) || [[ "$(notif_owner)" == "$owner" ]] \
+      || finish daemon-restarted
+  done
   exit 0
 fi
 
@@ -141,26 +224,16 @@ resolve_window_address() {
   done
 
   # Last resort: focused window (likely correct right after a response)
-  hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty' 2>/dev/null
+  active_window
 }
 
 # True when the user is already looking at the source window and tmux pane.
 # Skip the notification then: the TUI already shows the result. Anything
 # that fires while they are elsewhere still lands and stays in the panel.
 source_focused() {
-  local addr="${1:-}" target="${2:-}" socket="${3:-}"
-  [[ -n "$addr" ]] || return 1
-
-  local active
-  active=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty' 2>/dev/null) || return 1
-  [[ "$active" == "$addr" ]] || return 1
-
-  if [[ -n "$target" ]]; then
-    # #{pane_active} alone is per-window; require the pane to be the one shown.
-    [[ "$(tmux ${socket:+-S "$socket"} display-message -t "$target" \
-      -p '#{window_active}:#{pane_active}' 2>/dev/null)" == "1:1" ]] || return 1
-  fi
-  return 0
+  local addr="${1:-}" pane="${2:-}" socket="${3:-}"
+  [[ -n "$addr" && "$(active_window)" == "$addr" ]] || return 1
+  [[ -z "$pane" || "$(pane_state "$pane" "$socket")" == shown ]]
 }
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
@@ -180,14 +253,20 @@ if recover_hypr; then
   WINDOW_ADDR=$(resolve_window_address) || true
   TMUX_SOCKET="${TMUX:-}"
   TMUX_SOCKET="${TMUX_SOCKET%%,*}"
+  # The pane id (%N), never session:window.pane: renumber-windows shifts
+  # indexes when a window closes, so an index target ends up naming
+  # another window or, once missing, the current pane.
   TMUX_TARGET=""
-  if [[ -n "${TMUX_PANE:-}" ]]; then
-    TMUX_TARGET=$(tmux display-message -t "$TMUX_PANE" \
-      -p '#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null) || true
+  if [[ "${TMUX_PANE:-}" == %* \
+        && "$(pane_state "$TMUX_PANE" "$TMUX_SOCKET")" != gone ]]; then
+    TMUX_TARGET="$TMUX_PANE"
   fi
 
   # Already on the source pane: no toast, no sound, no panel entry.
-  source_focused "${WINDOW_ADDR:-}" "${TMUX_TARGET:-}" "${TMUX_SOCKET:-}" && exit 0
+  if source_focused "${WINDOW_ADDR:-}" "$TMUX_TARGET" "$TMUX_SOCKET"; then
+    log "skip event=$EVENT pane=${TMUX_TARGET:-none} reason=focused"
+    exit 0
+  fi
 
   play_sound
 
@@ -202,50 +281,16 @@ if recover_hypr; then
     ${TMUX_SOCKET:+-h "string:claude-tmux-socket:$TMUX_SOCKET"} \
     ${TMUX_TARGET:+-h "string:claude-tmux:$TMUX_TARGET"} \
     "$TITLE" "$BODY" 2>/dev/null) || true
+  OWNER=$(notif_owner)
 
-  # Dismiss from the panel once the user goes to the source, or if it dies.
-  if [[ -n "${NOTIF_ID:-}" ]]; then
-    setsid bash -c '
-      addr="$1"; target="$2"; socket="$3"; id="$4"; his="$5"
-      export HYPRLAND_INSTANCE_SIGNATURE="$his"
-      focused() {
-        [[ -n "$addr" ]] || return 1
-        local active
-        active=$(hyprctl activewindow -j 2>/dev/null | jq -r ".address // empty") || return 1
-        [[ "$active" == "$addr" ]] || return 1
-        if [[ -n "$target" ]]; then
-          [[ "$(tmux ${socket:+-S "$socket"} display-message -t "$target" \
-            -p "#{window_active}:#{pane_active}" 2>/dev/null)" == "1:1" ]] || return 1
-        fi
-        return 0
-      }
-      alive() {
-        if [[ -n "$target" ]]; then
-          tmux ${socket:+-S "$socket"} display-message -t "$target" -p "" >/dev/null 2>&1
-          return $?
-        fi
-        if [[ -n "$addr" ]]; then
-          hyprctl clients -j 2>/dev/null | jq -e --arg a "$addr" \
-            ".[] | select(.address == \$a)" >/dev/null 2>&1
-          return $?
-        fi
-        return 0
-      }
-      dismiss() {
-        gdbus call --session \
-          --dest org.freedesktop.Notifications \
-          --object-path /org/freedesktop/Notifications \
-          --method org.freedesktop.Notifications.CloseNotification \
-          "$id" >/dev/null 2>&1
-      }
-      # ~30 min cap; longer-lived history stays until the user clears it.
-      for _ in $(seq 1 600); do
-        sleep 3
-        focused && { dismiss; exit 0; }
-        alive || { dismiss; exit 0; }
-      done
-    ' _ "${WINDOW_ADDR:-}" "${TMUX_TARGET:-}" "${TMUX_SOCKET:-}" \
-      "$NOTIF_ID" "${HYPRLAND_INSTANCE_SIGNATURE:-}" </dev/null &>/dev/null &
+  # Close it from the panel once the user goes to the source, or it dies.
+  # Without a window address there is nothing to watch for.
+  if [[ -n "${NOTIF_ID:-}" && -n "${WINDOW_ADDR:-}" && -n "$OWNER" ]]; then
+    setsid "${BASH_SOURCE[0]}" watch "$NOTIF_ID" "$WINDOW_ADDR" \
+      "$TMUX_TARGET" "$TMUX_SOCKET" "$OWNER" </dev/null &>/dev/null &
+    log "send id=$NOTIF_ID event=$EVENT pane=${TMUX_TARGET:-none} addr=$WINDOW_ADDR"
+  else
+    log "send id=${NOTIF_ID:-none} event=$EVENT pane=${TMUX_TARGET:-none} unwatched addr=${WINDOW_ADDR:-none} owner=${OWNER:-none}"
   fi
 else
   # SSH/remote: kitty OSC 99 desktop notification. Clicking focuses the kitty
