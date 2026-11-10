@@ -32,3 +32,8 @@ Fly visual system and locomotion.
 - Link a type at its first mention in each heading section (the intro before the first heading is one) and not again in that section. Repeat the link in a table or a list that works as data. Do not link in a heading, a code span, a quotation, or frontmatter.
 - A type with no note yet gets the same link once a notebook or a meeting talks about it: a dangling link is a note still to write. Other cell types stay plain text.
 - A type note (`types/<Codex type>.md`) is a `#` title, a line on what the cell is, and quotes inserted with `gz` in nvim (author, year, page, PDF and DOI links); personal communication is attributed by name and date. It has no frontmatter (Codex has the counts, family and category) and no "See also" section; the first-mention links carry the edges.
+
+## Learning
+
+- `notes/learning/sources/` holds quotes checked against the PDFs, one file per syllabus level, with PDF page numbers. Quote from it before reopening a paper.
+- `notes/learning/quizzes/.keys/pool/` holds written questions with their answers for Levels 0–2 and methods. It is a key: give it to the subagent that writes a quiz, to draw from, and never open it in the session.
