@@ -21,7 +21,6 @@ color = dark magenta
 path = ~/.local/share/khal/khal.db
 
 [locale]
-local_timezone = America/New_York
 timeformat = %H:%M
 dateformat = %m-%d
 longdateformat = %Y-%m-%d
