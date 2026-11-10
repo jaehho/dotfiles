@@ -20,8 +20,12 @@ ExecCondition=/usr/bin/curl -s -o /dev/null --max-time 10 \
 # RESTIC_REPOSITORY and the rest-server login; not in the repo.
 EnvironmentFile=%h/.config/restic/rest.env
 Environment=RESTIC_PASSWORD_FILE=%h/.config/restic/password
+# A steno meeting recorded in a room stays on this laptop until everyone
+# in it agreed (steno writes .steno-kept beside it until then); a snapshot
+# would put it on wonlab for months, past any deletion.
 ExecStart=/usr/bin/restic backup \
     --exclude-file %h/.config/restic/excludes \
+    --exclude-if-present .steno-kept \
     --exclude %h/mnt \
     --one-file-system \
     --tag systemd.timer \
