@@ -63,6 +63,12 @@
     "spotify": {
       "state": "ignored",
       "app-name": "(?i)spotify"
+    },
+    "steno-recording": {
+      "state": "enabled",
+      "app-name": "^Steno$",
+      "summary": "^Recording",
+      "override-urgency": "critical"
     }
   },
 
