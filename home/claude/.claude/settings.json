@@ -1,7 +1,8 @@
 {
   "env": {
     "CLAUDE_CODE_NATIVE_CURSOR": "1",
-  "PLAYWRIGHT_MCP_CONFIG": "/home/jaeho/.claude/playwright-mcp.json"
+  "PLAYWRIGHT_MCP_CONFIG": "/home/jaeho/.claude/playwright-mcp.json",
+    "CLAUDE_CODE_SUBAGENT_EFFORT": "xhigh"
   },
   "attribution": {
     "commit": "",
