@@ -132,6 +132,7 @@
     }
   },
   "tui": "fullscreen",
+  "outputStyle": "Concise",
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "editorMode": "vim",
