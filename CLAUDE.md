@@ -14,7 +14,7 @@ Stow packages under `home/` only. No timers, no package manifests, no apply scri
 
 - One machine (omnibook, Arch). No per-host or per-distro branches.
 - Scripts: `home/bin` for terminal tools, `home/laptop` for desktop helpers, `home/hypr` for compositor glue.
-- Each project's `CLAUDE.md` under `~/projects/` is a symlink into `home/projects/projects/<name>/`; edit it here.
+- Each project's `CLAUDE.md` under `~/projects/` is a symlink into `home/projects/projects/<name>/`; edit it here. A session launched here never loads it: read it before the first command or edit in that project or its worktrees.
 - Apps under `~/projects/` own their implementation. This repo owns their integration (hyprland.lua, Neovim lazy specs, stowed configs).
 - swaync is the jaehho fork in `~/projects/upstream/swaync`. Native arrows and action digits pass through; `hypr-swaync-keys` handles Ctrl+n/p.
 - Monitor rules are computed in `home/hypr/.config/hypr/monitors.lua`. No layout daemon.

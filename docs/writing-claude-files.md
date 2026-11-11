@@ -16,7 +16,8 @@ These are working rules we derived from the sources below.
 - A test or linter owns any rule it can check. Prose states only what no
   check can see.
 - Put a rule where it loads at the right time:
-  - `~/.claude/CLAUDE.md` (global) and a project's `CLAUDE.md`: every session.
+  - `~/.claude/CLAUDE.md` (global): every session.
+  - A project's `CLAUDE.md`: every session launched in that project or a folder inside it. A session launched above it loads it only once Claude reads, writes, or edits a file there (a single-file `cat` counts), and one launched elsewhere (`~/dotfiles`, a sibling worktree) never does.
   - `.claude/rules/*.md` with `paths:`: when Claude opens a matching file.
   - A skill: when Claude judges that a task matches the skill's description.
   - A test, linter, or hook: each time it runs.
