@@ -11,6 +11,9 @@
 # notify-send fire-and-forget: no FIFO and no action waiter.
 #
 # Lifetime: skip entirely if the source pane is already focused at send time.
+# A turn that ends in another tmux window of the focused kitty window rings
+# that pane's tmux bell instead (an orange window number, no toast, no beep).
+# The beep plays only when nothing says to stay quiet (quiet_reason).
 # Otherwise the toast stays in the panel until the user focuses the source
 # pane, the pane closes, or the user dismisses it. The watcher has no time
 # cap: a toast left for hours must still close when its session is opened.
@@ -62,11 +65,14 @@ window_alive() {
 # so the printed id is the only proof the pane still exists.
 pane_state() {
   local pane="$1" socket="${2:-}" out
+  # shown also needs a client on the session: tmux answers a session no
+  # client shows with another session's client, so kitty having focus says
+  # nothing about it.
   out=$(tmux ${socket:+-S "$socket"} display-message -t "$pane" \
-    -p '#{pane_id} #{window_active}#{pane_active}' 2>/dev/null) \
-    || { echo gone; return 0; }
+    -p '#{pane_id} #{window_active}#{pane_active}#{?session_attached,1,0}' \
+    2>/dev/null) || { echo gone; return 0; }
   case "$out" in
-    "$pane 11") echo shown ;;
+    "$pane 111") echo shown ;;
     "$pane "*) echo hidden ;;
     *) echo gone ;;
   esac
@@ -163,6 +169,36 @@ play_sound() {
   setsid ffplay -nodisp -autoexit -loglevel quiet -f lavfi "sine=f=800:d=0.15" </dev/null &>/dev/null &
 }
 
+# Why to stay quiet now, or nothing. swaync already hides the popup under Do
+# Not Disturb or an inhibitor; the beep is ours, so it has to ask too. An open
+# capture stream is a call or a steno recording: no beep into it, and no reply
+# text on a screen that may be shared. Each check gives up after a second:
+# swaync-client waits forever for a daemon that is not on the bus (-sw stops
+# that) or for a bus that is not there (only timeout stops that).
+quiet_reason() {
+  if [[ -n "$(timeout 1 pactl list short source-outputs 2>/dev/null)" ]]; then
+    echo mic
+  elif [[ "$(timeout 1 swaync-client -sw -D 2>/dev/null)" == "true" ]]; then
+    echo dnd
+  elif [[ "$(timeout 1 swaync-client -sw -I 2>/dev/null)" == "true" ]]; then
+    echo inhibited
+  elif away; then
+    echo away
+  else
+    return 1
+  fi
+}
+
+# ActivityWatch's AFK watcher says afk, and said so in the last two minutes.
+# A stopped watcher or server counts as present, so the beep fails on.
+away() {
+  curl -s -m 1 "http://127.0.0.1:5600/api/0/buckets/aw-watcher-afk_$(uname -n)/events?limit=1" 2>/dev/null \
+    | jq -e --argjson now "$(date +%s)" '.[0]
+        | .data.status == "afk"
+          and (.timestamp | sub("\\.[0-9]+"; "") | fromdateiso8601) + .duration > $now - 120' \
+      >/dev/null 2>&1
+}
+
 case "$EVENT" in
 
   Stop)
@@ -236,6 +272,22 @@ source_focused() {
   [[ -z "$pane" || "$(pane_state "$pane" "$socket")" == shown ]]
 }
 
+# The source's kitty window has focus but tmux shows another window: ring the
+# pane's bell instead of a toast. tmux flags that window, .tmux.conf's
+# window-status-format draws the flag as an orange index, and tmux clears it
+# when you go there; kitty has enable_audio_bell no, so it makes no sound. A
+# pane in the window you are on is already on screen, and tmux flags nothing
+# for it. A session no client shows gets a toast instead: nobody would see it.
+ring_source_window() {
+  local addr="${1:-}" target="${2:-}" socket="${3:-}" tty
+  [[ -n "$addr" && -n "$target" ]] || return 1
+  [[ "$(active_window)" == "$addr" ]] || return 1
+  tty=$(tmux ${socket:+-S "$socket"} display-message -t "$target" \
+    -p '#{?session_attached,#{pane_tty},}' 2>/dev/null) || return 1
+  [[ -c "$tty" && -w "$tty" ]] || return 1
+  printf '\a' >"$tty"
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 # Desktop: notify-send when a live Hyprland is reachable; OSC 99 otherwise
 # (a remote host such as wonlab has none). SSH_CONNECTION is not a signal:
@@ -267,8 +319,20 @@ if recover_hypr; then
     log "skip event=$EVENT pane=${TMUX_TARGET:-none} reason=focused"
     exit 0
   fi
+  # A finished turn in another tmux window of this kitty: the status line says
+  # it. A permission prompt or question stops Claude until answered: it toasts.
+  if [[ "$EVENT" == Stop ]] \
+      && ring_source_window "${WINDOW_ADDR:-}" "$TMUX_TARGET" "$TMUX_SOCKET"; then
+    log "bell event=$EVENT pane=$TMUX_TARGET"
+    exit 0
+  fi
 
-  play_sound
+  QUIET=$(quiet_reason) || QUIET=""
+  case "$QUIET" in
+    "") play_sound ;;
+    mic) BODY="Open the session to read it." ;;
+  esac
+  [[ -n "$QUIET" ]] && log "quiet event=$EVENT reason=$QUIET"
 
   # -t 0 is NOT "never expire" in swaync: expire_timeout 0 falls back to the
   # daemon's `timeout` (5s). That only hides the popup; the control center
