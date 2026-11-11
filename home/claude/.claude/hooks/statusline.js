@@ -68,12 +68,20 @@ process.stdin.on('end', () => {
         try { size = fs.statSync(p).size; } catch { return null; }
         const cacheFile = path.join(os.tmpdir(),
             'claude-sl-' + p.replace(/[^a-zA-Z0-9]/g, '_').slice(-100) + '.json');
-        let c = { size: 0, credits: 0, drawn: 0, orUsd: 0, anyGlm: false, lastUsage: null };
-        try { c = { ...c, ...JSON.parse(fs.readFileSync(cacheFile, 'utf8')) }; } catch {}
-        if (size === c.size)
-            return { credits: c.anyGlm ? c.credits : null,
-                drawn: c.anyGlm ? c.drawn : null, orUsd: c.orUsd, lastUsage: c.lastUsage };
-        if (c.size > size) c = { size: 0, credits: 0, drawn: 0, orUsd: 0, anyGlm: false, lastUsage: null };
+        // v: bump when the cached fields change, so a cache written by an
+        // older version is rebuilt from the whole transcript, not its tail.
+        const fresh = () => ({ v: 2, size: 0, credits: 0, drawn: 0, orUsd: 0,
+            anyGlm: false, lastUsage: null, lastModel: null, flag: null });
+        let c = fresh();
+        try {
+            const saved = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+            if (saved.v === c.v) c = { ...c, ...saved };
+        } catch {}
+        const result = () => ({ credits: c.anyGlm ? c.credits : null,
+            drawn: c.anyGlm ? c.drawn : null, orUsd: c.orUsd, lastUsage: c.lastUsage,
+            lastModel: c.lastModel, flag: c.flag });
+        if (size === c.size) return result();
+        if (c.size > size) c = fresh();
         let text;
         try {
             const fd = fs.openSync(p, 'r');
@@ -87,6 +95,38 @@ process.stdin.on('end', () => {
         let offset = c.size + Buffer.byteLength(text, 'utf8') -
             Buffer.byteLength(partial, 'utf8');
         for (const line of lines) {
+            // Safeguard flags (bio, cyber) can hand the rest of the session
+            // to a smaller model (support.claude.com/en/articles/16049681).
+            // Records: an assistant refusal, a harness note naming
+            // refusedMessageId, or a model_refusal_fallback notice (with
+            // fallbackModel) at the switch; any of them may be the only one.
+            if (line.includes('refus')) {
+                let r = null;
+                try { r = JSON.parse(line); } catch {}
+                const rm = r && r.message;
+                const notice = r && r.subtype === 'model_refusal_fallback';
+                const cat = !r ? null
+                    : rm && rm.stop_reason === 'refusal'
+                        ? (rm.stop_details && rm.stop_details.category) || '?'
+                    : notice ? r.apiRefusalCategory || '?'
+                    : r.refusedMessageId ? '?' : null;
+                if (cat) {
+                    const f = c.flag || { cat: '?', to: null, picked: false,
+                        from: (rm && rm.stop_reason === 'refusal' && rm.model) || c.lastModel };
+                    if (f.cat === '?') f.cat = cat;
+                    if (notice) { f.to = r.fallbackModel || null; f.picked = false; }
+                    c.flag = f;
+                }
+            }
+            // A /model after the flag is the user's choice, not the switch.
+            if (c.flag && line.includes('<command-name>/model</command-name>')) {
+                let r = null;
+                try { r = JSON.parse(line); } catch {}
+                const mc = r && r.type === 'user' && r.message && r.message.content;
+                if (typeof mc === 'string' &&
+                    mc.startsWith('<command-name>/model</command-name>'))
+                    c.flag.picked = true;
+            }
             if (!line.includes('"usage"')) continue;
             let d = null;
             try { d = JSON.parse(line); } catch {
@@ -103,6 +143,10 @@ process.stdin.on('end', () => {
             if (!u) continue;
             c.lastUsage = u;
             const raw = m.model || '';
+            if (raw && raw !== '<synthetic>' && m.stop_reason !== 'refusal') {
+                c.lastModel = raw;
+                if (c.flag && !c.flag.from) c.flag.from = raw;
+            }
             const orp = orPrice(raw);
             if (orp) {
                 c.orUsd += (u.input_tokens * orp[0] +
@@ -124,8 +168,7 @@ process.stdin.on('end', () => {
         }
         c.size = offset;
         try { fs.writeFileSync(cacheFile, JSON.stringify(c)); } catch {}
-        return { credits: c.anyGlm ? c.credits : null,
-            drawn: c.anyGlm ? c.drawn : null, orUsd: c.orUsd, lastUsage: c.lastUsage };
+        return result();
     }
     const tu = transcriptUsage(data.transcript_path);
 
@@ -247,6 +290,18 @@ process.stdin.on('end', () => {
     const parts = [];
 
     parts.push(`${dim}${model}${rst}`);
+
+    // After a safeguard flag, say so; while the model it switched to is
+    // answering, name it. Without a notice, a model change counts unless
+    // the user ran /model after the flag.
+    if (tu && tu.flag) {
+      const f = tu.flag, last = tu.lastModel;
+      const short = m => m.replace(/^claude-/, '');
+      const moved = f.to ? last === f.to
+          : !f.picked && last && f.from && last !== f.from;
+      parts.push(`\x1b[33m${f.cat === '?' ? 'safeguard' : f.cat}-flagged` +
+          `${moved ? ` → ${short(last)}` : ''}${rst}`);
+    }
 
     // Context window bar (10 segments, fills as context is consumed)
     const AUTO_COMPACT_BUFFER_PCT = 16.5;
