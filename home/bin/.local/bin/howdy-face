@@ -2,6 +2,8 @@
 # Measure and extend the Howdy face model, using compare.py's own
 # frame pipeline (CLAHE, dark-frame skip, 0.8 rescale, upsample 1).
 #
+#   howdy-face
+#       guided menu: status, add a condition, test, install
 #   howdy-face diag [--note TEXT] [--seconds N]
 #       open the camera once like a real unlock and report the best
 #       certainty per second; appends a line to the diag log
@@ -273,11 +275,90 @@ def run_install(args, config) -> int:
           f"{staged_path(args.user)} {model_path(args.user)}")
     return 0
 
+CONDITIONS = [
+    "desk, normal light",
+    "evening lamp",
+    "dark room",
+    "bright window behind",
+    "glasses on",
+    "glasses off",
+    "leaning back",
+    "head tilted",
+]
+
+
+def recent_diags(count: int) -> list:
+    if not DIAG_LOG.exists():
+        return []
+    lines = DIAG_LOG.read_text().splitlines()
+    return [json.loads(line) for line in lines[-count:]]
+
+
+def diag_summary(report: dict) -> str:
+    when = time.strftime("%m-%d %H:%M", time.localtime(report["time"]))
+    best = report["best_certainty"]
+    best_text = "no face" if best is None else f"best {best:.1f}"
+    verdict = "pass" if report["first_pass_s"] is not None else "FAIL"
+    return f"{when}  {verdict:4}  {best_text:12}  {report['note']}"
+
+
+def show_status(user: str) -> None:
+    models = load_models(user)
+    state = "staged" if staged_path(user).exists() else "installed"
+    print(f"\nModel: {len(known_encodings(models))} encodings in "
+          f"{len(models)} entries ({state}). Pass is below 3.5.")
+    for report in recent_diags(3):
+        print("  " + diag_summary(report))
+
+
+def ask_condition() -> str | None:
+    for number, name in enumerate(CONDITIONS, start=1):
+        print(f"  {number}) {name}")
+    answer = input("Which one, or type your own (enter cancels): ").strip()
+    if answer.isdigit() and 1 <= int(answer) <= len(CONDITIONS):
+        return CONDITIONS[int(answer) - 1]
+    return answer or None
+
+
+def countdown(seconds: int) -> None:
+    for left in range(seconds, 0, -1):
+        print(f"  {left}...", flush=True)
+        time.sleep(1)
+
+
+def run_guided(args, config) -> int:
+    while True:
+        show_status(args.user)
+        print("\n  1) Add this condition to the model"
+              "\n  2) Test an unlock now"
+              "\n  3) Install the staged model"
+              "\n  q) Quit")
+        choice = input("> ").strip().lower()
+        if choice in ("q", ""):
+            return 0
+        if choice == "1":
+            label = ask_condition()
+            if label:
+                print("Get into that condition, face the camera.")
+                countdown(3)
+                run_enrol(argparse.Namespace(
+                    user=args.user, label=label, seconds=6.0, max_picks=3,
+                ), config)
+        elif choice == "2":
+            note = input("Condition note: ").strip()
+            countdown(3)
+            run_diag(argparse.Namespace(
+                user=args.user, note=note, seconds=6.0,
+            ), config)
+        elif choice == "3":
+            run_install(args, config)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--user", default=getpass.getuser())
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
+    parser.set_defaults(run=run_guided)
     diag = sub.add_parser("diag")
     diag.add_argument("--note", default="")
     diag.add_argument("--seconds", type=float, default=6.0)
