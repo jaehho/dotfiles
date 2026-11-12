@@ -548,6 +548,14 @@ end
 hl.bind(mainMod .. " + SHIFT + bracketleft",  function() move_window_beside(-1) end) -- window to a new workspace before this one
 hl.bind(mainMod .. " + SHIFT + bracketright", function() move_window_beside(1) end)  -- window to a new workspace after this one
 
+-- Super+Ctrl+[ / ]: this whole workspace trades places with the one before /
+-- after it. Super+Ctrl+0: it moves to the end, the ones after it closing up
+-- (Super+Shift+0 for a workspace). Renumbered in place (change_id), so the
+-- layout holds and the view stays on it.
+hl.bind(mainMod .. " + CTRL + bracketleft",  function() if ok_ws then workspaces.move_workspace(-1) end end) -- workspace one place earlier
+hl.bind(mainMod .. " + CTRL + bracketright", function() if ok_ws then workspaces.move_workspace(1) end end)  -- workspace one place later
+hl.bind(mainMod .. " + CTRL + 0", function() if ok_ws then workspaces.move_workspace_to_end() end end)       -- workspace to the end
+
 -- Move all windows in active workspace to target workspace with mainMod + CTRL + [1-9]
 for i = 1, 9 do
     hl.bind(mainMod .. " + CTRL + " .. i, -- send every window here to workspace

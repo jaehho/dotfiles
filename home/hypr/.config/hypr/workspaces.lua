@@ -34,6 +34,20 @@ local DEBOUNCE_MS = 300
 -- id > 0 is a stray and gets packed in or destroyed.
 local MAX_SLOT = 9
 
+-- Final {from=, to=} renumbers as change_id steps, two-phase via temps so a
+-- target is never requested while still occupied (change_id refuses a taken
+-- id; swaps and rotations always hit one).
+local function two_phase(finals)
+    local steps = {}
+    for i, mv in ipairs(finals) do
+        steps[#steps + 1] = { from = mv.from, to = TEMP_BASE + i }
+    end
+    for i, mv in ipairs(finals) do
+        steps[#steps + 1] = { from = TEMP_BASE + i, to = mv.to }
+    end
+    return steps
+end
+
 -- Pure planner. live: {{id=n, monitor=name}, ...}. slots_by_mon:
 -- { [monitor_name] = {slot_id, ...} }. Returns ordered {from=, to=} pairs
 -- (temps included). Untouched when a monitor has no slots recorded.
@@ -88,16 +102,45 @@ function M.plan_pack(live, slots_by_mon)
 
     table.sort(finals, function(a, b) return a.from < b.from end)
 
-    -- Two-phase via temps so a target is never requested while still occupied
-    -- (swap-shaped plans exist once Super+N puts an id off its round-robin slot).
-    local steps = {}
-    for i, mv in ipairs(finals) do
-        steps[#steps + 1] = { from = mv.from, to = TEMP_BASE + i }
+    -- Swap-shaped plans exist once Super+N puts an id off its round-robin slot.
+    return two_phase(finals)
+end
+
+-- Pure planners for Super+Ctrl+[ / ] and Super+Ctrl+0, which move the whole
+-- workspace here within its monitor's order. order: the ids of the
+-- workspaces on that monitor, ascending. Both return change_id steps (empty
+-- when it is already at that edge). Only ids in order trade places, so the
+-- set of ids stays the same and a hole stays a hole.
+
+-- One place earlier (dir = -1) or later (dir = 1): trade ids with that
+-- neighbour.
+function M.plan_swap(order, here, dir)
+    for i, id in ipairs(order) do
+        if id == here then
+            local other = order[i + dir]
+            if other == nil then return {} end
+            return two_phase({ { from = here, to = other }, { from = other, to = here } })
+        end
     end
-    for i, mv in ipairs(finals) do
-        steps[#steps + 1] = { from = TEMP_BASE + i, to = mv.to }
+    return {}
+end
+
+-- To the end: here takes the last id and each workspace after it moves back
+-- one.
+function M.plan_to_end(order, here)
+    for i, id in ipairs(order) do
+        if id == here then
+            local finals = {}
+            if i < #order then
+                finals[1] = { from = here, to = order[#order] }
+                for j = i + 1, #order do
+                    finals[#finals + 1] = { from = order[j], to = order[j - 1] }
+                end
+            end
+            return two_phase(finals)
+        end
     end
-    return steps
+    return {}
 end
 
 -- Pure planner for Super+Shift+[ / ]: give one window a workspace of its
@@ -219,6 +262,29 @@ local function reclaim_strays()
     end
 end
 
+-- Run change_id steps. The workspace object keeps its windows, layout and
+-- monitor; only its id moves.
+local function renumber(steps)
+    if #steps == 0 then return end
+    packing = true
+    for _, mv in ipairs(steps) do
+        hl.dispatch(hl.dsp.workspace.change_id({ workspace = mv.from, id = mv.to }))
+        -- Hyprland renames numeric workspaces to tostring(new id) but does not
+        -- emit renameworkspace, and waybar's changeworkspaceid handler only
+        -- setId — so {name} labels and active-by-name go stale (double-active
+        -- pills, missing numbers). A same-name rename is a no-op for us and
+        -- still emits renameworkspace>>id,name, which waybar does handle.
+        -- Reusing a freed id can also collide with waybar's queued destroy
+        -- and drop the live button (issue #62); patched in
+        -- ~/projects/upstream/waybar (onWorkspaceIdChanged).
+        -- Keep it regardless: a renamed workspace no longer takes its new
+        -- id as its name (CHLWorkspace::changeID skips m_name once
+        -- m_wasRenamed), so every change_id needs its rename from here on.
+        hl.dispatch(hl.dsp.workspace.rename({ workspace = mv.to, name = tostring(mv.to) }))
+    end
+    packing = false
+end
+
 local function pack_now()
     if packing then return end
 
@@ -237,23 +303,7 @@ local function pack_now()
         end
     end
 
-    local steps = M.plan_pack(live, slots_by_mon)
-    if #steps > 0 then
-        packing = true
-        for _, mv in ipairs(steps) do
-            hl.dispatch(hl.dsp.workspace.change_id({ workspace = mv.from, id = mv.to }))
-            -- Hyprland renames numeric workspaces to tostring(new id) but does not
-            -- emit renameworkspace, and waybar's changeworkspaceid handler only
-            -- setId — so {name} labels and active-by-name go stale (double-active
-            -- pills, missing numbers). A same-name rename is a no-op for us and
-            -- still emits renameworkspace>>id,name, which waybar does handle.
-            -- Reusing a freed id can also collide with waybar's queued destroy
-            -- and drop the live button (issue #62); patched in
-            -- ~/projects/upstream/waybar (onWorkspaceIdChanged).
-            hl.dispatch(hl.dsp.workspace.rename({ workspace = mv.to, name = tostring(mv.to) }))
-        end
-        packing = false
-    end
+    renumber(M.plan_pack(live, slots_by_mon))
     reclaim_strays()
 end
 
@@ -348,6 +398,43 @@ function M.move_window_beside(dir)
     if target ~= here then
         hl.dispatch(hl.dsp.window.move({ workspace = target, window = "address:" .. win.address }))
     end
+end
+
+-- The focused workspace and the ascending ids of the workspaces on its
+-- monitor within that monitor's slots (a foreign id waiting for monitors.lua
+-- is not in its order).
+local function focused_order()
+    local ws = hl.get_active_workspace()
+    local here = ws and tonumber(ws.id)
+    local name = ws and monitor_name(ws.monitor)
+    if not here or not name then return end
+
+    local monitors = package.loaded["monitors"]
+    local slots_by_mon = monitors and monitors.slots_by_monitor and monitors.slots_by_monitor() or {}
+    local mine = {}
+    for _, id in ipairs(slots_by_mon[name] or {}) do mine[id] = true end
+
+    local order = {}
+    for _, w in ipairs(hl.get_workspaces() or {}) do
+        if not w.special and mine[w.id] and monitor_name(w.monitor) == name then
+            order[#order + 1] = w.id
+        end
+    end
+    table.sort(order)
+    return here, order
+end
+
+-- Super+Ctrl+[ / ]: the workspace here trades places with the one before
+-- (dir = -1) or after (dir = 1) it. Super+Ctrl+0: it moves to the end and
+-- the ones after it close up. The view stays on it under its new id.
+function M.move_workspace(dir)
+    local here, order = focused_order()
+    if here then renumber(M.plan_swap(order, here, dir)) end
+end
+
+function M.move_workspace_to_end()
+    local here, order = focused_order()
+    if here then renumber(M.plan_to_end(order, here)) end
 end
 
 M.pack = pack_now
