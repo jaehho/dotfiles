@@ -146,31 +146,23 @@ end
 -- Pure planner for Super+Shift+[ / ]: give one window a workspace of its
 -- own right before (dir = -1) or after (dir = 1) the one it is on, the
 -- others shifting to make room. slots: the monitor's slot ids in order.
--- busy: { [id] = true } for ids holding windows. here: the window's
--- workspace id. lone: it is the only window there.
+-- busy: { [id] = true } for ids a workspace holds, on any monitor.
+-- here: the window's workspace id; it has other windows (a lone window
+-- takes plan_swap instead).
 --
--- Returns moves, target. moves is an ordered list of {from=, to=} stack
--- moves, each into an id that is empty by the time it runs; target is
--- where the window ends up. The run beside the gap shifts away from it
--- up to the nearest empty slot, toward the far end first, so a hole
--- elsewhere survives. Returns nil, "full" when every slot is busy.
---
--- A lone window already has a workspace of its own there, so it trades
--- places with the next busy workspace that way instead; nil when there
--- is none (a lone window at the edge).
-function M.plan_insert(slots, busy, here, dir, lone)
+-- Returns finals, target. finals are {from=, to=} renumbers for
+-- two_phase; target is the id left free for the window. The run beside
+-- the gap shifts away from it up to the nearest free slot, toward the
+-- far end first, so a hole elsewhere survives. When here is in that
+-- run, its workspace shifts too and takes the window along; the window
+-- then moves back out to target. Returns nil, "full" when every slot is
+-- busy.
+function M.plan_insert(slots, busy, here, dir)
     local idx
     for i, id in ipairs(slots) do
         if id == here then idx = i; break end
     end
     if idx == nil then return nil end
-
-    if lone then
-        local j = idx + dir
-        while slots[j] and not busy[slots[j]] do j = j + dir end
-        if slots[j] == nil then return nil end
-        return { { from = slots[j], to = here } }, slots[j]
-    end
 
     -- The new workspace goes right after position g (0 = before all).
     local g = dir > 0 and idx or idx - 1
@@ -331,17 +323,10 @@ local function monitor_name(mon)
     return type(mon) == "string" and mon or (mon and mon.name)
 end
 
--- Super+Shift+[ / ]: the focused window gets a workspace of its own
--- right before (dir = -1) or after (dir = 1) its current one, per
--- plan_insert, and focus follows it. Stacks shift by moving their
--- windows (follow = false), not by change_id: Quickshell 0.3.2 drops a
--- renumbered workspace's window icons. A shifted stack's dwindle tree
--- is rebuilt as its windows land, as with Super+Alt+N. It all runs in
--- this one call, so the packer's debounced timer sees only the result.
-function M.move_window_beside(dir)
-    local win = hl.get_active_window()
-    if not win or win.pinned then return end
-    local ws = win.workspace
+-- A workspace's id, its monitor's slot ids, and the ascending ids of the
+-- workspaces on that monitor within those slots (a foreign id waiting for
+-- monitors.lua is not in its order).
+local function order_of(ws)
     local here = ws and tonumber(ws.id)
     local name = ws and monitor_name(ws.monitor)
     if not here or not name then return end
@@ -350,69 +335,8 @@ function M.move_window_beside(dir)
     local slots_by_mon = monitors and monitors.slots_by_monitor and monitors.slots_by_monitor() or {}
     local slots = slots_by_mon[name]
     if not slots then return end
-
-    local busy = {}
-    for _, w in ipairs(hl.get_workspaces() or {}) do
-        if type(w.id) == "number" and (w.windows or 0) > 0 then
-            busy[w.id] = true
-        end
-    end
-
-    -- Windows a stack move carries: all but this one and pinned ones
-    -- (a pinned window rides along with whatever is on screen).
-    local function stack(id)
-        local out = {}
-        for _, w in ipairs(hl.get_workspace_windows(id) or {}) do
-            if w.address ~= win.address and not w.pinned then
-                out[#out + 1] = w.address
-            end
-        end
-        return out
-    end
-
-    local moves, target = M.plan_insert(slots, busy, here, dir, #stack(here) == 0)
-    if moves == nil then
-        if target == "full" then
-            hl.notification.create({ text = "No free workspace on this display", timeout = 1500, icon = "info" })
-        end
-        return
-    end
-
-    -- Snapshot every stack first: each move lands on the id the next one
-    -- empties.
-    local stacks = {}
-    for i, mv in ipairs(moves) do
-        stacks[i] = stack(mv.from)
-    end
-    for i, mv in ipairs(moves) do
-        for _, addr in ipairs(stacks[i]) do
-            hl.dispatch(hl.dsp.window.move({
-                workspace = mv.to,
-                window    = "address:" .. addr,
-                follow    = false,
-            }))
-        end
-    end
-    -- The window stays put when its old workspace's other windows were
-    -- the ones that moved.
-    if target ~= here then
-        hl.dispatch(hl.dsp.window.move({ workspace = target, window = "address:" .. win.address }))
-    end
-end
-
--- The focused workspace and the ascending ids of the workspaces on its
--- monitor within that monitor's slots (a foreign id waiting for monitors.lua
--- is not in its order).
-local function focused_order()
-    local ws = hl.get_active_workspace()
-    local here = ws and tonumber(ws.id)
-    local name = ws and monitor_name(ws.monitor)
-    if not here or not name then return end
-
-    local monitors = package.loaded["monitors"]
-    local slots_by_mon = monitors and monitors.slots_by_monitor and monitors.slots_by_monitor() or {}
     local mine = {}
-    for _, id in ipairs(slots_by_mon[name] or {}) do mine[id] = true end
+    for _, id in ipairs(slots) do mine[id] = true end
 
     local order = {}
     for _, w in ipairs(hl.get_workspaces() or {}) do
@@ -421,19 +345,61 @@ local function focused_order()
         end
     end
     table.sort(order)
-    return here, order
+    return here, order, slots
+end
+
+-- Super+Shift+[ / ]: the focused window gets a workspace of its own
+-- right before (dir = -1) or after (dir = 1) its current one, per
+-- plan_insert, and focus follows it. The workspaces in the way are
+-- renumbered in place (change_id), so their layouts hold. A window alone
+-- on its workspace (pinned ones ride along with whatever is on screen,
+-- so they don't count) has that already: its workspace trades places
+-- with the neighbour instead, as with Super+Ctrl+[ / ].
+function M.move_window_beside(dir)
+    local win = hl.get_active_window()
+    if not win or win.pinned then return end
+    local here, order, slots = order_of(win.workspace)
+    if not here then return end
+
+    local lone = true
+    for _, w in ipairs(hl.get_workspace_windows(here) or {}) do
+        if w.address ~= win.address and not w.pinned then
+            lone = false
+            break
+        end
+    end
+    if lone then
+        renumber(M.plan_swap(order, here, dir))
+        return
+    end
+
+    -- change_id refuses an id any workspace holds, on any monitor.
+    local busy = {}
+    for _, w in ipairs(hl.get_workspaces() or {}) do
+        if type(w.id) == "number" then busy[w.id] = true end
+    end
+    local finals, target = M.plan_insert(slots, busy, here, dir)
+    if finals == nil then
+        if target == "full" then
+            hl.notification.create({ text = "No free workspace on this display", timeout = 1500, icon = "info" })
+        end
+        return
+    end
+    renumber(two_phase(finals))
+    -- By address: if its workspace shifted, the window went with it.
+    hl.dispatch(hl.dsp.window.move({ workspace = target, window = "address:" .. win.address }))
 end
 
 -- Super+Ctrl+[ / ]: the workspace here trades places with the one before
 -- (dir = -1) or after (dir = 1) it. Super+Ctrl+0: it moves to the end and
 -- the ones after it close up. The view stays on it under its new id.
 function M.move_workspace(dir)
-    local here, order = focused_order()
+    local here, order = order_of(hl.get_active_workspace())
     if here then renumber(M.plan_swap(order, here, dir)) end
 end
 
 function M.move_workspace_to_end()
-    local here, order = focused_order()
+    local here, order = order_of(hl.get_active_workspace())
     if here then renumber(M.plan_to_end(order, here)) end
 end
 
