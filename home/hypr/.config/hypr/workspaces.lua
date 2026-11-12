@@ -20,7 +20,7 @@
 -- (see the comment in pack_now; hyprland renames silently). Waybar did not
 -- handle changeworkspaceid. Quickshell 0.3.2 did not either, so the bar lost
 -- window icons after a pack; quickshell-git (upstream 4befab5) follows the id
--- change. dash's shell.qml still confirms emptiness with hyprctl, from before.
+-- change, and dash reads its occlusion from the same model again.
 
 local M = {}
 
