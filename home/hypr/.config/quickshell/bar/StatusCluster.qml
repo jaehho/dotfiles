@@ -4,14 +4,10 @@
 // but the chevron, stay-awake and the bell hide while they have nothing
 // to say.
 //
-// The tray slides out to the chevron's left, so on this right-anchored
-// island it only grows the island's left edge, and stays out until the
-// chevron is clicked again, so a tray icon's menu is safe to reach.
-//
-// Tray icons rest grey, since an app's own colours are not news: they
-// take their colours under the pointer, or while the app asks for
-// attention, on an orange pill. While the drawer is shut, such an app
-// turns the chevron orange instead.
+// The tray is a grid under the bar (TrayGrid.qml), opened from the
+// chevron. An app asking for attention comes out beside the chevron by
+// itself, on an orange pill, until the grid is opened; every other
+// tray icon rests grey (TraySlot.qml).
 import QtQuick
 import QtQuick.Effects
 import Quickshell
@@ -25,8 +21,8 @@ Row {
 
     required property var bar
     readonly property var colors: bar.colors
+    readonly property alias chevron: chevron
     readonly property string bin: Quickshell.env("HOME") + "/.local/bin/"
-    property bool trayOpen: false
     // Passive items (udiskie with nothing mounted) stay hidden, as in
     // waybar.
     readonly property var trayItems: SystemTray.items.values.filter(item => item.status !== Status.Passive)
@@ -42,9 +38,11 @@ Row {
         Quickshell.execDetached(command);
     }
 
+    // An app asking for attention comes out beside the chevron by
+    // itself, until the grid is opened (it is in the grid too).
     Item {
-        id: drawer
-        width: attention.trayOpen ? tray.implicitWidth : 0
+        id: callers
+        width: !attention.bar.trayOpen && attention.calling.length > 0 ? callRow.implicitWidth : 0
         height: 24
         clip: true
 
@@ -55,95 +53,34 @@ Row {
             }
         }
 
-        // 16px icons 14px apart, 3px in from either end.
         Row {
-            id: tray
+            id: callRow
             anchors.right: parent.right
             leftPadding: 3
             rightPadding: 3
             spacing: 6
 
             Repeater {
-                model: attention.trayItems
+                model: attention.calling
 
-                Rectangle {
-                    id: slot
-
+                TraySlot {
                     required property var modelData
-                    readonly property string tip: modelData.tooltipTitle || modelData.title || modelData.id
-                    readonly property int tipFormat: Text.PlainText
-                    readonly property bool calling: modelData.status === Status.NeedsAttention
-                    readonly property bool lit: area.containsMouse || calling
 
-                    width: 24
-                    height: 24
-                    radius: 8
-                    color: area.containsMouse ? attention.colors.withAlpha(attention.colors.blue, 0.14) : calling ? attention.colors.withAlpha(attention.colors.orange, 0.18) : "transparent"
-
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: 200
-                        }
-                    }
-
-                    // Grey, and a little dimmed to sit with the grey2
-                    // glyphs; any lower and a dark icon (OpenClaw's red)
-                    // all but vanishes.
-                    TrayIcon {
-                        anchors.centerIn: parent
-                        source: slot.modelData.icon
-                        opacity: slot.lit ? 1 : 0.8
-                        layer.enabled: true
-                        layer.effect: MultiEffect {
-                            saturation: slot.lit ? 0 : -1
-
-                            Behavior on saturation {
-                                NumberAnimation {
-                                    duration: 200
-                                }
-                            }
-                        }
-
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 200
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        id: area
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                        cursorShape: Qt.PointingHandCursor
-                        onContainsMouseChanged: containsMouse ? attention.bar.hint(slot) : attention.bar.unhint(slot)
-                        onClicked: mouse => {
-                            attention.bar.unhint(slot);
-                            const item = slot.modelData;
-                            if (mouse.button === Qt.MiddleButton)
-                                item.secondaryActivate();
-                            else if (mouse.button === Qt.RightButton || item.onlyMenu)
-                                item.hasMenu && attention.bar.openTrayMenu(slot, item.menu);
-                            else
-                                item.activate();
-                        }
-                        onWheel: wheel => slot.modelData.scroll(wheel.angleDelta.y, false)
-                    }
+                    bar: attention.bar
+                    item: modelData
                 }
             }
         }
     }
 
-    // Points the way the drawer will move.
+    // Opens the grid; the grid hangs from it.
     BarButton {
-        readonly property bool waiting: !attention.trayOpen && attention.calling.length > 0
+        id: chevron
 
         bar: attention.bar
-        text: String.fromCodePoint(attention.trayOpen ? 0xf0142 : 0xf0141)
-        tint: waiting ? attention.colors.orange : attention.colors.grey2
-        tip: attention.trayOpen ? "Hide the tray" : waiting ? `Asking for attention: ${attention.calling.map(item => item.tooltipTitle || item.title || item.id).join(", ")}` : `Show the tray (${attention.trayItems.length})`
-        onClicked: attention.trayOpen = !attention.trayOpen
+        text: String.fromCodePoint(attention.bar.trayOpen ? 0xf0143 : 0xf0140)
+        tip: attention.bar.trayOpen ? "Hide the tray" : `Show the tray (${attention.trayItems.length})`
+        onClicked: attention.bar.trayOpen = !attention.bar.trayOpen
     }
 
     // Which app has the screen or the mic: red for the screen, which can
