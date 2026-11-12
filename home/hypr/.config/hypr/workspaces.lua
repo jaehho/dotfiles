@@ -99,6 +99,61 @@ function M.plan_pack(live, slots_by_mon)
     return steps
 end
 
+-- Pure planner for Super+Shift+[ / ]: give one window a workspace of its
+-- own right before (dir = -1) or after (dir = 1) the one it is on, the
+-- others shifting to make room. slots: the monitor's slot ids in order.
+-- busy: { [id] = true } for ids holding windows. here: the window's
+-- workspace id. lone: it is the only window there.
+--
+-- Returns moves, target. moves is an ordered list of {from=, to=} stack
+-- moves, each into an id that is empty by the time it runs; target is
+-- where the window ends up. The run beside the gap shifts away from it
+-- up to the nearest empty slot, toward the far end first, so a hole
+-- elsewhere survives. Returns nil, "full" when every slot is busy.
+--
+-- A lone window already has a workspace of its own there, so it trades
+-- places with the next busy workspace that way instead; nil when there
+-- is none (a lone window at the edge).
+function M.plan_insert(slots, busy, here, dir, lone)
+    local idx
+    for i, id in ipairs(slots) do
+        if id == here then idx = i; break end
+    end
+    if idx == nil then return nil end
+
+    if lone then
+        local j = idx + dir
+        while slots[j] and not busy[slots[j]] do j = j + dir end
+        if slots[j] == nil then return nil end
+        return { { from = slots[j], to = here } }, slots[j]
+    end
+
+    -- The new workspace goes right after position g (0 = before all).
+    local g = dir > 0 and idx or idx - 1
+    if slots[g + 1] and not busy[slots[g + 1]] then
+        return {}, slots[g + 1]
+    end
+    for f = g + 2, #slots do
+        if not busy[slots[f]] then
+            local moves = {}
+            for p = f - 1, g + 1, -1 do
+                moves[#moves + 1] = { from = slots[p], to = slots[p + 1] }
+            end
+            return moves, slots[g + 1]
+        end
+    end
+    for f = g, 1, -1 do
+        if not busy[slots[f]] then
+            local moves = {}
+            for p = f + 1, g do
+                moves[#moves + 1] = { from = slots[p], to = slots[p - 1] }
+            end
+            return moves, slots[g]
+        end
+    end
+    return nil, "full"
+end
+
 local packing = false
 
 -- Ids outside 1..9 (including leftover TEMP_BASE temps). Merge their windows
@@ -220,6 +275,79 @@ local function schedule()
 end
 
 hl.on("workspace.removed", schedule)
+
+local function monitor_name(mon)
+    return type(mon) == "string" and mon or (mon and mon.name)
+end
+
+-- Super+Shift+[ / ]: the focused window gets a workspace of its own
+-- right before (dir = -1) or after (dir = 1) its current one, per
+-- plan_insert, and focus follows it. Stacks shift by moving their
+-- windows (follow = false), not by change_id: Quickshell 0.3.2 drops a
+-- renumbered workspace's window icons. A shifted stack's dwindle tree
+-- is rebuilt as its windows land, as with Super+Alt+N. It all runs in
+-- this one call, so the packer's debounced timer sees only the result.
+function M.move_window_beside(dir)
+    local win = hl.get_active_window()
+    if not win or win.pinned then return end
+    local ws = win.workspace
+    local here = ws and tonumber(ws.id)
+    local name = ws and monitor_name(ws.monitor)
+    if not here or not name then return end
+
+    local monitors = package.loaded["monitors"]
+    local slots_by_mon = monitors and monitors.slots_by_monitor and monitors.slots_by_monitor() or {}
+    local slots = slots_by_mon[name]
+    if not slots then return end
+
+    local busy = {}
+    for _, w in ipairs(hl.get_workspaces() or {}) do
+        if type(w.id) == "number" and (w.windows or 0) > 0 then
+            busy[w.id] = true
+        end
+    end
+
+    -- Windows a stack move carries: all but this one and pinned ones
+    -- (a pinned window rides along with whatever is on screen).
+    local function stack(id)
+        local out = {}
+        for _, w in ipairs(hl.get_workspace_windows(id) or {}) do
+            if w.address ~= win.address and not w.pinned then
+                out[#out + 1] = w.address
+            end
+        end
+        return out
+    end
+
+    local moves, target = M.plan_insert(slots, busy, here, dir, #stack(here) == 0)
+    if moves == nil then
+        if target == "full" then
+            hl.notification.create({ text = "No free workspace on this display", timeout = 1500, icon = "info" })
+        end
+        return
+    end
+
+    -- Snapshot every stack first: each move lands on the id the next one
+    -- empties.
+    local stacks = {}
+    for i, mv in ipairs(moves) do
+        stacks[i] = stack(mv.from)
+    end
+    for i, mv in ipairs(moves) do
+        for _, addr in ipairs(stacks[i]) do
+            hl.dispatch(hl.dsp.window.move({
+                workspace = mv.to,
+                window    = "address:" .. addr,
+                follow    = false,
+            }))
+        end
+    end
+    -- The window stays put when its old workspace's other windows were
+    -- the ones that moved.
+    if target ~= here then
+        hl.dispatch(hl.dsp.window.move({ workspace = target, window = "address:" .. win.address }))
+    end
+end
 
 M.pack = pack_now
 M.reclaim = reclaim_strays

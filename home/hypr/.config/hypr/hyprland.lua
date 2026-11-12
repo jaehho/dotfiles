@@ -537,6 +537,17 @@ hl.bind(mainMod .. " + SHIFT + 0", function() -- send window to empty workspace 
     hl.dispatch(hl.dsp.window.move({ workspace = target }))
 end)
 
+-- Super+Shift+[ / ]: the window gets a workspace of its own right before /
+-- after this one, and the workspaces past it shift over to make room (from
+-- 1, [ puts it at 1 and everything moves up). A window alone on its
+-- workspace trades places with the neighbour instead. Focus follows.
+-- workspaces.lua (move_window_beside) plans and moves.
+local function move_window_beside(dir)
+    if ok_ws then workspaces.move_window_beside(dir) end
+end
+hl.bind(mainMod .. " + SHIFT + bracketleft",  function() move_window_beside(-1) end) -- window to a new workspace before this one
+hl.bind(mainMod .. " + SHIFT + bracketright", function() move_window_beside(1) end)  -- window to a new workspace after this one
+
 -- Move all windows in active workspace to target workspace with mainMod + CTRL + [1-9]
 for i = 1, 9 do
     hl.bind(mainMod .. " + CTRL + " .. i, -- send every window here to workspace
