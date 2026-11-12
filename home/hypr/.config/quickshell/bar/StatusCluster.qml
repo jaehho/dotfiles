@@ -4,8 +4,9 @@
 // but the chevron, stay-awake and the bell hide while they have nothing
 // to say.
 //
-// The tray is a grid under the bar (TrayGrid.qml), opened from the
-// chevron. An app asking for attention comes out beside the chevron by
+// The tray is a grid grown out of the right island (TrayGrid.qml),
+// opened from the chevron by resting the pointer on it, a click or
+// Super+'. An app asking for attention comes out beside the chevron by
 // itself, on an orange pill, until the grid is opened; every other
 // tray icon rests grey (TraySlot.qml).
 import QtQuick
@@ -25,7 +26,7 @@ Row {
     readonly property string bin: Quickshell.env("HOME") + "/.local/bin/"
     // Passive items (udiskie with nothing mounted) stay hidden, as in
     // waybar.
-    readonly property var trayItems: SystemTray.items.values.filter(item => item.status !== Status.Passive)
+    readonly property var trayItems: SystemTray.items.values.filter(item => item.status !== Status.Passive).sort((a, b) => bar.trayName(a).localeCompare(bar.trayName(b)))
     readonly property var calling: trayItems.filter(item => item.status === Status.NeedsAttention)
 
     // Refreshed by hypr-idle-toggle over IPC, and every 30 seconds.
@@ -79,8 +80,15 @@ Row {
 
         bar: attention.bar
         text: String.fromCodePoint(attention.bar.trayOpen ? 0xf0143 : 0xf0140)
-        tip: attention.bar.trayOpen ? "Hide the tray" : `Show the tray (${attention.trayItems.length})`
-        onClicked: attention.bar.trayOpen = !attention.bar.trayOpen
+        tip: attention.bar.trayOpen ? "Hide the tray" : "Tray (Super+')"
+        onClicked: attention.bar.toggleTray()
+
+        // Resting on it opens the grid; passing over does not.
+        Timer {
+            interval: 300
+            running: chevron.hovered && !attention.bar.trayOpen
+            onTriggered: attention.bar.hoverTray()
+        }
     }
 
     // Which app has the screen or the mic: red for the screen, which can

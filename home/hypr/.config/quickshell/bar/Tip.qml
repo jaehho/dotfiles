@@ -32,7 +32,7 @@ Rectangle {
         tip.x = Math.round(Math.max(8, Math.min(tip.bar.width - tip.width - 8, middle - tip.width / 2)));
     }
 
-    y: 42
+    y: bar.tipTop
     width: body.width + 20
     height: body.height + 12
     radius: 8
@@ -41,6 +41,13 @@ Rectangle {
     border.color: bar.colors.withAlpha(bar.colors.blue, 0.28)
     opacity: wanted ? 1 : 0
     visible: opacity > 0
+
+    Behavior on y {
+        NumberAnimation {
+            duration: 200
+            easing.type: Easing.OutCubic
+        }
+    }
 
     Behavior on opacity {
         NumberAnimation {

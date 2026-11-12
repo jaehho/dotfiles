@@ -1,7 +1,7 @@
 // One screen's bar: a full-width layer surface that reserves 40px at the
 // top edge, as waybar did (a 34px bar under a 6px margin), and is taller
 // than that so the center island can open into the player, the right
-// island into quick settings, and menus, the tray grid and tips can drop below the
+// island into quick settings or the tray, and menus and tips can drop below the
 // islands, without resizing the surface or moving a window. The input
 // mask is the islands and an open menu, so the rest of the surface lets
 // the pointer through to the windows under it.
@@ -21,11 +21,19 @@ PanelWindow {
     property bool quickOpen: false
     property string quickPage: "main"
     property bool quickKeys: false
-    // The tray grid under the status cluster's chevron.
+    // The tray grid, grown out of the right island under its chevron.
     property bool trayOpen: false
+    // Opened by hovering, which takes neither the keyboard nor the
+    // grab: it closes when the pointer leaves the island, and a click on
+    // what opened it keeps it open (and takes both).
+    property bool byHover: false
     // The control whose tip shows, after half a second's hover.
     property Item tipFor: null
     readonly property bool menuOpen: menu.open
+    // Held while a sheet needs the keyboard and the grab.
+    readonly property bool holding: (open || quickOpen || menuOpen || trayOpen) && !byHover
+    // Where a tip hangs: under the island, however far it has grown.
+    readonly property real tipTop: trayOpen ? rightSide.y + rightSide.height + 6 : 42
     readonly property var trayItems: rightSide.attention.trayItems
     readonly property alias rightIsland: rightSide
 
@@ -64,26 +72,80 @@ PanelWindow {
         }
         bar.closeRequested();
         bar.trayOpen = false;
+        bar.byHover = false;
         menu.show(anchor, entries, null);
+    }
+
+    // "Spotify", "Bitwarden": a tray item's id less what apps add.
+    function trayName(item) {
+        const name = item.id.replace(/[-_]?(status_icon|systray_icon|client|tray)[-_]?\d*$/i, "").split(/[-_ ]/)[0];
+        return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+
+    function toggleTray() {
+        if (trayOpen && byHover)
+            byHover = false;
+        else
+            trayOpen = !trayOpen;
+    }
+
+    // Hover opens only when nothing else is, and leaving closes only
+    // what hover opened.
+    function hoverTray() {
+        if (open || quickOpen || menuOpen || trayOpen)
+            return;
+        trayOpen = true;
+        byHover = true;
+    }
+
+    function hoverQuick() {
+        if (open || quickOpen || menuOpen || trayOpen)
+            return;
+        quickRequested("");
+        byHover = true;
+    }
+
+    function hoverLeft() {
+        if (!byHover)
+            return;
+        trayOpen = false;
+        closeRequested();
+        byHover = false;
     }
 
     function openTrayMenu(anchor, handle) {
         bar.closeRequested();
         bar.trayOpen = false;
+        bar.byHover = false;
         menu.show(anchor, [], handle);
     }
 
-    onOpenChanged: if (open) {
-        menu.close();
-        trayOpen = false;
+    // Nothing open, nothing to have been opened by hover.
+    function settle() {
+        if (!trayOpen && !quickOpen && !open)
+            byHover = false;
     }
-    onQuickOpenChanged: if (quickOpen) {
-        menu.close();
-        trayOpen = false;
+
+    onOpenChanged: {
+        if (open) {
+            menu.close();
+            trayOpen = false;
+        }
+        settle();
     }
-    onTrayOpenChanged: if (trayOpen) {
-        bar.closeRequested();
-        menu.close();
+    onQuickOpenChanged: {
+        if (quickOpen) {
+            menu.close();
+            trayOpen = false;
+        }
+        settle();
+    }
+    onTrayOpenChanged: {
+        if (trayOpen) {
+            bar.closeRequested();
+            menu.close();
+        }
+        settle();
     }
     onVisibleChanged: if (!visible) {
         menu.close();
@@ -104,7 +166,7 @@ PanelWindow {
     WlrLayershell.namespace: "bar"
     // The keyboard only while an island or a menu is open, which the
     // owner asked for by opening it.
-    WlrLayershell.keyboardFocus: bar.open || bar.quickOpen || bar.menuOpen || bar.trayOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: bar.holding ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: Region {
         item: leftSide
@@ -120,17 +182,13 @@ PanelWindow {
         Region {
             item: bar.menuOpen ? menu : null
         }
-
-        Region {
-            item: bar.trayOpen ? trayGrid : null
-        }
     }
 
     // A click anywhere else clears the grab, which closes the island or
     // the menu and gives the keyboard back to the window that had it.
     HyprlandFocusGrab {
         windows: [bar]
-        active: bar.open || bar.quickOpen || bar.menuOpen || bar.trayOpen
+        active: bar.holding
         onCleared: {
             bar.closeRequested();
             bar.trayOpen = false;
@@ -179,6 +237,7 @@ PanelWindow {
         y: 10
         bar: bar
         open: bar.quickOpen
+        trayOpen: bar.trayOpen
         page: bar.quickPage
         keys: bar.quickKeys
     }
@@ -186,15 +245,7 @@ PanelWindow {
     // Tips give way to an open sheet or menu.
     Tip {
         bar: bar
-        visible: opacity > 0 && !bar.open && !bar.quickOpen && !bar.menuOpen && !bar.trayOpen
-    }
-
-    TrayGrid {
-        id: trayGrid
-        bar: bar
-        items: bar.trayItems
-        open: bar.trayOpen
-        anchor: rightSide
+        visible: opacity > 0 && !bar.open && !bar.quickOpen && !bar.menuOpen
     }
 
     BarMenu {

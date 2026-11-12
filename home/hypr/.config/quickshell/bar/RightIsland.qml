@@ -3,6 +3,10 @@
 // attention, load, output, battery and radios, then quick settings and
 // the power menu.
 //
+// It also drops the tray's grid (TrayGrid.qml) the same way. Resting
+// the pointer on the tray chevron or the quick settings glyph opens
+// either; it closes when the pointer leaves, unless a click kept it.
+//
 // It opens into the quick settings sheet (QuickSettings.qml) the way the
 // center island opens into the player: it grows out of itself, leftward
 // and down, and its glyph row stays where it was, live, as the sheet's
@@ -20,6 +24,7 @@ Item {
     // The status cluster, for the IPC refresh of stay-awake.
     readonly property alias attention: attention
     property bool open: false
+    property bool trayOpen: false
     property string page: "main"
     property bool keys: false
 
@@ -27,13 +32,24 @@ Item {
     readonly property int restWidth: header.implicitWidth + 12
     readonly property int openWidth: Math.max(restWidth, 460)
     readonly property int openHeight: restHeight + 10 + sheet.implicitHeight + 16
+    // The tray's sheet keeps the island's width and only drops.
+    readonly property int trayHeight: restHeight + 6 + trayGrid.implicitHeight + 6
+    // How far the island has grown for either sheet, for its glass.
+    property real grow: open || trayOpen ? 1 : 0
     // 0 at rest and 1 open. The width follows it, so the glyph row
     // still sizes the island at once while it rests (the tray sliding
     // out); the height follows the page, so it eases when one opens.
     property real progress: open ? 1 : 0
 
     width: restWidth + (openWidth - restWidth) * progress
-    height: open ? openHeight : restHeight
+    height: open ? openHeight : trayOpen ? trayHeight : restHeight
+
+    Behavior on grow {
+        NumberAnimation {
+            duration: rightIsland.grow ? 260 : 200
+            easing.type: rightIsland.grow ? Easing.OutExpo : Easing.InOutCubic
+        }
+    }
 
     Behavior on progress {
         NumberAnimation {
@@ -51,6 +67,17 @@ Item {
 
     function blend(a, b, t) {
         return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t);
+    }
+
+    // Leaving closes what hovering opened, after a moment's grace.
+    HoverHandler {
+        id: pointer
+    }
+
+    Timer {
+        interval: 350
+        running: rightIsland.bar.byHover && !pointer.hovered
+        onTriggered: rightIsland.bar.hoverLeft()
     }
 
     component Divider: Item {
@@ -75,13 +102,13 @@ Item {
         radius: 12
         blur: 6
         color: rightIsland.colors.withAlpha(rightIsland.colors.bg_dim, 0.93)
-        opacity: rightIsland.progress
+        opacity: rightIsland.grow
     }
 
     Rectangle {
         anchors.fill: parent
         radius: 12
-        color: rightIsland.blend(rightIsland.colors.withAlpha(rightIsland.colors.bg0, 0.88), rightIsland.colors.withAlpha(rightIsland.colors.bg_dim, 0.985), rightIsland.progress)
+        color: rightIsland.blend(rightIsland.colors.withAlpha(rightIsland.colors.bg0, 0.88), rightIsland.colors.withAlpha(rightIsland.colors.bg_dim, 0.985), rightIsland.grow)
         border.width: 1
         border.color: rightIsland.colors.withAlpha(rightIsland.colors.blue, 0.18)
     }
@@ -131,7 +158,20 @@ Item {
             text: String.fromCodePoint(0xf1542)
             tint: rightIsland.open ? rightIsland.colors.fg : rightIsland.colors.grey2
             tip: "Quick settings (Super+;)"
-            onClicked: rightIsland.bar.openQuick("")
+            onClicked: {
+                // A click on what hover opened keeps it open.
+                if (rightIsland.open && rightIsland.bar.byHover)
+                    rightIsland.bar.byHover = false;
+                else
+                    rightIsland.bar.openQuick("");
+            }
+
+            // Resting on it opens them; passing over does not.
+            Timer {
+                interval: 300
+                running: parent.hovered && !rightIsland.open
+                onTriggered: rightIsland.bar.hoverQuick()
+            }
         }
 
         // Grey like its neighbours at rest, red only under the pointer,
@@ -177,6 +217,38 @@ Item {
                     run: () => session("shutdown")
                 }
             ])
+        }
+    }
+
+    // The tray's sheet, under the header row, fading in as the island
+    // drops.
+    Item {
+        anchors.fill: parent
+        clip: true
+
+        TrayGrid {
+            id: trayGrid
+            x: 6
+            y: rightIsland.restHeight + 6
+            width: rightIsland.restWidth - 12
+            bar: rightIsland.bar
+            items: rightIsland.bar.trayItems
+            open: rightIsland.trayOpen
+            opacity: rightIsland.trayOpen ? 1 : 0
+            visible: opacity > 0
+            enabled: rightIsland.trayOpen
+
+            Behavior on opacity {
+                SequentialAnimation {
+                    PauseAnimation {
+                        duration: rightIsland.trayOpen ? 80 : 0
+                    }
+                    NumberAnimation {
+                        duration: rightIsland.trayOpen ? 180 : 100
+                        easing.type: Easing.OutCubic
+                    }
+                }
+            }
         }
     }
 

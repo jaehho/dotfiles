@@ -426,6 +426,7 @@ hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheats
 -- Quick settings: the bar's right island opens into them; entries live in
 -- hypr-settings-menu
 hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("qs -c bar ipc call bar settings")) -- quick settings
+hl.bind(mainMod .. " + apostrophe", hl.dsp.exec_cmd("qs -c bar ipc call bar tray")) -- tray: apps in a grid under the bar
 
 -- Share: Taildrop a file or the clipboard, or show the clipboard as a QR code
 hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("~/.local/bin/hypr-share-menu")) -- share menu

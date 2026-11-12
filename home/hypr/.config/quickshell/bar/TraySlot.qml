@@ -20,15 +20,31 @@ Rectangle {
     readonly property int tipFormat: Text.PlainText
     readonly property bool calling: item.status === Status.NeedsAttention
     readonly property bool hovered: area.containsMouse
-    readonly property bool lit: hovered || calling
+    // The keyboard's pick in the grid.
+    property bool selected: false
+    readonly property bool lit: hovered || selected || calling
 
-    // A click that leaves the bar's tray open or shut as it was asked.
+    // After a click, for the grid to close.
     signal used
+
+    // What a click does, shared with the keyboard's Enter.
+    function click(button) {
+        slot.bar.unhint(slot);
+        if (button === Qt.MiddleButton) {
+            slot.item.secondaryActivate();
+        } else if (button === Qt.RightButton || slot.item.onlyMenu) {
+            if (slot.item.hasMenu)
+                slot.bar.openTrayMenu(slot, slot.item.menu);
+        } else {
+            slot.item.activate();
+        }
+        slot.used();
+    }
 
     width: 24
     height: 24
     radius: 8
-    color: hovered ? bar.colors.withAlpha(bar.colors.blue, 0.14) : calling ? bar.colors.withAlpha(bar.colors.orange, 0.18) : "transparent"
+    color: hovered || selected ? bar.colors.withAlpha(bar.colors.blue, 0.14) : calling ? bar.colors.withAlpha(bar.colors.orange, 0.18) : "transparent"
 
     Behavior on color {
         ColorAnimation {
@@ -70,18 +86,7 @@ Rectangle {
             if (slot.tips)
                 containsMouse ? slot.bar.hint(slot) : slot.bar.unhint(slot);
         }
-        onClicked: mouse => {
-            slot.bar.unhint(slot);
-            if (mouse.button === Qt.MiddleButton) {
-                slot.item.secondaryActivate();
-            } else if (mouse.button === Qt.RightButton || slot.item.onlyMenu) {
-                if (slot.item.hasMenu)
-                    slot.bar.openTrayMenu(slot, slot.item.menu);
-            } else {
-                slot.item.activate();
-            }
-            slot.used();
-        }
+        onClicked: mouse => slot.click(mouse.button)
         onWheel: wheel => slot.item.scroll(wheel.angleDelta.y, false)
     }
 }
