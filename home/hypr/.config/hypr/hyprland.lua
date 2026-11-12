@@ -122,6 +122,10 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("steno gui --background")          -- meeting listener
     hl.exec_cmd("asst-gtk --background")           -- tasks (~/projects/asst)
     hl.exec_cmd("nextcloud --background")
+    -- Bitwarden: Firefox face unlock and the SSH agent. Its "Start automatically
+    -- on login" only writes an XDG entry; --autostart is the windowless start.
+    -- Its biometric key sits in memfd_secret, so hibernate is off while it runs.
+    hl.exec_cmd("bitwarden --autostart")
     hl.exec_cmd("betterbird")                      -- prefs.js: mail.startupMinimized
     hl.exec_cmd("zotero")
     -- spotify-launcher passes a URI but no flags, so update through it, then run
