@@ -18,8 +18,9 @@
 -- first; a plain low-to-high walk is not enough when off-slot ids swap.
 -- Each change_id is followed by a same-name rename so the bars hear the name
 -- (see the comment in pack_now; hyprland renames silently). Waybar did not
--- handle changeworkspaceid, and Quickshell (the bar, dash) has no handler; dash's shell.qml confirms
--- emptiness with hyprctl so a stale toplevels list cannot draw over windows.
+-- handle changeworkspaceid. Quickshell 0.3.2 did not either, so the bar lost
+-- window icons after a pack; quickshell-git (upstream 4befab5) follows the id
+-- change. dash's shell.qml still confirms emptiness with hyprctl, from before.
 
 local M = {}
 
