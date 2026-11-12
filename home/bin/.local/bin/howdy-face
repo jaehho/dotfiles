@@ -231,6 +231,14 @@ def run_diag(args, config) -> int:
     return 0
 
 
+def frame_counts(samples: list) -> str:
+    lit = [s for s in samples if not s.dark]
+    return (f"{len(samples)} frames: {len(samples) - len(lit)} dark, "
+            f"{sum(not s.encodings for s in lit)} lit without a face, "
+            f"{sum(len(s.encodings) == 1 for s in lit)} with one face, "
+            f"{sum(len(s.encodings) > 1 for s in lit)} with several.")
+
+
 def run_enrol(args, config) -> int:
     engine = load_engine()
     models = load_models(args.user)
@@ -239,7 +247,7 @@ def run_enrol(args, config) -> int:
     samples = capture(config, engine, seconds=args.seconds)
     singles = [s.encodings[0] for s in samples if len(s.encodings) == 1]
     if not singles:
-        print("No single face seen; nothing staged.")
+        print("No single face seen; nothing staged. " + frame_counts(samples))
         return 1
     picks = pick_cover(
         singles, known, radius=COVER_RADIUS, max_picks=args.max_picks
