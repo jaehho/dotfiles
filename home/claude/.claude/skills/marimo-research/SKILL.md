@@ -27,6 +27,11 @@ keep the loaders in another module as pure readers.
 - Opening or batch-running a notebook never fetches.
   A cell that fetches sits behind `mo.ui.run_button`;
   secrets come from the environment.
+- A step that takes more than about a minute runs outside the notebook:
+  package code, run by a make target, writes its results to files, and
+  the notebook reads them to show and explore. Make reruns the step when
+  the code or data it read change; the notebook names the command that
+  makes missing results.
 - Every role except the question notebooks is a reference: present tense,
   no discussion of results.
 

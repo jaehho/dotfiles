@@ -13,6 +13,7 @@ Fly visual system and locomotion.
 
 - One notebook per question (for example `lc_pathways`), and every notebook is published as one: the site has no sections. A figure is a function in `lab.connectome.plots` that its question notebook calls and saves to `config.FIGURES`.
 - A new notebook also gets a symlink in `docs/content/notebooks/`, made with `ln -s ../../../notebooks/<file>.py` from that folder. Without it the table-of-contents entry that `docs/gen_site.py` writes points at nothing.
+- A slow step (over about a minute) is a module's `results_step`. `lab connectome results <notebook>` runs it and writes its tables to `config.RESULTS`, and the notebook reads them with `results.read_results`. The step is named for its notebook's stem in `STEPS` in `cli.py` and the `Makefile` (a test checks they match). `make results` reruns a step when the code or data it read change.
 - A notebook opens with `# Title`, `## Introduction`, `### Question`. The home page card shows the paragraph under `### Question`, so a notebook without one has an empty card.
 - `pyproject.toml` ignores `E501` in `notebooks/` (markdown cells are one line per paragraph), so keep code lines under 79 by hand or with `ruff format`. `W505` runs only under `src/`.
 - Name another notebook in prose as a link, `` [`stem`](?file=stem.py) ``. `uv run python tools/link_notebooks.py --fix` rewrites bare names and warns about links to notebooks that no longer exist. Links may be cyclic.
@@ -20,7 +21,7 @@ Fly visual system and locomotion.
 
 ## Package (`src/lab/connectome`)
 
-- A function moves into the package when another current notebook can use it. Otherwise it stays in its notebook.
+- A function moves into the package when another current notebook or a results step can use it. Otherwise it stays in its notebook.
 - Docstrings are numpydoc. Name no callers or notebooks (they go stale) and tell no project history (it goes in an issue).
 - Every public function has an example: a doctest on a small input with generic names. pytest runs it (`--doctest-modules`), so the example is the function's test, and `make docs` shows it in the API reference. A function that reads a file takes its path as an argument (default: the `config` path), and its example writes a toy file to a temp folder. A function that calls the network or needs the real `data/` is listed in its module's `__doctest_skip__` (`conftest.py` skips those doctests), and its example shows real output from a run. Its logic is tested in `tests/` with `monkeypatch`, not by extra arguments.
 - A function that returns a figure (matplotlib, plotly, PNG bytes, or an HTML string) ends its example by binding it to `figure`, on an input that looks like data. `docs/api_figures.py` runs the example and embeds the result; it runs only examples that bind `figure`, so a `+SKIP` example that fetches is shown and never executed. Do not assert on the figure.
