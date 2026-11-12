@@ -18,7 +18,9 @@ Rectangle {
     property bool armed: false
     // The hint key that presses it, shown while the sheet hints.
     property string hint: ""
-    property real hintInset: 3
+    // What its hint letter is taken from; the first name in it if empty.
+    property string hintText: ""
+    property real hintInset: -3
     readonly property bool hovered: hover.hovered
     readonly property bool lit: hovered && enabled
     readonly property bool ringed: activeFocus && sheet.keyboard

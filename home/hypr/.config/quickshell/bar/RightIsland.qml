@@ -26,7 +26,9 @@ Item {
     readonly property alias attention: attention
     property bool open: false
     property bool trayOpen: false
-    readonly property bool hovered: pointer.hovered
+    // What keeps a hover-opened sheet open: the pointer on the glyph
+    // that opened it or in the sheet, not elsewhere on the island.
+    readonly property bool keepHover: (trayOpen && (attention.chevron.hovered || sheetPointer.hovered)) || (open && (quickGlyph.hovered || sheetPointer.hovered))
     property string page: "main"
     property bool keys: false
 
@@ -71,9 +73,16 @@ Item {
         return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t);
     }
 
-    // Bar.qml closes what hovering opened once the pointer has left.
-    HoverHandler {
-        id: pointer
+    // Bar.qml closes what hovering opened once the pointer has left
+    // what keeps it. The sheet is everything under the header row.
+    Item {
+        y: rightIsland.restHeight
+        width: parent.width
+        height: Math.max(0, parent.height - rightIsland.restHeight)
+
+        HoverHandler {
+            id: sheetPointer
+        }
     }
 
     component Divider: Item {
@@ -150,6 +159,7 @@ Item {
 
         // fg while its sheet is open, as a control that is in use.
         BarButton {
+            id: quickGlyph
             bar: rightIsland.bar
             text: String.fromCodePoint(0xf1542)
             tint: rightIsland.open ? rightIsland.colors.fg : rightIsland.colors.grey2

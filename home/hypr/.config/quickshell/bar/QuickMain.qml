@@ -89,6 +89,7 @@ Column {
 
         QuickSlider {
             id: volume
+            hintText: "Volume"
 
             readonly property bool muted: main.sink?.audio?.muted ?? false
             readonly property real level: main.sink?.audio?.volume ?? 0
@@ -126,6 +127,7 @@ Column {
         // events, so it is read each second while the sheet is open.
         QuickSlider {
             id: light
+            hintText: "Brightness"
 
             property string device: ""
             readonly property real raw: Number(now.text())

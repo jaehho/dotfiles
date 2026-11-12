@@ -18,6 +18,7 @@ Item {
 
     QuickControl {
         sheet: head.sheet
+        hintText: "Back"
         flat: true
         width: label.implicitWidth + 20
         height: 32
@@ -50,6 +51,7 @@ Item {
     QuickSwitch {
         id: radio
         sheet: head.sheet
+        hintText: "Toggle"
         visible: head.switchable
         anchors.right: parent.right
         anchors.rightMargin: 4

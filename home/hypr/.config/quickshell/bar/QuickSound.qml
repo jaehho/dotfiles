@@ -150,6 +150,7 @@ Column {
         // hypr-level and the keys only move the speaker.
         QuickSlider {
             id: mic
+            hintText: "Mic"
 
             readonly property bool muted: sound.source?.audio?.muted ?? false
             readonly property real level: sound.source?.audio?.volume ?? 0

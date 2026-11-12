@@ -22,7 +22,7 @@ Item {
     property bool open: false
     property string typed: ""
     readonly property bool hinting: open && bar.holding
-    readonly property var codes: Hints.codes(items.length)
+    readonly property var codes: Hints.named(items.map(item => bar.trayName(item)), Hints.ALL)
 
     readonly property int columns: 5
     readonly property real cellWidth: (width - 8) / columns
@@ -65,7 +65,7 @@ Item {
         } else if (event.key === Qt.Key_Backspace && grid.typed !== "") {
             grid.typed = grid.typed.slice(0, -1);
         } else {
-            const ch = Hints.letter(event.text);
+            const ch = Hints.letter(event.text, Hints.ALL);
             if (ch === "" || !grid.hinting)
                 return;
             const r = Hints.step(grid.typed, ch, grid.codes);

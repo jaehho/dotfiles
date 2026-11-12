@@ -32,8 +32,8 @@ PanelWindow {
     readonly property bool menuOpen: menu.open
     // How long the pointer rests on an island or its glyph before it
     // opens, and how long it may be gone before the sheet closes again.
-    readonly property int hoverDelay: 90
-    readonly property int leaveDelay: 250
+    readonly property int hoverDelay: 40
+    readonly property int leaveDelay: 100
     // Held while a sheet needs the keyboard and the grab.
     readonly property bool holding: (open || quickOpen || menuOpen || trayOpen) && !byHover
     // Where a tip hangs: under the island, however far it has grown.
@@ -95,7 +95,7 @@ PanelWindow {
     }
 
     function hoverCenter() {
-        if (open || quickOpen || menuOpen || trayOpen)
+        if (!hoverFree || open)
             return;
         toggleRequested();
         byHover = true;
@@ -108,17 +108,21 @@ PanelWindow {
             trayOpen = !trayOpen;
     }
 
-    // Hover opens only when nothing else is, and leaving closes only
-    // what hover opened.
+    // Hover opens over nothing, or over what hover itself opened (the
+    // pointer moving from one island or glyph to the next); a sheet
+    // that was clicked or keyed open is never taken from its owner.
+    // Leaving closes only what hover opened.
+    readonly property bool hoverFree: !menuOpen && ((!open && !quickOpen && !trayOpen) || byHover)
+
     function hoverTray() {
-        if (open || quickOpen || menuOpen || trayOpen)
+        if (!hoverFree || trayOpen)
             return;
         trayOpen = true;
         byHover = true;
     }
 
     function hoverQuick() {
-        if (open || quickOpen || menuOpen || trayOpen)
+        if (!hoverFree || quickOpen)
             return;
         quickRequested("");
         byHover = true;
@@ -254,7 +258,7 @@ PanelWindow {
     // Leaving closes what hovering opened, after a moment's grace.
     Timer {
         interval: bar.leaveDelay
-        running: bar.byHover && !center.hovered && !rightSide.hovered
+        running: bar.byHover && !center.hovered && !rightSide.keepHover
         onTriggered: bar.hoverLeft()
     }
 

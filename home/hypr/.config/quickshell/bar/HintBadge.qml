@@ -1,5 +1,6 @@
-// The small letter in a control's corner that presses it when typed.
-// Subtle at rest (grey on bg_dim); the part already typed turns blue,
+// The small key in a control's corner that presses it when typed: a
+// keycap (bg2, a blue edge) with the letter in bold fg, upper case for
+// legibility though it is typed lower. The part already typed turns blue
 // and codes that no longer match fade out.
 import QtQuick
 
@@ -19,18 +20,18 @@ Rectangle {
     anchors.right: parent.right
     anchors.rightMargin: inset
     z: 10
-    width: Math.max(13, label.width + 6)
-    height: 13
-    radius: 4
-    color: colors.withAlpha(colors.bg_dim, 0.94)
+    width: Math.max(17, label.width + 8)
+    height: 17
+    radius: 5
+    color: colors.bg2
     border.width: 1
-    border.color: colors.bg3
+    border.color: colors.withAlpha(colors.blue, 0.6)
     opacity: live ? 1 : 0
     visible: opacity > 0
 
     Behavior on opacity {
         NumberAnimation {
-            duration: 120
+            duration: 100
         }
     }
 
@@ -40,18 +41,18 @@ Rectangle {
 
         Line {
             mono: true
-            size: 9
+            size: 12
             weight: Font.Bold
-            text: badge.code.slice(0, badge.typed.length)
+            text: badge.code.slice(0, badge.typed.length).toUpperCase()
             color: badge.colors.blue
         }
 
         Line {
             mono: true
-            size: 9
+            size: 12
             weight: Font.Bold
-            text: badge.code.slice(badge.typed.length)
-            color: badge.colors.grey2
+            text: badge.code.slice(badge.typed.length).toUpperCase()
+            color: badge.colors.fg
         }
     }
 }

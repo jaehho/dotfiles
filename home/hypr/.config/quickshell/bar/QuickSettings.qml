@@ -164,6 +164,18 @@ FocusScope {
         return true;
     }
 
+    // The first words a control shows, for its hint letter.
+    function textOf(item) {
+        for (const child of item.children) {
+            if (child.mono === false && child.text)
+                return child.text;
+            const inner = sheet.textOf(child);
+            if (inner !== "")
+                return inner;
+        }
+        return "";
+    }
+
     // Codes in reading order, kept while the same controls are there.
     function assignHints() {
         const list = sheet.controls().filter(item => sheet.shows(item)).map(item => ({
@@ -175,7 +187,7 @@ FocusScope {
         for (const old of sheet.hinted)
             if (old.item)
                 old.item.hint = "";
-        const codes = Hints.codes(list.length);
+        const codes = Hints.named(list.map(item => item.hintText || sheet.textOf(item)), Hints.KEYS);
         sheet.hinted = list.map((item, i) => ({
                     item: item,
                     code: codes[i]
@@ -401,7 +413,7 @@ FocusScope {
             here?.press();
             break;
         default:
-            const ch = Hints.letter(event.text);
+            const ch = Hints.letter(event.text, Hints.KEYS);
             if (ch === "" || !sheet.hinting)
                 return;
             sheet.typeHint(ch);
