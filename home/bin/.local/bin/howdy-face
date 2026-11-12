@@ -1,0 +1,297 @@
+#!/usr/bin/python3
+# Measure and extend the Howdy face model, using compare.py's own
+# frame pipeline (CLAHE, dark-frame skip, 0.8 rescale, upsample 1).
+#
+#   howdy-face diag [--note TEXT] [--seconds N]
+#       open the camera once like a real unlock and report the best
+#       certainty per second; appends a line to the diag log
+#   howdy-face enrol --label TEXT [--seconds N] [--max-picks N]
+#       capture one open, add the encodings the model does not cover,
+#       check them on a fresh open, stage the result (never /etc)
+#   howdy-face install
+#       print the sudo command that installs the staged model
+#
+# Uses /usr/bin/python3 because dlib is built against it, not a uv env.
+# Upstream `howdy add` encodes one unscaled frame taken before the
+# camera's exposure settles, so its model drifts from compare.py.
+
+import argparse
+import configparser
+import getpass
+import json
+import sys
+import time
+from pathlib import Path
+from typing import NamedTuple
+
+sys.path.insert(0, "/usr/lib/howdy")
+import dlib  # noqa: E402  (must precede cv2)
+import cv2  # noqa: E402
+import numpy as np  # noqa: E402
+import paths_factory  # noqa: E402
+from recorders.video_capture import VideoCapture  # noqa: E402
+
+STATE_DIR = Path.home() / ".local/state/howdy"
+DIAG_LOG = STATE_DIR / "diag.jsonl"
+COVER_RADIUS = 0.25  # distance; certainty 2.5 on Howdy's x10 scale
+UNLOCK_TIMEOUT = 4.0  # seconds, Howdy's [video] timeout default
+
+
+class Sample(NamedTuple):
+    """One camera frame as compare.py would see it."""
+
+    seconds: float  # since the camera was opened
+    dark: bool  # skipped by dark_threshold
+    encodings: tuple  # one 128-vector per detected face
+
+
+class Engine(NamedTuple):
+    detector: object
+    pose: object
+    encoder: object
+    clahe: object
+
+
+def load_engine() -> Engine:
+    return Engine(
+        dlib.get_frontal_face_detector(),
+        dlib.shape_predictor(
+            paths_factory.shape_predictor_5_face_landmarks_path()
+        ),
+        dlib.face_recognition_model_v1(
+            paths_factory.dlib_face_recognition_resnet_model_v1_path()
+        ),
+        cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)),
+    )
+
+
+def load_config() -> configparser.ConfigParser:
+    config = configparser.ConfigParser()
+    config.read(paths_factory.config_file_path())
+    return config
+
+
+def darkness_percent(gray: np.ndarray) -> float:
+    """Share of pixels in Howdy's darkest histogram bin (of 8)."""
+    histogram = cv2.calcHist([gray], [0], None, [8], [0, 256])
+    return float(histogram[0] / np.sum(histogram) * 100)
+
+
+def distances_to(known: np.ndarray, encoding: np.ndarray) -> np.ndarray:
+    return np.linalg.norm(known - encoding, axis=1)
+
+
+def best_distance(samples: list, known: np.ndarray) -> float:
+    """Smallest distance of any face in any sample; inf if no face."""
+    found = [
+        distances_to(known, e).min() for s in samples for e in s.encodings
+    ]
+    return min(found, default=float("inf"))
+
+
+def first_pass_seconds(
+    samples: list, known: np.ndarray, *, certainty: float, timeout: float
+) -> float | None:
+    """When Howdy would approve, or None if it times out."""
+    for sample in samples:
+        if sample.seconds > timeout:
+            return None
+        for encoding in sample.encodings:
+            if distances_to(known, encoding).min() < certainty / 10:
+                return sample.seconds
+    return None
+
+
+def pick_cover(
+    candidates: list, known: np.ndarray, *, radius: float, max_picks: int
+) -> list:
+    """Greedy picks so every candidate is within radius of a kept one.
+
+    Candidates already within radius of `known` need no pick.
+    """
+    uncovered = [
+        c for c in candidates if distances_to(known, c).min() >= radius
+    ]
+    picks = []
+    while uncovered and len(picks) < max_picks:
+        best = max(
+            uncovered,
+            key=lambda c: sum(
+                np.linalg.norm(c - u) < radius for u in uncovered
+            ),
+        )
+        picks.append(best)
+        uncovered = [
+            u for u in uncovered if np.linalg.norm(best - u) >= radius
+        ]
+    return picks
+
+
+def encode_face(engine: Engine, frame, gray, rect) -> np.ndarray:
+    landmarks = engine.pose(frame, rect)
+    return np.array(
+        engine.encoder.compute_face_descriptor(frame, landmarks, 1)
+    )
+
+
+def read_sample(
+    camera: VideoCapture, engine: Engine, config, opened_at: float
+) -> Sample:
+    frame, gray = camera.read_frame()
+    gray = engine.clahe.apply(gray)
+    seconds = time.time() - opened_at
+    dark_threshold = config.getfloat("video", "dark_threshold", fallback=60)
+    if darkness_percent(gray) > dark_threshold:
+        return Sample(seconds, True, ())
+    max_height = config.getfloat("video", "max_height", fallback=320.0)
+    scale = max_height / (camera.internal.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1)
+    if scale != 1:
+        frame = cv2.resize(frame, None, fx=scale, fy=scale,
+                           interpolation=cv2.INTER_AREA)
+        gray = cv2.resize(gray, None, fx=scale, fy=scale,
+                          interpolation=cv2.INTER_AREA)
+    faces = engine.detector(gray, 1)
+    return Sample(
+        seconds, False,
+        tuple(encode_face(engine, frame, gray, f) for f in faces),
+    )
+
+
+def capture(config, engine: Engine, *, seconds: float) -> list:
+    """Open the camera once and read frames for `seconds`."""
+    opened_at = time.time()
+    camera = VideoCapture(config)
+    samples = []
+    try:
+        while time.time() - opened_at < seconds:
+            samples.append(read_sample(camera, engine, config, opened_at))
+    finally:
+        camera.release()
+    return samples
+
+
+def model_path(user: str) -> Path:
+    return Path(paths_factory.user_model_path(user))
+
+
+def staged_path(user: str) -> Path:
+    return STATE_DIR / f"{user}.dat"
+
+
+def load_models(user: str) -> list:
+    """Staged model if there is one, else the installed one."""
+    path = staged_path(user)
+    if not path.exists():
+        path = model_path(user)
+    return json.loads(path.read_text())
+
+
+def known_encodings(models: list) -> np.ndarray:
+    return np.array([e for m in models for e in m["data"]])
+
+
+def per_second_best(samples: list, known: np.ndarray) -> list:
+    """Best certainty (x10) in each whole second, None without a face."""
+    buckets = []
+    for start in range(int(samples[-1].seconds) + 1):
+        window = [s for s in samples if start <= s.seconds < start + 1]
+        best = best_distance(window, known)
+        buckets.append(None if best == float("inf") else best * 10)
+    return buckets
+
+
+def describe(samples: list, known: np.ndarray, config) -> dict:
+    certainty = config.getfloat("video", "certainty", fallback=3.5)
+    best = best_distance(samples, known)
+    return {
+        "frames": len(samples),
+        "dark": sum(s.dark for s in samples),
+        "with_face": sum(bool(s.encodings) for s in samples),
+        "best_certainty": None if best == float("inf") else best * 10,
+        "first_pass_s": first_pass_seconds(
+            samples, known, certainty=certainty, timeout=UNLOCK_TIMEOUT
+        ),
+        "per_second_best": per_second_best(samples, known),
+    }
+
+
+def run_diag(args, config) -> int:
+    models = load_models(args.user)
+    known = known_encodings(models)
+    samples = capture(config, load_engine(), seconds=args.seconds)
+    report = describe(samples, known, config)
+    report |= {"time": int(time.time()), "note": args.note,
+               "encodings": len(known)}
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    with DIAG_LOG.open("a") as log:
+        log.write(json.dumps(report) + "\n")
+    print(json.dumps(report, indent=1))
+    return 0
+
+
+def run_enrol(args, config) -> int:
+    engine = load_engine()
+    models = load_models(args.user)
+    known = known_encodings(models)
+    print(f"Hold your usual pose for {args.seconds:.0f} s. Go.")
+    samples = capture(config, engine, seconds=args.seconds)
+    singles = [s.encodings[0] for s in samples if len(s.encodings) == 1]
+    if not singles:
+        print("No single face seen; nothing staged.")
+        return 1
+    picks = pick_cover(
+        singles, known, radius=COVER_RADIUS, max_picks=args.max_picks
+    )
+    if not picks:
+        print(f"All {len(singles)} faces are already within "
+              f"{COVER_RADIUS * 10:.1f} of the model; nothing to add.")
+        return 0
+    staged = models + [{
+        "time": int(time.time()),
+        "label": args.label[:24],
+        "id": models[-1]["id"] + 1,
+        "data": [p.tolist() for p in picks],
+    }]
+    print("Validating on a fresh open. Keep the pose.")
+    check = capture(config, engine, seconds=UNLOCK_TIMEOUT + 1)
+    report = describe(check, known_encodings(staged), config)
+    print(f"added {len(picks)}; validation: {report}")
+    if report["first_pass_s"] is None:
+        print("Validation did not pass; nothing staged.")
+        return 1
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    staged_path(args.user).write_text(json.dumps(staged))
+    print("Staged. Run `howdy-face install` for the sudo command.")
+    return 0
+
+
+def run_install(args, config) -> int:
+    if not staged_path(args.user).exists():
+        print("Nothing staged.")
+        return 1
+    print(f"sudo install -m 644 -o root -g root --backup=numbered "
+          f"{staged_path(args.user)} {model_path(args.user)}")
+    return 0
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--user", default=getpass.getuser())
+    sub = parser.add_subparsers(dest="command", required=True)
+    diag = sub.add_parser("diag")
+    diag.add_argument("--note", default="")
+    diag.add_argument("--seconds", type=float, default=6.0)
+    diag.set_defaults(run=run_diag)
+    enrol = sub.add_parser("enrol")
+    enrol.add_argument("--label", required=True)
+    enrol.add_argument("--seconds", type=float, default=6.0)
+    enrol.add_argument("--max-picks", type=int, default=3)
+    enrol.set_defaults(run=run_enrol)
+    install = sub.add_parser("install")
+    install.set_defaults(run=run_install)
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    sys.exit(args.run(args, load_config()))
