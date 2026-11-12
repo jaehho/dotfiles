@@ -1,6 +1,6 @@
 // The bar's center island. At rest it shows what waybar's center showed:
 // the player glyph with the title and artist, then the date and time.
-// Clicked (or toggled over IPC) it opens into a sheet with the media
+// Rested on, clicked (or toggled over IPC) it opens into a sheet with the media
 // controls beside the month. It grows out of the island itself, width
 // and height together, and its header row never moves, so what the owner
 // clicked stays under the pointer.
@@ -15,6 +15,7 @@ Item {
     id: island
 
     required property var colors
+    required property var bar
     property var player: null
     property bool open: false
     property date now: clock.date
@@ -24,7 +25,11 @@ Item {
     property real room: Infinity
     readonly property real mediaRoom: Math.min(360, 2 * room - 12 - 4 - (timeText.width + 14) - 14)
 
+    readonly property bool hovered: pointer.hovered
+
     signal toggleRequested
+    // The pointer has rested on the island.
+    signal hoverRequested
     signal closeRequested
 
     readonly property bool hasTrack: player !== null && player.trackTitle !== ""
@@ -60,6 +65,27 @@ Item {
     onOpenChanged: if (open) {
         month.offset = 0;
         island.forceActiveFocus();
+    }
+
+    HoverHandler {
+        id: pointer
+    }
+
+    // Resting on it opens it; passing over does not.
+    Timer {
+        interval: island.bar.hoverDelay
+        running: pointer.hovered && !island.open
+        onTriggered: island.hoverRequested()
+    }
+
+    // Pinned by a click: the keyboard is the island's now.
+    Connections {
+        target: island.bar
+
+        function onByHoverChanged() {
+            if (island.open && !island.bar.byHover)
+                island.forceActiveFocus();
+        }
     }
 
     Keys.onPressed: event => {

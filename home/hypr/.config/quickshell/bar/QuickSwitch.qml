@@ -8,6 +8,7 @@ QuickControl {
     width: 40
     height: 22
     radius: height / 2
+    hintInset: -6
 
     Rectangle {
         x: toggle.on ? toggle.width - width - 4 : 4

@@ -30,6 +30,10 @@ PanelWindow {
     // The control whose tip shows, after half a second's hover.
     property Item tipFor: null
     readonly property bool menuOpen: menu.open
+    // How long the pointer rests on an island or its glyph before it
+    // opens, and how long it may be gone before the sheet closes again.
+    readonly property int hoverDelay: 90
+    readonly property int leaveDelay: 250
     // Held while a sheet needs the keyboard and the grab.
     readonly property bool holding: (open || quickOpen || menuOpen || trayOpen) && !byHover
     // Where a tip hangs: under the island, however far it has grown.
@@ -80,6 +84,21 @@ PanelWindow {
     function trayName(item) {
         const name = item.id.replace(/[-_]?(status_icon|systray_icon|client|tray)[-_]?\d*$/i, "").split(/[-_ ]/)[0];
         return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+
+    // A click on the center island while hover has it open keeps it.
+    function toggleCenter() {
+        if (open && byHover)
+            byHover = false;
+        else
+            toggleRequested();
+    }
+
+    function hoverCenter() {
+        if (open || quickOpen || menuOpen || trayOpen)
+            return;
+        toggleRequested();
+        byHover = true;
     }
 
     function toggleTray() {
@@ -223,11 +242,20 @@ PanelWindow {
         anchors.horizontalCenter: parent.horizontalCenter
         y: 10
         colors: bar.colors
+        bar: bar
         player: bar.player
         open: bar.open
         room: bar.width / 2 - rightSide.restWidth - 16
-        onToggleRequested: bar.toggleRequested()
+        onToggleRequested: bar.toggleCenter()
+        onHoverRequested: bar.hoverCenter()
         onCloseRequested: bar.closeRequested()
+    }
+
+    // Leaving closes what hovering opened, after a moment's grace.
+    Timer {
+        interval: bar.leaveDelay
+        running: bar.byHover && !center.hovered && !rightSide.hovered
+        onTriggered: bar.hoverLeft()
     }
 
     RightIsland {

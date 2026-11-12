@@ -27,6 +27,7 @@ QuickControl {
     }
 
     slider: true
+    hintInset: -4
     flat: true
     height: 32
 

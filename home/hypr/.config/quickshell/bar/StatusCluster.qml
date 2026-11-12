@@ -85,7 +85,7 @@ Row {
 
         // Resting on it opens the grid; passing over does not.
         Timer {
-            interval: 300
+            interval: attention.bar.hoverDelay
             running: chevron.hovered && !attention.bar.trayOpen
             onTriggered: attention.bar.hoverTray()
         }

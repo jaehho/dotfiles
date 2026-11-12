@@ -20,9 +20,11 @@ Rectangle {
     readonly property int tipFormat: Text.PlainText
     readonly property bool calling: item.status === Status.NeedsAttention
     readonly property bool hovered: area.containsMouse
-    // The keyboard's pick in the grid.
-    property bool selected: false
-    readonly property bool lit: hovered || selected || calling
+    // The hint key that clicks it (shift: its menu), while hinting.
+    property string hint: ""
+    property string typed: ""
+    property bool hinting: false
+    readonly property bool lit: hovered || calling
 
     // After a click, for the grid to close.
     signal used
@@ -44,7 +46,7 @@ Rectangle {
     width: 24
     height: 24
     radius: 8
-    color: hovered || selected ? bar.colors.withAlpha(bar.colors.blue, 0.14) : calling ? bar.colors.withAlpha(bar.colors.orange, 0.18) : "transparent"
+    color: hovered ? bar.colors.withAlpha(bar.colors.blue, 0.14) : calling ? bar.colors.withAlpha(bar.colors.orange, 0.18) : "transparent"
 
     Behavior on color {
         ColorAnimation {
@@ -74,6 +76,14 @@ Rectangle {
                 duration: 200
             }
         }
+    }
+
+    HintBadge {
+        colors: slot.bar.colors
+        code: slot.hint
+        typed: slot.typed
+        shown: slot.hinting
+        inset: -5
     }
 
     MouseArea {

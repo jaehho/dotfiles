@@ -6,6 +6,7 @@
 // It also drops the tray's grid (TrayGrid.qml) the same way. Resting
 // the pointer on the tray chevron or the quick settings glyph opens
 // either; it closes when the pointer leaves, unless a click kept it.
+// (Bar.qml times the dwell and the leave, for all three islands.)
 //
 // It opens into the quick settings sheet (QuickSettings.qml) the way the
 // center island opens into the player: it grows out of itself, leftward
@@ -25,6 +26,7 @@ Item {
     readonly property alias attention: attention
     property bool open: false
     property bool trayOpen: false
+    readonly property bool hovered: pointer.hovered
     property string page: "main"
     property bool keys: false
 
@@ -69,15 +71,9 @@ Item {
         return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t);
     }
 
-    // Leaving closes what hovering opened, after a moment's grace.
+    // Bar.qml closes what hovering opened once the pointer has left.
     HoverHandler {
         id: pointer
-    }
-
-    Timer {
-        interval: 350
-        running: rightIsland.bar.byHover && !pointer.hovered
-        onTriggered: rightIsland.bar.hoverLeft()
     }
 
     component Divider: Item {
@@ -168,7 +164,7 @@ Item {
 
             // Resting on it opens them; passing over does not.
             Timer {
-                interval: 300
+                interval: rightIsland.bar.hoverDelay
                 running: parent.hovered && !rightIsland.open
                 onTriggered: rightIsland.bar.hoverQuick()
             }

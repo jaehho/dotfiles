@@ -16,6 +16,9 @@ Rectangle {
     property bool flat: false
     property bool on: false
     property bool armed: false
+    // The hint key that presses it, shown while the sheet hints.
+    property string hint: ""
+    property real hintInset: 3
     readonly property bool hovered: hover.hovered
     readonly property bool lit: hovered && enabled
     readonly property bool ringed: activeFocus && sheet.keyboard
@@ -47,6 +50,14 @@ Rectangle {
         border.width: 2
         border.color: control.colors.blue
         visible: control.ringed
+    }
+
+    HintBadge {
+        colors: control.colors
+        code: control.hint
+        typed: control.sheet.typed
+        shown: control.sheet.hinting
+        inset: control.hintInset
     }
 
     HoverHandler {

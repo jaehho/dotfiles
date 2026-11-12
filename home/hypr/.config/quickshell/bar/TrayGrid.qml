@@ -6,10 +6,12 @@
 // number of apps. A hovered app's tooltip (unread counts and the like)
 // is the bar's tip, under the island.
 //
-// From the keyboard (Super+'): h j k l or the arrows pick an app, Enter
-// brings it up, Esc closes.
+// From the keyboard (Super+'), each app carries a hint letter (Hints.js):
+// type it to bring the app up, Shift and it to open its menu. Esc closes.
+// A grid opened by hover has no keyboard, so it shows no letters.
 import QtQuick
 import Quickshell.Services.SystemTray
+import "Hints.js" as Hints
 
 Item {
     id: grid
@@ -18,8 +20,9 @@ Item {
     readonly property var colors: bar.colors
     required property var items
     property bool open: false
-    // The keyboard's pick, or -1.
-    property int current: -1
+    property string typed: ""
+    readonly property bool hinting: open && bar.holding
+    readonly property var codes: Hints.codes(items.length)
 
     readonly property int columns: 5
     readonly property real cellWidth: (width - 8) / columns
@@ -28,44 +31,48 @@ Item {
     implicitHeight: tiles.implicitHeight + 8
 
     onOpenChanged: {
-        current = -1;
+        typed = "";
         if (open)
             forceActiveFocus();
     }
 
-    function move(step) {
-        const last = items.length - 1;
-        current = current < 0 ? 0 : Math.max(0, Math.min(last, current + step));
+    // Pinned by a click: the keyboard is the grid's now.
+    Connections {
+        target: grid.bar
+
+        function onByHoverChanged() {
+            if (grid.open && !grid.bar.byHover)
+                grid.forceActiveFocus();
+        }
+    }
+
+    // A letter that starts no code is dropped, and so is a half-typed
+    // one after a pause.
+    Timer {
+        id: pause
+        interval: 1500
+        onTriggered: grid.typed = ""
     }
 
     Keys.onPressed: event => {
-        switch (event.key) {
-        case Qt.Key_Escape:
-            grid.bar.trayOpen = false;
-            break;
-        case Qt.Key_H:
-        case Qt.Key_Left:
-            grid.move(-1);
-            break;
-        case Qt.Key_L:
-        case Qt.Key_Right:
-            grid.move(1);
-            break;
-        case Qt.Key_J:
-        case Qt.Key_Down:
-            grid.move(grid.columns);
-            break;
-        case Qt.Key_K:
-        case Qt.Key_Up:
-            grid.move(-grid.columns);
-            break;
-        case Qt.Key_Return:
-        case Qt.Key_Enter:
-        case Qt.Key_Space:
-            cells.itemAt(grid.current)?.slot.click(Qt.LeftButton);
-            break;
-        default:
+        if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))
             return;
+        if (event.key === Qt.Key_Escape) {
+            if (grid.typed !== "")
+                grid.typed = "";
+            else
+                grid.bar.trayOpen = false;
+        } else if (event.key === Qt.Key_Backspace && grid.typed !== "") {
+            grid.typed = grid.typed.slice(0, -1);
+        } else {
+            const ch = Hints.letter(event.text);
+            if (ch === "" || !grid.hinting)
+                return;
+            const r = Hints.step(grid.typed, ch, grid.codes);
+            grid.typed = r.typed;
+            pause.restart();
+            if (r.hit >= 0)
+                cells.itemAt(r.hit)?.slot.click(event.modifiers & Qt.ShiftModifier ? Qt.RightButton : Qt.LeftButton);
         }
         event.accepted = true;
     }
@@ -96,7 +103,9 @@ Item {
                     y: 3
                     bar: grid.bar
                     item: cell.modelData
-                    selected: grid.current === cell.index
+                    hint: grid.codes[cell.index] ?? ""
+                    typed: grid.typed
+                    hinting: grid.hinting
                     // A click leaves the sheet; a right click's menu
                     // takes its place.
                     onUsed: grid.bar.trayOpen = false
@@ -111,7 +120,7 @@ Item {
                     elide: Text.ElideRight
                     size: 11
                     text: grid.bar.trayName(cell.modelData)
-                    color: slot.calling ? grid.colors.orange : slot.hovered || slot.selected ? grid.colors.fg : grid.colors.grey2
+                    color: slot.calling ? grid.colors.orange : slot.hovered ? grid.colors.fg : grid.colors.grey2
                 }
             }
         }

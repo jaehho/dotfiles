@@ -5,6 +5,9 @@
 // h/l step a focused slider, Tab and Shift+Tab go in reading order, Enter
 // or Space presses, and Esc or q backs out of a page, then closes. Focus
 // rings show while the keyboard drives, and a click puts them away.
+// Every control also carries a hint letter in its corner while the
+// sheet holds the keyboard (Hints.js): type it to press the control, or
+// to focus a slider, which h and l then step.
 //
 // The toggles, what the sheet opens and the session row come from
 // hypr-settings-menu's table (`--json`), read at start and on each open;
@@ -12,6 +15,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "Hints.js" as Hints
 
 FocusScope {
     id: sheet
@@ -34,6 +38,10 @@ FocusScope {
     // enough to include it: id -> { state, after }.
     property var pending: ({})
     property bool again: false
+    // Hint keys: what has been typed, and [{ item, code }] for the page.
+    property string typed: ""
+    property var hinted: []
+    readonly property bool hinting: open && bar.holding
 
     readonly property Item current: page === "wifi" ? wifiPage : page === "bluetooth" ? bluetoothPage : page === "sound" ? soundPage : mainPage
 
@@ -144,6 +152,57 @@ FocusScope {
         return found;
     }
 
+    // Whether a control shows, not scrolled out of a clipped list.
+    function shows(item) {
+        for (let up = item.parent; up && up !== sheet; up = up.parent) {
+            if (up.clip !== true)
+                continue;
+            const r = item.mapToItem(up, 0, 0, item.width, item.height);
+            if (r.y + r.height <= 0 || r.y >= up.height || r.x + r.width <= 0 || r.x >= up.width)
+                return false;
+        }
+        return true;
+    }
+
+    // Codes in reading order, kept while the same controls are there.
+    function assignHints() {
+        const list = sheet.controls().filter(item => sheet.shows(item)).map(item => ({
+                    item: item,
+                    at: sheet.box(item)
+                })).sort((p, q) => Math.abs(p.at.y - q.at.y) > 4 ? p.at.y - q.at.y : p.at.x - q.at.x).map(p => p.item);
+        if (list.length === sheet.hinted.length && list.every((item, i) => item === sheet.hinted[i].item))
+            return;
+        for (const old of sheet.hinted)
+            if (old.item)
+                old.item.hint = "";
+        const codes = Hints.codes(list.length);
+        sheet.hinted = list.map((item, i) => ({
+                    item: item,
+                    code: codes[i]
+                }));
+        sheet.hinted.forEach(h => h.item.hint = h.code);
+    }
+
+    function clearHints() {
+        sheet.typed = "";
+        typing.stop();
+    }
+
+    // One more letter: press the control it completes.
+    function typeHint(ch) {
+        const r = Hints.step(sheet.typed, ch, sheet.hinted.map(h => h.code));
+        sheet.typed = r.typed;
+        typing.restart();
+        if (r.hit < 0)
+            return;
+        const item = sheet.hinted[r.hit].item;
+        sheet.keyboard = true;
+        if (item.slider)
+            sheet.reveal(item);
+        else
+            item.press();
+    }
+
     function focused() {
         for (let item = sheet.Window.activeFocusItem; item && item !== sheet; item = item.parent)
             if (item.navigable === true)
@@ -249,13 +308,45 @@ FocusScope {
         });
     }
 
-    onOpenChanged: if (open) {
-        sheet.keyboard = sheet.keys;
-        sheet.read();
-        sheet.settle();
+    onOpenChanged: {
+        sheet.clearHints();
+        if (open) {
+            sheet.keyboard = sheet.keys;
+            sheet.read();
+            sheet.settle();
+        }
     }
-    onPageChanged: if (open)
-        sheet.settle()
+    onPageChanged: {
+        sheet.clearHints();
+        if (open)
+            sheet.settle();
+    }
+
+    // Pinned by a click: the keyboard is the sheet's now.
+    Connections {
+        target: sheet.bar
+
+        function onByHoverChanged() {
+            if (sheet.open && !sheet.bar.byHover)
+                sheet.settle();
+        }
+    }
+
+    // Controls come and go (a scan's networks), and pages settle late.
+    Timer {
+        interval: 250
+        repeat: true
+        triggeredOnStart: true
+        running: sheet.hinting
+        onTriggered: sheet.assignHints()
+    }
+
+    // A half-typed code is dropped after a pause.
+    Timer {
+        id: typing
+        interval: 1500
+        onTriggered: sheet.typed = ""
+    }
 
     Keys.onPressed: event => {
         if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))
@@ -263,8 +354,18 @@ FocusScope {
         const here = sheet.focused();
         switch (event.key) {
         case Qt.Key_Escape:
+            if (sheet.typed !== "")
+                sheet.clearHints();
+            else
+                sheet.back();
+            break;
         case Qt.Key_Q:
             sheet.back();
+            break;
+        case Qt.Key_Backspace:
+            if (sheet.typed === "")
+                return;
+            sheet.typed = sheet.typed.slice(0, -1);
             break;
         case Qt.Key_J:
         case Qt.Key_Down:
@@ -300,7 +401,10 @@ FocusScope {
             here?.press();
             break;
         default:
-            return;
+            const ch = Hints.letter(event.text);
+            if (ch === "" || !sheet.hinting)
+                return;
+            sheet.typeHint(ch);
         }
         sheet.keyboard = true;
         event.accepted = true;
