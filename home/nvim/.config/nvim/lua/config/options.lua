@@ -8,6 +8,11 @@ vim.g.have_nerd_font = true
 -- LazyVim's lang.python extra runs this server (default: pyright).
 vim.g.lazyvim_python_lsp = 'ty'
 
+-- LazyVim's <leader>e and <leader><leader> use LazyVim.root(), which
+-- finds the git root from the buffer's path and only falls back to cwd.
+-- Root on the cwd alone so `:cd` moves them.
+vim.g.root_spec = { 'cwd' }
+
 -- Provider configuration
 vim.g.node_host_prog = vim.fn.expand '~/.npm-global/bin/neovim-node-host'
 vim.g.loaded_perl_provider = 0
