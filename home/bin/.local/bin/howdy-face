@@ -86,7 +86,8 @@ def distances_to(known: np.ndarray, encoding: np.ndarray) -> np.ndarray:
 def best_distance(samples: list, known: np.ndarray) -> float:
     """Smallest distance of any face in any sample; inf if no face."""
     found = [
-        distances_to(known, e).min() for s in samples for e in s.encodings
+        float(distances_to(known, e).min())
+        for s in samples for e in s.encodings
     ]
     return min(found, default=float("inf"))
 
