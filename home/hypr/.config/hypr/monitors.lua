@@ -256,11 +256,21 @@ local function apply()
     for idx, m in ipairs(ordered) do
         local live = hl.get_monitor(m.name)
         local active = live and live.active_workspace
-        local id = active and (type(active) == "table" and active.id or active)
+        -- active_workspace is a userdata (not a table) on 0.57, so read .id
+        -- off anything that is not already a number.
+        local id = active and (type(active) == "number" and active or active.id)
         if id and assigned[id] ~= m.name and defaults[idx] then
             local target = hl.get_monitor(m.name)
             if target then
-                target:set_workspace({ workspace = tostring(defaults[idx]) })
+                -- set_workspace({ workspace = "N" }) does nothing when N
+                -- exists already (0.57.1, checked live); the workspace object
+                -- works. The table form is only good for creating it.
+                local home = hl.get_workspace(tostring(defaults[idx]))
+                if home then
+                    target:set_workspace(home)
+                else
+                    target:set_workspace({ workspace = tostring(defaults[idx]) })
+                end
                 swept = true
             end
         end
