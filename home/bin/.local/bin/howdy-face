@@ -11,7 +11,7 @@
 #       capture one open, add the encodings the model does not cover,
 #       check them on a fresh open, stage the result (never /etc)
 #   howdy-face install
-#       print the sudo command that installs the staged model
+#       sudo-install the staged model, keeping a numbered backup
 #
 # Uses /usr/bin/python3 because dlib is built against it, not a uv env.
 # Upstream `howdy add` encodes one unscaled frame taken before the
@@ -21,6 +21,7 @@ import argparse
 import configparser
 import getpass
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -277,12 +278,22 @@ def run_enrol(args, config) -> int:
 
 
 def run_install(args, config) -> int:
+    """Install the staged model with sudo, keeping a numbered backup."""
     if not staged_path(args.user).exists():
         print("Nothing staged.")
         return 1
-    print(f"sudo install -m 644 -o root -g root --backup=numbered "
-          f"{staged_path(args.user)} {model_path(args.user)}")
-    return 0
+    command = [
+        "sudo", "install", "-m", "644", "-o", "root", "-g", "root",
+        "--backup=numbered",
+        str(staged_path(args.user)), str(model_path(args.user)),
+    ]
+    print(" ".join(command))
+    result = subprocess.run(command)
+    if result.returncode == 0:
+        staged_path(args.user).unlink()
+        print("Installed. The staged copy is removed.")
+    return result.returncode
+
 
 CONDITIONS = [
     "desk, normal light",
