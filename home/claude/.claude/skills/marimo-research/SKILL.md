@@ -85,11 +85,13 @@ abstraction) is the writing-functions skill.
   trailing comments in `with app.setup:` and `@app.function` bodies are lost.
   Put a comment on its own line inside a cell or function.
 - Read each file in one cell and pass the variable on.
-- Show each fact as itself: a DataFrame as the last expression (not
-  `.head()`; marimo pages it), a figure, or `mo.md` with numbers
+- Show each fact as itself: a table, a figure, or `mo.md` with numbers
   interpolated.
 - Show a table as `mo.ui.table(df, label="...")` with
-  `selection=None`, so it carries a title wherever it is seen.
+  `selection=None`, never as a bare DataFrame at the end of a cell, so it
+  carries a title wherever it is seen.
+  Show it whole, not `.head()` (marimo pages it), except the first rows
+  of a lazy scan of a large file (Data).
   The label is Markdown and names what the rows are, as a figure title
   does.
   Where the variable name already says that, use it as the label
