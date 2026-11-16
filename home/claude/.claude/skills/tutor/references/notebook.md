@@ -8,6 +8,7 @@ Read this before you build or extend a notebook that teaches a concept.
 
 - Integrate: every idea comes as a figure, a diagram, or a display equation, with at most two or three sentences of text between visuals. The introduction is the question, with one simple picture if one helps, not paragraphs of background; background enters where it is used, beside its own picture.
 - Diagrams are simple and accurate: one idea each, with only the parts that idea needs (no blocks for structures the point does not use), and nothing drawn that is wrong. No diagram tries to show a whole method or structure at once. Where an accurate drawing of the real geometry is impractical, plot the real data or say it in a sentence rather than draw a simplified, wrong picture. Draw them as manim stills (the manim skill), in the style of the project's own diagrams.
+- Where a paper's own figure shows the idea well and its license allows, use it rather than draw one; the marimo-research skill's figures reference says how to get it.
 - Math: each quantity gets a display equation with every symbol defined, worked once on numbers from the toy and drawn on the figure beside it (the line the formula fits, the distance it measures).
 - Start from a toy small enough to see whole: a few dozen points, two or three variables, built so the answer is known.
 - Put the contrasting cases side by side in every figure, the same order and colour throughout: the case without the effect beside the cases with it.

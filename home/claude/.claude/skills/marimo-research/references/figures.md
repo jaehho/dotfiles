@@ -8,6 +8,7 @@ Read the section you need; `SKILL.md` has the rules that always apply.
 - Base look
 - Selectable figures
 - Schematics
+- Figures from papers
 
 ## Libraries
 
@@ -124,3 +125,26 @@ schematic next to it.
   because `set_opacity` fills an open arc into a D.
   It needs system LaTeX, cairo, and pango.
   Use manim directly; video-oriented manim skills are more than a still needs.
+
+## Figures from papers
+
+- Look first in the papers the notebook cites (the Zotero library), then
+  online where a source is of high quality: the publisher's article page,
+  PubMed Central, eLife.
+- The best copy is the full-resolution image on the publisher's article
+  page.
+  Fetch it when the host serves it to scripts.
+  Most publisher hosts and PubMed Central block scripts; then give the user
+  the figure's page URL and the file name to save it as, and wait for the
+  file.
+- From a PDF in Zotero, `zotero_get_page_layout` returns each figure's box
+  and caption on a page; render that box at 300 dpi with pdftoppm
+  (`pdftoppm -png -r 300 -f P -l P -x X -y Y -W W -H H`, the normalized
+  box times the page size in pixels).
+  `pdfimages` extracts only embedded raster images and misses vector art
+  and labels.
+- Embed a figure only when its license allows reuse (for example CC BY),
+  credited under the image: authors, year, figure and panel, and a link.
+  Otherwise link to the figure.
+- Keep the file where the project keeps such files, named for the paper and
+  figure, with its source URL and license recorded.

@@ -155,8 +155,11 @@ before you write or restructure it.
 - Axis limits follow the data.
   Show groups side by side; a dropdown that shows one group at a time hides
   the comparison.
-- The chart library, selectable figures, schematics, and the base-look code:
-  read `references/figures.md`.
+- Before drawing a schematic or describing a published result, look for
+  the paper's own figure, and show it where it serves the point and its
+  license allows.
+- The chart library, selectable figures, schematics, figures from papers,
+  and the base-look code: read `references/figures.md`.
 
 ## Math
 
