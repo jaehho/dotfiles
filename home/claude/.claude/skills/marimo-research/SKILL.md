@@ -70,6 +70,12 @@ abstraction) is the writing-functions skill.
 - Show each fact as itself: a DataFrame as the last expression (not
   `.head()`; marimo pages it), a figure, or `mo.md` with numbers
   interpolated.
+- Show a table as `mo.ui.table(df, label="...")` with
+  `selection=None`, so it carries a title wherever it is seen.
+  The label is Markdown and names what the rows are, as a figure title
+  does.
+  Where the variable name already says that, use it as the label
+  (`label="lc10a_partners"`).
 - A cell with a display equation has braces, so keep it a raw
   `mo.md(r"...")` and put interpolated sentences in their own
   `mo.md(rf"...")` cell.
