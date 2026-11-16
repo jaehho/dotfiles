@@ -12,7 +12,7 @@ Fly visual system and locomotion.
 
 ## Notebooks
 
-- One notebook per question (for example `lc_pathways`), and every notebook is published as one: the site has no sections. A figure is a function in `lab.connectome.plots` that its question notebook calls and saves to `config.FIGURES`.
+- One notebook per question (for example `lc_pathways`), and every notebook is a page of the lab's site, which has no sections. The site (lab.jaehho.com) is for the lab only, behind a Cloudflare Access login, so a notebook may embed figures from papers, credited under each; a figure saved from a paper goes in `config.SHARED / "papers" / "<Author Year>"`, named for its figure number. A figure is a function in `lab.connectome.plots` that its question notebook calls and saves to `config.FIGURES`.
 - A new notebook also gets a symlink in `docs/content/notebooks/`, made with `ln -s ../../../notebooks/<file>.py` from that folder. Without it the table-of-contents entry that `docs/gen_site.py` writes points at nothing.
 - A slow step (over about a minute) is a module's `results_step`. `lab connectome results <notebook>` runs it and writes its tables to `config.RESULTS`, and the notebook reads them with `results.read_results`. The step is named for its notebook's stem in `STEPS` in `cli.py` and the `Makefile` (a test checks they match). `make results` reruns a step when the code or data it read change.
 - A figure, table, or sentence names what it is about wherever the context is not on screen with it: titles, axis labels, legends and column names say `LC10a cell (right eye)` or `share of LC10a output to AOTU019`, not `cell` or `share`. A figure is often seen without the text around it.

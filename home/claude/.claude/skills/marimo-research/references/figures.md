@@ -143,8 +143,10 @@ schematic next to it.
   box times the page size in pixels).
   `pdfimages` extracts only embedded raster images and misses vector art
   and labels.
-- Embed a figure only when its license allows reuse (for example CC BY),
-  credited under the image: authors, year, figure and panel, and a link.
-  Otherwise link to the figure.
+- Credit an embedded figure under the image: authors, year, figure and
+  panel, and a link.
+  A notebook published openly embeds only figures whose license allows
+  reuse (for example CC BY) and links to the others; one kept within a lab
+  may embed any.
 - Keep the file where the project keeps such files, named for the paper and
   figure, with its source URL and license recorded.
