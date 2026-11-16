@@ -90,6 +90,10 @@ A definition that compares two quantities or describes a structure
 (an aggregation, a graph motif, a pipeline) is easier with a small
 schematic next to it.
 
+- Keep it simple and accurate: one idea, only the parts that idea needs,
+  and nothing drawn wrong.
+  Where the real geometry cannot be drawn accurately, plot the real data
+  or say it in words instead of drawing a simplified, wrong picture.
 - Choose the tool by what the picture must get right.
   **mermaid** (`mo.mermaid`) for flow and process, where automatic layout is
   fine and the text source is the point.

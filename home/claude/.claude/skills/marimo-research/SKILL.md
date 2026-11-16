@@ -11,6 +11,10 @@ Project facts (layout, datasets, ids, thresholds, palette) belong to the
 project. Read its `CLAUDE.md` and `.claude/rules/` first. Where they differ
 from this skill, follow the project.
 
+Build or restructure a notebook a section at a time: write one section,
+show its rendered output, and wait for the user before the next, unless
+they ask for the whole notebook.
+
 ## Layout
 
 Shared code is an installable package of regular Python modules, one per
