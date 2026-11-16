@@ -124,7 +124,9 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("nextcloud --background")
     -- Bitwarden: Firefox face unlock and the SSH agent. Its "Start automatically
     -- on login" only writes an XDG entry; --autostart is the windowless start.
-    -- Its biometric key sits in memfd_secret, so hibernate is off while it runs.
+    -- Its in-memory key sits in memfd_secret, so hibernate is off while it runs
+    -- (bitwarden/clients#21661; SECURE_KEY_CONTAINER_BACKEND=mlock did not lift
+    -- it on 2026.10.3, 2026-11-16).
     hl.exec_cmd("bitwarden --autostart")
     hl.exec_cmd("betterbird")                      -- prefs.js: mail.startupMinimized
     hl.exec_cmd("zotero")
