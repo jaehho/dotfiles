@@ -4,8 +4,11 @@ Read this before you build or extend a notebook that teaches a concept.
 
 **Where.** Put it where the project keeps notebooks and follow the project's rules for them (in a marimo project, also the marimo-research skill). One notebook per concept, linked from the notebook or note whose method it explains. In a project without notebooks, ask where it goes.
 
-**Shape.**
+**Shape.** The notebook teaches through pictures and equations, with words only to connect them.
 
+- Integrate: every idea comes as a figure, a diagram, or a display equation, with at most two or three sentences of text between visuals. The introduction is a diagram and the question, not paragraphs of background; background enters where it is used, beside its own picture.
+- Diagrams show mechanisms (what connects to what, what is computed from what) as drawn schematics, not prose: manim stills (the manim skill), in the style of the project's own diagrams where it has them.
+- Math: each quantity gets a display equation with every symbol defined, worked once on numbers from the toy and drawn on the figure beside it (the line the formula fits, the distance it measures).
 - Start from a toy small enough to see whole: a few dozen points, two or three variables, built so the answer is known.
 - Put the contrasting cases side by side in every figure, the same order and colour throughout: the case without the effect beside the cases with it.
 - One step per section, one figure per step. Before each figure, one sentence says what to look at; after it, one sentence says what it showed.
