@@ -7,7 +7,7 @@ Claims from the literature come from the user's Zotero library, checked
 before any web search.
 If nothing there supports a claim, say so and do not cite it.
 A claim that rests on a conversation is attributed to the person by
-name as personal communication.
+name as personal communication, without a date.
 A claim with no source is computed from the data in the notebook or
 left out.
 

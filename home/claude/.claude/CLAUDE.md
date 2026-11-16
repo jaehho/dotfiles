@@ -39,4 +39,4 @@
 
 ## Memory
 
-Auto-memory is project-local.
+Auto-memory is project-local. Before saving a memory for a correction, find the CLAUDE.md, rule, or skill that caused the behaviour and fix it there; save a memory only when no file owns the rule.
