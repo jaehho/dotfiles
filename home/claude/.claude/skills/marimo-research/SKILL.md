@@ -39,6 +39,20 @@ keep the loaders in another module as pure readers.
 - Every role except the question notebooks is a reference: present tense,
   no discussion of results.
 
+## Data
+
+- Every notebook shows each data file as shipped before it uses it.
+  Name the source as a link (the data release, the page, or the
+  repository at its commit) with the file's name there, and show the raw
+  table: whole when small, its schema and first rows from a lazy scan
+  when large.
+  Then call the function that makes the format the analysis uses, and
+  show its result.
+- A reader function returns a file as shipped, under the file's own
+  column names. Each transform is a separate function named for what it
+  makes; no function both reads and reshapes.
+- A fetched file keeps the name and folder path its source gives it.
+
 ## Functions or cells
 
 A step used once is a cell.
@@ -70,7 +84,7 @@ abstraction) is the writing-functions skill.
 - marimo regenerates the file on save, so comments between cells and
   trailing comments in `with app.setup:` and `@app.function` bodies are lost.
   Put a comment on its own line inside a cell or function.
-- Load each table in one cell and pass the variable on.
+- Read each file in one cell and pass the variable on.
 - Show each fact as itself: a DataFrame as the last expression (not
   `.head()`; marimo pages it), a figure, or `mo.md` with numbers
   interpolated.

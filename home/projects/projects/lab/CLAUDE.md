@@ -4,6 +4,7 @@ Fly visual system and locomotion.
 
 - Run `make test` before you report work done.
 - Paths live in `src/lab/connectome/config.py`, remote ids in `src/lab/connectome/fetch.py`, and network imports in `fetch.py`. `tests/test_boundaries.py` enforces those three. Only `fetch.py` writes `data/`.
+- In `load.py`, a `read_*` function returns a data file as shipped and a separate function makes the format the analysis uses (the marimo-research skill has the rule for notebooks). The older `load_*` functions do both and are being retired: new code calls a `read_*` function and its transform. A file under `config.SHARED` keeps its source's name; one from a repository sits under `src/<repository>/` at its path there.
 - A new cell type needs no fetch: `data/connections.parquet` holds the connections of every proofread neuron. A notebook filters it with `load.load_connections_of`.
 - Do not hand-edit what `docs/gen_site.py` writes (`docs/book.yml`, the home page). Book settings live in `book_config` there. `make docs` regenerates them.
 - Search `gotcha` issues before you debug CAVE, fafbseg, or marimo.
