@@ -29,10 +29,12 @@ startup.
 
 ## Clear to the caller
 
-- The name is a noun phrase for what it returns (`fit_summary`) or a verb
-  phrase for what it does (`add_legend`), reads well at the call site
-  (`rows_between(table, start, stop)`), and promises neither less nor more
-  than the function does.
+- The name is a verb phrase for what it does (`place_cells`,
+  `read_annotations`, `draw_cluster_map`), so the value it returns takes
+  the noun (`placed_cells = place_cells(...)`) and a variable never needs
+  a second name for its thing.
+  It reads well at the call site (`select_rows(table, start, stop)`) and
+  promises neither less nor more than the function does.
   No catch-all words (`output`, `process`, `get`, `data`).
 - Parameters are named for their role (`window_size`, not `n`), options are
   keyword-only, and a function asks for no more than its body uses.
