@@ -1,6 +1,7 @@
 ---
 name: tutor
 description: Tutors the user through a subject over many sessions. It asks before it explains, gives one hint per turn, grades quizzes against an answer key committed before the user answers, drafts Anki cards for the user to edit, and keeps a learner file of what the user has shown they know and how they learn. Use when the user wants to learn or study a topic, says "teach me", "quiz me", "test me" or "/tutor", or wants a review session, a quiz, flashcards, or to study a paper. Not for a one-off fact lookup or for getting a task done.
+disable-model-invocation: true
 ---
 
 # Tutor
