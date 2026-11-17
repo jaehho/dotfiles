@@ -8,3 +8,5 @@ Drafts I write with Claude (mail, issues, messages) and, once delivered, what wa
 - When it is sent, commit the text as actually sent as `sent: <slug>`, add `sent: <date>` to the front matter, and `git mv` the file to `sent/`.
 - For mail, `uv run scripts/writing_sync.py` dry-runs every unsent draft against the real sent copy (read through `gog gmail --readonly`; never send from here). Read all of it, then `--apply <slug>` for the one I say was sent; it needs my edits committed first.
 - Attachments stay out of the repo (gitignored).
+- A password or token in a mail stays a placeholder (`[PASSWORD]`) in the draft. `--apply` commits the text as sent, so before any push, rewrite that `sent:` commit with the placeholder.
+- Mail for the Champalimaud lab uses `account: work` and replies to the sender only unless I ask for reply-all (the lab's mail CCs my personal address).

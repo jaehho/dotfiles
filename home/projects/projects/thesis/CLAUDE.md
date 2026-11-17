@@ -1,6 +1,6 @@
 # Chopper Amplifier — Neural Front-End
 
-Sub-1 V chopper amplifier for neural recording in TSMC CRN65G+. Behavioral model in Python (package `nfe`), Cadence schematics on the ICE server, IEEE-style manuscript in `paper.typ`. Repo path is historical (`/home/jaeho/thesis`).
+Sub-1 V chopper amplifier for neural recording in TSMC CRN65G+. Behavioral model in Python (package `nfe`), Cadence schematics on the ICE server, IEEE-style manuscript in `paper.typ`. The repo name `thesis` is historical.
 
 The working tree holds live publication work only. Nothing finished is kept in it: git tags freeze each delivered thing. The authoring root is `paper.typ`; don't drag thesis- or talk-era framing into it.
 
