@@ -39,8 +39,9 @@ keep the loaders in another module as pure readers.
 - A cell that takes more than a few seconds, but not the minute that
   calls for such a step, wraps its slow part in
   `with mo.persistent_cache(name="..."):`, so reopening the notebook
-  restores the result from `__marimo__/cache/` beside it instead of
-  computing it again. The cache key covers the block's code, its inputs,
+  restores the result from disk instead of computing it again
+  (`__marimo__/cache/` beside the notebook, or under
+  `PYTHONPYCACHEPREFIX` when that is set; `marimo cache dir` prints it). The cache key covers the block's code, its inputs,
   and the cells above it, but not the source of imported modules: after
   changing a package function the block calls, rename the cache (or
   delete the folder `marimo cache dir` prints). A hit skips the block's
