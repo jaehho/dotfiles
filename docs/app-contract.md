@@ -35,6 +35,10 @@ Links today:
 | asst | ActivityWatch | `/api/0/buckets`, `/api/0/query` on port 5600, buckets that aw-watchers fills | `asst/crates/asst-core/src/track.rs` |
 | dotfiles (idle suspend) | steno | `bar --once`: `class`, `manual` | `dotfiles/home/hypr/.local/bin/hypr-suspend-ok` |
 
+## Where features live
+
+- **A feature lives where the user sees it:** the window, the tray, the bar or a notification. The CLI is for setup, migration, batch jobs and other apps; a capability that exists only as a subcommand does not exist for the user (steno). A CLI action that changes what an open window shows makes the window show it (steno's `realign` once left the old transcript on screen).
+
 ## In the background
 
 - **The window is a view.** Work that has to keep going (listening, sync, reminders, sampling) lives in a daemon or in the app process held without a window, so closing the window loses nothing.
@@ -48,6 +52,7 @@ Links today:
 
 - Ctrl+W closes the window (the app keeps running, as above), Ctrl+Q quits, Ctrl+F searches in an app with a search, and Ctrl+? shows every shortcut. These work from a text field too.
 - Single-letter keys (asst's `j`, `k`, `x`) act only while focus is outside a text field. Where they are on, `?` also shows every shortcut.
+- A new shortcut starts from vim's key where one fits (`/` search, `n`/`N` next and previous match, `Esc` to clear), not a browser or desktop convention (steno's search once got `F3`), with a `Ctrl+` variant for use from a text field.
 
 ## Install and run
 
