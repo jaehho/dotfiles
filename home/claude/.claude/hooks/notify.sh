@@ -11,10 +11,10 @@
 # notify-send fire-and-forget: no FIFO and no action waiter.
 #
 # Lifetime: skip entirely if the source pane is already focused at send time.
-# A turn that ends in another tmux window of the focused kitty window rings
-# that pane's tmux bell instead (an orange window number, no toast, no beep).
+# A turn that ends in another tmux window of the focused kitty window also
+# rings that pane's tmux bell (an orange window number) besides the toast.
 # The beep plays only when nothing says to stay quiet (quiet_reason).
-# Otherwise the toast stays in the panel until the user focuses the source
+# The toast stays in the panel until the user focuses the source
 # pane, the pane closes, or the user dismisses it. The watcher has no time
 # cap: a toast left for hours must still close when its session is opened.
 # Sends, skips and closes are logged to $LOG.
@@ -273,11 +273,11 @@ source_focused() {
 }
 
 # The source's kitty window has focus but tmux shows another window: ring the
-# pane's bell instead of a toast. tmux flags that window, .tmux.conf's
+# pane's bell (the caller toasts too). tmux flags that window, .tmux.conf's
 # window-status-format draws the flag as an orange index, and tmux clears it
 # when you go there; kitty has enable_audio_bell no, so it makes no sound. A
 # pane in the window you are on is already on screen, and tmux flags nothing
-# for it. A session no client shows gets a toast instead: nobody would see it.
+# for it. A session no client shows gets only the toast: nobody would see a bell.
 ring_source_window() {
   local addr="${1:-}" target="${2:-}" socket="${3:-}" tty
   [[ -n "$addr" && -n "$target" ]] || return 1
@@ -319,12 +319,11 @@ if recover_hypr; then
     log "skip event=$EVENT pane=${TMUX_TARGET:-none} reason=focused"
     exit 0
   fi
-  # A finished turn in another tmux window of this kitty: the status line says
-  # it. A permission prompt or question stops Claude until answered: it toasts.
+  # A finished turn in another tmux window of this kitty: flag that window
+  # orange as well as toasting below, so both say it.
   if [[ "$EVENT" == Stop ]] \
       && ring_source_window "${WINDOW_ADDR:-}" "$TMUX_TARGET" "$TMUX_SOCKET"; then
     log "bell event=$EVENT pane=$TMUX_TARGET"
-    exit 0
   fi
 
   QUIET=$(quiet_reason) || QUIET=""
