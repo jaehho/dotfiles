@@ -36,6 +36,16 @@ keep the loaders in another module as pure readers.
   the notebook reads them to show and explore. Make reruns the step when
   the code or data it read change; the notebook names the command that
   makes missing results.
+- A cell that takes more than a few seconds, but not the minute that
+  calls for such a step, wraps its slow part in
+  `with mo.persistent_cache(name="..."):`, so reopening the notebook
+  restores the result from `__marimo__/cache/` beside it instead of
+  computing it again. The cache key covers the block's code, its inputs,
+  and the cells above it, but not the source of imported modules: after
+  changing a package function the block calls, rename the cache (or
+  delete the folder `marimo cache dir` prints). A hit skips the block's
+  side effects, so saving a figure or printing stays outside it.
+  The cache folder is not committed.
 - Every role except the question notebooks is a reference: present tense,
   no discussion of results.
 
