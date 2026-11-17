@@ -174,6 +174,17 @@ before you write or restructure it.
 - The chart library, selectable figures, schematics, figures from papers,
   and the base-look code: read `references/figures.md`.
 
+## Effects and uncertainty
+
+Lead with effect sizes in the result's own units, each with an interval
+(a bootstrap over the units that were sampled), and use replication on an
+independent set as the test of whether a pattern is real.
+No p-values, q-values, significance flags or "beyond chance" unless the
+user asks: when the data are one sample (one connectome, two surgeons),
+they only say a pattern exceeds an assumed null.
+Where a comparison with noise helps, name it ("steeper than in 99% of
+shuffles") or draw the null distribution beside the data.
+
 ## Math
 
 Display math is a definition or a claim, never decoration.
