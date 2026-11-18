@@ -63,7 +63,7 @@ ShellRoot {
         id: nowPlaying
     }
 
-    // dash-live runs only while a panel is open.
+    // dash-data board runs only while a panel is open.
     DashFeed {
         id: dashFeed
         active: root.dashOn !== ""
@@ -119,7 +119,7 @@ ShellRoot {
             root.toggle(Hyprland.focusedMonitor?.name ?? "");
         }
 
-        // The dash panel on the focused monitor (Super+0).
+        // The dash panel on the focused monitor (Super+D).
         function dash(): void {
             const name = Hyprland.focusedMonitor?.name ?? "";
             root.openOn = "";

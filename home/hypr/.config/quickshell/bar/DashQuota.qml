@@ -1,5 +1,4 @@
-// One quota on the LLM card (and SYSTEM's disk row, without a pace),
-// ported from dash's StatRow: the name, its
+// One quota on the LLM card, ported from dash's StatRow: the name, its
 // window ("week"), "25% · 3d 12h left", and a bar as long as the use.
 // The tick is the even-burn pace (where use would be if spread evenly
 // to the reset); the span between use and tick is faint green when
@@ -16,7 +15,6 @@ Item {
     property string win: ""
     property string value
     property color valueColor: colors.fg
-    property color barColor: colors.grey2
     // 0 to 100, or -1 for no bar.
     property real pct: -1
     // The even-burn %, or -1 for no tick.
@@ -94,7 +92,7 @@ Item {
                 width: parent.width * row.core
                 height: parent.height
                 radius: 2.5
-                color: row.barColor
+                color: row.colors.grey2
             }
 
             Rectangle {
