@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=FlyWire Codex
+Comment=FlyWire Codex in its own window, drawing on the RTX
+Exec=flywire-codex %u
+Icon=firefox-developer-edition
+Terminal=false
+Categories=Science;Biology;
+StartupWMClass=flywire-codex

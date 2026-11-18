@@ -1,0 +1,28 @@
+#!/bin/bash
+# flywire-codex [URL...]: FlyWire Codex in its own window on the RTX.
+#
+# firefox-nvidia with a profile of its own whose tab bar and toolbars
+# are hidden, so the window holds the page alone. A link that would
+# open a tab opens a window instead, which Hyprland tiles beside it.
+set -euo pipefail
+
+profile="${FLYWIRE_CODEX_PROFILE:-${XDG_DATA_HOME:-$HOME/.local/share}/flywire-codex}"
+mkdir -p "$profile/chrome"
+
+# Rewritten at every launch, so this script holds the whole setup.
+cat >"$profile/user.js" <<'PREFS'
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+user_pref("browser.link.open_newwindow", 2);
+user_pref("browser.aboutwelcome.enabled", false);
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+PREFS
+cat >"$profile/chrome/userChrome.css" <<'CSS'
+#TabsToolbar, #nav-bar, #PersonalToolbar {
+    visibility: collapse !important;
+}
+CSS
+
+[ $# -gt 0 ] || set -- https://codex.flywire.ai
+FIREFOX_NVIDIA_PROFILE="$profile" FIREFOX_NVIDIA_NAME=flywire-codex \
+    exec firefox-nvidia "$@"

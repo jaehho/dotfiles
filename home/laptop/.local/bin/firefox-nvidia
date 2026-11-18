@@ -9,10 +9,11 @@ set -euo pipefail
 
 profile="${FIREFOX_NVIDIA_PROFILE:-${XDG_DATA_HOME:-$HOME/.local/share}/firefox-nvidia}"
 mkdir -p "$profile"
+name="${FIREFOX_NVIDIA_NAME:-firefox-nvidia}"
 
 export __NV_PRIME_RENDER_OFFLOAD=1
 export __GLX_VENDOR_LIBRARY_NAME=nvidia
 export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
-exec firefox-developer-edition --no-remote --name firefox-nvidia \
+exec firefox-developer-edition --no-remote --name "$name" \
     --profile "$profile" "$@"
