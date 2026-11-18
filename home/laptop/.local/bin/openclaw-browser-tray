@@ -2,14 +2,9 @@
 """Tray item for OpenClaw: a terminal chat, and its agent Chrome.
 
 Left click opens ``openclaw tui`` (the gateway's main session, the same one
-Telegram talks to) in a tmux pane via hypr-pane.
-
-hyprland.lua sends every Google Chrome window to the special workspace
-``openclaw`` without focusing it, so the agent browses out of sight. Middle
-click shows or hides that workspace; with no browser running it starts one
-and shows it once its window maps. Right click opens a menu: the chat,
-show/hide, start/stop/restart the browser, open the Control UI, and the
-gateway's state.
+Telegram talks to) in a tmux pane via hypr-pane. Right click opens a menu:
+the chat, start/stop/restart the browser, open the Control UI, and the
+gateway's state. The agent's Chrome opens like any other window.
 
 It speaks StatusNotifierItem itself instead of using libayatana-appindicator.
 That library cannot do a left-click action: it never sets ``ItemIsMenu`` to
@@ -17,9 +12,8 @@ false, and waybar's default for a missing ``ItemIsMenu`` is true, which opens
 the menu on left click. The menu is a ``com.canonical.dbusmenu`` served by
 libdbusmenu; waybar reads it from the ``Menu`` property on right click.
 
-State comes from ``hyprctl`` (clients, monitors) and ``systemctl`` on a
-two-second poll. The toggle goes through ``hyprctl eval`` because a Lua
-config rejects the legacy ``hyprctl dispatch`` string form. The icon is
+State comes from ``hyprctl clients`` and ``systemctl`` on a two-second
+poll. The icon is
 OpenClaw's lobster, the Control UI favicon, installed as
 hicolor/scalable/apps/openclaw.svg.
 """
@@ -36,16 +30,11 @@ import gi
 gi.require_version("Dbusmenu", "0.4")
 from gi.repository import Dbusmenu, Gio, GLib  # noqa: E402
 
-WORKSPACE = "special:openclaw"
 BROWSER_CLASS = "Google-chrome"
 GATEWAY_UNIT = "openclaw-gateway"
 CONFIG = Path.home() / ".openclaw" / "openclaw.json"
 HYPR_PANE = Path.home() / ".local" / "bin" / "hypr-pane"
 POLL_SECONDS = 2
-# A browser start that never maps a window should not leave the "show once
-# it maps" wish armed forever.
-SHOW_WAIT_POLLS = 20
-TOGGLE = 'hl.dispatch(hl.dsp.workspace.toggle_special("openclaw"))'
 
 WATCHER = "org.kde.StatusNotifierWatcher"
 WATCHER_PATH = "/StatusNotifierWatcher"
@@ -102,13 +91,6 @@ def browser_exists() -> bool:
     return any(c["class"] == BROWSER_CLASS for c in hyprctl_json("clients"))
 
 
-def browser_shown() -> bool:
-    return any(
-        m["specialWorkspace"]["name"] == WORKSPACE
-        for m in hyprctl_json("monitors")
-    )
-
-
 def gateway_state() -> str:
     out = run(["systemctl", "--user", "is-active", GATEWAY_UNIT])
     return out.stdout.strip()
@@ -132,8 +114,6 @@ def spawn(*cmd: str) -> None:
 class Tray:
     def __init__(self) -> None:
         self.running = False
-        self.shown = False
-        self.show_polls_left = 0
         self.build_menu()
         self.export_item()
         self.refresh()
@@ -142,7 +122,6 @@ class Tray:
     def build_menu(self) -> None:
         self.root = Dbusmenu.Menuitem.new()
         self.add_item("Open terminal chat", self.open_chat)
-        self.toggle_item = self.add_item("Show OpenClaw browser", self.toggle)
         self.start_stop_item = self.add_item("Start browser", self.start_stop)
         self.restart_item = self.add_item("Restart browser", self.restart)
         self.add_separator()
@@ -190,8 +169,6 @@ class Tray:
     def on_call(self, _conn, _sender, _path, _iface, method, _params, inv):
         if method == "Activate":
             self.open_chat()
-        elif method == "SecondaryActivate":
-            self.activate()
         inv.return_value(None)
 
     def on_get_property(self, _conn, _sender, _path, _iface, name):
@@ -215,22 +192,8 @@ class Tray:
         return props.get(name)
 
     def tip(self) -> str:
-        if not self.running:
-            browser = "not running"
-        else:
-            browser = "visible" if self.shown else "hidden"
-        return f"Click: chat. Middle click: browser ({browser})."
-
-    def activate(self) -> None:
-        if self.running:
-            self.toggle()
-        else:
-            self.show_polls_left = SHOW_WAIT_POLLS
-            self.start()
-
-    def toggle(self) -> None:
-        run(["hyprctl", "eval", TOGGLE])
-        self.refresh()
+        browser = "running" if self.running else "not running"
+        return f"Click: chat. Browser: {browser}."
 
     def start(self) -> None:
         spawn("openclaw", "browser", "start")
@@ -252,21 +215,12 @@ class Tray:
 
     def refresh(self) -> bool:
         running = browser_exists()
-        shown = browser_shown()
         gateway = gateway_state()
-        if running and not shown and self.show_polls_left > 0:
-            self.show_polls_left = 0
-            run(["hyprctl", "eval", TOGGLE])
-            shown = browser_shown()
-        elif self.show_polls_left > 0:
-            self.show_polls_left -= 1
-        if (running, shown) != (self.running, self.shown):
-            self.running, self.shown = running, shown
+        if running != self.running:
+            self.running = running
             self.conn.emit_signal(
                 None, ITEM_PATH, ITEM_IFACE, "NewToolTip", None
             )
-        verb = "Hide" if shown else "Show"
-        self.set_item(self.toggle_item, f"{verb} OpenClaw browser", running)
         self.set_item(
             self.start_stop_item,
             "Stop browser" if running else "Start browser",
