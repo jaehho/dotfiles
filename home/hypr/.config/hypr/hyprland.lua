@@ -434,7 +434,7 @@ hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheats
 -- hypr-settings-menu
 hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("qs -c bar ipc call bar settings")) -- quick settings
 hl.bind(mainMod .. " + apostrophe", hl.dsp.exec_cmd("qs -c bar ipc call bar tray")) -- tray: apps in a grid under the bar
-hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("qs -c bar ipc call bar dash")) -- dash: a tiled window with the system numbers (#83)
+hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("qs -c bar ipc call bar dash")) -- dash panel: system numbers on the right edge (#83)
 
 -- Share: Taildrop a file or the clipboard, or show the clipboard as a QR code
 hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("~/.local/bin/hypr-share-menu")) -- share menu
@@ -868,44 +868,6 @@ hl.window_rule({
     move      = "0 monitor_h-226",
     animation = "slide bottom",
 })
-
--- Dash (the bar's window, #83): a tiled window opens at half the
--- workspace in dwindle, which is too wide for a column of cards. A size
--- rule is ignored on tiled windows, and `exact` resizes the divider by
--- the wanted change with its sign flipped for a window on the right of a
--- split (measured: 1446 wide, exact 440 gave 1800 and squeezed the other
--- window), so resize relatively, with that sign, once the layout has
--- placed it. Alone on a workspace, or with nothing beside it, it fills
--- the space.
-local DASH_WIDTH = 440
-
-local function dash_fit(w, tries)
-    local left_of, right_of = false, false
-    for _, o in ipairs(hl.get_windows()) do
-        if o.address ~= w.address and not o.floating and o.workspace and w.workspace
-                and o.workspace.id == w.workspace.id then
-            if o.at.x + o.size.x <= w.at.x + 4 then left_of = true end
-            if o.at.x >= w.at.x + w.size.x - 4 then right_of = true end
-        end
-    end
-    local change = DASH_WIDTH - w.size.x
-    if math.abs(change) < 6 then return end
-    if left_of then
-        change = -change
-    elseif not right_of then
-        return
-    end
-    hl.dispatch(hl.dsp.window.resize({ x = change, y = 0, relative = true, window = w }))
-    -- A split that was being laid out, or animated, can leave it short.
-    if tries > 1 then
-        hl.timer(function() dash_fit(w, tries - 1) end, { timeout = 200, type = "oneshot" })
-    end
-end
-
-hl.on("window.open", function(w)
-    if w.class ~= "org.quickshell" or w.title ~= "dash" then return end
-    hl.timer(function() dash_fit(w, 3) end, { timeout = 150, type = "oneshot" })
-end)
 
 local wallhelper_came_from
 
