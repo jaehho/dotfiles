@@ -1,6 +1,6 @@
 # Everforest Dark Medium: a hand recolor of the Catppuccin Mocha port
 # (catppuccin/imv) with sainnhe/everforest palette.md.
 [options]
-background=2d353b
+background=343431
 overlay_text_color=d3c6aa
-overlay_background_color=232a2e
+overlay_background_color=292927

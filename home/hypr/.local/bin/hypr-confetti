@@ -84,7 +84,7 @@ def palette():
 
     # The palette is tuned for text contrast, so lift it a little for paper.
     accents = [rgb(found[k], 1.18) for k in ACCENTS if k in found]
-    return accents, rgb(found.get("yellow", "dbbc7f"), 1.35), rgb(found.get("bg0", "2d353b"))
+    return accents, rgb(found.get("yellow", "dbbc7f"), 1.35), rgb(found.get("bg0", "343431"))
 
 
 def hypr(*args):

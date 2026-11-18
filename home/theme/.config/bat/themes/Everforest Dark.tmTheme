@@ -21,19 +21,19 @@
       <key>settings</key>
       <dict>
         <key>background</key>
-        <string>#2d353b</string>
+        <string>#343431</string>
         <key>foreground</key>
         <string>#d3c6aa</string>
         <key>caret</key>
         <string>#d3c6aa</string>
         <key>lineHighlight</key>
-        <string>#343f44</string>
+        <string>#3d3d3a</string>
         <key>selection</key>
         <string>#543a48</string>
         <key>invisibles</key>
         <string>#7a8478</string>
         <key>gutter</key>
-        <string>#2d353b</string>
+        <string>#343431</string>
         <key>gutterForeground</key>
         <string>#859289</string>
       </dict>

@@ -1,13 +1,13 @@
 /* foliage palette, forked from Everforest Dark Medium (sainnhe/everforest palette.md) on 2026-11-05; edit the values here.
    Names are Everforest's, with - for _ (rofi property names take no _). */
 * {
-  bg-dim: #232a2e;
-  bg0: #2d353b;
-  bg1: #343f44;
-  bg2: #3d484d;
-  bg3: #475258;
-  bg4: #4f585e;
-  bg5: #56635f;
+  bg-dim: #292927;
+  bg0: #343431;
+  bg1: #3d3d3a;
+  bg2: #464642;
+  bg3: #50504c;
+  bg4: #575752;
+  bg5: #60605b;
   bg-visual: #543a48;
   bg-red: #514045;
   bg-yellow: #4d4c43;

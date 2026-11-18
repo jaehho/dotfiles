@@ -3,9 +3,9 @@
 colourful: true
 
 # Everforest Medium Palette
-# Background: #2d353b
+# Background: #343431
 # Foreground: #d3c6aa
-# Black: #343f44
+# Black: #3d3d3a
 # Red: #e67e80
 # Green: #a7c080
 # Yellow: #dbbc7f
@@ -14,7 +14,7 @@ colourful: true
 # Cyan: #83c092
 # White: #d3c6aa
 # Gray: #859289
-# Bright Black: #475258
+# Bright Black: #50504c
 # Bright Red: #e67e80
 # Bright Green: #a7c080
 # Bright Yellow: #dbbc7f

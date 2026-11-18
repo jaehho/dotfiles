@@ -21,4 +21,4 @@ Apps with their own stow package carry their theme files there: kitty (`themes/e
 
 ## Palette
 
-Everforest Dark with the medium background (`bg0` `#2d353b`). Hand recolors map each Catppuccin token to the Everforest color with the same role and use Everforest's names (`bg0`, `fg`, `green`, ...). The old lavender accent becomes `green`; `blue` stays focus, `purple` marks special, `orange` is worth a glance, `red` is critical.
+Everforest Dark with the medium background (`bg0` `#343431`). Hand recolors map each Catppuccin token to the Everforest color with the same role and use Everforest's names (`bg0`, `fg`, `green`, ...). The old lavender accent becomes `green`; `blue` stays focus, `purple` marks special, `orange` is worth a glance, `red` is critical.

@@ -1,12 +1,12 @@
 /* foliage palette, forked from Everforest Dark Medium (sainnhe/everforest palette.md) on 2026-11-05; edit the values here.
    Names are Everforest's. */
-@define-color bg_dim #232a2e;
-@define-color bg0 #2d353b;
-@define-color bg1 #343f44;
-@define-color bg2 #3d484d;
-@define-color bg3 #475258;
-@define-color bg4 #4f585e;
-@define-color bg5 #56635f;
+@define-color bg_dim #292927;
+@define-color bg0 #343431;
+@define-color bg1 #3d3d3a;
+@define-color bg2 #464642;
+@define-color bg3 #50504c;
+@define-color bg4 #575752;
+@define-color bg5 #60605b;
 @define-color bg_visual #543a48;
 @define-color bg_red #514045;
 @define-color bg_yellow #4d4c43;

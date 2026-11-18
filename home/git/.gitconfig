@@ -44,9 +44,9 @@
 	frag = "#d699b6 bold"
 [color "diff-highlight"]
 	oldNormal = "#e67e80"
-	oldHighlight = "bold #2d353b #e67e80"
+	oldHighlight = "bold #343431 #e67e80"
 	newNormal = "#a7c080"
-	newHighlight = "bold #2d353b #a7c080"
+	newHighlight = "bold #343431 #a7c080"
 # Bright fill means changed. A line added or removed whole gets the same
 # fill as the changed words inside a paired line; the unchanged rest of a
 # paired line stays at delta's dim default (minus-/plus-style default to

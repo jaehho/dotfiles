@@ -2,26 +2,26 @@
 -- Names are Everforest's. hyprland.lua reads the *Alpha forms.
 local M = {}
 
-M.bg_dim = 'rgb(232a2e)'
-M.bg_dimAlpha = '232a2e'
+M.bg_dim = 'rgb(292927)'
+M.bg_dimAlpha = '292927'
 
-M.bg0 = 'rgb(2d353b)'
-M.bg0Alpha = '2d353b'
+M.bg0 = 'rgb(343431)'
+M.bg0Alpha = '343431'
 
-M.bg1 = 'rgb(343f44)'
-M.bg1Alpha = '343f44'
+M.bg1 = 'rgb(3d3d3a)'
+M.bg1Alpha = '3d3d3a'
 
-M.bg2 = 'rgb(3d484d)'
-M.bg2Alpha = '3d484d'
+M.bg2 = 'rgb(464642)'
+M.bg2Alpha = '464642'
 
-M.bg3 = 'rgb(475258)'
-M.bg3Alpha = '475258'
+M.bg3 = 'rgb(50504c)'
+M.bg3Alpha = '50504c'
 
-M.bg4 = 'rgb(4f585e)'
-M.bg4Alpha = '4f585e'
+M.bg4 = 'rgb(575752)'
+M.bg4Alpha = '575752'
 
-M.bg5 = 'rgb(56635f)'
-M.bg5Alpha = '56635f'
+M.bg5 = 'rgb(60605b)'
+M.bg5Alpha = '60605b'
 
 M.bg_visual = 'rgb(543a48)'
 M.bg_visualAlpha = '543a48'

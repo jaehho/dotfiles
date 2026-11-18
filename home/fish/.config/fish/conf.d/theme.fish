@@ -11,10 +11,10 @@ set -q BAT_THEME; or set -gx BAT_THEME "Everforest Dark"
 # fzf: hand recolor of the catppuccin/fzf mocha snippet with
 # sainnhe/everforest palette.md.
 set -q FZF_DEFAULT_OPTS; or set -gx FZF_DEFAULT_OPTS "\
---color=bg+:#343f44,bg:#2d353b,spinner:#e69875,hl:#e67e80 \
+--color=bg+:#3d3d3a,bg:#343431,spinner:#e69875,hl:#e67e80 \
 --color=fg:#d3c6aa,header:#e67e80,info:#d699b6,pointer:#e69875 \
 --color=marker:#a7c080,fg+:#d3c6aa,prompt:#d699b6,hl+:#e67e80 \
---color=selected-bg:#3d484d \
+--color=selected-bg:#464642 \
 --color=border:#7a8478,label:#d3c6aa"
 
 # starship (package) reads ~/.config/starship.toml (theme package).
