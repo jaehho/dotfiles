@@ -434,7 +434,7 @@ hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheats
 -- hypr-settings-menu
 hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("qs -c bar ipc call bar settings")) -- quick settings
 hl.bind(mainMod .. " + apostrophe", hl.dsp.exec_cmd("qs -c bar ipc call bar tray")) -- tray: apps in a grid under the bar
-hl.bind(mainMod .. " + ALT + 0", hl.dsp.exec_cmd("qs -c bar ipc call bar dash")) -- dash panel: system numbers on the right edge (Super+0 takes over when the overlay goes, #83)
+hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("qs -c bar ipc call bar dash")) -- dash panel: system numbers on the right edge (#83)
 
 -- Share: Taildrop a file or the clipboard, or show the clipboard as a QR code
 hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("~/.local/bin/hypr-share-menu")) -- share menu

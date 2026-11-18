@@ -60,6 +60,9 @@ PanelWindow {
         right: 8
         bottom: 8
     }
+    // The margins count from the screen's edge, not from under the
+    // bar's 40px (Auto put the panel at y=88).
+    exclusionMode: ExclusionMode.Ignore
     implicitWidth: 440
     color: "transparent"
     // Mapped while it slides, so the close animation is seen.
