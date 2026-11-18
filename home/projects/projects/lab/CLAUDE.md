@@ -9,6 +9,7 @@ Fly visual system and locomotion.
 - Do not hand-edit what `docs/gen_site.py` writes (`docs/book.yml`, the home page). Book settings live in `book_config` there. `make docs` regenerates them.
 - Search `gotcha` issues before you debug CAVE, fafbseg, or marimo.
 - Paper notes live in Zotero.
+- Keep an eye out for translational opportunities: when a result or a method could carry over to another field (robotics, sensor fusion, machine learning, a disease model, a tool other labs could reuse), say so when you see it.
 
 ## Notebooks
 
