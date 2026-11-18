@@ -68,8 +68,7 @@ hl.on("hyprland.start", function()
     -- it. Pure D-Bus, so no WAYLAND_DISPLAY gate. Sequenced in one command
     -- so the bar cannot take the name first (issues #52 / #63 -- a bar that
     -- owns the watcher drops it on restart and pops tray-hidden Spotify).
-    -- The bar is the Quickshell config in quickshell/bar/ (issue #75);
-    -- `quickshell`, not `qs`, because `dash stop` runs `pkill -x qs`.
+    -- The bar is the Quickshell config in quickshell/bar/ (issue #75).
     hl.exec_cmd("systemctl --user start sni-watcher && quickshell -c bar")
     hl.exec_cmd("hyprpaper")
     -- swaync is a user unit pointed at the fork in ~/.local/bin (the packaged
@@ -90,8 +89,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
     hl.exec_cmd("wl-paste --type image --watch cliphist store")
     -- Polkit prompt: the Quickshell config in quickshell/polkit/, which
-    -- shows the Howdy face check, then the password if PAM asks. Started as
-    -- `quickshell`, not `qs`, because `dash stop` runs `pkill -x qs`.
+    -- shows the Howdy face check, then the password if PAM asks.
     hl.exec_cmd("quickshell -c polkit")
     -- swayosd-server is a user unit; a copy launched here grabs its app id and
     -- makes the unit crash-loop "already running" (issue #14). Start the unit
@@ -140,9 +138,9 @@ hl.on("hyprland.start", function()
     -- Workspace management daemons
     hl.exec_cmd("hyprwhenthen run")
 
-    -- Desktop dashboard (bottom layer; lands on an empty workspace). Last, so
-    -- the daemons above are up before it switches workspace.
-    hl.exec_cmd("dash show")
+    -- btop, started hidden so Ctrl+Shift+Escape opens it at once with its
+    -- graphs' history (hypr-btop-toggle).
+    hl.exec_cmd("~/.local/bin/hypr-btop-toggle start")
 end)
 
 -------------------------------
@@ -434,8 +432,8 @@ hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheats
 -- hypr-settings-menu
 hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("qs -c bar ipc call bar settings")) -- quick settings
 hl.bind(mainMod .. " + apostrophe", hl.dsp.exec_cmd("qs -c bar ipc call bar tray")) -- tray: apps in a grid under the bar
-hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("qs -c bar ipc call bar dash")) -- dash panel: system, sessions and LLM on the right edge (#83)
-hl.bind("CTRL + SHIFT + Escape", hl.dsp.exec_cmd("~/.local/bin/hypr-settings-menu monitor")) -- btop, floating (the bar's load glyphs open it too)
+hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("qs -c bar ipc call bar dash")) -- dash panel: sessions and LLM on the right edge (#83)
+hl.bind("CTRL + SHIFT + Escape", hl.dsp.exec_cmd("~/.local/bin/hypr-btop-toggle")) -- btop: show / hide (runs on hidden; the bar's load glyphs too)
 
 -- Share: Taildrop a file or the clipboard, or show the clipboard as a QR code
 hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("~/.local/bin/hypr-share-menu")) -- share menu
@@ -474,8 +472,8 @@ end
 -- Free means an id in this monitor's round-robin slots (monitors.lua, closed
 -- set 1-9) with no windows (a missing id counts). slots_by_monitor is the same
 -- left-to-right plan apply() locks ids to, so with one external it is laptop
--- 1/3/5/7/9 and tablet 2/4/6/8. Super+0 hops there and shows dash; Super+0
--- again returns to the workspace it left (same round trip as Super+N).
+-- 1/3/5/7/9 and tablet 2/4/6/8. Super+0 hops there; Super+0 again returns
+-- to the workspace it left (same round trip as Super+N).
 -- Super+Shift+0 sends the window, focus following, matching Super+Shift+N.
 local function focused_monitor_name()
     for _, m in ipairs(hl.get_monitors() or {}) do
@@ -512,13 +510,13 @@ end
 
 -- Super+0 hop origin. Empty Super+0 goes here; busy Super+0 records here
 -- then hops to the free slot.
-local dash_return_to
+local hop_return_to
 
-hl.bind(mainMod .. " + 0", function() -- dash: hop to empty slot, or back
+hl.bind(mainMod .. " + 0", function() -- hop to an empty workspace, or back
     local here = focused_workspace_id()
     if focused_workspace_windows() == 0 then
-        local back = dash_return_to
-        dash_return_to = nil
+        local back = hop_return_to
+        hop_return_to = nil
         if back and here and back ~= here and hl.get_workspace(back) then
             focus_workspace(back)
         elseif here then
@@ -531,11 +529,8 @@ hl.bind(mainMod .. " + 0", function() -- dash: hop to empty slot, or back
         hl.notification.create({ text = "No free workspace on this display", timeout = 1500, icon = "info" })
         return
     end
-    dash_return_to = here
+    hop_return_to = here
     focus_workspace(target)
-    -- show, not toggle: after the hop this workspace is empty, so toggle would
-    -- read it as "landed on dash" and stop instead of keeping the dashboard up.
-    hl.dispatch(hl.dsp.exec_cmd("dash show"))
 end)
 
 hl.bind(mainMod .. " + SHIFT + 0", function() -- send window to empty workspace on this display
@@ -779,7 +774,7 @@ hl.window_rule({
     float = true,
 })
 
--- Floating TUI apps (nmtui, btop, etc.)
+-- Floating TUI apps (nmtui, bluetui, wiremix)
 hl.window_rule({
     name  = "float-tui",
     match = { class = "^(floating-tui)$" },
@@ -789,14 +784,18 @@ hl.window_rule({
     center = true,
 })
 
--- btop needs 80x24 cells at minimum and more to be useful
+-- btop needs 80x24 cells at minimum and more to be useful. It maps hidden
+-- on special:btop, where it runs between looks; hypr-btop-toggle brings it
+-- to the screen in front of you.
 hl.window_rule({
     name  = "float-btop",
     match = { class = "^(floating-btop)$" },
 
-    float  = true,
-    size   = "1400 900",
-    center = true,
+    float            = true,
+    size             = "1400 900",
+    center           = true,
+    workspace        = "special:btop silent",
+    no_initial_focus = true,
 })
 
 -- Battery dashboard: a window you open to answer one question and then close

@@ -5,8 +5,9 @@
 // A click on a pill goes to that workspace; on an icon, to that window
 // (or hides the special workspace it is raised on, as waybar's
 // hypr-waybar-window-click did). The wheel steps through this monitor's
-// workspaces. asstdev, the asst test harness's parking workspace, never
-// shows.
+// workspaces. Two parking workspaces never show: asstdev, the asst test
+// harness's, and special:btop, where btop waits hidden
+// (hypr-btop-toggle).
 //
 // The title follows the focused toplevel itself, not the active
 // workspace, so a raised special workspace names its own window (why
@@ -31,7 +32,7 @@ Island {
     readonly property real titleRoom: Math.min(470, limit - x - 28 - spaces.width)
 
     // Numbered workspaces by id, then named ones, then the specials.
-    readonly property var workspaces: Hyprland.workspaces.values.filter(w => w.monitor === leftIsland.monitor && w.name !== "asstdev").sort((a, b) => leftIsland.rank(a) - leftIsland.rank(b) || a.id - b.id)
+    readonly property var workspaces: Hyprland.workspaces.values.filter(w => w.monitor === leftIsland.monitor && w.name !== "asstdev" && w.name !== "special:btop").sort((a, b) => leftIsland.rank(a) - leftIsland.rank(b) || a.id - b.id)
 
     // Diagnostic for the stale-workspaces-after-hotplug report: one line
     // per re-evaluation, so the log shows whether the list re-ran after a

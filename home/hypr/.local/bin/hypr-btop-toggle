@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Ctrl+Shift+Escape and the bar's load glyphs: show or hide btop, as
+# Super+M does Spotify. Hidden, btop keeps running, so it opens at once
+# with its graphs' history: hidden is special:btop, a special workspace
+# that is never raised (the bar leaves it out). hyprland.lua's float-btop
+# rule maps a new btop there, floating at 1400x900, without focus.
+#
+#   hypr-btop-toggle         focused: hide it. Hidden or not focused:
+#                            bring it to the screen in front of you and
+#                            focus it. Not running: start it, then that.
+#   hypr-btop-toggle start   start it hidden unless it runs (at login)
+#
+# Quitting btop (q) ends it; the next press starts a fresh one.
+
+class=floating-btop
+
+# One run at a time, so presses during a cold start open one btop.
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/hypr-btop-toggle.lock"
+flock -n 9 || exit 0
+
+btop_window() {
+    hyprctl clients -j | jq -r --arg c "$class" 'map(select(.class == $c)) | .[0].address // empty'
+}
+
+start() {
+    setsid -f kitty --class "$class" -e btop >/dev/null 2>&1
+}
+
+hide() {
+    hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:btop\", window = \"address:$1\", follow = false })" >/dev/null
+}
+
+# Move window $1 to what the focused monitor shows (a raised special
+# workspace covers the regular one, which is all activeWorkspace
+# reports), centre it and focus it, in one eval.
+show() {
+    local ws
+    ws=$(hyprctl monitors -j | jq -r '.[] | select(.focused)
+        | (if .specialWorkspace.name != "" then .specialWorkspace.name
+           else .activeWorkspace.id end) | tojson')
+    [[ -n $ws ]] || return 1
+    hyprctl eval "local w = 'address:$1'
+hl.dispatch(hl.dsp.window.move({ workspace = $ws, window = w }))
+hl.dispatch(hl.dsp.window.center({ window = w }))
+hl.dispatch(hl.dsp.focus({ window = w }))" >/dev/null
+}
+
+if [[ ${1:-} == start ]]; then
+    [[ -n $(btop_window) ]] || start
+    exit 0
+fi
+
+focused=$(hyprctl activewindow -j | jq -r --arg c "$class" 'select(.class == $c) | .address')
+if [[ -n $focused ]]; then
+    hide "$focused"
+elif addr=$(btop_window) && [[ -n $addr ]]; then
+    show "$addr"
+else
+    start
+    for _ in $(seq 50); do   # up to 5 s; a cold kitty maps in well under one
+        addr=$(btop_window)
+        [[ -n $addr ]] && { show "$addr"; exit 0; }
+        sleep 0.1
+    done
+fi

@@ -38,8 +38,8 @@ def running(name):
     return output(["pgrep", "-x", name]) != ""
 
 
-def tui(cmd, cls="floating-tui"):
-    return f"kitty --class {cls} -e {cmd}"
+def tui(cmd):
+    return f"kitty --class floating-tui -e {cmd}"
 
 
 # ── state probes ─────────────────────────────────────────────────────────────
@@ -167,7 +167,7 @@ ITEMS = [
     dict(id="wallpaper", kind="open", icon="󰸉", label="Wallpaper",
          run="wallhelper gui", needs=["wallhelper"]),
     dict(id="monitor", kind="open", icon="󰍛", label="System monitor",
-         run=tui("btop", cls="floating-btop"), needs=["kitty", "btop"]),
+         run=f"{BIN}/hypr-btop-toggle", needs=["kitty", "btop"]),
     dict(id="failed-units", kind="open", icon="󰒏", label="Failed units",
          run=f"{BIN}/hypr-failed-units", needs=["systemctl"]),
     dict(id="battery", kind="open", icon="󰁹", label="Battery history",
