@@ -29,6 +29,7 @@ Item {
     // What keeps a hover-opened sheet open: the pointer on the glyph
     // that opened it or in the sheet, not elsewhere on the island.
     readonly property bool keepHover: (trayOpen && (attention.chevron.hovered || sheetPointer.hovered)) || (open && (quickGlyph.hovered || sheetPointer.hovered))
+    readonly property bool sheetHovered: sheetPointer.hovered
     property string page: "main"
     property bool keys: false
 

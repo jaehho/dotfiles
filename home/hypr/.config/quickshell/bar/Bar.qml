@@ -259,7 +259,10 @@ PanelWindow {
     Timer {
         interval: bar.leaveDelay
         running: bar.byHover && !center.hovered && !rightSide.keepHover
-        onTriggered: bar.hoverLeft()
+        onTriggered: {
+            console.log("hoverLeft: tray", bar.trayOpen, "chevron", rightSide.attention.chevron.hovered, "sheet", rightSide.sheetHovered, "height", rightSide.height);
+            bar.hoverLeft();
+        }
     }
 
     RightIsland {
