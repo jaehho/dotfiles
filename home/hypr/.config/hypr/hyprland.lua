@@ -869,6 +869,14 @@ hl.window_rule({
     animation = "slide bottom",
 })
 
+-- Dash (the bar's window, #83): a tiled window opens at half the
+-- workspace in dwindle, which is too wide for a column of cards, and a
+-- size rule is ignored on tiled windows, so resize it once as it maps.
+hl.on("window.open", function(w)
+    if w.class ~= "org.quickshell" or w.title ~= "dash" then return end
+    hl.dispatch(hl.dsp.window.resize({ x = 440, y = w.size.y, exact = true, window = w }))
+end)
+
 local wallhelper_came_from
 
 hl.on("window.open", function(w)
