@@ -1,6 +1,6 @@
 ---
 name: marimo-research
-description: Rules for writing or editing marimo notebooks used for scientific or data-science research (data collection, analysis, figures), where the notebooks are the lab record. Use whenever creating, restructuring, or editing a research marimo notebook, a project's notebooks/ folder, or a function in a package that notebooks import. Not for driving a live kernel (that is marimo-pair).
+description: Rules for writing or editing marimo notebooks used for scientific or data-science research (data collection, analysis, figures), where the notebooks are the lab record. Use whenever starting a new research question, or creating, restructuring, or editing a research marimo notebook, a project's notebooks/ folder, or a function in a package that notebooks import. Not for driving a live kernel (that is marimo-pair).
 ---
 
 # Research marimo notebooks
@@ -11,9 +11,28 @@ Project facts (layout, datasets, ids, thresholds, palette) belong to the
 project. Read its `CLAUDE.md` and `.claude/rules/` first. Where they differ
 from this skill, follow the project.
 
-Build or restructure a notebook a section at a time: write one section,
-show its rendered output, and wait for the user before the next, unless
-they ask for the whole notebook.
+## A new question: explore, then build
+
+A new question starts as an exploration, not a notebook.
+
+1. Explore in plain scripts in a dated folder,
+   `explorations/YYYY-MM-DD-<slug>/`, as Noble (2009) dates a project's
+   computational experiments (doi:10.1371/journal.pcbi.1000424).
+   It holds the scripts, a `README.md` report, and the figures the report
+   shows, committed on the question's topic branch. A script may import
+   the package; nothing imports a script, and no exploration code moves
+   into the package.
+2. Run it to complete results. The report gives the answer first, then
+   every choice (data, filters, cutoffs, definitions, methods) with the
+   alternatives tried and what each changes, then the dead ends, so the
+   build revisits each choice instead of inheriting the first cut.
+   The user reads the report before any notebook exists. The folder is
+   merged when they say so and is not edited after: a later look at the
+   question is a new folder.
+3. Build the notebook a section at a time: write one section, show its
+   rendered output, and wait for the user before the next, unless they
+   ask for the whole notebook. Restructure an existing notebook the same
+   way. A function moves into the package when a notebook cell needs it.
 
 ## Layout
 
