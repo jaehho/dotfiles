@@ -25,6 +25,7 @@ Scope {
     readonly property color aqua: tokens.aqua ?? "#80c0a0"
     readonly property color green: tokens.green ?? "#a0c080"
     readonly property color orange: tokens.orange ?? "#e09070"
+    readonly property color yellow: tokens.yellow ?? "#e0c080"
     readonly property color red: tokens.red ?? "#e08080"
     readonly property color purple: tokens.purple ?? "#d0a0c0"
 

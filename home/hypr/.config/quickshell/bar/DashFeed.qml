@@ -1,7 +1,9 @@
-// The dash panel's live numbers: `dash-live` (one JSON line per 100 ms)
-// runs only while a panel is open, so a closed panel costs nothing. The
-// 1-minute samplers (dash-collect and the rest) are dash's own timers
-// and keep running either way (issue #83).
+// The dash panel's data, fetched only while a panel is open, so a closed
+// panel costs nothing: `dash-live` (one JSON line per 100 ms) for the
+// SYSTEM meters, and `dash-data board` every 10 s for the rest (tasks,
+// sessions, LLM quotas, market, failed units, the backup). The 1-minute
+// samplers (dash-collect and the rest) are dash's own timers and keep
+// running either way (issue #83).
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -17,7 +19,45 @@ Scope {
     // shows no numbers rather than the last ones as if they were now.
     property double liveAt: 0
     readonly property bool down: !active || now - liveAt > 5000
+    // The last board, null until one arrives. dash-data caches most of
+    // its sections for 30 s, so a board can be that old.
+    property var board: null
+    property double boardAt: 0
+    // Silent for 60 s: the board's cards dim rather than read as now.
+    readonly property bool boardDown: !active || now - boardAt > 60000
     property double now: Date.now()
+
+    // Whole seconds from a unix time to now, by this 1 s clock, so a
+    // binding that calls it ticks.
+    function since(ts) {
+        return Math.max(0, Math.floor(feed.now / 1000) - ts);
+    }
+
+    // "<1m", "45m", "1h20m", "2d 4h": zero units dropped.
+    function dur(s) {
+        if (s < 60)
+            return "<1m";
+        const d = Math.floor(s / 86400);
+        const h = Math.floor(s % 86400 / 3600);
+        const m = Math.floor(s % 3600 / 60);
+        if (d > 0)
+            return h > 0 ? d + "d " + h + "h" : d + "d";
+        if (h > 0)
+            return m > 0 ? h + "h" + m + "m" : h + "h";
+        return m + "m";
+    }
+
+    // "5m ago", "3h ago", "2d ago"; "" for no time.
+    function ago(ts) {
+        if (!ts)
+            return "";
+        const s = feed.since(ts);
+        if (s < 3600)
+            return Math.max(1, Math.round(s / 60)) + "m ago";
+        if (s < 86400)
+            return Math.round(s / 3600) + "h ago";
+        return Math.round(s / 86400) + "d ago";
+    }
 
     Process {
         id: proc
@@ -31,6 +71,34 @@ Scope {
                     feed.liveAt = Date.now();
                 } catch (e) {}
             }
+        }
+    }
+
+    Process {
+        id: boardProc
+        command: [Quickshell.env("HOME") + "/.local/bin/dash-data", "board"]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const b = JSON.parse(this.text);
+                    if (b && typeof b === "object") {
+                        feed.board = b;
+                        feed.boardAt = Date.now();
+                    }
+                } catch (e) {}
+            }
+        }
+    }
+
+    Timer {
+        interval: 10000
+        running: feed.active
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            boardProc.running = false;
+            boardProc.running = true;
         }
     }
 

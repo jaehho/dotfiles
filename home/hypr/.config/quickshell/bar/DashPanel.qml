@@ -4,8 +4,10 @@
 // tall. Open, it reserves its width, so the windows tile beside it;
 // closed, it is unmapped and the desktop stays plain.
 //
-// Esc or a click outside closes it (the focus grab). Cards are ported
-// from ~/projects/dash one at a time; SYSTEM is first.
+// Esc or a click outside closes it (the focus grab), and so does a click
+// that opens something from a card (a session, a link, asst-gtk). The
+// cards are the old overlay's, from ~/projects/dash's Dashboard.qml, in
+// its reading order: SYSTEM and MARKET, then SESSIONS, LLM and TASKS.
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
@@ -49,6 +51,16 @@ PanelWindow {
 
     function warm(c, hot, warn) {
         return c >= hot ? panel.colors.red : c >= warn ? panel.colors.orange : panel.colors.aqua;
+    }
+
+    // A card's click: run its command or open its link, then get out of
+    // the way.
+    function launch(url, cmd) {
+        if (cmd && cmd.length)
+            Quickshell.execDetached(cmd);
+        if (url !== "")
+            Qt.openUrlExternally(url);
+        panel.closeRequested();
     }
 
     anchors {
@@ -198,6 +210,67 @@ PanelWindow {
                         value: panel.rate(panel.d.net_tx_bps)
                         tint: panel.colors.blue
                     }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
+                        Layout.topMargin: 2
+                        color: panel.colors.bg2
+                    }
+
+                    // Failed units: absent at rest, red when present.
+                    Line {
+                        readonly property var failed: panel.feed.board?.failed ?? []
+
+                        visible: failed.length > 0
+                        Layout.fillWidth: true
+                        opacity: panel.feed.boardDown ? 0.45 : 1
+                        text: "✗ failed: " + failed.join(", ")
+                        mono: true
+                        size: 12
+                        color: panel.colors.red
+                        elide: Text.ElideRight
+                    }
+
+                    // restic: grey under 26 h, amber to 48 h, red past it
+                    // or never.
+                    Line {
+                        readonly property var hours: panel.feed.board?.backup?.hours_ago ?? null
+
+                        opacity: panel.feed.boardDown ? 0.45 : 1
+                        text: !panel.feed.board ? "backup: …" : hours === null ? "backup: never succeeded" : "backup: " + hours + "h ago"
+                        mono: true
+                        size: 12
+                        color: !panel.feed.board ? panel.colors.grey2 : hours === null ? panel.colors.red : hours < 26 ? panel.colors.grey2 : hours < 48 ? panel.colors.yellow : panel.colors.red
+                    }
+                }
+
+                DashMarket {
+                    Layout.fillWidth: true
+                    colors: panel.colors
+                    feed: panel.feed
+                    onLaunch: (url, cmd) => panel.launch(url, cmd)
+                }
+
+                DashSessions {
+                    Layout.fillWidth: true
+                    colors: panel.colors
+                    feed: panel.feed
+                    onLaunch: (url, cmd) => panel.launch(url, cmd)
+                }
+
+                DashLlm {
+                    Layout.fillWidth: true
+                    colors: panel.colors
+                    feed: panel.feed
+                    onLaunch: (url, cmd) => panel.launch(url, cmd)
+                }
+
+                DashTasks {
+                    Layout.fillWidth: true
+                    colors: panel.colors
+                    feed: panel.feed
+                    onLaunch: (url, cmd) => panel.launch(url, cmd)
                 }
             }
         }
