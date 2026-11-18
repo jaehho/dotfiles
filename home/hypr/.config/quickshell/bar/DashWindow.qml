@@ -1,18 +1,13 @@
-// The dash panel: a full-height sheet on the right edge of one screen,
-// under the bar, that replaces the always-on desktop dashboard (issue
-// #83). It is its own layer surface, since the bar's surface is 640px
-// tall. Closed it is unmapped and the desktop stays plain.
-//
-// Esc or a click outside closes it (the focus grab). Cards are ported
-// from ~/projects/dash one at a time; SYSTEM is first.
+// The dash window: a normal window that Hyprland tiles in dwindle beside
+// the others, replacing the always-on desktop dashboard (issue #83).
+// Closed it is gone and the desktop stays plain. Super+Q or Super+D
+// closes it. Cards are ported from ~/projects/dash one at a time; SYSTEM
+// is first.
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Hyprland
-import Quickshell.Wayland
 
-PanelWindow {
+FloatingWindow {
     id: panel
 
     required property var colors
@@ -50,71 +45,17 @@ PanelWindow {
         return c >= hot ? panel.colors.red : c >= warn ? panel.colors.orange : panel.colors.aqua;
     }
 
-    anchors {
-        top: true
-        bottom: true
-        right: true
-    }
-    margins {
-        top: 48
-        right: 8
-        bottom: 8
-    }
-    // The margins count from the screen's edge, not from under the
-    // bar's 40px (Auto put the panel at y=88).
-    exclusionMode: ExclusionMode.Ignore
-    implicitWidth: 440
-    color: "transparent"
-    // Mapped while it slides, so the close animation is seen.
-    visible: sheet.opacity > 0
-
-    WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.namespace: "bar-dash"
-    WlrLayershell.keyboardFocus: panel.open ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
-
-    HyprlandFocusGrab {
-        windows: [panel]
-        active: panel.open
-        onCleared: panel.closeRequested()
-    }
+    title: "dash"
+    color: colors.bg_dim
+    visible: open
+    onVisibleChanged: if (!visible)
+        closeRequested()
 
     Item {
-        id: sheet
-        width: panel.width
-        height: panel.height
-        x: panel.open ? 0 : 24
-        opacity: panel.open ? 1 : 0
-        focus: panel.open
+        anchors.fill: parent
+        focus: true
 
         Keys.onEscapePressed: panel.closeRequested()
-
-        Behavior on x {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
-            }
-        }
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 150
-            }
-        }
-
-        RectangularShadow {
-            anchors.fill: parent
-            radius: 12
-            blur: 6
-            color: panel.colors.withAlpha(panel.colors.bg_dim, 0.93)
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 12
-            color: panel.colors.withAlpha(panel.colors.bg_dim, 0.985)
-            border.width: 1
-            border.color: panel.colors.withAlpha(panel.colors.blue, 0.18)
-        }
 
         Flickable {
             anchors.fill: parent

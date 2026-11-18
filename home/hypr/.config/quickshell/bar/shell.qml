@@ -5,7 +5,7 @@
 // Over IPC (`qs -c bar ipc call bar <function>`): `toggleShown` hides or
 // shows the bar on every monitor (Super+B), `toggle` opens or closes the
 // center island on the focused monitor (Super+Shift+B), `settings` the
-// right island's quick settings (Super+;), `dash` the dash panel,
+// right island's quick settings (Super+;), `dash` the dash window,
 // `settingsPage <page>` the same
 // at a page (wifi, bluetooth or sound), `tray` the tray grid (Super+'), and `refreshAwake` makes the stay-awake glyph look
 // again (hypr-idle-toggle calls it).
@@ -27,14 +27,13 @@ ShellRoot {
     property string quickOn: ""
     property string quickPage: "main"
     property bool quickKeys: false
-    // The screen whose dash panel is open, by name, or "" for none.
-    property string dashOn: ""
+    // Whether the dash window is open (one window, on the focused monitor).
+    property bool dashOpen: false
     // Hidden, the bars unmap and give their 40px back to the windows.
     property bool shown: true
 
     function toggle(name) {
         root.quickOn = "";
-        root.dashOn = "";
         root.openOn = root.openOn === name ? "" : name;
     }
 
@@ -46,7 +45,6 @@ ShellRoot {
             return;
         }
         root.openOn = "";
-        root.dashOn = "";
         root.quickKeys = keys;
         if (root.quickOn !== name)
             root.quickPage = page === "" ? "main" : page;
@@ -66,21 +64,14 @@ ShellRoot {
     // dash-live runs only while a panel is open.
     DashFeed {
         id: dashFeed
-        active: root.dashOn !== ""
+        active: root.dashOpen
     }
 
-    Variants {
-        model: Quickshell.screens
-
-        DashPanel {
-            required property var modelData
-
-            screen: modelData
-            colors: everforest
-            feed: dashFeed
-            open: root.dashOn === modelData.name && root.shown
-            onCloseRequested: root.dashOn = ""
-        }
+    DashWindow {
+        colors: everforest
+        feed: dashFeed
+        open: root.dashOpen
+        onCloseRequested: root.dashOpen = false
     }
 
     Variants {
@@ -119,19 +110,16 @@ ShellRoot {
             root.toggle(Hyprland.focusedMonitor?.name ?? "");
         }
 
-        // The dash panel on the focused monitor (Super+0).
+        // The dash window (Super+D): a tiled window, opened on the
+        // focused monitor's workspace.
         function dash(): void {
-            const name = Hyprland.focusedMonitor?.name ?? "";
-            root.openOn = "";
-            root.quickOn = "";
-            root.dashOn = root.dashOn === name ? "" : name;
+            root.dashOpen = !root.dashOpen;
         }
 
         function toggleShown(): void {
             root.openOn = "";
             root.quickOn = "";
-            root.dashOn = "";
-            root.shown = !root.shown;
+                root.shown = !root.shown;
         }
 
         function settings(): void {
