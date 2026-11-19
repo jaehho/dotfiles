@@ -4,7 +4,7 @@
 # `on` starts Sunshine and opens the stream in Moonlight on the tablet. The
 # headless Hyprland output exists only while a stream does: Sunshine runs
 # `create` before it starts capturing (the Desktop app's prep command) and
-# `remove` when the app ends. monitors.lua treats the output as any other
+# `remove` when the app ends. screens.lua treats the output as any other
 # external, so it sits right of the laptop and takes workspaces 2, 4, and so
 # on; when it goes, the workspaces fall back to the laptop.
 #
@@ -226,10 +226,10 @@ report_address() {
     fi
 }
 
-# monitors.lua hears of a headless output only from here (it fires no event).
+# screens.lua hears of a headless output only from here (it fires no event).
 # Its layout then covers the tablet, and a turned-off state cannot outlive it.
 sync_layout() {
-    hyprctl eval "require(\"monitors\").forget(\"$OUTPUT\")" >/dev/null 2>&1
+    hyprctl eval "require(\"screens\").forget(\"$OUTPUT\")" >/dev/null 2>&1
 }
 
 cmd_on() {

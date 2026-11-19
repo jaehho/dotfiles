@@ -3,7 +3,7 @@
 
 Reads what Hyprland reports (`hyprctl monitors all`) and refreshes while open, so
 the cards follow plugging, unplugging, and the tablet coming up. Changes go to
-monitors.lua through `hyprctl eval`, which owns the layout; the tablet goes
+screens.lua through `hyprctl eval`, which owns the layout; the tablet goes
 through `tablet-display`, including whether Moonlight also plays the PC's sound
 (`tablet-display audio`). The F1 key opens this with Extend focused.
 """
@@ -37,7 +37,7 @@ def spawn(cmd):
 
 
 def monitors_lua(code):
-    subprocess.run(["hyprctl", "eval", f'require("monitors").{code}'], capture_output=True)
+    subprocess.run(["hyprctl", "eval", f'require("screens").{code}'], capture_output=True)
 
 
 def sun_conf(key, default=None):

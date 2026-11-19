@@ -217,7 +217,7 @@ local function apply()
         end
         assigned[ws] = name
         -- Not persistent: an empty workspace must die when you leave it so
-        -- workspace.removed fires and workspaces.lua ripples the holes closed
+        -- workspace.removed fires and workspace_pack.lua ripples the holes closed
         -- (tmux renumber-windows). Super+N creates id N if it is missing.
         hl.workspace_rule({ workspace = tostring(ws), monitor = name, default = is_default })
     end
@@ -273,14 +273,14 @@ local function apply()
 
     -- Closed set 1-9: fold any stray (temp leak, Super+scroll mint, 9003) back
     -- into the slots so the bar and Super+N only ever see 1-9.
-    local ws_mod = package.loaded["workspaces"]
+    local ws_mod = package.loaded["workspace_pack"]
     if ws_mod and ws_mod.reclaim then
         ws_mod.reclaim()
     end
 end
 
 -- Slot ids each output owns under the live layout (round-robin, same formula
--- and plan() as apply()). workspaces.lua packs only into these so the
+-- and plan() as apply()). workspace_pack.lua packs only into these so the
 -- id ↔ monitor map hypr-tab-nonempty and hypr-move-project assume survives.
 local function slots_by_monitor()
     local monitors = live_monitors()

@@ -8,7 +8,7 @@
 -- looking at stays until you leave it.
 --
 -- A workspace whose id is another monitor's slot is not a hole here. Leave it
--- for monitors.lua to move whole (windows follow). Packing it onto this
+-- for screens.lua to move whole (windows follow). Packing it onto this
 -- monitor's slots is what kept windows on the same output when a display was
 -- plugged in: workspace 2 would renumber onto a laptop slot before apply()
 -- could send it to the tablet.
@@ -53,7 +53,7 @@ end
 -- (temps included). Untouched when a monitor has no slots recorded.
 function M.plan_pack(live, slots_by_mon)
     -- Slot id -> output that owns it. Used to tell a real hole apart from a
-    -- workspace that is merely waiting for monitors.lua to move it home.
+    -- workspace that is merely waiting for screens.lua to move it home.
     local owner = {}
     for mon, slots in pairs(slots_by_mon) do
         for _, id in ipairs(slots) do
@@ -197,7 +197,7 @@ local packing = false
 -- workspace is destroyed when unfocused. Keeps Super+N / Super+Tab / the bar on
 -- the closed set.
 local function reclaim_strays()
-    local monitors = package.loaded["monitors"]
+    local monitors = package.loaded["screens"]
     local slots_by_mon = monitors and monitors.slots_by_monitor and monitors.slots_by_monitor() or {}
     if not next(slots_by_mon) then return end
 
@@ -280,7 +280,7 @@ end
 local function pack_now()
     if packing then return end
 
-    local monitors = package.loaded["monitors"]
+    local monitors = package.loaded["screens"]
     local slots_by_mon = monitors and monitors.slots_by_monitor and monitors.slots_by_monitor() or {}
     if not next(slots_by_mon) then return end
 
@@ -301,7 +301,7 @@ end
 
 -- Trailing-edge debounce: workspace.removed and the events change_id itself
 -- fires arrive in a burst. opts.type is mandatory; a spent oneshot cannot be
--- re-armed (same new_timer/schedule shape as monitors.lua). No timer is armed
+-- re-armed (same new_timer/schedule shape as screens.lua). No timer is armed
 -- at load — packing must not run on reload, or it would fill Super+N holes.
 local pending = nil
 
@@ -325,13 +325,13 @@ end
 
 -- A workspace's id, its monitor's slot ids, and the ascending ids of the
 -- workspaces on that monitor within those slots (a foreign id waiting for
--- monitors.lua is not in its order).
+-- screens.lua is not in its order).
 local function order_of(ws)
     local here = ws and tonumber(ws.id)
     local name = ws and monitor_name(ws.monitor)
     if not here or not name then return end
 
-    local monitors = package.loaded["monitors"]
+    local monitors = package.loaded["screens"]
     local slots_by_mon = monitors and monitors.slots_by_monitor and monitors.slots_by_monitor() or {}
     local slots = slots_by_mon[name]
     if not slots then return end

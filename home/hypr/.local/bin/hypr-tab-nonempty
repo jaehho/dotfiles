@@ -10,7 +10,7 @@ mon_json=$(hyprctl monitors -j)
 current_mon=$(echo "$mon_json" | jq -r '.[] | select(.focused) | .name')
 current_ws=$(echo "$mon_json" | jq -r '.[] | select(.focused) | .activeWorkspace.id')
 
-# Left-to-right order, the same layout monitors.lua applies and locks
+# Left-to-right order, the same layout screens.lua applies and locks
 # workspace ids to (slots_by_monitor). Do not force the laptop last: with one
 # external it sits on the left and owns 1/3/5…, so "externals first" would look
 # at the tablet's 2/4/6… and Super+Tab would no-op on the laptop.

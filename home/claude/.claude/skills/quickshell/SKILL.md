@@ -5,7 +5,7 @@ description: Writes, reloads, restarts and captures Quickshell (QML) shells on t
 
 # Quickshell
 
-Instances: `quickshell -c bar` and `quickshell -c polkit` (dotfiles `home/hypr/.config/quickshell/`, started from `hyprland.lua`). dash's desktop overlay was retired 2026-11-18; its data feeds the bar's dash panel (Super+D). The package is AUR `quickshell-git`: Quickshell 0.3.2 ignores Hyprland's `changeworkspaceid`, so after `workspaces.lua` renumbers with `change_id` the bar loses window icons. Upstream 4befab5 fixes it; the user chose to stay on `-git` (2026-11-12).
+Instances: `quickshell -c bar` and `quickshell -c polkit` (dotfiles `home/hypr/.config/quickshell/`, started from `hyprland.lua`). dash's desktop overlay was retired 2026-11-18; its data feeds the bar's dash panel (Super+D). The package is AUR `quickshell-git`: Quickshell 0.3.2 ignores Hyprland's `changeworkspaceid`, so after `workspace_pack.lua` renumbers with `change_id` the bar loses window icons. Upstream 4befab5 fixes it; the user chose to stay on `-git` (2026-11-12).
 
 ## Run and reload
 
@@ -26,4 +26,4 @@ Instances: `quickshell -c bar` and `quickshell -c polkit` (dotfiles `home/hypr/.
 ## Capture without taking focus
 
 - `QT_QPA_PLATFORM=offscreen` renders on Qt's software scene graph even with a display set (`QSG_INFO=1` prints "Loading backend software"), so shader items (`RectangularShadow`, `MultiEffect`) draw nothing. It is fine for layout, not for judging depth or shadows.
-- For a capture with the real GPU renderer on the live session, run a harness whose `PanelWindow` is 1x1, `color: "transparent"`, `mask: Region {}`, `WlrLayershell.layer: WlrLayer.Background`, `keyboardFocus: WlrKeyboardFocus.None`, with a namespace no layer rule matches. Put the stage item outside the window (`x: 1`, full size) and call `grabToImage` on it. It shows nothing and takes no focus, and it avoids the hidden-workspace rule, which wakes `workspaces.lua` packing. Quickshell refuses imports from outside the harness's config dir, so copy the bar's `.qml` files into it, with the `PanelWindow` under test turned into an `Item`.
+- For a capture with the real GPU renderer on the live session, run a harness whose `PanelWindow` is 1x1, `color: "transparent"`, `mask: Region {}`, `WlrLayershell.layer: WlrLayer.Background`, `keyboardFocus: WlrKeyboardFocus.None`, with a namespace no layer rule matches. Put the stage item outside the window (`x: 1`, full size) and call `grabToImage` on it. It shows nothing and takes no focus, and it avoids the hidden-workspace rule, which wakes `workspace_pack.lua` packing. Quickshell refuses imports from outside the harness's config dir, so copy the bar's `.qml` files into it, with the `PanelWindow` under test turned into an `Item`.

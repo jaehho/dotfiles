@@ -20,7 +20,7 @@ A personal, single-machine configuration. The owner's apps under `~/projects/` o
 
 ## Operating Context
 
-The laptop panel, sometimes with external monitors whose rules `monitors.lua` computes. Workspaces 1–9. Hyprland's Lua config starts the session's helpers and overlays. System changes (packages, `/etc`) go through reviewed scripts the owner runs. Tasks, gotchas and decisions live in GitHub issues. Agents test GUIs without taking the owner's focus or keyboard (the `gui-testing` skill).
+The laptop panel, sometimes with external monitors whose rules `screens.lua` computes. Workspaces 1–9. Hyprland's Lua config starts the session's helpers and overlays. System changes (packages, `/etc`) go through reviewed scripts the owner runs. Tasks, gotchas and decisions live in GitHub issues. Agents test GUIs without taking the owner's focus or keyboard (the `gui-testing` skill).
 
 ## Capabilities and Constraints
 

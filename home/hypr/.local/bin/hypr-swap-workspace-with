@@ -6,8 +6,8 @@
 # own moves and could bounce windows back; this way the second batch is still
 # the original target set.
 #
-# Cross-monitor is fine: ids stay put, so monitors.lua's id → output map and
-# the packer in workspaces.lua never see a hole. Windows hop outputs; the
+# Cross-monitor is fine: ids stay put, so screens.lua's id → output map and
+# the packer in workspace_pack.lua never see a hole. Windows hop outputs; the
 # tiling trees are rebuilt as the windows land (same as Super+Ctrl+N).
 #
 # Empty or missing target is a send (same as hypr-move-workspace-to): the

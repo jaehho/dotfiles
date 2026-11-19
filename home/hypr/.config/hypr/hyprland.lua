@@ -7,13 +7,13 @@
 ---- MONITORS ----
 ------------------
 
--- monitors.lua computes the layout and workspace assignment live; it is a
+-- screens.lua computes the layout and workspace assignment live; it is a
 -- tracked file now rather than generated.
 --
 -- require caches in package.loaded and that cache survives `hyprctl reload`, so
--- without this line an edit to monitors.lua is ignored until a full restart.
-package.loaded["monitors"] = nil
-local ok, monitors = pcall(require, "monitors")
+-- without this line an edit to screens.lua is ignored until a full restart.
+package.loaded["screens"] = nil
+local ok, monitors = pcall(require, "screens")
 
 -- Two guards, because failure here is quiet and expensive. Hyprland's require
 -- swallows an error raised inside a module and hands back an empty table, so
@@ -21,22 +21,22 @@ local ok, monitors = pcall(require, "monitors")
 -- would be fatal to require, aborting the rest of this file: a bad layout is
 -- survivable, a session with no keybinds is not.
 if ok and (type(monitors) ~= "table" or monitors.apply == nil) then
-    ok, monitors = false, "monitors.lua did not return its module table"
+    ok, monitors = false, "screens.lua did not return its module table"
 end
 if not ok then
-    hl.notification.create({ text = "monitors.lua failed: " .. tostring(monitors), timeout = 10000, icon = "error" })
+    hl.notification.create({ text = "screens.lua failed: " .. tostring(monitors), timeout = 10000, icon = "error" })
     monitors = { apply = function() end }
 end
 
--- workspaces.lua packs each monitor's ids when one is removed. Same require
--- cache/shape guards as monitors.lua above.
-package.loaded["workspaces"] = nil
-local ok_ws, workspaces = pcall(require, "workspaces")
+-- workspace_pack.lua packs each monitor's ids when one is removed. Same require
+-- cache/shape guards as screens.lua above.
+package.loaded["workspace_pack"] = nil
+local ok_ws, workspaces = pcall(require, "workspace_pack")
 if ok_ws and (type(workspaces) ~= "table" or workspaces.plan_pack == nil) then
-    ok_ws, workspaces = false, "workspaces.lua did not return its module table"
+    ok_ws, workspaces = false, "workspace_pack.lua did not return its module table"
 end
 if not ok_ws then
-    hl.notification.create({ text = "workspaces.lua failed: " .. tostring(workspaces), timeout = 10000, icon = "error" })
+    hl.notification.create({ text = "workspace_pack.lua failed: " .. tostring(workspaces), timeout = 10000, icon = "error" })
 end
 -- Colors only from the Everforest Dark Medium module (themes/foliage.lua).
 -- Active border is fixed green, the Everforest accent.
@@ -458,7 +458,7 @@ hl.bind(mainMod .. " + SHIFT + j", hl.dsp.window.swap({ direction = "down" }))
 
 -- Switch workspaces / move active window with mainMod (+ SHIFT) + [1-9]
 -- Super+N is workspace id N (holes allowed; the closed set is 1-9). Each id is locked to its round-robin monitor by
--- monitors.lua, so Super+N moves focus to that monitor.
+-- screens.lua, so Super+N moves focus to that monitor.
 local function focus_workspace(n)
     hl.dispatch(hl.dsp.focus({ workspace = n }))
 end
@@ -468,7 +468,7 @@ for i = 1, 9 do
 end
 
 -- Super+0 / Super+Shift+0: empty workspace on the focused display.
--- Free means an id in this monitor's round-robin slots (monitors.lua, closed
+-- Free means an id in this monitor's round-robin slots (screens.lua, closed
 -- set 1-9) with no windows (a missing id counts). slots_by_monitor is the same
 -- left-to-right plan apply() locks ids to, so with one external it is laptop
 -- 1/3/5/7/9 and tablet 2/4/6/8. Super+0 hops there; Super+0 again returns
@@ -545,7 +545,7 @@ end)
 -- after this one, and the workspaces past it shift over to make room (from
 -- 1, [ puts it at 1 and everything moves up). A window alone on its
 -- workspace trades places with the neighbour instead. Focus follows.
--- workspaces.lua (move_window_beside) plans and moves.
+-- workspace_pack.lua (move_window_beside) plans and moves.
 local function move_window_beside(dir)
     if ok_ws then workspaces.move_window_beside(dir) end
 end
@@ -568,7 +568,7 @@ end
 
 -- Swap every window here with every window on target workspace with
 -- mainMod + ALT + [1-9]. Rearranges which stack sits at which Super+N.
--- Window lists, not ids: monitors.lua owns id → output, and workspaces.lua
+-- Window lists, not ids: screens.lua owns id → output, and workspace_pack.lua
 -- packs on workspace.removed — both would undo a change_id swap. Snapshot
 -- then move, so it holds across monitors. Empty target is a send (Ctrl+N).
 for i = 1, 9 do

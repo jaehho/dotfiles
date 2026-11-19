@@ -19,7 +19,7 @@ wait_active() {
 }
 lit() { timeout 3 grim -o "$mon" - >/dev/null 2>&1; }
 
-# Docked with the panel disabled by monitors.lua: nothing to wake.
+# Docked with the panel disabled by screens.lua: nothing to wake.
 hyprctl monitors -j | jq -e --arg m "$mon" 'any(.[]; .name == $m)' >/dev/null || { log "$mon absent; nothing to wake"; exit 0; }
 
 log "start: session $session active=$(active && echo yes || echo no), vt $(cat /sys/class/tty/tty0/active), $mon dpmsStatus=$(hyprctl monitors -j | jq --arg m "$mon" '.[] | select(.name == $m) | .dpmsStatus')"

@@ -17,7 +17,7 @@ Stow packages under `home/` only. No timers, no package manifests, no apply scri
 - Each project's `CLAUDE.md` under `~/projects/` is a symlink into `home/projects/projects/<name>/`; edit it here. A session launched here never loads it: read it before the first command or edit in that project or its worktrees.
 - Apps under `~/projects/` own their implementation. This repo owns their integration (hyprland.lua, Neovim lazy specs, stowed configs).
 - swaync is the jaehho fork in `~/projects/upstream/swaync`. Native arrows and action digits pass through; `hypr-swaync-keys` handles Ctrl+n/p.
-- Monitor rules are computed in `home/hypr/.config/hypr/monitors.lua`. No layout daemon.
+- Monitor rules are computed in `home/hypr/.config/hypr/screens.lua`. No layout daemon.
 - Corner radii: 12px windows/containers, 8px nested controls, pill when fully round. A new surface picks from that scale.
 - Keybind sheet parses `hyprland.lua` comments and tmux `-N` notes. Label new binds. `hypr-settings-menu`'s table feeds the bar's quick settings (`--json`), and its IDs are also called by the bar's glyphs (`home/hypr/.config/quickshell/bar/`).
 
