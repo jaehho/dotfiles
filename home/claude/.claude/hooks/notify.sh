@@ -3,11 +3,12 @@
 #
 # Hook mode (stdin JSON): Stop and Notification -> notify-send, with source
 # window/tmux pane carried as hints.
-# Focus mode (`notify.sh focus`, run by swaync on action): focus that source.
+# Focus mode (`notify.sh focus <window> <socket> <pane>`, run by the bar's
+# notification daemon on a click, Notifs.qml `hook`): focus that source.
 # Watch mode (`notify.sh watch ...`, started detached by hook mode): close
 # one notification once its source is seen or gone.
 #
-# Click path is swaync's action script, not notify-send --action. That keeps
+# Click path is the daemon's hook, not notify-send --action. That keeps
 # notify-send fire-and-forget: no FIFO and no action waiter.
 #
 # Lifetime: skip entirely if the source pane is already focused at send time.
@@ -78,9 +79,9 @@ pane_state() {
   esac
 }
 
-# Unique bus name of the notification daemon. swaync restarts drop every
-# toast and number new ones from 1 again, so a watcher must not close an
-# id once the owner has changed.
+# Unique bus name of the notification daemon. A daemon restart drops
+# every toast and numbers new ones from 1 again, so a watcher must not
+# close an id once the owner has changed.
 notif_owner() {
   gdbus call --session --dest org.freedesktop.DBus \
     --object-path /org/freedesktop/DBus \
@@ -88,7 +89,8 @@ notif_owner() {
     2>/dev/null | tr -d "(),' " || true
 }
 
-# swaync exports hints via GLib Variant.print, so strings arrive single-quoted.
+# Older daemons passed hints via GLib Variant.print, single-quoted; the
+# bar passes them plain, so this only trims quotes when present.
 unquote() {
   local v="${1:-}"
   v="${v#\'}"
@@ -98,11 +100,11 @@ unquote() {
   printf '%s' "$v"
 }
 
-# ── Focus mode: swaync script on notification action ──────────────────────────
+# ── Focus mode: the daemon's hook on a click ─────────────────────────────────
 if [[ "${1:-}" == "focus" ]]; then
-  addr=$(unquote "${SWAYNC_HINT_CLAUDE_WINDOW:-}")
-  socket=$(unquote "${SWAYNC_HINT_CLAUDE_TMUX_SOCKET:-}")
-  target=$(unquote "${SWAYNC_HINT_CLAUDE_TMUX:-}")
+  addr=$(unquote "${2:-}")
+  socket=$(unquote "${3:-}")
+  target=$(unquote "${4:-}")
 
   recover_hypr || true
   if [[ -n "$addr" ]] && window_alive "$addr"; then
@@ -169,19 +171,16 @@ play_sound() {
   setsid ffplay -nodisp -autoexit -loglevel quiet -f lavfi "sine=f=800:d=0.15" </dev/null &>/dev/null &
 }
 
-# Why to stay quiet now, or nothing. swaync already hides the popup under Do
-# Not Disturb or an inhibitor; the beep is ours, so it has to ask too. An open
-# capture stream is a call or a steno recording: no beep into it, and no reply
-# text on a screen that may be shared. Each check gives up after a second:
-# swaync-client waits forever for a daemon that is not on the bus (-sw stops
-# that) or for a bus that is not there (only timeout stops that).
+# Why to stay quiet now, or nothing. The bar already hides the popup under
+# Do Not Disturb; the beep is ours, so it has to ask too. An open capture
+# stream is a call or a steno recording: no beep into it, and no reply text
+# on a screen that may be shared. Each check gives up after a second, so a
+# bar that is not running cannot hold the hook.
 quiet_reason() {
   if [[ -n "$(timeout 1 pactl list short source-outputs 2>/dev/null)" ]]; then
     echo mic
-  elif [[ "$(timeout 1 swaync-client -sw -D 2>/dev/null)" == "true" ]]; then
+  elif [[ "$(timeout 1 qs -c bar ipc call notifs dnd 2>/dev/null)" == "true" ]]; then
     echo dnd
-  elif [[ "$(timeout 1 swaync-client -sw -I 2>/dev/null)" == "true" ]]; then
-    echo inhibited
   elif away; then
     echo away
   else
@@ -333,9 +332,9 @@ if recover_hypr; then
   esac
   [[ -n "$QUIET" ]] && log "quiet event=$EVENT reason=$QUIET"
 
-  # -t 0 is NOT "never expire" in swaync: expire_timeout 0 falls back to the
-  # daemon's `timeout` (5s). That only hides the popup; the control center
-  # keeps the entry. 12s gives the toast time to be clicked.
+  # -t 0 is NOT "never expire" in the bar's daemon: expire_timeout 0 falls
+  # back to its default (5s), as swaync's did. That only hides the popup;
+  # the center keeps the entry. 12s gives the toast time to be clicked.
   NOTIF_ID=$(notify-send --print-id \
     --app-name="Claude Code" \
     -u "${URGENCY:-normal}" \

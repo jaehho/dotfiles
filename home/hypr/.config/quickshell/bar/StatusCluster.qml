@@ -201,47 +201,21 @@ Row {
         }
     }
 
-    // swaync's count, orange while something waits; red under do not
-    // disturb, which silences everything and must not be forgotten.
+    // The notification count (Notifs.qml), orange while something waits;
+    // red under Do Not Disturb, which silences everything and must not be
+    // forgotten. A click opens the center on this bar's screen.
     BarButton {
         id: bell
 
-        property var state: ({
-                text: "0",
-                alt: "none",
-                tooltip: ""
-            })
-        readonly property bool quiet: state.alt.startsWith("dnd")
-        readonly property bool waiting: !quiet && state.alt.endsWith("notification")
+        readonly property bool quiet: Notifs.dnd
+        readonly property bool waiting: !quiet && Notifs.count > 0
 
         bar: attention.bar
-        text: String.fromCodePoint(quiet ? 0xf009b : 0xf009a) + (quiet || state.text === "0" || state.text === "" ? "" : ` ${state.text}`)
+        text: String.fromCodePoint(quiet ? 0xf009b : 0xf009a) + (quiet || Notifs.count === 0 ? "" : ` ${Notifs.count}`)
         tint: quiet ? attention.colors.red : waiting ? attention.colors.orange : attention.colors.grey2
-        tip: state.tooltip ?? ""
-        onClicked: attention.run(["swaync-client", "-t", "-sw"])
+        tip: quiet ? "Do Not Disturb is on" : Notifs.count === 0 ? "No notifications" : Notifs.count === 1 ? "1 notification" : `${Notifs.count} notifications`
+        onClicked: Notifs.toggleRequested(attention.bar.screen.name)
         onRightClicked: attention.run([attention.bin + "hypr-settings-menu", "dnd"])
-
-        // A subscription that only writes on change never meets a closed
-        // pipe, so it is tied to the bar's life instead (issue #50).
-        Process {
-            id: subscription
-            running: true
-            command: ["setpriv", "--pdeathsig", "TERM", "swaync-client", "-swb"]
-            stdout: SplitParser {
-                onRead: line => {
-                    try {
-                        bell.state = JSON.parse(line);
-                    } catch (error) {}
-                }
-            }
-            onExited: resubscribe.start()
-        }
-
-        Timer {
-            id: resubscribe
-            interval: 3000
-            onTriggered: subscription.running = true
-        }
     }
 
     // dash's red-only glance (jaehho/dash#29): empty at rest, red when a

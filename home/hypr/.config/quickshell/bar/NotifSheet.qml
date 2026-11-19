@@ -7,7 +7,8 @@ pragma ComponentBehavior: Bound
 //
 // The keyboard is native, not a Hyprland submap: Up/Down, j/k or
 // Ctrl+n/p move, gg/Home and G/End jump, Enter runs the default action
-// and closes, x/Delete dismisses and moves to the next, `<` or `,` and
+// and closes, x/d/Delete dismisses and moves to the next, Shift+C
+// clears all, `<` or `,` and
 // `>` or `.` press the first two buttons and 3–9 the rest, q or Esc
 // close. It takes keys while it has focus.
 //
@@ -63,7 +64,9 @@ Sheet {
             if (list.currentItem)
                 Notifs.activate(list.currentItem.entry, "default");
             sheet.closeRequested();
-        } else if (key === Qt.Key_X || key === Qt.Key_Delete) {
+        } else if (key === Qt.Key_C && event.modifiers & Qt.ShiftModifier) {
+            Notifs.clear();
+        } else if (key === Qt.Key_X || key === Qt.Key_D || key === Qt.Key_Delete) {
             if (list.currentItem)
                 Notifs.dismiss(list.currentItem.entry);
         } else if (key === Qt.Key_Less || key === Qt.Key_Comma)

@@ -344,7 +344,7 @@ def emit_bind(text, comment, block_id, submap, loop, locals_):
 
 # ── grouping ─────────────────────────────────────────────────────────────────
 
-SUBMAP_GROUPS = {"resize": "Resize mode", "swaync": "Notification panel"}
+SUBMAP_GROUPS = {"resize": "Resize mode"}
 
 GROUP_ORDER = [
     "Super", "Super + Shift", "Super + Ctrl", "No prefix",

@@ -81,13 +81,8 @@ hl.on("hyprland.start", function()
     -- The bar is the Quickshell config in quickshell/bar/ (issue #75).
     hl.exec_cmd("systemctl --user start sni-watcher && quickshell -c bar")
     hl.exec_cmd("hyprpaper")
-    -- swaync is a user unit pointed at the fork in ~/.local/bin (the packaged
-    -- one runs the stock /usr/bin/swaync and used to be masked, which also
-    -- blocked D-Bus revival). Start it with the same post-import kick as
-    -- swayosd.
-    hl.exec_cmd("systemctl --user start swaync")
+    -- Notifications are the bar's too (Notifs.qml, #90): no separate daemon.
     hl.exec_cmd("~/.local/bin/hypr-urgent-focus")
-    hl.exec_cmd("~/.local/bin/hypr-swaync-keys")
     -- hypridle, through stay-awake's off so a lid inhibitor a previous
     -- Hyprland left held goes too (hypr-idle-toggle).
     hl.exec_cmd("~/.local/bin/hypr-idle-toggle off")
@@ -395,8 +390,8 @@ hl.bind(mainMod .. " + T",         hl.dsp.layout("togglesplit"))                
 -- Screenshots — see ~/.local/bin/screenshot.
 -- Modifiers: (none)=full, SHIFT=region, SUPER=window, SUPER+SHIFT=focused monitor;
 --            CTRL=clipboard only (no disk).
--- A function because a submap is exclusive (see bind_media_keys): the swaync
--- submap re-declares these, or Print goes dead while the panel is open.
+-- A function because a submap is exclusive (see bind_media_keys): one that
+-- must keep Print working re-declares these.
 local function bind_screenshots()
     hl.bind("Print",                     hl.dsp.exec_cmd("screenshot full copy"))    -- screenshot the screen
     hl.bind("SHIFT + Print",             hl.dsp.exec_cmd("screenshot region copy"))  -- screenshot a region
@@ -425,8 +420,8 @@ hl.bind(mainMod .. " + E", hl.dsp.exec_cmd("~/.local/bin/hypr-easel-toggle")) --
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("qs -c bar ipc call bar toggleShown || quickshell -c bar")) -- show/hide bar
 hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("qs -c bar ipc call bar toggle")) -- open bar: player and calendar
 
--- Notifications
-hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("swaync-client -t"))
+-- Notifications: the bar's center (Notifs.qml), keyboard included.
+hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("qs -c bar ipc call notifs toggle")) -- notification center
 
 -- Game mode (disable effects for performance)
 hl.bind(mainMod .. " + G", hl.dsp.exec_cmd("~/.local/bin/hypr-gamemode"))
@@ -643,8 +638,8 @@ end)
 -- signature is what moved in swayosd 0.3.1 -> 0.3.2, so pinning it just
 -- re-breaks on the next bump. Probing the server costs more than the keypress.
 -- Declared as a function because a Hyprland submap is exclusive: while one is
--- active *only* its own binds fire. The swaync submap calls this too, so
--- opening the control center does not kill the media keys.
+-- active *only* its own binds fire, so a submap that must keep the media keys
+-- calls this too.
 local function bind_media_keys()
     -- Volume steps go through hypr-level (finer at low levels), which sets it
     -- with wpctl, so only the mute keys depend on the server answering.
@@ -927,20 +922,13 @@ hl.layer_rule({
     ignore_alpha = 0.5,
 })
 
+-- The bar's notification popups and center animate themselves (cards
+-- slide in, the center slides from the edge).
 hl.layer_rule({
-    name  = "swaync-notification-blur",
-    match = { namespace = "swaync-notification-window" },
+    name  = "bar-notifications",
+    match = { namespace = "^bar-notification" },
 
-    blur         = false,
-    ignore_alpha = 1,
-})
-
-hl.layer_rule({
-    name  = "swaync-control-center-blur",
-    match = { namespace = "swaync-control-center" },
-
-    blur         = true,
-    ignore_alpha = 0.5,
+    no_anim = true,
 })
 
 hl.layer_rule({
@@ -974,42 +962,3 @@ hl.layer_rule({
     -- The prompt animates itself: the sheet drops from the top edge.
     no_anim = true,
 })
-
--- Vim-style navigation inside the control center. `hypr-swaync-keys` enters
--- and leaves this submap by watching swaync's own `visible` flag, so it is
--- never entered by hand. The helper checks visibility before restoring it.
---
--- Only the translations below are bound. Everything swaync already handles --
--- Return, Delete/BackSpace/x/d, Home/End, Escape, q (close), y (yank),
--- Shift+C (clear all), 1-9 (actions) -- is deliberately left unbound so
--- Hyprland forwards it untouched, and bare letters stay free. A `catchall`
--- here would swallow the lot. Media keys and screenshots are re-declared
--- below because they are compositor binds that an exclusive submap would
--- otherwise silence.
-local function swaync_key(key)
-    return hl.dsp.exec_cmd("~/.local/bin/hypr-swaync-keys send " .. key)
-end
-
-hl.define_submap("swaync", "reset", function()
-    hl.bind("CTRL + n", swaync_key("Down"), { repeating = true }) -- next notification
-    hl.bind("CTRL + p", swaync_key("Up"),   { repeating = true }) -- previous notification
-    hl.bind("j", swaync_key("Down"), { repeating = true }) -- next notification
-    hl.bind("k", swaync_key("Up"),   { repeating = true }) -- previous notification
-    -- g is the gg prefix (second g sends Home). End is SHIFT+g, not the keysym
-    -- "G": Hyprland treats bare "G" as the g key too, which made every g jump
-    -- to the bottom.
-    hl.bind("g", swaync_key("g")) -- gg: top
-    hl.bind("SHIFT + g", swaync_key("End")) -- bottom
-    hl.bind("d", swaync_key("Delete")) -- dismiss
-    hl.bind("q", hl.dsp.exec_cmd("swaync-client -t")) -- close
-    -- Swallow Shift+D so it cannot reach swaync's DND toggle. The underline
-    -- on that switch is gone too (config.json).
-    hl.bind("SHIFT + d", function() end)
-    -- Native Up/Down, Home/End and 1-9 go straight to swaync. The fork
-    -- labels action buttons with their numbers; no synthetic keypress needed.
-    -- Passthroughs: a submap is exclusive, so without these it would silence
-    -- the media keys and the panel's own toggle while the panel is open.
-    hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("swaync-client -t")) -- close the panel
-    bind_media_keys()
-    bind_screenshots() -- screenshotting with the panel open is the common case
-end)

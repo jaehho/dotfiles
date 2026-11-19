@@ -7,8 +7,9 @@ pragma ComponentBehavior: Bound
 // popups, NotifCenter the list, and the bar's bell the count.
 //
 // Over IPC (`qs -c bar ipc call notifs <function>`): `toggle` opens or
-// closes the center on the focused monitor, `dnd` says "true" or
-// "false", `setDnd`/`toggleDnd` change it, `clear` dismisses all.
+// closes the center on the focused monitor (Super+period), `dnd` says
+// "true" or "false", `setDnd`/`toggleDnd` change it, `count` says how
+// many are kept, `clear` dismisses all.
 //
 // What swaync's config did lives here: the rules (`ignored`,
 // `forcedCritical`), the hooks it ran on an action (`hook`), its
@@ -34,8 +35,9 @@ Singleton {
 
     readonly property string home: Quickshell.env("HOME")
 
-    // The center's open/close request, for shell.qml to place.
-    signal toggleRequested
+    // The center's open/close request, for shell.qml to place: on the
+    // named screen, or "" for the focused one.
+    signal toggleRequested(string screen)
 
     onCenterOpenChanged: {
         if (centerOpen)
@@ -184,7 +186,11 @@ Singleton {
         target: "notifs"
 
         function toggle(): void {
-            notifs.toggleRequested();
+            notifs.toggleRequested("");
+        }
+
+        function count(): int {
+            return notifs.count;
         }
 
         function dnd(): string {

@@ -1,14 +1,14 @@
 #!/bin/bash
-# Toggle Do Not Disturb via swaync.
+# Toggle Do Not Disturb in the bar's notification daemon (Notifs.qml).
 # When turning DND on, notify first so the toast is visible before silencing.
 
-state=$(swaync-client -D 2>/dev/null)
+ipc() { qs -c bar ipc call notifs "$@"; }
 
-if [[ "$state" == "true" ]]; then
-    swaync-client -df >/dev/null
+if [[ "$(ipc dnd 2>/dev/null)" == "true" ]]; then
+    ipc setDnd false
     notify-send -u low "Notifications" "Do Not Disturb OFF"
 else
     notify-send -u low "Notifications" "Do Not Disturb ON"
     sleep 1
-    swaync-client -dn >/dev/null
+    ipc setDnd true
 fi

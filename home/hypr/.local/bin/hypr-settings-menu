@@ -169,8 +169,9 @@ ITEMS = [
          state=lambda: running("hyprsunset") and output(
              ["hyprctl", "hyprsunset", "identity", "get"]) == "false"),
     dict(id="dnd", kind="toggle", icon="󰂛", label="Do not disturb",
-         run=f"{BIN}/hypr-dnd-toggle", needs=["swaync-client"],
-         state=lambda: output(["swaync-client", "-D"]) == "true"),
+         run=f"{BIN}/hypr-dnd-toggle", needs=["qs"],
+         state=lambda: output(
+             ["qs", "-c", "bar", "ipc", "call", "notifs", "dnd"]) == "true"),
     dict(id="awake", kind="toggle", icon="󰅶", label="Stay awake",
          run=f"{BIN}/hypr-idle-toggle", needs=["hypridle", "systemd-inhibit"],
          state=awake_on),

@@ -14,14 +14,14 @@
 #   copy     — save to $SCREENSHOT_DIR + clipboard + notification
 #   clip     — clipboard only, no disk persistence
 #
-# `screenshot open` is the swaync ACTION script (config.json). It opens
-# $SWAYNC_BODY, the absolute path the saved notification carries. No
+# `screenshot open <path>` is the bar's hook for a click on the saved
+# notification (Notifs.qml `hook`), with the path its body carries. No
 # notify-send --wait helper: the daemon invokes this on click, in the
-# popup or later in the panel, for as long as the notification exists.
+# popup or later in the center, for as long as the notification exists.
 set -euo pipefail
 
 if [ "${1:-}" = open ]; then
-    exec xdg-open "${SWAYNC_BODY:?swaync did not pass a path}"
+    exec xdg-open "${2:?usage: screenshot open <path>}"
 fi
 
 dir=${SCREENSHOT_DIR:-$HOME/Media/screenshots}
@@ -41,7 +41,7 @@ notify() {
 }
 
 # Fire-and-forget. Body is the absolute path so `screenshot open` (see
-# swaync scripts) can open it without this process staying alive.
+# the bar's hook in Notifs.qml) can open it without this process staying alive.
 notify_saved() {
     notify-send -a screenshot -i "$1" "Screenshot saved" "$1"
 }

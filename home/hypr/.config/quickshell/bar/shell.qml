@@ -10,6 +10,9 @@
 // at a page (wifi, bluetooth or sound), `tray` the tray grid (Super+'), and `refreshAwake` makes the stay-awake glyph look
 // again (hypr-idle-toggle calls it).
 //
+// The bar is also the notification daemon (Notifs.qml, #90): popups on
+// the focused monitor and a center that opens like the other sheets.
+//
 // App icons resolve through Papirus-Dark, as waybar's did.
 import QtQuick
 import Quickshell
@@ -29,12 +32,15 @@ ShellRoot {
     property bool quickKeys: false
     // The screen whose dash panel is open, by name, or "" for none.
     property string dashOn: ""
+    // The screen whose notification center is open, or "" for none.
+    property string notifOn: ""
     // Hidden, the bars unmap and give their 40px back to the windows.
     property bool shown: true
 
     function toggle(name) {
         root.quickOn = "";
         root.dashOn = "";
+        root.notifOn = "";
         root.openOn = root.openOn === name ? "" : name;
     }
 
@@ -47,6 +53,7 @@ ShellRoot {
         }
         root.openOn = "";
         root.dashOn = "";
+        root.notifOn = "";
         root.quickKeys = keys;
         if (root.quickOn !== name)
             root.quickPage = page === "" ? "main" : page;
@@ -60,6 +67,43 @@ ShellRoot {
 
     NowPlaying {
         id: nowPlaying
+    }
+
+    // One sheet at a time: the center closes the others.
+    function notif(name) {
+        root.openOn = "";
+        root.quickOn = "";
+        root.dashOn = "";
+        root.notifOn = root.notifOn === name ? "" : name;
+    }
+
+    Binding {
+        target: Notifs
+        property: "centerOpen"
+        value: root.notifOn !== ""
+    }
+
+    Connections {
+        target: Notifs
+
+        function onToggleRequested(screen) {
+            root.shown = true;
+            root.notif(screen !== "" ? screen : Hyprland.focusedMonitor?.name ?? "");
+        }
+    }
+
+    NotifPopups {}
+
+    Variants {
+        model: Quickshell.screens
+
+        NotifCenter {
+            required property var modelData
+
+            screen: modelData
+            open: root.notifOn === modelData.name
+            onCloseRequested: root.notifOn = ""
+        }
     }
 
     // dash-data board runs only while a panel is open.
@@ -123,6 +167,7 @@ ShellRoot {
             const name = Hyprland.focusedMonitor?.name ?? "";
             root.openOn = "";
             root.quickOn = "";
+            root.notifOn = "";
             root.dashOn = root.dashOn === name ? "" : name;
         }
 
@@ -130,6 +175,7 @@ ShellRoot {
             root.openOn = "";
             root.quickOn = "";
             root.dashOn = "";
+            root.notifOn = "";
             root.shown = !root.shown;
         }
 
