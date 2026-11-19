@@ -1,224 +1,111 @@
--- Monitor layout + workspace assignment.
+-- Screens: which workspaces each monitor holds, and the display menu's
+-- mirror and per-screen off.
 --
--- Replaces the hypr-monitor daemon (retired 2026-09-01). That tool existed to
--- generate monitors.conf/workspaces.conf because hyprlang could not compute
--- anything; Lua can, so there is no generated file, no socket watcher, and no
--- `hyprctl reload` (and therefore none of the post-reload races the daemon had
--- to poll around). hl.monitor/hl.workspace_rule mutate live config state.
+-- Hyprland places monitors itself: the catch-all rule in hyprland.lua (each
+-- monitor's own preferred mode, automatic position and scale) or the rules
+-- nwg-displays saves to monitors.lua. This module only reads where they
+-- ended up, and does what Hyprland will not: keep workspaces 1-9 spread
+-- round-robin over the monitors, leftmost getting 1, and move them when a
+-- monitor comes or goes (issue #9580 was closed as not planned). The closed
+-- set is 1-9, never 10. Minting past 9 is a bug.
 --
--- Layout rules, unchanged from the daemon:
---   0 externals   [laptop]
---   1 external    [laptop, external]      external to the right
---   2+ externals  [externals..., laptop]  laptop rightmost
--- Externals sort by EXTERNAL_ORDER preference (substring of description or
--- serial), then alphabetically by connector name. Workspaces 1-9 are assigned
--- round-robin, leftmost monitor getting workspace 1. The closed set is 1-9,
--- never 10. Minting past 9 is a bug.
+-- Mirror and off are runtime rules under the selector nwg-displays uses, so
+-- they merge into its rule and keep its mode, position and scale. Any config
+-- reload drops them, which is how Extend brings every screen back.
 
 local LAPTOP_PATTERN = "eDP-"
-local EXTERNAL_ORDER = { "FT36ZS2", "B946ZS2" }
 local MAX_WORKSPACES = 9
 local DEBOUNCE_MS    = 500
-
--- Display state, set from the display menu (F1) through set_layout() and
--- toggle_output(). `mirror`: every external shows the laptop. `off`: outputs the
--- user turned off. A disabled or mirrored output drops out of hl.get_monitors(),
--- so the names needed to bring them back are remembered in `seen`.
-local state = { mirror = false, off = {}, scale = {} }
-local seen = { laptop = nil, externals = {} }
-
--- Scale for an output: what the display menu set, else "auto". Scale survives
--- layout changes (reset_state leaves it alone).
-local function scale_for(name)
-    return state.scale[name] or "auto"
-end
-
--- Width in layout pixels. A requested number wins over the live scale, which
--- lags until the rule is applied; "auto" has to use the live one.
-local function logical_width(m)
-    local scale = scale_for(m.name)
-    if type(scale) ~= "number" then scale = m.scale end
-    return math.floor(m.width / scale)
-end
 
 local function is_laptop(m)
     return m.name:sub(1, #LAPTOP_PATTERN) == LAPTOP_PATTERN
 end
 
--- The outputs Hyprland has now. With none left it invents one called FALLBACK;
--- that is not a screen, so it is left out and "nothing visible" stays true.
-local function live_monitors()
+-- Outputs showing their own picture, or with `all` every connected one
+-- (turned off and mirroring too). With none left Hyprland invents one called
+-- FALLBACK; that is not a screen, so it is left out.
+local function monitors(all)
+    local list = all and hl.get_monitors({ all = true }) or hl.get_monitors()
     local out = {}
-    for _, m in ipairs(hl.get_monitors() or {}) do
+    for _, m in ipairs(list or {}) do
         if m.name ~= "FALLBACK" then out[#out + 1] = m end
     end
     return out
 end
 
--- Index in EXTERNAL_ORDER whose pattern appears in the monitor's description or
--- serial, or nil. Plain substring match (find with `plain`), as before.
-local function rank(m)
-    for i, pat in ipairs(EXTERNAL_ORDER) do
-        if (m.description or ""):find(pat, 1, true) or (m.serial or ""):find(pat, 1, true) then
-            return i
-        end
-    end
-    return nil
-end
-
--- Left-to-right ordering of the currently connected monitors.
-local function order_monitors(monitors)
-    local laptop, externals = nil, {}
-    for _, m in ipairs(monitors) do
-        if laptop == nil and is_laptop(m) then
-            laptop = m
-        else
-            externals[#externals + 1] = m
-        end
-    end
-
-    table.sort(externals, function(a, b)
-        local ra, rb = rank(a), rank(b)
-        if ra and rb then return ra < rb end
-        if ra then return true end
-        if rb then return false end
+-- Left to right as Hyprland placed them.
+local function ordered(list)
+    local out = { table.unpack(list) }
+    table.sort(out, function(a, b)
+        if a.x ~= b.x then return a.x < b.x end
+        if a.y ~= b.y then return a.y < b.y end
         return a.name < b.name
     end)
-
-    if laptop == nil then
-        return externals
-    elseif #externals == 0 then
-        return { laptop }
-    elseif #externals == 1 then
-        return { laptop, externals[1] }
-    end
-    externals[#externals + 1] = laptop
-    return externals
+    return out
 end
 
-local function reset_state()
-    state.mirror = false
-    state.off = {}
+-- The rule selector for an override. nwg-displays (use-desc) keys a
+-- monitor's rule as "desc:<description>"; hl.monitor merges into a rule
+-- with the same selector, so the override changes only the fields it sets.
+-- A headless output (the tablet) has no real description: its name.
+local function selector(m)
+    if m.backend == "drm" and (m.description or "") ~= "" then
+        return "desc:" .. m.description
+    end
+    return m.name
 end
 
-local function pristine()
-    return not state.mirror and next(state.off) == nil
-end
-
--- Undo mirroring and turned-off outputs: plain rules for every remembered
--- output. Each real one that comes back fires monitor.added, which re-applies
--- the layout.
-local function release()
-    if seen.laptop then
-        -- disabled = false because a plain rule leaves a disabled output disabled.
-        hl.monitor({ output = seen.laptop, mode = "preferred", position = "auto", scale = scale_for(seen.laptop), disabled = false })
-    end
-    for name in pairs(seen.externals) do
-        -- mirror = "" because a headless output never fires monitor.added, so
-        -- nothing else would clear its mirror rule.
-        hl.monitor({ output = name, mode = "preferred", position = "auto", scale = scale_for(name), mirror = "", disabled = false })
-    end
-end
-
--- The outputs that make up the layout now, left to right. Outputs the user
--- turned off are left out. Mirrored externals are not in `live`, so a mirrored
--- layout is the laptop alone. Returns ordered, laptop, externals, and the
--- externals still to be mirrored (nil once they are).
-local function plan(live)
-    local active = {}
-    for _, m in ipairs(live) do
-        if not state.off[m.name] then active[#active + 1] = m end
-    end
-
-    local ordered = order_monitors(active)
-    local laptop, externals = nil, {}
-    for _, m in ipairs(ordered) do
-        if is_laptop(m) then laptop = m else externals[#externals + 1] = m end
-    end
-
-    local mirrored = laptop and type(laptop.mirrors) == "table" and next(laptop.mirrors) ~= nil
-    if #externals == 0 then
-        if mirrored then ordered = { laptop } end
-    elseif state.mirror and laptop then
-        return { laptop }, laptop, externals, externals
-    end
-    return ordered, laptop, externals, nil
+local function override(m, fields)
+    fields.output = selector(m)
+    hl.monitor(fields)
 end
 
 -- Set below; apply() may need to retry after its oneshot is spent.
 local schedule
 
--- Recompute and apply monitor positions and workspace rules.
+-- Assign workspace slots to the monitors as placed, and move any workspace
+-- that sits on the wrong one.
 local function apply()
-    local monitors = live_monitors()
-    if #monitors == 0 then
-        -- Nothing visible: the laptop was off and the last external just left.
-        if not pristine() then
-            reset_state()
-            release()
+    local live = monitors()
+    if #live == 0 then
+        -- Nothing visible: the laptop was turned off and the last external
+        -- just left. Turn the laptop (or any output) back on.
+        local all = monitors(true)
+        local target
+        for _, m in ipairs(all) do
+            if is_laptop(m) then target = m end
         end
+        target = target or all[1]
+        if target then override(target, { disabled = false, mirror = "" }) end
         return
     end
-    -- A monitor mid-hotplug reports 0x0. Positioning off that produces a
-    -- garbage layout that sticks until the next event, so wait it out. The
-    -- oneshot that got here is spent, so arm another — nothing else will.
-    for _, m in ipairs(monitors) do
+    -- A monitor mid-hotplug reports 0x0, and its position is not final
+    -- either, so wait it out. The oneshot that got here is spent, so arm
+    -- another — nothing else will.
+    for _, m in ipairs(live) do
         if m.width == 0 or m.height == 0 then
             schedule()
             return
         end
     end
 
-    for _, m in ipairs(monitors) do
-        if is_laptop(m) then seen.laptop = m.name else seen.externals[m.name] = true end
-        if state.off[m.name] then hl.monitor({ output = m.name, disabled = true }) end
-    end
-
-    local ordered, laptop, externals, to_mirror = plan(monitors)
-    if #ordered == 0 then
-        reset_state()
-        release()
-        return
-    end
-    -- The externals are gone (unplugged), so there is nothing left to mirror.
-    if state.mirror and #externals == 0 and not (laptop and type(laptop.mirrors) == "table" and next(laptop.mirrors) ~= nil) then
-        state.mirror = false
-    end
-
-    for _, m in ipairs(to_mirror or {}) do
-        hl.monitor({ output = m.name, mode = "preferred", position = "auto", scale = scale_for(m.name), mirror = laptop.name })
-    end
-
-    -- "preferred", never the live mode: a rule is keyed by connector and
-    -- outlives the monitor on it. Pinning the live mode left HDMI-A-2 at
-    -- the ASUS's 1920x1080, and the Dell U4025QW plugged in next got that
-    -- mode stretched across its 64:27 panel (2026-11-19).
-    local x = 0
-    for _, m in ipairs(ordered) do
-        hl.monitor({
-            output   = m.name,
-            mode     = "preferred",
-            position = string.format("%dx0", x),
-            scale    = scale_for(m.name),
-        })
-        x = x + logical_width(m)
-    end
+    local order = ordered(live)
 
     -- Round-robin 1..MAX_WORKSPACES. The first workspace each monitor receives
     -- becomes its default, so a fresh workspace opens where you expect.
-    local count = #ordered
+    local count = #order
     local assigned, defaults = {}, {}
     for ws = 1, MAX_WORKSPACES do
         local idx = ((ws - 1) % count) + 1
-        local name = ordered[idx].name
+        local name = order[idx].name
         local is_default = defaults[idx] == nil
         if is_default then
             defaults[idx] = ws
         end
         assigned[ws] = name
         -- Not persistent: an empty workspace must die when you leave it so
-        -- workspace.removed fires and workspace_pack.lua ripples the holes closed
-        -- (tmux renumber-windows). Super+N creates id N if it is missing.
+        -- workspace.removed fires and workspace_pack.lua ripples the holes
+        -- closed (tmux renumber-windows). Super+N creates id N if missing.
         hl.workspace_rule({ workspace = tostring(ws), monitor = name, default = is_default })
     end
 
@@ -239,31 +126,28 @@ local function apply()
     -- Sweep monitors sitting on a workspace that is no longer theirs back to
     -- their default, then restore focus.
     local focused
-    for _, m in ipairs(monitors) do
+    for _, m in ipairs(live) do
         if m.focused then focused = m.name end
     end
 
     local swept = false
-    for idx, m in ipairs(ordered) do
-        local live = hl.get_monitor(m.name)
-        local active = live and live.active_workspace
+    for idx, m in ipairs(order) do
+        local now = hl.get_monitor(m.name)
+        local active = now and now.active_workspace
         -- active_workspace is a userdata (not a table) on 0.57, so read .id
         -- off anything that is not already a number.
         local id = active and (type(active) == "number" and active or active.id)
         if id and assigned[id] ~= m.name and defaults[idx] then
-            local target = hl.get_monitor(m.name)
-            if target then
-                -- set_workspace({ workspace = "N" }) does nothing when N
-                -- exists already (0.57.1, checked live); the workspace object
-                -- works. The table form is only good for creating it.
-                local home = hl.get_workspace(tostring(defaults[idx]))
-                if home then
-                    target:set_workspace(home)
-                else
-                    target:set_workspace({ workspace = tostring(defaults[idx]) })
-                end
-                swept = true
+            -- set_workspace({ workspace = "N" }) does nothing when N exists
+            -- already (0.57.1, checked live); the workspace object works. The
+            -- table form is only good for creating it.
+            local home = hl.get_workspace(tostring(defaults[idx]))
+            if home then
+                now:set_workspace(home)
+            else
+                now:set_workspace({ workspace = tostring(defaults[idx]) })
             end
+            swept = true
         end
     end
 
@@ -273,29 +157,26 @@ local function apply()
 
     -- Closed set 1-9: fold any stray (temp leak, Super+scroll mint, 9003) back
     -- into the slots so the bar and Super+N only ever see 1-9.
-    local ws_mod = package.loaded["workspace_pack"]
-    if ws_mod and ws_mod.reclaim then
-        ws_mod.reclaim()
+    local pack = package.loaded["workspace_pack"]
+    if pack and pack.reclaim then
+        pack.reclaim()
     end
 end
 
--- Slot ids each output owns under the live layout (round-robin, same formula
--- and plan() as apply()). workspace_pack.lua packs only into these so the
--- id ↔ monitor map hypr-tab-nonempty and hypr-move-project assume survives.
+-- Slot ids each output owns under the live layout (same order and formula
+-- as apply()). workspace_pack.lua packs only into these so the id ↔ monitor
+-- map hypr-tab-nonempty and hypr-move-project assume survives.
 local function slots_by_monitor()
-    local monitors = live_monitors()
-    if #monitors == 0 then return {} end
-    for _, m in ipairs(monitors) do
+    local live = monitors()
+    if #live == 0 then return {} end
+    for _, m in ipairs(live) do
         if m.width == 0 or m.height == 0 then return {} end
     end
 
-    local ordered = plan(monitors)
-
+    local order = ordered(live)
     local slots = {}
-    local count = #ordered
-    if count == 0 then return {} end
     for ws = 1, MAX_WORKSPACES do
-        local name = ordered[((ws - 1) % count) + 1].name
+        local name = order[((ws - 1) % #order) + 1].name
         slots[name] = slots[name] or {}
         slots[name][#slots[name] + 1] = ws
     end
@@ -305,7 +186,8 @@ end
 -- Trailing-edge debounce: hotplug fires several events in a burst.
 -- opts.type is mandatory ("repeat" or "oneshot") and hl.timer returns nil
 -- without it. Creating it armed also gives us the initial apply, since the
--- config is parsed before monitors can be queried.
+-- config is parsed before monitors can be queried; that covers startup and
+-- every reload (no event fires on a reload).
 local function new_timer()
     return hl.timer(function()
         apply()
@@ -326,86 +208,60 @@ end
 
 hl.on("monitor.added", schedule)
 hl.on("monitor.removed", schedule)
--- Deliberately not monitor.layout_changed: applying rules changes the layout,
--- which would re-enter this.
-
--- The timer above is created armed, so the initial apply happens ~500ms after
--- the config is parsed. That covers startup and `hyprctl reload` alike; no
--- event fires on a reload, and hyprland.start fires only on the first parse.
-
--- Change the state. From a plain extend, every output is already live and
--- apply() can act now. Otherwise some outputs are mirrored or off, so they are
--- brought back first and the new layout waits for their monitor.added. A
--- headless output never fires it, hence the explicit schedule().
-local function change(fn)
-    local was_pristine = pristine()
-    fn()
-    if was_pristine then
-        apply()
-    else
-        release()
-        schedule()
-    end
-end
-
-local function laptop_name()
-    for _, m in ipairs(live_monitors()) do
-        if is_laptop(m) then return m.name end
-    end
-    return seen.laptop
-end
+-- Deliberately not monitor.layout_changed: moving workspaces changes the
+-- layout, which would re-enter this.
 
 -- "extend", "mirror", "external" (laptop off) or "laptop" (externals off).
+-- Extend reloads the config, which drops every override and brings back the
+-- configured rules. Returns false when the layout needs an external and
+-- none is connected.
 local function set_layout(layout)
-    change(function()
-        reset_state()
-        if layout == "mirror" then
-            state.mirror = true
-        elseif layout == "external" then
-            state.off[laptop_name() or ""] = true
-        elseif layout == "laptop" then
-            for name in pairs(seen.externals) do state.off[name] = true end
-        end
-    end)
-end
-
--- Turn one output off or back on. Refuses to turn off the last one on.
-local function toggle_output(name)
-    local on = {}
-    for _, m in ipairs(live_monitors()) do on[m.name] = true end
-    if state.off[name] then
-        change(function() state.off[name] = nil end)
-    elseif on[name] then
-        local others = 0
-        for other in pairs(on) do
-            if other ~= name and not state.off[other] then others = others + 1 end
-        end
-        if others == 0 then return false end
-        change(function() state.off[name] = true end)
+    if layout == "extend" then
+        hl.dispatch(hl.dsp.reload_config())
+        return true
+    end
+    local laptop, externals = nil, {}
+    for _, m in ipairs(monitors(true)) do
+        if is_laptop(m) and laptop == nil then laptop = m else externals[#externals + 1] = m end
+    end
+    if laptop == nil or (#externals == 0 and layout ~= "laptop") then return false end
+    override(laptop, { disabled = layout == "external", mirror = "" })
+    for _, m in ipairs(externals) do
+        override(m, {
+            disabled = layout == "laptop",
+            mirror = layout == "mirror" and laptop.name or "",
+        })
     end
     return true
 end
 
--- Set one output's scale (a number, or nil for auto) and re-apply. "auto" is
--- only resolved once the rule lands, so a second pass lays out on the real one.
-local function set_scale(name, scale)
-    state.scale[name] = scale
-    apply()
-    schedule()
+-- Turn one output off or back on. Refuses to turn off the last one showing
+-- its own picture.
+local function toggle_output(name)
+    for _, m in ipairs(monitors(true)) do
+        if m.name == name then
+            if not m.enabled then
+                override(m, { disabled = false })
+                return true
+            end
+            for _, other in ipairs(monitors()) do
+                if other.name ~= name then
+                    override(m, { disabled = true })
+                    return true
+                end
+            end
+            return false
+        end
+    end
+    return false
 end
 
--- An output is leaving or arriving by a path that fires no event (a headless
--- one): forget that it was ever turned off, and re-apply.
+-- An output arriving or leaving by a path that fires no event (the headless
+-- tablet): clear a turned-off state its rule may still carry, so a new one
+-- under the same name comes up on, and re-apply.
 local function forget(name)
-    state.off[name] = nil
-    seen.externals[name] = nil
+    hl.monitor({ output = name, disabled = false })
     schedule()
-end
-
--- Back to a plain extend, now. For callers that are about to remove an output
--- (tablet-display off) and must not leave the laptop panel disabled.
-local function reset()
-    change(reset_state)
 end
 
 return {
@@ -413,8 +269,6 @@ return {
     schedule = schedule,
     set_layout = set_layout,
     toggle_output = toggle_output,
-    set_scale = set_scale,
-    reset = reset,
     forget = forget,
     slots_by_monitor = slots_by_monitor,
 }

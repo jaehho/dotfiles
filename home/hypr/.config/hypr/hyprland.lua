@@ -7,8 +7,19 @@
 ---- MONITORS ----
 ------------------
 
--- screens.lua computes the layout and workspace assignment live; it is a
--- tracked file now rather than generated.
+-- Hyprland's defaults place the monitors: each gets its own preferred mode
+-- and an automatic position and scale. A rule for a specific monitor always
+-- wins over this catch-all, whatever the order.
+hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
+
+-- nwg-displays saves its arrangement as rules in monitors.lua (keyed
+-- "desc:<description>", its use-desc setting). It is generated and untracked;
+-- without it, the catch-all above is the whole layout.
+package.loaded["monitors"] = nil
+pcall(require, "monitors")
+
+-- screens.lua assigns workspaces to the monitors as placed, and backs the
+-- display menu's mirror and per-screen off.
 --
 -- require caches in package.loaded and that cache survives `hyprctl reload`, so
 -- without this line an edit to screens.lua is ignored until a full restart.
