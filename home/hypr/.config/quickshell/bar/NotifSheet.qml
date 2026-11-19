@@ -213,27 +213,34 @@ Sheet {
             }
         }
 
-        // Nothing left.
-        ColumnLayout {
+        // Nothing left: a bell and a line, centered in the sheet's width.
+        Item {
             Layout.fillWidth: true
             Layout.topMargin: Theme.space.xl
             Layout.bottomMargin: Theme.space.xl
             visible: Notifs.count === 0
-            spacing: Theme.space.sm
+            implicitHeight: empty.implicitHeight
 
-            Icon {
-                Layout.alignment: Qt.AlignHCenter
-                name: "notifications"
-                size: 40
-                weight: 300
-                color: Theme.colors.grey0
-            }
+            Column {
+                id: empty
 
-            Line {
-                Layout.alignment: Qt.AlignHCenter
-                text: "No notifications"
-                size: Theme.font.body
-                color: Theme.colors.grey1
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.space.sm
+
+                Icon {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    name: "notifications"
+                    size: 40
+                    weight: 300
+                    color: Theme.colors.grey0
+                }
+
+                Line {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "No notifications"
+                    size: Theme.font.body
+                    color: Theme.colors.grey1
+                }
             }
         }
     }

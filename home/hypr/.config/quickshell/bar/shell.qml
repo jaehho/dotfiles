@@ -92,6 +92,18 @@ ShellRoot {
         }
     }
 
+    // An open center follows the focus to another screen, as a
+    // workspace switch moves it.
+    Connections {
+        target: Hyprland
+
+        function onFocusedMonitorChanged() {
+            const name = Hyprland.focusedMonitor?.name ?? "";
+            if (root.notifOn !== "" && name !== "" && name !== root.notifOn)
+                root.notifOn = name;
+        }
+    }
+
     NotifPopups {}
 
     Variants {
