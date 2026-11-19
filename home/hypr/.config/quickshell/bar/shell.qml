@@ -55,9 +55,8 @@ ShellRoot {
         root.quickOn = name;
     }
 
-    Colors {
-        id: everforest
-    }
+    // The one palette instance; Theme holds it for the primitives too.
+    readonly property Colors everforest: Theme.colors
 
     NowPlaying {
         id: nowPlaying

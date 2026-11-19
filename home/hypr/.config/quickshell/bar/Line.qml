@@ -3,11 +3,11 @@
 import QtQuick
 
 Text {
-    property int size: 13
+    property int size: Theme.font.body
     property int weight: Font.Normal
     property bool mono: false
 
-    font.family: mono ? "JetBrainsMono Nerd Font" : "Adwaita Sans"
+    font.family: mono ? Theme.font.mono : Theme.font.sans
     font.pixelSize: size
     font.weight: weight
     renderType: Text.NativeRendering
