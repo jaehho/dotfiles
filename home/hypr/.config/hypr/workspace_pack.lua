@@ -1,5 +1,6 @@
 -- Workspace gap-filling: pack each monitor's live workspaces into its
--- round-robin slot ids when one of them is removed (tmux renumber-windows).
+-- slot ids (its block in screens.lua) when one of them is removed (tmux
+-- renumber-windows).
 --
 -- Per-monitor on purpose: renumbering never moves a window across outputs.
 -- Super+N still means workspace id N, so Super+9 can open an intentional hole;
@@ -28,6 +29,9 @@ local M = {}
 -- stray (reclaim_strays eats id > 9). 9003 on Spotify was a leftover temp from
 -- an interrupted pack.
 local TEMP_BASE = 9000
+-- Where plan_adopt parks a workspace its monitor has no slot left for:
+-- past 9, so reclaim_strays folds its windows into that monitor's slots.
+local OVERFLOW_BASE = TEMP_BASE + 100
 local DEBOUNCE_MS = 300
 
 -- The closed set Super+N addresses. Anything else with
@@ -102,7 +106,55 @@ function M.plan_pack(live, slots_by_mon)
 
     table.sort(finals, function(a, b) return a.from < b.from end)
 
-    -- Swap-shaped plans exist once Super+N puts an id off its round-robin slot.
+    -- Swap-shaped plans exist once Super+N puts an id off its slot.
+    return two_phase(finals)
+end
+
+-- Pure planner for screens.lua's set_primary: the blocks moved, the
+-- windows stay. live and slots_by_mon as for plan_pack. A workspace
+-- already on one of its monitor's slots keeps its id (holes survive);
+-- the rest take that monitor's free slots in id order. One left over
+-- goes past 9 for reclaim_strays. Every target is either free or held by
+-- another mover, which two_phase parks first.
+function M.plan_adopt(live, slots_by_mon)
+    local by_mon = {}
+    for _, ws in ipairs(live) do
+        if type(ws.id) == "number" and ws.id > 0 and not ws.special then
+            local list = by_mon[ws.monitor]
+            if not list then
+                list = {}
+                by_mon[ws.monitor] = list
+            end
+            list[#list + 1] = ws.id
+        end
+    end
+
+    local finals, overflow = {}, 0
+    for mon, ids in pairs(by_mon) do
+        local slots = slots_by_mon[mon]
+        if slots then
+            local mine, taken, movers = {}, {}, {}
+            for _, id in ipairs(slots) do mine[id] = true end
+            table.sort(ids)
+            for _, id in ipairs(ids) do
+                if mine[id] then taken[id] = true else movers[#movers + 1] = id end
+            end
+            local k = 1
+            for _, slot in ipairs(slots) do
+                if k > #movers then break end
+                if not taken[slot] then
+                    finals[#finals + 1] = { from = movers[k], to = slot }
+                    k = k + 1
+                end
+            end
+            for j = k, #movers do
+                overflow = overflow + 1
+                finals[#finals + 1] = { from = movers[j], to = OVERFLOW_BASE + overflow }
+            end
+        end
+    end
+
+    table.sort(finals, function(a, b) return a.from < b.from end)
     return two_phase(finals)
 end
 
@@ -277,13 +329,8 @@ local function renumber(steps)
     packing = false
 end
 
-local function pack_now()
-    if packing then return end
-
-    local monitors = package.loaded["screens"]
-    local slots_by_mon = monitors and monitors.slots_by_monitor and monitors.slots_by_monitor() or {}
-    if not next(slots_by_mon) then return end
-
+-- Every normal workspace as the planners read it: {id=, monitor=name}.
+local function live_workspaces()
     local live = {}
     for _, ws in ipairs(hl.get_workspaces() or {}) do
         if not ws.special and type(ws.id) == "number" and ws.id > 0 then
@@ -294,9 +341,23 @@ local function pack_now()
             end
         end
     end
+    return live
+end
 
-    renumber(M.plan_pack(live, slots_by_mon))
+-- Plan against the slots screens.lua holds now, run it, fold strays.
+local function run_plan(planner)
+    if packing then return end
+
+    local monitors = package.loaded["screens"]
+    local slots_by_mon = monitors and monitors.slots_by_monitor and monitors.slots_by_monitor() or {}
+    if not next(slots_by_mon) then return end
+
+    renumber(planner(live_workspaces(), slots_by_mon))
     reclaim_strays()
+end
+
+local function pack_now()
+    run_plan(M.plan_pack)
 end
 
 -- Trailing-edge debounce: workspace.removed and the events change_id itself
@@ -404,6 +465,9 @@ function M.move_workspace_to_end()
 end
 
 M.pack = pack_now
+-- screens.lua's set_primary, before apply() binds the ids: renumber each
+-- monitor's workspaces into its new block, windows staying put.
+M.adopt = function() run_plan(M.plan_adopt) end
 M.reclaim = reclaim_strays
 M.schedule = schedule
 return M

@@ -1,9 +1,10 @@
 #!/bin/bash
 # hypr-move-project — move all windows to an empty slot on the next/prev monitor
 #
-# Workspace IDs are hard-locked to monitors via round-robin distribution.
-# This script moves all windows from the current workspace to an empty slot
-# on the target monitor, then focuses that workspace.
+# Workspace IDs are locked to monitors in blocks by screens.lua. This script
+# moves all windows from the current workspace to an empty slot on the
+# monitor to the right (next) or left (prev), wrapping, then focuses that
+# workspace.
 #
 # Usage:
 #   hypr-move-project next    — move to next monitor
@@ -35,48 +36,16 @@ _clients_json() {
 # ── monitor helpers ─────────────────────────────────────────────────
 
 get_ordered_monitors() {
-    # Returns monitors in canonical order: externals sorted by x, laptop (eDP/LVDS) last.
-    local mon_json
-    mon_json=$(_monitors_json)
-
-    local laptop_mon=""
-    local -a ext_mons=()
-
-    while IFS= read -r name; do
-        if [[ "$name" == eDP-* || "$name" == LVDS-* ]]; then
-            laptop_mon="$name"
-        else
-            ext_mons+=("$name")
-        fi
-    done < <(echo "$mon_json" | jq -r 'sort_by(.x) | .[].name')
-
-    [[ ${#ext_mons[@]} -gt 0 ]] && printf '%s\n' "${ext_mons[@]}"
-    [[ -n "$laptop_mon" ]] && echo "$laptop_mon"
+    # Left to right as placed, so next is the monitor to the right.
+    _monitors_json | jq -r 'sort_by(.x, .y) | .[].name'
 }
 
 get_monitor_workspaces() {
-    local target_mon="$1"
-    local -a all_mons=()
-    while IFS= read -r m; do
-        all_mons+=("$m")
-    done < <(get_ordered_monitors)
-
-    local count=${#all_mons[@]}
-    local target_idx=-1
-    for ((i=0; i<count; i++)); do
-        if [[ "${all_mons[$i]}" == "$target_mon" ]]; then
-            target_idx=$i
-            break
-        fi
-    done
-    ((target_idx < 0)) && return 1
-
-    # Round-robin: slot N belongs to monitor (N-1) % count
-    for slot in $(seq 1 9); do
-        if (( (slot - 1) % count == target_idx )); then
-            echo "$slot"
-        fi
-    done
+    # The block screens.lua binds to this monitor, read back from its
+    # workspace rules rather than recomputed here.
+    hyprctl workspacerules -j | jq -r --arg m "$1" \
+        '.[] | select(.monitor == $m) | .workspaceString | select(test("^[1-9]$"))' |
+        sort -nu
 }
 
 find_empty_slot() {

@@ -197,6 +197,11 @@ ITEMS = [
          run="speaker-eq", needs=["speaker-eq"]),
     dict(id="displays", kind="open", icon="\U000F037A", label="Displays",
          run="nwg-displays", needs=["nwg-displays"]),
+    # screens.lua's Super+Ctrl+P, for the display the sheet is on.
+    dict(id="primary-display", kind="open", icon="\U000F0379",
+         label="Workspaces start here",
+         run="hyprctl eval 'package.loaded.screens.set_primary()'",
+         needs=["hyprctl"]),
     dict(id="wallpaper", kind="open", icon="󰸉", label="Wallpaper",
          run="wallhelper gui", needs=["wallhelper"]),
     dict(id="monitor", kind="open", icon="󰍛", label="System monitor",

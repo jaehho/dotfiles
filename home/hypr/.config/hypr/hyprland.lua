@@ -467,7 +467,7 @@ hl.bind(mainMod .. " + SHIFT + k", hl.dsp.window.swap({ direction = "up" }))
 hl.bind(mainMod .. " + SHIFT + j", hl.dsp.window.swap({ direction = "down" }))
 
 -- Switch workspaces / move active window with mainMod (+ SHIFT) + [1-9]
--- Super+N is workspace id N (holes allowed; the closed set is 1-9). Each id is locked to its round-robin monitor by
+-- Super+N is workspace id N (holes allowed; the closed set is 1-9). Each id is locked to its monitor's block by
 -- screens.lua, so Super+N moves focus to that monitor.
 local function focus_workspace(n)
     hl.dispatch(hl.dsp.focus({ workspace = n }))
@@ -478,11 +478,11 @@ for i = 1, 9 do
 end
 
 -- Super+0 / Super+Shift+0: empty workspace on the focused display.
--- Free means an id in this monitor's round-robin slots (screens.lua, closed
--- set 1-9) with no windows (a missing id counts). slots_by_monitor is the same
--- left-to-right plan apply() locks ids to, so with one external it is laptop
--- 1/3/5/7/9 and tablet 2/4/6/8. Super+0 hops there; Super+0 again returns
--- to the workspace it left (same round trip as Super+N).
+-- Free means an id in this monitor's block (screens.lua, closed set 1-9)
+-- with no windows (a missing id counts). slots_by_monitor is the same plan
+-- apply() locks ids to, so with one external on the right it is laptop 1-5
+-- and external 6-9. Super+0 hops there; Super+0 again returns to the
+-- workspace it left (same round trip as Super+N).
 -- Super+Shift+0 sends the window, focus following, matching Super+Shift+N.
 local function focused_monitor_name()
     for _, m in ipairs(hl.get_monitors() or {}) do
@@ -600,6 +600,13 @@ hl.bind(mainMod .. " + CTRL + R", function() monitors.apply() end) -- re-apply m
 -- (arrangement, resolution, scale, on/off, mirror), which saves its rules to
 -- monitors.lua. Super+; reaches it through quick settings too.
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("nwg-displays")) -- displays (F1)
+
+-- Super+Ctrl+P: this display holds workspaces 1..N from now on whenever the
+-- same displays are connected (screens.lua, set_primary); on the leftmost
+-- display it clears that, back to left to right. Windows stay put.
+hl.bind(mainMod .. " + CTRL + P", function() -- workspaces start on this display
+    if monitors.set_primary then monitors.set_primary() end
+end)
 
 -- Scroll through existing workspaces on this monitor with mainMod + scroll.
 -- m+1/m-1, not e+1/e-1: e walks all monitors and empty/missing ids can mint

@@ -10,26 +10,18 @@ mon_json=$(hyprctl monitors -j)
 current_mon=$(echo "$mon_json" | jq -r '.[] | select(.focused) | .name')
 current_ws=$(echo "$mon_json" | jq -r '.[] | select(.focused) | .activeWorkspace.id')
 
-# Left-to-right order, the same layout screens.lua applies and locks
-# workspace ids to (slots_by_monitor). Do not force the laptop last: with one
-# external it sits on the left and owns 1/3/5…, so "externals first" would look
-# at the tablet's 2/4/6… and Super+Tab would no-op on the laptop.
-mapfile -t ordered < <(echo "$mon_json" | jq -r 'sort_by(.x) | .[].name')
-
-mon_count=${#ordered[@]}
-mon_idx=0
-for ((i=0; i<mon_count; i++)); do
-    [[ "${ordered[$i]}" == "$current_mon" ]] && { mon_idx=$i; break; }
-done
+# This monitor's workspace ids: the block screens.lua binds to it, read back
+# from its workspace rules rather than recomputed here.
+mapfile -t mine < <(hyprctl workspacerules -j | jq -r --arg m "$current_mon" \
+    '.[] | select(.monitor == $m) | .workspaceString | select(test("^[1-9]$"))' |
+    sort -nu)
 
 # Workspace IDs that have at least one window
 mapfile -t occupied < <(hyprctl clients -j | jq '[.[].workspace.id | select(type == "number" and . > 0)] | unique | .[]')
 
 # Build slots for this monitor, keeping only non-empty ones
 slots=()
-for slot in $(seq 1 9); do
-    (( (slot - 1) % mon_count == mon_idx )) || continue
-    ws_id=$slot
+for ws_id in "${mine[@]}"; do
     for occ in "${occupied[@]}"; do
         (( occ == ws_id )) && { slots+=("$ws_id"); break; }
     done
