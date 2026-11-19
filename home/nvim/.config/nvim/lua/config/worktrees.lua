@@ -1,7 +1,7 @@
 -- Pick a git worktree of the current repository and open it in a new
 -- tab whose directory is the worktree. A worktree whose branch adds an
--- explorations/<slug>/ folder that the main worktree lacks is listed
--- once per such folder and opens on its README.
+-- explorations/<slug>/ folder that the main worktree lacks opens on
+-- its README.
 local M = {}
 
 local function list_worktrees()
@@ -56,7 +56,9 @@ function M.items()
       end
       for _, exploration in ipairs(own) do
         table.insert(items, {
-          text = label .. '  ' .. exploration.slug,
+          -- A branch normally holds one exploration; name the folder
+          -- only when it holds more, so the rows stay distinct.
+          text = #own > 1 and label .. '  ' .. exploration.slug or label,
           root = worktree.path,
           file = exploration.readme,
         })
