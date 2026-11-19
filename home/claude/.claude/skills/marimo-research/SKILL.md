@@ -229,6 +229,8 @@ If a display only restates a line of dataframe code, use prose.
 
 ## Citations
 
+Every fact the notebook states, background sentences included, is cited
+or computed in the notebook; a fact that is neither is cut.
 Before you cite a claim from the literature, read `references/citations.md`.
 
 ## Tests
