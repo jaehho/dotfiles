@@ -42,6 +42,8 @@ Notebooks import the package and never each other.
 Name notebooks by role, one per question, without stage numbers. A prefix
 per role is fine (`fig_` for notebooks that write figures, `tool_` for
 debugging).
+A notebook's title names its subject, as its file name does, and is not
+a question.
 Keep every network fetch in one module, the only writer of data files, and
 keep the loaders in another module as pure readers.
 

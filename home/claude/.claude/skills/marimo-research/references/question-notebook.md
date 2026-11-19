@@ -8,7 +8,8 @@ The usual order: Introduction (the question, then the background with the
 expectations), Load data, one section per analysis, Discussion (with
 Limitations and Open questions, each only when it has content).
 
-- **Question**: one sentence, no definitions or notation.
+- **Question**: one plain sentence, no definitions or notation, and the
+  only question the opening poses.
 - **Background**: only what bears on the question.
   Each exclusion or data quirk the analysis handles gets one sentence
   saying where it comes from.
