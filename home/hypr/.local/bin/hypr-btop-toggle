@@ -22,8 +22,10 @@ btop_window() {
     hyprctl clients -j | jq -r --arg c "$class" 'map(select(.class == $c)) | .[0].address // empty'
 }
 
+# 9>&-: kitty must not inherit the lock, or it holds it for its whole
+# life and every later press exits at the flock above.
 start() {
-    setsid -f kitty --class "$class" -e btop >/dev/null 2>&1
+    setsid -f kitty --class "$class" -e btop >/dev/null 2>&1 9>&-
 }
 
 hide() {
