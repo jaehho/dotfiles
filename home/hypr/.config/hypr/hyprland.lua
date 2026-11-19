@@ -601,13 +601,6 @@ hl.bind(mainMod .. " + CTRL + R", function() monitors.apply() end) -- re-apply m
 -- monitors.lua. Super+; reaches it through quick settings too.
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("nwg-displays")) -- displays (F1)
 
--- Super+Ctrl+P: this display holds workspaces 1..N from now on whenever the
--- same displays are connected (screens.lua, set_primary); on the leftmost
--- display it clears that, back to left to right. Windows stay put.
-hl.bind(mainMod .. " + CTRL + P", function() -- workspaces start on this display
-    if monitors.set_primary then monitors.set_primary() end
-end)
-
 -- Scroll through existing workspaces on this monitor with mainMod + scroll.
 -- m+1/m-1, not e+1/e-1: e walks all monitors and empty/missing ids can mint
 -- workspaces outside the closed 1-9 set.
