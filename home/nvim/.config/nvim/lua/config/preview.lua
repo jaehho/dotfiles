@@ -21,7 +21,7 @@ local function is_marimo_notebook()
   return false
 end
 
--- One uv pip install per interpreter so edit --watch has real file events.
+-- One uv pip install per interpreter so run --watch has real file events.
 local watchdog_checked = {}
 local function ensure_watchdog(py)
   if watchdog_checked[py] then
@@ -85,8 +85,10 @@ local function marimo_url_host(host)
 end
 
 -- What the server serves, from the registered pid: directory operand of
--- `marimo edit [NAME]`, or the single file. Registry entries do not carry
--- a root, and the workspace_files API wants a skew-protection token.
+-- `marimo edit [NAME]` or `marimo run [NAME]`, or the single file.
+-- Registry entries do not carry a root, and the workspace_files API wants
+-- a skew-protection token. The subcommand must follow the marimo token,
+-- so the `run` of a `uv run` wrapper is not taken for it.
 local function marimo_workspace_root(server)
   local proc = '/proc/' .. server.pid
   local fd = vim.uv.fs_open(proc .. '/cmdline', 'r', 0)
@@ -101,7 +103,7 @@ local function marimo_workspace_root(server)
 
   local name
   for i, t in ipairs(tokens) do
-    if t == 'edit' then
+    if (t == 'edit' or t == 'run') and i > 1 and tokens[i - 1]:match 'marimo$' then
       local j = i + 1
       while j <= #tokens do
         local a = tokens[j]
@@ -118,6 +120,7 @@ local function marimo_workspace_root(server)
             or a == '--token-password'
             or a == '--token-password-file'
             or a == '--allow-origins'
+            or a == '--session-ttl'
           if takes_value then
             j = j + 1
           end
@@ -224,10 +227,14 @@ function M.toggle()
       local venv_python = root .. '/.venv/bin/python'
       local py = vim.uv.fs_stat(venv_python) and venv_python or 'python3'
       ensure_watchdog(py)
-      -- edit --watch: notebook UI + reload on nvim saves. --no-token registers
-      -- the server; --headless leaves the window to Firefox.
+      -- run --watch: the notebook as an app, reloaded on nvim saves. Run
+      -- mode cannot write the file (marimo's save endpoint needs edit
+      -- mode), so :w or Ctrl-S in the tab cannot rewrite it.
+      -- --include-code lets the tab show the source. --no-token registers
+      -- the server; --headless stops marimo opening its own tab, since
+      -- show_marimo opens the ?file= URL.
       local cmd = vim.fn.shellescape(marimo_bin)
-        .. ' edit --watch --no-token --headless '
+        .. ' run --watch --include-code --no-token --headless '
         .. vim.fn.shellescape(src)
       local result = vim.system {
         'tmux', 'split-window', '-v', '-d', '-l', '10', '-P', '-F', '#{pane_id}',
