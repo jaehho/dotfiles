@@ -27,19 +27,6 @@ local DEBOUNCE_MS    = 500
 local state = { mirror = false, off = {}, scale = {} }
 local seen = { laptop = nil, externals = {} }
 
--- Format a number the way the old Rust writer did: 60.0 -> "60", not "60.0".
--- Hyprland parses either, but mode strings are compared as text elsewhere.
-local function num(n)
-    if n == math.floor(n) then
-        return string.format("%d", n)
-    end
-    return (string.format("%.2f", n):gsub("0+$", ""):gsub("%.$", ""))
-end
-
-local function mode_string(m)
-    return string.format("%dx%d@%sHz", m.width, m.height, num(math.floor(m.refresh_rate * 100) / 100))
-end
-
 -- Scale for an output: what the display menu set, else "auto". Scale survives
 -- layout changes (reset_state leaves it alone).
 local function scale_for(name)
@@ -202,11 +189,15 @@ local function apply()
         hl.monitor({ output = m.name, mode = "preferred", position = "auto", scale = scale_for(m.name), mirror = laptop.name })
     end
 
+    -- "preferred", never the live mode: a rule is keyed by connector and
+    -- outlives the monitor on it. Pinning the live mode left HDMI-A-2 at
+    -- the ASUS's 1920x1080, and the Dell U4025QW plugged in next got that
+    -- mode stretched across its 64:27 panel (2026-11-19).
     local x = 0
     for _, m in ipairs(ordered) do
         hl.monitor({
             output   = m.name,
-            mode     = mode_string(m),
+            mode     = "preferred",
             position = string.format("%dx0", x),
             scale    = scale_for(m.name),
         })
