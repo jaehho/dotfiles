@@ -36,16 +36,26 @@ A new question starts as an exploration, not a notebook.
 
 ## Layout
 
-Shared code is an installable package of regular Python modules, one per
-concern and named for it, never a catch-all `helpers`.
-Notebooks import the package and never each other.
+Notebooks are grouped by analysis. An analysis's folder holds its main
+notebook, named for the folder (`retinotopy/retinotopy.py`), its data
+notebook (`data.py`), and its children; a child with children of its
+own gets a folder inside. The path carries the lineage, so a child's
+name does not repeat its parent's.
 Name notebooks by role, one per question, without stage numbers. A prefix
 per role is fine (`fig_` for notebooks that write figures, `tool_` for
 debugging).
 A notebook's title names its subject, as its file name does, and is not
 a question.
-Keep every network fetch in one module, the only writer of data files, and
-keep the loaders in another module as pure readers.
+
+Shared code is an installable package of regular Python modules, one per
+concern and named for it, never a catch-all `helpers`; its subpackages
+mirror the notebook folders.
+Notebooks import the package and never each other.
+Anything shared (a module, a function, a data file's section of a data
+notebook) lives at the closest common parent of everything that uses
+it, and moves up when a user outside that folder appears.
+Network fetches live in fetch modules, the only writers of data files,
+and loaders in separate modules of pure readers.
 
 - A constant is defined once; reference the symbol, never restate a path,
   id, or threshold. A knob used by one notebook stays in that notebook.
@@ -73,13 +83,18 @@ keep the loaders in another module as pure readers.
 
 ## Data
 
-- Every notebook shows each data file as shipped before it uses it.
-  Name the source as a link (the data release, the page, or the
-  repository at its commit) with the file's name there, and show the raw
-  table: whole when small, its schema and first rows from a lazy scan
-  when large.
-  Then call the function that makes the format the analysis uses, and
-  show its result.
+- A data notebook shows each data file its folder's notebooks use, once:
+  the source as a link (the data release, the page, or the repository at
+  its commit) with the file's name there; the raw table, whole when
+  small, its schema and first rows from a lazy scan when large; the call
+  that makes the format the analysis uses, with its result; and the
+  file's quirks. It is a reference and names none of the notebooks that
+  use it.
+- A question notebook's Data section says in a sentence per source what
+  it supplies to this question, linked to its section of the data
+  notebook. It shows a raw table only for a file no data notebook
+  covers, and a quirk of the data that bears on the result still gets
+  its sentence there.
 - A reader function returns a file as shipped, under the file's own
   column names. Each transform is a separate function named for what it
   makes; no function both reads and reshapes.

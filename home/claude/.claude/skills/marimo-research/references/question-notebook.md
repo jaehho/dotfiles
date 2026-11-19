@@ -5,7 +5,7 @@ SKILL.md has the rules that always apply.
 
 A question notebook is the log of one question, two at most.
 The usual order: Introduction (the question, then the background with the
-expectations), Load data, one section per analysis, Discussion (with
+expectations), Data, one section per analysis, Discussion (with
 Limitations and Open questions, each only when it has content).
 
 - **Question**: one plain sentence, no definitions or notation, and the
