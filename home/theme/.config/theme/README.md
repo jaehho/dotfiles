@@ -12,7 +12,6 @@ Static vendor tree of Everforest Dark Medium theme files for terminal and CLI ap
 | `.config/lazygit/config.yml` | hand recolor of catppuccin/lazygit (lavender) |
 | `.config/cava/config` | hand recolor of catppuccin/cava |
 | `.config/mpv/mpv.conf` | hand recolor of catppuccin/mpv (lavender) |
-| `.config/imv/config` | hand recolor of catppuccin/imv |
 | `.config/starship.toml` | hand recolor of catppuccin/starship; the prompt layout is this repo's |
 
 `.config/qt5ct/colors/` and `.config/Kvantum/catppuccin-mocha-lavender/` are leftover Catppuccin Mocha ports; GUI apps run on stock colors and nothing selects them.
