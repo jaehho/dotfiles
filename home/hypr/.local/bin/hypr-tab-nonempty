@@ -23,7 +23,7 @@ for ((i=0; i<mon_count; i++)); do
 done
 
 # Workspace IDs that have at least one window
-mapfile -t occupied < <(hyprctl clients -j | jq '[.[].workspace.id] | unique | .[]')
+mapfile -t occupied < <(hyprctl clients -j | jq '[.[].workspace.id | select(type == "number" and . > 0)] | unique | .[]')
 
 # Build slots for this monitor, keeping only non-empty ones
 slots=()
