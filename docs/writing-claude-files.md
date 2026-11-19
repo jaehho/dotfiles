@@ -31,6 +31,10 @@ These are working rules we derived from the sources below.
   restatements of default behavior, or rules another file owns. One
   correction is not a rule: add it after it recurs, or ask. Before adding
   a rule, look for one to merge it into or remove.
+- A commit that adds or changes a rule says why in its body: the
+  project, date and mistake that prompted it, and the user's words that
+  asked for it, quoted. One rule per commit, so each carries its own
+  evidence.
 
 ## CLAUDE.md
 
