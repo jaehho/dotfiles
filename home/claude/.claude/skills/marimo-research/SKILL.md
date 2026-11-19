@@ -160,6 +160,9 @@ before you write or restructure it.
   thing is and how it relates to the others.
   Define each term once, where it first appears, and say there where this
   notebook departs from the literature.
+  A word with many senses across contexts (column, layer, depth) gets
+  the specific one meant where it first appears, or a more specific
+  word replaces it.
   Within a notebook keep one word per thing and one thing per word, across
   prose, code names, column names, and figure labels.
   Before coining a name, check the terms already defined.
