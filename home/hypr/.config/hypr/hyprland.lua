@@ -784,6 +784,16 @@ hl.window_rule({
     float = true,
 })
 
+-- nwg-displays' toolbar is wider than a dwindle tile, so it clips there.
+hl.window_rule({
+    name  = "float-nwg-displays",
+    match = { class = "^(nwg-displays)$" },
+
+    float  = true,
+    size   = "1200 800",
+    center = true,
+})
+
 -- Floating TUI apps (nmtui, bluetui, wiremix)
 hl.window_rule({
     name  = "float-tui",
