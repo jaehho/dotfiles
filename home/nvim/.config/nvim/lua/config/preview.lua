@@ -176,11 +176,18 @@ local function find_marimo_workspace(src)
 end
 
 -- Open the notebook in the default browser (Firefox tab). marimo-view
--- (home/laptop) is an unused WebKit experiment.
+-- (home/laptop) is an unused WebKit experiment. show-code=true starts a
+-- run-mode tab with the code shown (hidden by default even with
+-- --include-code); edit mode always shows it.
 local function show_marimo(server, src)
   local host = marimo_url_host(server.host)
   local file = server.file_key or src
-  local url = ('http://%s:%d%s/?file=%s'):format(host, server.port, server.base_url or '', vim.uri_encode(file, true))
+  local url = ('http://%s:%d%s/?file=%s&show-code=true'):format(
+    host,
+    server.port,
+    server.base_url or '',
+    vim.uri_encode(file, true)
+  )
   vim.fn.jobstart({ 'xdg-open', url }, { detach = true })
   return url
 end
@@ -230,9 +237,10 @@ function M.toggle()
       -- run --watch: the notebook as an app, reloaded on nvim saves. Run
       -- mode cannot write the file (marimo's save endpoint needs edit
       -- mode), so :w or Ctrl-S in the tab cannot rewrite it.
-      -- --include-code lets the tab show the source. --no-token registers
-      -- the server; --headless stops marimo opening its own tab, since
-      -- show_marimo opens the ?file= URL.
+      -- --include-code sends the source, which show_marimo's URL shows.
+      -- --no-token registers the server; --headless stops marimo opening
+      -- its own tab at the bare root URL, since show_marimo opens one with
+      -- show-code=true.
       local cmd = vim.fn.shellescape(marimo_bin)
         .. ' run --watch --include-code --no-token --headless '
         .. vim.fn.shellescape(src)
