@@ -1,0 +1,68 @@
+// A tonal pill button (#89): a label, and an optional Material Symbol
+// before it, in `tint` on a faint wash of the same. `badge` is a dim
+// keyboard hint in its corner. Laid out wider than its text, it centers
+// the text; narrower, the text is cut with an ellipsis.
+import QtQuick
+
+Rectangle {
+    id: button
+
+    property string text: ""
+    property string icon: ""
+    property string badge: ""
+    property color tint: Theme.colors.blue
+    readonly property bool hovered: layer.hovered
+
+    signal clicked
+
+    implicitHeight: 30
+    implicitWidth: row.implicitWidth + Theme.space.md * 2
+    radius: Theme.radius.pill
+    color: Theme.colors.withAlpha(tint, enabled ? 0.14 : 0.06)
+
+    Behavior on color {
+        CAnim {}
+    }
+
+    StateLayer {
+        id: layer
+        tint: button.tint
+        onClicked: button.clicked()
+    }
+
+    Row {
+        id: row
+        anchors.centerIn: parent
+        spacing: Theme.space.xs
+        opacity: button.enabled ? 1 : 0.5
+
+        Icon {
+            visible: button.icon !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            name: button.icon
+            size: Theme.icon.small
+            color: button.tint
+        }
+
+        Line {
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.min(implicitWidth, button.width - Theme.space.md * 2 - (button.icon !== "" ? Theme.icon.small + row.spacing : 0))
+            elide: Text.ElideRight
+            text: button.text
+            size: Theme.font.smaller
+            weight: Font.Medium
+            color: button.tint
+        }
+    }
+
+    Line {
+        visible: button.badge !== ""
+        anchors.right: parent.right
+        anchors.rightMargin: Theme.space.sm
+        anchors.verticalCenter: parent.verticalCenter
+        text: button.badge
+        mono: true
+        size: Theme.font.small
+        color: Theme.colors.grey0
+    }
+}

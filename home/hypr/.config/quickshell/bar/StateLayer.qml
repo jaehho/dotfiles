@@ -40,9 +40,12 @@ Item {
         cursorShape: layer.cursorShape
     }
 
+    // Exclusive on press, so a button inside a clickable card does not
+    // click the card too; a DragHandler above can still take over.
     TapHandler {
         id: tap
         acceptedButtons: layer.acceptedButtons
+        gesturePolicy: TapHandler.ReleaseWithinBounds
         onTapped: (eventPoint, button) => layer.clicked(button)
     }
 }
