@@ -16,7 +16,9 @@ Rectangle {
     signal clicked
 
     implicitHeight: 30
-    implicitWidth: row.implicitWidth + Theme.space.md * 2
+    // From the label's own width, not the row's: the label's width
+    // depends on the button's, which would loop.
+    implicitWidth: label.implicitWidth + (icon !== "" ? Theme.icon.small + row.spacing : 0) + Theme.space.md * 2
     radius: Theme.radius.pill
     color: Theme.colors.withAlpha(tint, enabled ? 0.14 : 0.06)
 
@@ -45,6 +47,7 @@ Rectangle {
         }
 
         Line {
+            id: label
             anchors.verticalCenter: parent.verticalCenter
             width: Math.min(implicitWidth, button.width - Theme.space.md * 2 - (button.icon !== "" ? Theme.icon.small + row.spacing : 0))
             elide: Text.ElideRight
