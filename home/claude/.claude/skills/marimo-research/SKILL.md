@@ -148,7 +148,14 @@ before you write or restructure it.
   Values stay typed where they are not the notebook's (a quote, a cited
   threshold, the rows of a toy example) or where they count a fixed list
   the notebook itself states ("the three strengths").
-- Use the literature's word for a quantity.
+- Name things in the terms of the audience the notebook is for.
+  Where the literature already has a name for a quantity, figure, or
+  method, use it, and look for one in the field's papers before choosing.
+  Coin a name only when none exists, and give the reason for it where it
+  is defined.
+  Things of one kind (the figures of one analysis, related quantities, a
+  notebook's follow-ups) share a naming scheme, so a name says what the
+  thing is and how it relates to the others.
   Define each term once, where it first appears, and say there where this
   notebook departs from the literature.
   Within a notebook keep one word per thing and one thing per word, across
