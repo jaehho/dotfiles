@@ -20,15 +20,6 @@ local EXTERNAL_ORDER = { "FT36ZS2", "B946ZS2" }
 local MAX_WORKSPACES = 9
 local DEBOUNCE_MS    = 500
 
--- Modes for monitors whose own preferred mode is not their panel's. `match`
--- is a plain substring of the description or serial; a display-menu scale
--- still wins over `scale`. Anything not listed gets "preferred".
-local MONITOR_MODES = {
-    -- Over HDMI the U4025QW's EDID prefers 2560x1080, half its panel.
-    -- Scale 2 keeps that layout size with native sharpness (2026-11-19).
-    { match = "U4025QW", mode = "5120x2160@60", scale = 2 },
-}
-
 -- Display state, set from the display menu (F1) through set_layout() and
 -- toggle_output(). `mirror`: every external shows the laptop. `off`: outputs the
 -- user turned off. A disabled or mirrored output drops out of hl.get_monitors(),
@@ -36,39 +27,18 @@ local MONITOR_MODES = {
 local state = { mirror = false, off = {}, scale = {} }
 local seen = { laptop = nil, externals = {} }
 
--- The MONITOR_MODES entry for a monitor, or nil.
-local function mode_entry(m)
-    if m == nil then return nil end
-    for _, e in ipairs(MONITOR_MODES) do
-        if (m.description or ""):find(e.match, 1, true) or (m.serial or ""):find(e.match, 1, true) then
-            return e
-        end
-    end
-    return nil
+-- Scale for an output: what the display menu set, else "auto". Scale survives
+-- layout changes (reset_state leaves it alone).
+local function scale_for(name)
+    return state.scale[name] or "auto"
 end
 
-local function mode_for(m)
-    local e = mode_entry(m)
-    return e and e.mode or "preferred"
-end
-
--- Scale for an output: what the display menu set, else its MONITOR_MODES
--- scale, else "auto". Scale survives layout changes (reset_state leaves it
--- alone). `m` is optional; without it the MONITOR_MODES step is skipped.
-local function scale_for(name, m)
-    local e = mode_entry(m)
-    return state.scale[name] or (e and e.scale) or "auto"
-end
-
--- Width in layout pixels. A requested mode and scale win over the live
--- ones, which lag until the rule is applied; "auto" has to use the live
--- scale.
+-- Width in layout pixels. A requested number wins over the live scale, which
+-- lags until the rule is applied; "auto" has to use the live one.
 local function logical_width(m)
-    local scale = scale_for(m.name, m)
+    local scale = scale_for(m.name)
     if type(scale) ~= "number" then scale = m.scale end
-    local e = mode_entry(m)
-    local width = e and tonumber(e.mode:match("^(%d+)x")) or m.width
-    return math.floor(width / scale)
+    return math.floor(m.width / scale)
 end
 
 local function is_laptop(m)
@@ -199,24 +169,9 @@ local function apply()
         end
     end
 
-    local live = {}
     for _, m in ipairs(monitors) do
-        live[m.name] = true
         if is_laptop(m) then seen.laptop = m.name else seen.externals[m.name] = true end
         if state.off[m.name] then hl.monitor({ output = m.name, disabled = true }) end
-    end
-
-    -- A rule outlives its monitor, so an emptied connector goes back to
-    -- plain defaults: the next monitor plugged into it starts from its own
-    -- preferred mode, not the last one's MONITOR_MODES mode and scale.
-    -- Outputs turned off or mirrored are absent too, and keep theirs.
-    if not state.mirror then
-        for name in pairs(seen.externals) do
-            if not live[name] and not state.off[name] then
-                hl.monitor({ output = name, mode = "preferred", position = "auto", scale = scale_for(name) })
-                seen.externals[name] = nil
-            end
-        end
     end
 
     local ordered, laptop, externals, to_mirror = plan(monitors)
@@ -234,18 +189,17 @@ local function apply()
         hl.monitor({ output = m.name, mode = "preferred", position = "auto", scale = scale_for(m.name), mirror = laptop.name })
     end
 
-    -- "preferred" or a MONITOR_MODES mode, never the live mode: a rule is
-    -- keyed by connector and outlives the monitor on it. Pinning the live
-    -- mode left HDMI-A-2 at the ASUS's 1920x1080, and the Dell U4025QW
-    -- plugged in next got that mode stretched across its 64:27 panel
-    -- (2026-11-19).
+    -- "preferred", never the live mode: a rule is keyed by connector and
+    -- outlives the monitor on it. Pinning the live mode left HDMI-A-2 at
+    -- the ASUS's 1920x1080, and the Dell U4025QW plugged in next got that
+    -- mode stretched across its 64:27 panel (2026-11-19).
     local x = 0
     for _, m in ipairs(ordered) do
         hl.monitor({
             output   = m.name,
-            mode     = mode_for(m),
+            mode     = "preferred",
             position = string.format("%dx0", x),
-            scale    = scale_for(m.name, m),
+            scale    = scale_for(m.name),
         })
         x = x + logical_width(m)
     end
