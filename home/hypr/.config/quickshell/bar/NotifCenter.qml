@@ -2,8 +2,8 @@ pragma ComponentBehavior: Bound
 
 // The notification center (#90): NotifSheet at the top right of one
 // screen, under the bar, sliding in from the right edge. It floats over
-// the windows and reserves nothing. Open, it takes the keyboard; Esc or
-// a click outside closes it (the focus grab).
+// the windows and reserves nothing. Open, it holds the keyboard
+// exclusively; Esc or a click outside closes it (the focus grab).
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
@@ -36,7 +36,10 @@ PanelWindow {
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "bar-notification-center"
-    WlrLayershell.keyboardFocus: center.open ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // Exclusive, as the polkit prompt: open, the keyboard stays here and
+    // no window can take it (OnDemand let focus wander off while it was
+    // still open). Super+period, Esc, q or a click outside close it.
+    WlrLayershell.keyboardFocus: center.open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     HyprlandFocusGrab {
         windows: [center]
