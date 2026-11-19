@@ -1,5 +1,4 @@
--- Screens: which workspaces each monitor holds, and the display menu's
--- mirror and per-screen off.
+-- Screens: which workspaces each monitor holds.
 --
 -- Hyprland places monitors itself: the catch-all rule in hyprland.lua (each
 -- monitor's own preferred mode, automatic position and scale) or the rules
@@ -7,11 +6,8 @@
 -- ended up, and does what Hyprland will not: keep workspaces 1-9 spread
 -- round-robin over the monitors, leftmost getting 1, and move them when a
 -- monitor comes or goes (issue #9580 was closed as not planned). The closed
--- set is 1-9, never 10. Minting past 9 is a bug.
---
--- Mirror and off are runtime rules under the selector nwg-displays uses, so
--- they merge into its rule and keep its mode, position and scale. Any config
--- reload drops them, which is how Extend brings every screen back.
+-- set is 1-9, never 10. Minting past 9 is a bug. Turning screens off and
+-- mirroring are nwg-displays' (F1), saved with its other rules.
 
 local LAPTOP_PATTERN = "eDP-"
 local MAX_WORKSPACES = 9
@@ -46,8 +42,9 @@ end
 
 -- The rule selector for an override. nwg-displays (use-desc) keys a
 -- monitor's rule as "desc:<description>"; hl.monitor merges into a rule
--- with the same selector, so the override changes only the fields it sets.
--- A headless output (the tablet) has no real description: its name.
+-- with the same selector, so the override changes only the fields it sets
+-- and lasts until the next config reload. A headless output (the tablet)
+-- has no real description: its name.
 local function selector(m)
     if m.backend == "drm" and (m.description or "") ~= "" then
         return "desc:" .. m.description
@@ -68,8 +65,9 @@ local schedule
 local function apply()
     local live = monitors()
     if #live == 0 then
-        -- Nothing visible: the laptop was turned off and the last external
-        -- just left. Turn the laptop (or any output) back on.
+        -- Nothing visible: the laptop was turned off (in nwg-displays) and
+        -- the last external just left. Turn the laptop (or any output) back
+        -- on until the next reload.
         local all = monitors(true)
         local target
         for _, m in ipairs(all) do
@@ -211,51 +209,6 @@ hl.on("monitor.removed", schedule)
 -- Deliberately not monitor.layout_changed: moving workspaces changes the
 -- layout, which would re-enter this.
 
--- "extend", "mirror", "external" (laptop off) or "laptop" (externals off).
--- Extend reloads the config, which drops every override and brings back the
--- configured rules. Returns false when the layout needs an external and
--- none is connected.
-local function set_layout(layout)
-    if layout == "extend" then
-        hl.dispatch(hl.dsp.reload_config())
-        return true
-    end
-    local laptop, externals = nil, {}
-    for _, m in ipairs(monitors(true)) do
-        if is_laptop(m) and laptop == nil then laptop = m else externals[#externals + 1] = m end
-    end
-    if laptop == nil or (#externals == 0 and layout ~= "laptop") then return false end
-    override(laptop, { disabled = layout == "external", mirror = "" })
-    for _, m in ipairs(externals) do
-        override(m, {
-            disabled = layout == "laptop",
-            mirror = layout == "mirror" and laptop.name or "",
-        })
-    end
-    return true
-end
-
--- Turn one output off or back on. Refuses to turn off the last one showing
--- its own picture.
-local function toggle_output(name)
-    for _, m in ipairs(monitors(true)) do
-        if m.name == name then
-            if not m.enabled then
-                override(m, { disabled = false })
-                return true
-            end
-            for _, other in ipairs(monitors()) do
-                if other.name ~= name then
-                    override(m, { disabled = true })
-                    return true
-                end
-            end
-            return false
-        end
-    end
-    return false
-end
-
 -- An output arriving or leaving by a path that fires no event (the headless
 -- tablet): clear a turned-off state its rule may still carry, so a new one
 -- under the same name comes up on, and re-apply.
@@ -267,8 +220,6 @@ end
 return {
     apply = apply,
     schedule = schedule,
-    set_layout = set_layout,
-    toggle_output = toggle_output,
     forget = forget,
     slots_by_monitor = slots_by_monitor,
 }

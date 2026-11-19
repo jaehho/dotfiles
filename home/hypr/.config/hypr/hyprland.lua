@@ -18,8 +18,7 @@ hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" 
 package.loaded["monitors"] = nil
 pcall(require, "monitors")
 
--- screens.lua assigns workspaces to the monitors as placed, and backs the
--- display menu's mirror and per-screen off.
+-- screens.lua assigns workspaces to the monitors as placed.
 --
 -- require caches in package.loaded and that cache survives `hyprctl reload`, so
 -- without this line an edit to screens.lua is ignored until a full restart.
@@ -597,9 +596,10 @@ hl.bind("CTRL + ALT + SHIFT + SUPER + space", hl.dsp.exec_cmd("hypr-confetti")) 
 -- Re-apply monitor layout + workspace assignments (fixes stranded workspaces)
 hl.bind(mainMod .. " + CTRL + R", function() monitors.apply() end) -- re-apply monitor layout
 
--- Display key (F1), which the firmware sends as Super+P: the display menu
--- (layout, per-screen on/off, tablet). Super+; reaches it through quick settings.
-hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("~/.local/bin/hypr-display-menu")) -- display menu (F1)
+-- Display key (F1), which the firmware sends as Super+P: nwg-displays
+-- (arrangement, resolution, scale, on/off, mirror), which saves its rules to
+-- monitors.lua. Super+; reaches it through quick settings too.
+hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("nwg-displays")) -- displays (F1)
 
 -- Scroll through existing workspaces on this monitor with mainMod + scroll.
 -- m+1/m-1, not e+1/e-1: e walks all monitors and empty/missing ids can mint

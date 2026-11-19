@@ -11,12 +11,16 @@ argument it opens the sheet on the focused monitor (Super + ;).
 from concurrent.futures import ThreadPoolExecutor
 import json
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 
 HOME = os.path.expanduser("~")
 BIN = f"{HOME}/.local/bin"
+# tablet-display's Sunshine: the unit and the conf naming its output.
+SUNSHINE_CONF = f"{HOME}/.config/sunshine/sunshine.conf"
+SUNSHINE_UNIT = "app-dev.lizardbyte.app.Sunshine.service"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -118,6 +122,32 @@ def gamemode_on():
         return None
 
 
+def tablet_output():
+    """The headless output tablet-display creates (output_name)."""
+    try:
+        for line in Path(SUNSHINE_CONF).read_text().splitlines():
+            key, _, value = line.partition("=")
+            if key.strip() == "output_name":
+                return value.strip()
+    except OSError:
+        pass
+    return "tablet"
+
+
+def tablet_on():
+    """tablet-display's stream is up or coming up: its output exists or
+    Sunshine runs. `tablet-display state` also asks adb, too slow for a
+    tile."""
+    try:
+        mons = json.loads(output(["hyprctl", "monitors", "all", "-j"]) or "[]")
+    except ValueError:
+        mons = []
+    name = tablet_output()
+    if any(m.get("name") == name for m in mons):
+        return True
+    return output(["systemctl", "--user", "is-active", SUNSHINE_UNIT]) == "active"
+
+
 def awake_on():
     """hypr-idle-toggle's stay awake: its hypr-lid-inhibit inhibitor
     held, as logind lists it. hypridle runs in both states; the bar
@@ -150,6 +180,9 @@ ITEMS = [
     dict(id="speaker-eq", kind="toggle", icon="󰓃", label="Speaker EQ",
          run=speaker_eq_toggle, needs=["pw-dump", "pw-cli", "pw-metadata"],
          state=speaker_eq_on),
+    dict(id="tablet", kind="toggle", icon="\U000F04F6", label="Tablet",
+         run=f"{BIN}/tablet-display toggle", needs=["tablet-display", "hyprctl"],
+         state=tablet_on),
     dict(id="power-profile", kind="cycle", icon="󰓅", label="Power profile",
          run=power_profile_cycle, needs=["powerprofilesctl"],
          state=power_profile),
@@ -163,7 +196,7 @@ ITEMS = [
     dict(id="speaker-eq-tune", kind="open", icon="󰙪", label="Tune speakers",
          run="speaker-eq", needs=["speaker-eq"]),
     dict(id="displays", kind="open", icon="\U000F037A", label="Displays",
-         run=f"{BIN}/hypr-display-menu", needs=["hyprctl"]),
+         run="nwg-displays", needs=["nwg-displays"]),
     dict(id="wallpaper", kind="open", icon="󰸉", label="Wallpaper",
          run="wallhelper gui", needs=["wallhelper"]),
     dict(id="monitor", kind="open", icon="󰍛", label="System monitor",

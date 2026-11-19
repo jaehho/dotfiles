@@ -41,7 +41,7 @@
 # first waits for an unlock does nothing), reports through notifications when
 # there is no terminal, checks the tablet before starting anything, and undoes
 # what it started if a later step fails. `toggle` turns it off whenever either
-# half is up. `state` is for the display menu: on (streaming), ready (host up,
+# half is up. `state` reports on (streaming), ready (host up,
 # Moonlight not showing), off, or starting while another run holds the lock;
 # when off, a second line says why the tablet cannot be reached, if it cannot.
 # `audio on|off|toggle|status` is whether Moonlight also plays the PC's sound
