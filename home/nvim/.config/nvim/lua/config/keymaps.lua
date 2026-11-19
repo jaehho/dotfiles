@@ -37,6 +37,9 @@ vim.keymap.set('t', '<Esc><Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' }
 -- Unified preview toggle (typst/tex/markdown/marimo/python/html)
 vim.keymap.set('n', '<leader>tp', function() require('config.preview').toggle() end, { desc = '[T]oggle [P]review' })
 
+-- Git worktrees of this repository, and the explorations their branches add
+vim.keymap.set('n', '<leader>gw', function() require('config.worktrees').pick() end, { desc = '[G]it [W]orktrees' })
+
 -- Zotero annotation → markdown blockquote at cursor (stock local API :23119)
 -- gz: same g-prefix as gB/gA/gC; <leader>zq was a three-key reach.
 vim.keymap.set('n', 'gz', function() require('zotero_quotes').pick() end, { desc = 'Zotero Quote' })
