@@ -298,8 +298,7 @@ hl.animation({ leaf = "zoomFactor",    enabled = true, speed = 7,    bezier = "q
 
 hl.config({
     dwindle = {
-        preserve_split       = true,
-        special_scale_factor = 0.8,
+        preserve_split = true,
     },
 
     master = {
