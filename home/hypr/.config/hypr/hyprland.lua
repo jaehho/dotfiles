@@ -148,8 +148,8 @@ hl.on("hyprland.start", function()
     -- Workspace management daemons
     hl.exec_cmd("hyprwhenthen run")
 
-    -- btop, started hidden so Ctrl+Shift+Escape opens it at once with its
-    -- graphs' history (hypr-btop-toggle).
+    -- btop, started windowless in its own tmux session so Ctrl+Shift+Escape
+    -- opens it with its graphs' history (hypr-btop-toggle).
     hl.exec_cmd("~/.local/bin/hypr-btop-toggle start")
 end)
 
@@ -442,7 +442,7 @@ hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheats
 hl.bind(mainMod .. " + semicolon", hl.dsp.exec_cmd("qs -c bar ipc call bar settings")) -- quick settings
 hl.bind(mainMod .. " + apostrophe", hl.dsp.exec_cmd("qs -c bar ipc call bar tray")) -- tray: apps in a grid under the bar
 hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("qs -c bar ipc call bar dash")) -- dash panel: sessions and LLM on the right edge (#83)
-hl.bind("CTRL + SHIFT + Escape", hl.dsp.exec_cmd("~/.local/bin/hypr-btop-toggle")) -- btop: show / hide (runs on hidden; the bar's load glyphs too)
+hl.bind("CTRL + SHIFT + Escape", hl.dsp.exec_cmd("~/.local/bin/hypr-btop-toggle")) -- btop: show / hide (keeps running in tmux; the bar's load glyphs too)
 
 -- Share: Taildrop a file or the clipboard, or show the clipboard as a QR code
 hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("~/.local/bin/hypr-share-menu")) -- share menu
@@ -804,18 +804,15 @@ hl.window_rule({
     center = true,
 })
 
--- btop needs 80x24 cells at minimum and more to be useful. It maps hidden
--- on special:btop, where it runs between looks; hypr-btop-toggle brings it
--- to the screen in front of you.
+-- btop needs 80x24 cells at minimum and more to be useful. The window is a
+-- kitty attached to btop's tmux session (hypr-btop-toggle).
 hl.window_rule({
     name  = "float-btop",
     match = { class = "^(floating-btop)$" },
 
-    float            = true,
-    size             = "1400 900",
-    center           = true,
-    workspace        = "special:btop silent",
-    no_initial_focus = true,
+    float  = true,
+    size   = "1400 900",
+    center = true,
 })
 
 -- Battery dashboard: a window you open to answer one question and then close

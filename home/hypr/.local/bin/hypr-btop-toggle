@@ -1,35 +1,41 @@
 #!/usr/bin/env bash
-# Ctrl+Shift+Escape and the bar's load glyphs: show or hide btop, as
-# Super+M does Spotify. Hidden, btop keeps running, so it opens at once
-# with its graphs' history: hidden is special:btop, a special workspace
-# that is never raised (the bar leaves it out). hyprland.lua's float-btop
-# rule maps a new btop there, floating at 1400x900, without focus.
+# Ctrl+Shift+Escape and the bar's load glyphs: show or hide btop. btop
+# itself lives in a tmux session on its own socket (tmux -L btop), with
+# no window while hidden, so it opens with its graphs' history: a
+# resize redraws them from what btop kept. Showing it is a floating
+# kitty attached to that session (hyprland.lua's float-btop rule);
+# hiding detaches it, which closes the window and leaves btop running.
 #
-#   hypr-btop-toggle         focused: hide it. Hidden or not focused:
-#                            bring it to the screen in front of you and
-#                            focus it. Not running: start it, then that.
-#   hypr-btop-toggle start   start it hidden unless it runs (at login)
+#   hypr-btop-toggle         focused: hide it. Open elsewhere: bring it to
+#                            the screen in front of you. Hidden: open it
+#                            here, starting btop first if it is not running.
+#   hypr-btop-toggle start   start btop in its session unless it runs (at
+#                            login)
 #
-# Quitting btop (q) ends it; the next press starts a fresh one.
+# Quitting btop (q) ends the session; the next press starts a fresh one.
 
 class=floating-btop
 
-# One run at a time, so presses during a cold start open one btop.
+# One run at a time, so presses during a cold start open one window.
 exec 9>"${XDG_RUNTIME_DIR:-/tmp}/hypr-btop-toggle.lock"
 flock -n 9 || exit 0
 
+# A private server with no user config: no prefix, so every key reaches
+# btop; mouse on, so its clicks and wheel do too; truecolor and an
+# instant Esc. 140x39 is what the float-btop window holds, so btop keeps
+# history at the width it will show. 9>&-: the server must not inherit
+# the lock, or it holds it for its whole life and every later press
+# exits at the flock above.
+start() {
+    tmux -L btop has-session -t btop 2>/dev/null && return
+    tmux -L btop -f /dev/null new-session -d -s btop -x 140 -y 39 btop \; \
+        set -g status off \; set -g prefix None \; set -g mouse on \; \
+        set -g escape-time 0 \; set -g default-terminal tmux-256color \; \
+        set -as terminal-features ',xterm-kitty:RGB' 9>&-
+}
+
 btop_window() {
     hyprctl clients -j | jq -r --arg c "$class" 'map(select(.class == $c)) | .[0].address // empty'
-}
-
-# 9>&-: kitty must not inherit the lock, or it holds it for its whole
-# life and every later press exits at the flock above.
-start() {
-    setsid -f kitty --class "$class" -e btop >/dev/null 2>&1 9>&-
-}
-
-hide() {
-    hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:btop\", window = \"address:$1\", follow = false })" >/dev/null
 }
 
 # Move window $1 to what the focused monitor shows (a raised special
@@ -48,20 +54,20 @@ hl.dispatch(hl.dsp.focus({ window = w }))" >/dev/null
 }
 
 if [[ ${1:-} == start ]]; then
-    [[ -n $(btop_window) ]] || start
+    start
     exit 0
 fi
 
 focused=$(hyprctl activewindow -j | jq -r --arg c "$class" 'select(.class == $c) | .address')
 if [[ -n $focused ]]; then
-    hide "$focused"
+    tmux -L btop detach-client -s btop
 elif addr=$(btop_window) && [[ -n $addr ]]; then
     show "$addr"
 else
     start
-    for _ in $(seq 50); do   # up to 5 s; a cold kitty maps in well under one
-        addr=$(btop_window)
-        [[ -n $addr ]] && { show "$addr"; exit 0; }
+    setsid -f kitty --class "$class" -e tmux -L btop attach -t btop >/dev/null 2>&1 9>&-
+    for _ in $(seq 50); do   # hold the lock until it maps, up to 5 s
+        [[ -n $(btop_window) ]] && exit 0
         sleep 0.1
     done
 fi
