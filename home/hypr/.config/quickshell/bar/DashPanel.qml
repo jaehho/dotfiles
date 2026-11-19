@@ -6,8 +6,8 @@
 //
 // Esc or a click outside closes it (the focus grab), and so does a click
 // that opens something from a card (a session, tmux's tree, a usage
-// page). It holds SESSIONS and LLM and never scrolls:
-// .claude/rules/dash-panel.md.
+// page, asst, the IBKR portal). It holds SESSIONS, LLM, TASKS and
+// MARKET and never scrolls: .claude/rules/dash-panel.md.
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
@@ -135,6 +135,20 @@ PanelWindow {
                 }
 
                 DashLlm {
+                    Layout.fillWidth: true
+                    colors: panel.colors
+                    feed: panel.feed
+                    onLaunch: (url, cmd) => panel.launch(url, cmd)
+                }
+
+                DashTasks {
+                    Layout.fillWidth: true
+                    colors: panel.colors
+                    feed: panel.feed
+                    onLaunch: (url, cmd) => panel.launch(url, cmd)
+                }
+
+                DashMarket {
                     Layout.fillWidth: true
                     colors: panel.colors
                     feed: panel.feed

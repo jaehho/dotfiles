@@ -1,7 +1,7 @@
 // The dash panel's data, fetched only while a panel is open, so a closed
-// panel costs nothing: `dash-data board` every 10 s (sessions and LLM
-// quotas). The 1-minute samplers (dash-collect, dash-llm) are dash's
-// own timers and keep running either way (issue #83).
+// panel costs nothing: `dash-data board` every 10 s (sessions, LLM
+// quotas, tasks, the IBKR snapshot). dash's samplers (dash-collect,
+// dash-llm, dash-mkt) keep running either way (issue #83).
 import QtQuick
 import Quickshell
 import Quickshell.Io
