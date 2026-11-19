@@ -168,6 +168,9 @@ before you write or restructure it.
 - Define a variable in the cell where the prose first needs it, and say in
   the prose what each package function that cell calls does.
   A filter or reshape that the code shows plainly needs no sentence.
+- Explain a method as a whole first, in plain words and with a schematic,
+  then give each step a section that adds its detail. A section opens
+  with what it does and why, not with a run of facts.
 - Explanatory text is a markdown cell in complete sentences, not a comment
   at the top of a code cell.
   Comments stay for a choice at its site and stay short; a setup constant's
