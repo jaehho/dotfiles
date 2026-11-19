@@ -34,6 +34,7 @@ ShellRoot {
     property string dashOn: ""
     // The screen whose notification center is open, or "" for none.
     property string notifOn: ""
+    onNotifOnChanged: console.log("notif-debug notifOn ->", JSON.stringify(notifOn))
     // Hidden, the bars unmap and give their 40px back to the windows.
     property bool shown: true
 
@@ -99,6 +100,7 @@ ShellRoot {
 
         function onFocusedMonitorChanged() {
             const name = Hyprland.focusedMonitor?.name ?? "";
+            console.log("notif-debug focused monitor", name, "notifOn", root.notifOn);
             if (root.notifOn !== "" && name !== "" && name !== root.notifOn)
                 root.notifOn = name;
         }
@@ -114,7 +116,10 @@ ShellRoot {
 
             screen: modelData
             open: root.notifOn === modelData.name
-            onCloseRequested: root.notifOn = ""
+            onCloseRequested: {
+                console.log("notif-debug closeRequested from", modelData.name, "notifOn", root.notifOn);
+                root.notifOn = "";
+            }
         }
     }
 
