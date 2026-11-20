@@ -18,8 +18,15 @@ left out.
 - Quote as a blockquote of the highlight, then
   `> — Author year, p. N · [PDF p. N](zotero://open-pdf/library/items/<attachment key>?page=<PDF position>&annotation=<annotation key>) · [<doi>](https://doi.org/<doi>)`,
   on one line.
-  N is the page label Zotero stores on the annotation (`page` in
-  `zotero_get_annotations`, often the journal page), not the PDF index.
+  N is the number printed on that page, in its header or footer; a first
+  page that prints only the article's range ("Cell 189, 5552–5570") is
+  the range's first number. Do not take Zotero's stored page label
+  (`page` in `zotero_get_annotations`) on trust: some PDFs label every
+  page 1, and pages that print no number, such as online Methods, get
+  labels past the article's range. A page that prints no number is cited
+  by its section (`Methods`, `Extended Data`), and a preprint, which has
+  no pagination of its own, by its PDF page. Where the project has a
+  citation check (a script that reads each quote's PDF page), run it.
   `page=` in the link is different: Zotero reads it as the PDF position,
   `pageIndex + 1` from the annotation's position.
   The user's annotation comment goes outside the quote, as complete
