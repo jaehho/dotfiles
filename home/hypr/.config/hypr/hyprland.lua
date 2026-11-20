@@ -384,6 +384,7 @@ hl.bind(mainMod .. " + Q",         hl.dsp.window.close()) -- quit: close the foc
 -- asst's add-task popup: a layer surface, so no window rule; pressing again closes it
 hl.bind(mainMod .. " + A",         hl.dsp.exec_cmd("asst-gtk quick-add")) -- quick add task
 hl.bind(mainMod .. " + space",     hl.dsp.exec_cmd(menu)) -- app launcher
+hl.bind(mainMod .. " + C",         hl.dsp.exec_cmd("betterbird -calendar")) -- calendar (Betterbird calendar tab)
 hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/hypr-pin-toggle")) -- pin window on top
 hl.bind(mainMod .. " + T",         hl.dsp.layout("togglesplit"))                    -- toggle split direction (dwindle)
 

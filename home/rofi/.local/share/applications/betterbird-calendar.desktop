@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Calendar
+GenericName=Calendar
+Comment=Open Betterbird on the calendar tab
+Exec=betterbird -calendar
+Icon=office-calendar
+Categories=Office;Calendar;
+Keywords=agenda;schedule;betterbird;
+StartupWMClass=eu.betterbird.Betterbird
