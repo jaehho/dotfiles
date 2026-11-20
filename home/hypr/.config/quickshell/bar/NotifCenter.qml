@@ -28,6 +28,9 @@ PanelWindow {
     readonly property int gutter: Theme.space.sm
 
     signal closeRequested
+    // Super went down: a Super chord is coming, which closes the center
+    // so the chord acts on the windows (shell.qml).
+    signal superPressed
 
     // DEBUG(#90): what the surface does while focus goes astray.
     onVisibleChanged: console.log("notif-debug surface", screen?.name, "visible", visible, "open", open, "kb", WlrLayershell.keyboardFocus, "focusable", focusable)
@@ -92,6 +95,7 @@ PanelWindow {
             console.log("notif-debug sheet close (key)", center.screen?.name);
             center.closeRequested();
         }
+        onSuperPressed: center.superPressed()
 
         Behavior on x {
             Anim {

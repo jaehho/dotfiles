@@ -10,7 +10,8 @@ pragma ComponentBehavior: Bound
 // and closes, x/d/Delete dismisses and moves to the next, Shift+C
 // clears all, `<` or `,` and
 // `>` or `.` press the first two buttons and 3–9 the rest, q or Esc
-// close. It takes keys while it has focus.
+// close. Super alone says `superPressed`: any Super chord closes the
+// center before Hyprland acts on it. It takes keys while it has focus.
 //
 // Its implicitHeight is what it would like; given less, the list
 // scrolls.
@@ -26,6 +27,7 @@ Sheet {
     property real gAt: 0
 
     signal closeRequested
+    signal superPressed
 
     implicitHeight: column.implicitHeight + Theme.space.md * 2
 
@@ -43,6 +45,10 @@ Sheet {
     }
 
     Keys.onPressed: event => {
+        if (event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R || event.key === Qt.Key_Meta) {
+            sheet.superPressed();
+            return;
+        }
         const ctrl = event.modifiers & Qt.ControlModifier;
         const last = Notifs.count - 1;
         const key = event.key;

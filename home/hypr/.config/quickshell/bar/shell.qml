@@ -34,6 +34,9 @@ ShellRoot {
     property string dashOn: ""
     // The screen whose notification center is open, or "" for none.
     property string notifOn: ""
+    // When Super last closed the center, in ms: the toggle that Super+
+    // period sends right after is that close, not a reopen.
+    property real superClosedAt: 0
     onNotifOnChanged: console.log("notif-debug notifOn ->", JSON.stringify(notifOn))
     // Hidden, the bars unmap and give their 40px back to the windows.
     property bool shown: true
@@ -88,30 +91,12 @@ ShellRoot {
         target: Notifs
 
         function onToggleRequested(screen) {
+            if (root.notifOn === "" && Date.now() - root.superClosedAt < 1000) {
+                root.superClosedAt = 0;
+                return;
+            }
             root.shown = true;
             root.notif(screen !== "" ? screen : Hyprland.focusedMonitor?.name ?? "");
-        }
-    }
-
-    // An open center follows the focus to another screen, as a
-    // workspace switch moves it.
-    Connections {
-        target: Hyprland
-
-        function onFocusedMonitorChanged() {
-            const name = Hyprland.focusedMonitor?.name ?? "";
-            console.log("notif-debug focused monitor", name, "notifOn", root.notifOn);
-            // Close first and open on the next turn, so the old surface
-            // is gone before the new one maps and takes the keyboard;
-            // the other order let the old one's unmap hand it to a
-            // window (NotifCenter.qml).
-            if (root.notifOn !== "" && name !== "" && name !== root.notifOn) {
-                root.notifOn = "";
-                Qt.callLater(() => {
-                    if (root.notifOn === "")
-                        root.notifOn = Hyprland.focusedMonitor?.name ?? name;
-                });
-            }
         }
     }
 
@@ -127,6 +112,12 @@ ShellRoot {
             open: root.notifOn === modelData.name
             onCloseRequested: {
                 console.log("notif-debug closeRequested from", modelData.name, "notifOn", root.notifOn);
+                root.notifOn = "";
+            }
+            // Any Super chord closes it first, so the chord acts on the
+            // windows: the center keeps the keyboard while open.
+            onSuperPressed: {
+                root.superClosedAt = Date.now();
                 root.notifOn = "";
             }
         }
