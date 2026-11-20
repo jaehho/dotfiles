@@ -37,7 +37,6 @@ ShellRoot {
     // When Super last closed the center, in ms: the toggle that Super+
     // period sends right after is that close, not a reopen.
     property real superClosedAt: 0
-    onNotifOnChanged: console.log("notif-debug notifOn ->", JSON.stringify(notifOn))
     // Hidden, the bars unmap and give their 40px back to the windows.
     property bool shown: true
 
@@ -110,10 +109,7 @@ ShellRoot {
 
             screen: modelData
             open: root.notifOn === modelData.name
-            onCloseRequested: {
-                console.log("notif-debug closeRequested from", modelData.name, "notifOn", root.notifOn);
-                root.notifOn = "";
-            }
+            onCloseRequested: root.notifOn = ""
             // Any Super chord closes it first, so the chord acts on the
             // windows: the center keeps the keyboard while open.
             onSuperPressed: {

@@ -32,9 +32,6 @@ PanelWindow {
     // so the chord acts on the windows (shell.qml).
     signal superPressed
 
-    // DEBUG(#90): what the surface does while focus goes astray.
-    onVisibleChanged: console.log("notif-debug surface", screen?.name, "visible", visible, "open", open, "kb", WlrLayershell.keyboardFocus, "focusable", focusable)
-
     anchors {
         top: true
         bottom: true
@@ -76,7 +73,6 @@ PanelWindow {
         property bool hadKeys: false
 
         onActiveFocusChanged: {
-            console.log("notif-debug activeFocus", center.screen?.name, activeFocus, "open", center.open);
             if (activeFocus)
                 hadKeys = true;
             else if (hadKeys && center.open)
@@ -91,10 +87,7 @@ PanelWindow {
                     sheet.hadKeys = false;
             }
         }
-        onCloseRequested: {
-            console.log("notif-debug sheet close (key)", center.screen?.name);
-            center.closeRequested();
-        }
+        onCloseRequested: center.closeRequested()
         onSuperPressed: center.superPressed()
 
         Behavior on x {
