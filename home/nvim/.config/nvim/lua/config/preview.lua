@@ -175,6 +175,31 @@ local function find_marimo_workspace(src)
   return best
 end
 
+-- One server per project, which every notebook in it opens on. It
+-- serves the project's notebooks/ when the notebook is in it, as
+-- `marimo run notebooks/` did, so a ?file= link resolves from there;
+-- otherwise the project root.
+local function marimo_serve_dir(src)
+  local root = vim.fs.root(src, { 'pyproject.toml', '.venv' }) or vim.fs.dirname(src)
+  local notebooks = root .. '/notebooks'
+  if vim.startswith(src, notebooks .. '/') then
+    return root, notebooks
+  end
+  return root, root
+end
+
+-- Servers <leader>tp started, by the folder they serve: their tmux pane
+-- and the notebook that started them. They stop with nvim, not with a
+-- buffer, since other notebooks in the project use them.
+local spawned = {}
+vim.api.nvim_create_autocmd('VimLeavePre', {
+  callback = function()
+    for _, s in pairs(spawned) do
+      vim.system({ 'tmux', 'kill-pane', '-t', s.pane }):wait()
+    end
+  end,
+})
+
 -- Open the notebook in the default browser (Firefox tab). marimo-view
 -- (home/laptop) is an unused WebKit experiment. show-code=true starts a
 -- run-mode tab with the code shown (hidden by default even with
@@ -210,17 +235,19 @@ function M.toggle()
   elseif ft == 'python' then
     if is_marimo_notebook() then
       local src = vim.api.nvim_buf_get_name(0)
-      local bufnr = vim.api.nvim_get_current_buf()
+      local root, dir = marimo_serve_dir(src)
 
-      -- A pane we spawned is ours to toggle off.
-      if vim.b.marimo_pane then
-        vim.system { 'tmux', 'kill-pane', '-t', vim.b.marimo_pane }
-        vim.b.marimo_pane = nil
+      -- The notebook that started a server stops it.
+      local own = spawned[dir]
+      if own and own.src == src then
+        vim.system({ 'tmux', 'kill-pane', '-t', own.pane }):wait()
+        spawned[dir] = nil
         vim.notify('Preview stopped', vim.log.levels.INFO)
         return
       end
 
-      -- Live workspace: reveal/switch, never stop.
+      -- Any live server that serves this notebook, ours or one started in
+      -- a terminal: open the notebook there, never stop it.
       local server = find_marimo_workspace(src)
       if server then
         show_marimo(server, src)
@@ -228,7 +255,6 @@ function M.toggle()
         return
       end
 
-      local root = vim.fs.root(0, { 'pyproject.toml', '.venv' }) or vim.fn.fnamemodify(src, ':h')
       local venv_marimo = root .. '/.venv/bin/marimo'
       local marimo_bin = vim.uv.fs_stat(venv_marimo) and venv_marimo or 'marimo'
       local venv_python = root .. '/.venv/bin/python'
@@ -240,27 +266,16 @@ function M.toggle()
       -- --include-code sends the source, which show_marimo's URL shows.
       -- --no-token registers the server; --headless stops marimo opening
       -- its own tab at the bare root URL, since show_marimo opens one with
-      -- show-code=true.
-      -- It serves the notebook's folder, not the file: marimo resolves a
-      -- ?file= link against the server's root, and notebooks link to
-      -- each other relative to the linking notebook's folder.
+      -- show-code=true. It runs from the project root, as
+      -- `uv run marimo run notebooks/` from a terminal did.
       local cmd = vim.fn.shellescape(marimo_bin)
         .. ' run --watch --include-code --no-token --headless '
-        .. vim.fn.shellescape(vim.fs.dirname(src))
+        .. vim.fn.shellescape(dir)
       local result = vim.system {
-        'tmux', 'split-window', '-v', '-d', '-l', '10', '-P', '-F', '#{pane_id}',
-        cmd,
+        'tmux', 'split-window', '-v', '-d', '-l', '10', '-c', root,
+        '-P', '-F', '#{pane_id}', cmd,
       }:wait()
-      vim.b.marimo_pane = vim.trim(result.stdout or '')
-      vim.api.nvim_create_autocmd({ 'BufDelete', 'VimLeavePre' }, {
-        buffer = bufnr,
-        once = true,
-        callback = function()
-          if vim.b[bufnr].marimo_pane then
-            vim.system { 'tmux', 'kill-pane', '-t', vim.b[bufnr].marimo_pane }
-          end
-        end,
-      })
+      spawned[dir] = { pane = vim.trim(result.stdout or ''), src = src }
       for _ = 1, 20 do
         vim.wait(100)
         server = find_marimo_workspace(src)
