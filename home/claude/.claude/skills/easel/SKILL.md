@@ -1,6 +1,6 @@
 ---
 name: easel
-description: Reads, renders, checks and edits Easel reference boards (folders ending in .easel) through the easel CLI, live in the open window when there is one. Use when a task touches a .easel board, such as laying out references, adding images or notes, framing columns, checking overlaps, or importing a Drawy board.
+description: Reads, renders, checks and edits Easel reference boards (folders ending in .easel) through the easel CLI, live in the open window when there is one. Use when a task touches a .easel board, such as laying out references, adding images or notes, framing columns, or checking overlaps.
 ---
 
 # Easel boards
