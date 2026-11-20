@@ -6,6 +6,11 @@ SKILL.md has the rules that always apply.
 Claims from the literature come from the user's Zotero library, checked
 before any web search.
 If nothing there supports a claim, say so and do not cite it.
+Quote the work that established a fact. A paper is the source of its own
+findings and definitions; a sentence that cites other work, or restates
+textbook knowledge, points to the original. Find the original, add it to
+Zotero (by script when it is open access, otherwise the user downloads
+it), and quote it.
 A claim that rests on a conversation is attributed to the person by
 name as personal communication, without a date.
 A claim with no source is computed from the data in the notebook or
