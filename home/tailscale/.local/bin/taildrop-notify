@@ -6,19 +6,34 @@
 # makes it name each file it wrote ("wrote NAME as /abs/path (N bytes)"),
 # which is the only thing the notification needs. It retries internally every
 # 5s on error, so a tailscaled restart does not need handling here.
+#
+# The loop prints its errors on stdout as bare lines, such as "getting
+# WaitingFiles: Access denied: file access denied" when this user is not the
+# tailscale operator (#92). Every line is echoed to stderr so the journal
+# shows them; a line identical to the one before it is dropped, so an error
+# retried every 5s is logged once.
 
 set -euo pipefail
 
 DIR=$(realpath -m "${1:-$HOME/Taildrop}")
 mkdir -p "$DIR"
 
-# No ^ anchor: --verbose prints "waiting for file..." WITHOUT a newline, so the
-# record arrives glued to the end of it. The written path is absolute, so
-# requiring the leading / keeps a filename containing " as " from confusing the
-# greedy match.
+last=
 tailscale file get --loop --verbose --conflict=rename "$DIR" |
 while IFS= read -r line; do
-    [[ $line =~ wrote\ .*\ as\ (/.+)\ \([0-9]+\ bytes\)$ ]] || continue
+    # --verbose prints "waiting for file..." WITHOUT a newline, so the next
+    # record arrives glued to the end of it.
+    while [[ $line == "waiting for file..."* ]]; do
+        line=${line#"waiting for file..."}
+    done
+    [ -n "$line" ] || continue
+    if [ "$line" != "$last" ]; then
+        printf '%s\n' "$line" >&2
+        last=$line
+    fi
+    # The written path is absolute, so requiring the leading / keeps a
+    # filename containing " as " from confusing the greedy match.
+    [[ $line =~ ^wrote\ .*\ as\ (/.+)\ \([0-9]+\ bytes\)$ ]] || continue
     f=${BASH_REMATCH[1]}
     (
         key=$(notify-send --wait --action=default=Open \
