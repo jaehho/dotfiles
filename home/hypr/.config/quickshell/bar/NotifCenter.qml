@@ -3,20 +3,21 @@ pragma ComponentBehavior: Bound
 // The notification center (#90): NotifSheet at the top right of one
 // screen, under the bar, sliding in from the right edge. It floats over
 // the windows and reserves nothing. Open, it holds the keyboard
-// exclusively; Esc or a click outside closes it (the focus grab).
+// exclusively; Super+period, Esc or q close it, and so does losing the
+// keyboard after having it.
 //
 // Its keyboard mode never changes: the surface is Exclusive for as long
-// as it is mapped, and opening or closing only maps or unmaps it.
-// Switching a mapped surface between None and Exclusive raced its map:
-// Hyprland's log showed the surface mapping before the Exclusive
-// request, never taking focus, and a window getting the keyboard while
-// no exclusive layer counted (#90, 2026-11-20). Mapped with Exclusive
-// from its first commit, it takes focus on map, and while it is mapped
-// Hyprland refuses focus to every window. The close fade is short, so
-// the keyboard comes back quickly.
+// as it is mapped, and opening or closing only maps or unmaps it, as
+// the polkit prompt does. No HyprlandFocusGrab: in Hyprland 0.57.2 a
+// grab hands the surface the keyboard at the seat level first, so the
+// layer's own takeKeyboardFocus finds it already focused and returns
+// before Hyprland records it as the focused surface; mouse refocus then
+// checks only that record (InputManager.cpp, allowKeyboardRefocus) and
+// gave the window under the pointer the keyboard while the center
+// stayed open (#90, Hyprland debug log 2026-11-20). The close fade is
+// short, so the keyboard comes back quickly.
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Wayland
 
 PanelWindow {
@@ -30,7 +31,7 @@ PanelWindow {
     signal closeRequested
 
     // DEBUG(#90): what the surface does while focus goes astray.
-    onVisibleChanged: console.log("notif-debug surface", screen?.name, "visible", visible, "open", open)
+    onVisibleChanged: console.log("notif-debug surface", screen?.name, "visible", visible, "open", open, "kb", WlrLayershell.keyboardFocus, "focusable", focusable)
 
     anchors {
         top: true
@@ -53,20 +54,6 @@ PanelWindow {
     // Super+period, Esc, q or a click outside close it.
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
 
-    HyprlandFocusGrab {
-        windows: [center]
-        active: center.open
-        // DEBUG(#90): what closes the center during monitor hops.
-        onActiveChanged: console.log("notif-debug grab", center.screen?.name, "active", active, "open", center.open)
-        // Only an open center closes: a grab ended while this one was
-        // already handing over to another screen says nothing.
-        onCleared: {
-            console.log("notif-debug grab cleared", center.screen?.name, "open", center.open);
-            if (center.open)
-                center.closeRequested();
-        }
-    }
-
     NotifSheet {
         id: sheet
 
@@ -77,6 +64,27 @@ PanelWindow {
         open: center.open
         opacity: center.open ? 1 : 0
         focus: center.open
+
+        // Losing the keyboard after having it closes the center, so it
+        // is never open while something else takes the typing.
+        property bool hadKeys: false
+
+        onActiveFocusChanged: {
+            console.log("notif-debug activeFocus", center.screen?.name, activeFocus, "open", center.open);
+            if (activeFocus)
+                hadKeys = true;
+            else if (hadKeys && center.open)
+                center.closeRequested();
+        }
+
+        Connections {
+            target: center
+
+            function onOpenChanged() {
+                if (!center.open)
+                    sheet.hadKeys = false;
+            }
+        }
         onCloseRequested: {
             console.log("notif-debug sheet close (key)", center.screen?.name);
             center.closeRequested();
