@@ -1,12 +1,14 @@
-// A tile on the quick settings sheet: its glyph, a name and a state
-// line beneath. On, the glyph and state turn blue on the blue tint (4.69:1
-// there); off, the glyph rests in grey0. A chevron marks a tile that opens
-// a page.
+// A tile on the quick settings sheet (#89): a pill with its Material
+// Symbol in the round end, a name and a state line beneath. On, the
+// icon fills and it and the state turn blue on the blue tint (4.69:1
+// there); off, the icon rests in grey0. A chevron marks a tile that
+// opens a page.
 import QtQuick
 
 QuickControl {
     id: tile
 
+    // A Material Symbols name.
     property string icon: ""
     property string name: ""
     property string detail: ""
@@ -15,19 +17,24 @@ QuickControl {
 
     height: 48
 
-    Line {
-        id: glyph
-        x: 12
+    // Centered in the pill's round end.
+    Icon {
+        x: tile.height / 2 - width / 2
         anchors.verticalCenter: parent.verticalCenter
-        mono: true
-        size: 17
-        text: tile.icon
-        color: tile.on ? tile.colors.blue : tile.off ? tile.colors.grey0 : tile.colors.fg
+        name: tile.icon
+        fill: tile.on ? 1 : 0
+        color: tile.on ? Theme.colors.blue : tile.off ? Theme.colors.grey0 : Theme.colors.fg
+
+        Behavior on color {
+            CAnim {
+                speed: "fast"
+            }
+        }
     }
 
     Column {
-        x: 40
-        width: parent.width - x - (tile.more ? 24 : 10)
+        x: tile.height - Theme.space.sm
+        width: parent.width - x - (tile.more ? 28 : Theme.space.md)
         anchors.verticalCenter: parent.verticalCenter
         spacing: 1
 
@@ -35,25 +42,25 @@ QuickControl {
             width: parent.width
             elide: Text.ElideRight
             text: tile.name
-            color: tile.colors.fg
+            color: Theme.colors.fg
         }
 
         Line {
             width: parent.width
             elide: Text.ElideRight
-            size: 11
+            size: Theme.font.small
             text: tile.detail
-            color: tile.on ? tile.colors.blue : tile.colors.grey2
+            color: tile.on ? Theme.colors.blue : Theme.colors.grey2
         }
     }
 
-    Line {
+    Icon {
         visible: tile.more
         anchors.right: parent.right
-        anchors.rightMargin: 6
+        anchors.rightMargin: Theme.space.sm
         anchors.verticalCenter: parent.verticalCenter
-        mono: true
-        text: String.fromCodePoint(0xf0142)
-        color: tile.colors.grey2
+        name: "chevron_right"
+        size: Theme.icon.small
+        color: Theme.colors.grey2
     }
 }

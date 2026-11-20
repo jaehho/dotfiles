@@ -1,15 +1,18 @@
-// A level on the quick settings sheet: its glyph, a track filled in fg
-// up to the level, and the level in words. Dragging or clicking the
-// track sets it (moved); the wheel, and h or l under the keyboard, step
-// it as the keys do (stepped). The glyph's click and Enter belong to
-// whoever places it.
+// A level on the quick settings sheet: its Material Symbol, a track
+// filled in fg up to the level, and the level in words. Dragging or
+// clicking the track sets it (moved); the wheel, and h or l under the
+// keyboard, step it as the keys do (stepped). The icon's click and
+// Enter belong to whoever places it; `pressable` gives the icon a round
+// state layer when the click does something (mute).
 import QtQuick
 
 QuickControl {
     id: slider
 
     property real value: 0
-    property int glyph
+    // A Material Symbols name.
+    property string icon: ""
+    property bool pressable: false
     // Off (muted): the glyph and fill turn grey0.
     property bool off: false
     property string label: ""
@@ -29,7 +32,7 @@ QuickControl {
     slider: true
     hintInset: -4
     flat: true
-    height: 32
+    height: 36
 
     // The track keeps showing where it was dragged until the level
     // read back has caught up.
@@ -40,30 +43,36 @@ QuickControl {
 
     Item {
         id: icon
-        width: 32
+        width: parent.height
         height: parent.height
 
-        Line {
-            anchors.centerIn: parent
-            mono: true
-            size: 16
-            text: String.fromCodePoint(slider.glyph)
-            color: slider.off ? slider.colors.grey0 : slider.colors.fg
-        }
-
-        TapHandler {
-            onTapped: {
+        StateLayer {
+            radius: Theme.radius.pill
+            enabled: slider.pressable && slider.enabled
+            onClicked: () => {
                 slider.sheet.keyboard = false;
                 slider.forceActiveFocus();
                 slider.glyphClicked();
+            }
+        }
+
+        Icon {
+            anchors.centerIn: parent
+            name: slider.icon
+            color: slider.off ? Theme.colors.grey0 : Theme.colors.fg
+
+            Behavior on color {
+                CAnim {
+                    speed: "fast"
+                }
             }
         }
     }
 
     Item {
         id: track
-        x: icon.width + 6
-        width: parent.width - x - words.width - 16
+        x: icon.width + Theme.space.sm
+        width: parent.width - x - words.width - Theme.space.lg
         height: parent.height
 
         Rectangle {
@@ -72,13 +81,19 @@ QuickControl {
             width: parent.width
             height: 6
             radius: 3
-            color: slider.colors.bg1
+            color: Theme.colors.bg1
 
             Rectangle {
                 width: Math.max(groove.height, groove.width * slider.shown)
                 height: parent.height
                 radius: 3
-                color: slider.off ? slider.colors.grey0 : slider.colors.fg
+                color: slider.off ? Theme.colors.grey0 : Theme.colors.fg
+
+                Behavior on color {
+                    CAnim {
+                        speed: "fast"
+                    }
+                }
             }
         }
 
@@ -89,13 +104,13 @@ QuickControl {
             width: size
             height: size
             radius: size / 2
-            color: slider.off ? slider.colors.grey0 : slider.colors.fg
+            color: slider.off ? Theme.colors.grey0 : Theme.colors.fg
             border.width: 2
-            border.color: slider.colors.bg_dim
+            border.color: Theme.colors.bg_dim
 
             Behavior on size {
-                NumberAnimation {
-                    duration: 120
+                Anim {
+                    speed: "fast"
                 }
             }
         }
@@ -128,14 +143,14 @@ QuickControl {
     Line {
         id: words
         anchors.right: parent.right
-        anchors.rightMargin: 8
+        anchors.rightMargin: Theme.space.md
         anchors.verticalCenter: parent.verticalCenter
         width: 44
         horizontalAlignment: Text.AlignRight
         mono: true
-        size: 11
+        size: Theme.font.small
         text: slider.label
-        color: slider.colors.grey2
+        color: Theme.colors.grey2
     }
 
     WheelHandler {

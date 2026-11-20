@@ -1,5 +1,6 @@
 // An on/off switch on the quick settings sheet: a pill whose knob sits
-// right in fg on the blue tint when on, and left in grey0 when off.
+// right in fg on the blue tint when on, and left in grey0 on the card
+// tone when off.
 import QtQuick
 
 QuickControl {
@@ -16,12 +17,17 @@ QuickControl {
         width: 14
         height: 14
         radius: 7
-        color: toggle.on ? toggle.colors.fg : toggle.colors.grey0
+        color: toggle.on ? Theme.colors.fg : Theme.colors.grey0
 
         Behavior on x {
-            NumberAnimation {
-                duration: 150
-                easing.type: Easing.OutCubic
+            Anim {
+                speed: "fast"
+            }
+        }
+
+        Behavior on color {
+            CAnim {
+                speed: "fast"
             }
         }
     }

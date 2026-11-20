@@ -166,7 +166,8 @@ Column {
             enabled: sound.source !== null
             value: level
             off: muted
-            glyph: muted ? 0xf036d : 0xf036c
+            icon: muted ? "mic_off" : "mic"
+            pressable: true
             label: muted && !held ? "Muted" : `${Math.round((held ? dragged : level) * 100)}%`
             onMoved: value => {
                 if (!sound.source?.audio)

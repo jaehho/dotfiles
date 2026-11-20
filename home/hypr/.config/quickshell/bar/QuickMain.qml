@@ -2,7 +2,8 @@
 // levels, tiles for Wi-Fi, Bluetooth and sound, then from
 // hypr-settings-menu's table its toggles, what it opens, and the session
 // row, whose Log out, Reboot and Shut down take a second press (DESIGN.md,
-// the Second Press Rule).
+// the Second Press Rule). Icons are Material Symbols (#89); the table's
+// entries name theirs.
 import QtQuick
 import Quickshell
 import Quickshell.Bluetooth
@@ -15,8 +16,8 @@ Column {
 
     required property var sheet
     readonly property var colors: sheet.colors
-    readonly property real third: (width - 16) / 3
-    readonly property real half: (width - 8) / 2
+    readonly property real third: (width - Theme.space.sm * 2) / 3
+    readonly property real half: (width - Theme.space.sm) / 2
     // The session entry a first press armed, by id.
     property string armed: ""
 
@@ -37,13 +38,13 @@ Column {
         return page === "wifi" ? wifiTile : page === "bluetooth" ? bluetoothTile : page === "sound" ? soundTile : null;
     }
 
-    // The ramp glyph for a 0..1 level, as the bar picks it.
-    function pick(glyphs, level) {
-        return glyphs[Math.max(0, Math.min(glyphs.length - 1, Math.floor(level * glyphs.length)))];
+    // The ramp icon for a 0..1 level, as the bar picks it.
+    function pick(icons, level) {
+        return icons[Math.max(0, Math.min(icons.length - 1, Math.floor(level * icons.length)))];
     }
 
-    function wifiGlyph(strength) {
-        return main.pick([0xf091f, 0xf0922, 0xf0925, 0xf0928], strength);
+    function wifiIcon(strength) {
+        return main.pick(["network_wifi_1_bar", "network_wifi_2_bar", "network_wifi_3_bar", "signal_wifi_4_bar"], strength);
     }
 
     function session(entry) {
@@ -68,7 +69,7 @@ Column {
         lightSet.running = true;
     }
 
-    spacing: 14
+    spacing: Theme.space.md
 
     Connections {
         target: main.sheet
@@ -85,7 +86,7 @@ Column {
 
     Column {
         width: parent.width
-        spacing: 4
+        spacing: Theme.space.xs
 
         QuickSlider {
             id: volume
@@ -105,7 +106,8 @@ Column {
             enabled: main.sink !== null
             value: level
             off: muted
-            glyph: muted ? 0xf075f : bluetooth ? 0xf00b0 : main.pick([0xf057f, 0xf0580, 0xf057e], level)
+            icon: muted ? "volume_off" : bluetooth ? "headphones" : main.pick(["volume_mute", "volume_down", "volume_up"], level)
+            pressable: true
             label: muted && !held ? "Muted" : `${Math.round((held ? dragged : level) * 100)}%`
             onMoved: value => {
                 if (!main.sink?.audio)
@@ -138,7 +140,7 @@ Column {
             width: parent.width
             visible: device !== ""
             value: level
-            glyph: main.pick([0xf00de, 0xf00df, 0xf00e0], level)
+            icon: main.pick(["brightness_low", "brightness_medium", "brightness_high"], level)
             label: `${Math.round((held ? dragged : level) * 100)}%`
             onMoved: value => main.setLight(value)
             onStepped: steps => main.sheet.level("brightness", steps)
@@ -188,7 +190,7 @@ Column {
     }
 
     Row {
-        spacing: 8
+        spacing: Theme.space.sm
 
         QuickTile {
             id: wifiTile
@@ -196,7 +198,7 @@ Column {
             width: main.third
             more: true
             off: !Networking.wifiEnabled || main.wifiDevice === null
-            icon: String.fromCodePoint(off ? 0xf05aa : main.station ? main.wifiGlyph(main.station.signalStrength) : 0xf092f)
+            icon: off ? "wifi_off" : main.station ? main.wifiIcon(main.station.signalStrength) : "signal_wifi_0_bar"
             name: "Wi-Fi"
             detail: main.wifiDevice === null ? "No device" : !Networking.wifiEnabled ? "Off" : main.station?.name ?? "Not connected"
             onActivated: main.sheet.pageRequested("wifi")
@@ -208,7 +210,7 @@ Column {
             width: main.third
             more: true
             off: !main.adapter || !main.adapter.enabled
-            icon: String.fromCodePoint(off ? 0xf00b2 : main.linked.length > 0 ? 0xf00b1 : 0xf00af)
+            icon: off ? "bluetooth_disabled" : main.linked.length > 0 ? "bluetooth_connected" : "bluetooth"
             name: "Bluetooth"
             detail: !main.adapter ? "No adapter" : !main.adapter.enabled ? "Off" : main.linked.length === 1 ? main.linked[0].name : main.linked.length > 1 ? `${main.linked.length} connected` : "On"
             onActivated: main.sheet.pageRequested("bluetooth")
@@ -219,7 +221,7 @@ Column {
             sheet: main.sheet
             width: main.third
             more: true
-            icon: String.fromCodePoint(volume.bluetooth ? 0xf00b0 : 0xf04c3)
+            icon: volume.bluetooth ? "headphones" : "speaker"
             name: "Sound"
             detail: main.sink ? main.sink.nickname || main.sink.description || main.sink.name : "No output"
             onActivated: main.sheet.pageRequested("sound")
@@ -228,7 +230,7 @@ Column {
 
     Grid {
         columns: 3
-        spacing: 8
+        spacing: Theme.space.sm
         visible: toggles.count > 0
 
         Repeater {
@@ -255,21 +257,21 @@ Column {
 
     Column {
         width: parent.width
-        spacing: 6
+        spacing: Theme.space.sm
         visible: rows.count > 0
 
         Line {
-            x: 2
-            size: 11
+            x: Theme.space.xs
+            size: Theme.font.small
             weight: Font.Bold
             font.capitalization: Font.AllUppercase
             text: "Open"
-            color: main.colors.grey2
+            color: Theme.colors.grey2
         }
 
         Grid {
             columns: 2
-            spacing: 8
+            spacing: Theme.space.sm
 
             Repeater {
                 id: rows
@@ -282,26 +284,29 @@ Column {
 
                     sheet: main.sheet
                     width: main.half
-                    height: 30
+                    height: 36
                     onActivated: main.sheet.launch(modelData.id)
 
                     Row {
-                        x: 12
+                        x: Theme.space.md
+                        width: parent.width - x - Theme.space.md
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 10
+                        spacing: Theme.space.sm
 
-                        Line {
+                        Icon {
+                            id: rowIcon
                             anchors.verticalCenter: parent.verticalCenter
-                            mono: true
-                            size: 15
-                            text: row.modelData.icon
-                            color: main.colors.fg
+                            name: row.modelData.icon
+                            size: Theme.icon.small + 2
+                            color: Theme.colors.fg
                         }
 
                         Line {
                             anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - rowIcon.width - parent.spacing
+                            elide: Text.ElideRight
                             text: row.modelData.label
-                            color: main.colors.fg
+                            color: Theme.colors.fg
                         }
                     }
                 }
@@ -310,7 +315,7 @@ Column {
     }
 
     Row {
-        spacing: 8
+        spacing: Theme.space.sm
         visible: sessions.count > 0
 
         Repeater {
@@ -323,28 +328,28 @@ Column {
                 required property var modelData
 
                 sheet: main.sheet
-                width: (main.width - 8 * (sessions.count - 1)) / sessions.count
-                height: 50
+                width: (main.width - Theme.space.sm * (sessions.count - 1)) / sessions.count
+                height: 56
+                radius: Theme.radius.surface
                 armed: main.armed === modelData.id
                 onActivated: main.session(modelData)
 
                 Column {
                     anchors.centerIn: parent
-                    spacing: 3
+                    spacing: 2
 
-                    Line {
+                    Icon {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        mono: true
-                        size: 17
-                        text: button.modelData.icon
-                        color: main.colors.fg
+                        name: button.modelData.icon
+                        fill: button.armed ? 1 : 0
+                        color: button.armed ? Theme.colors.red : Theme.colors.fg
                     }
 
                     Line {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        size: 11
+                        size: Theme.font.small
                         text: button.armed ? "Again?" : button.modelData.label
-                        color: button.armed ? main.colors.fg : main.colors.grey2
+                        color: button.armed ? Theme.colors.fg : Theme.colors.grey2
                     }
                 }
             }
