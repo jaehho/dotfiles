@@ -63,10 +63,11 @@ and loaders in separate modules of pure readers.
   A cell that fetches sits behind `mo.ui.run_button`;
   secrets come from the environment.
 - A step that takes more than about a minute runs outside the notebook:
-  package code, run by a make target, writes its results to files, and
-  the notebook reads them to show and explore. Make reruns the step when
-  the code or data it read change; the notebook names the command that
-  makes missing results.
+  package code, run by a command (a make target, or the project's own
+  CLI), writes its results to files, and the notebook reads them to
+  show and explore. The command reruns the step when the code or data
+  it read change; the notebook names the command that makes missing
+  results.
 - A cell that takes more than a few seconds, but not the minute that
   calls for such a step, wraps its slow part in
   `with mo.persistent_cache(name="..."):`, so reopening the notebook
