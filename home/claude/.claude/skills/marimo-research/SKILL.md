@@ -1,6 +1,6 @@
 ---
 name: marimo-research
-description: Rules for writing or editing marimo notebooks used for scientific or data-science research (data collection, analysis, figures), where the notebooks are the lab record. Use whenever starting a new research question, or creating, restructuring, or editing a research marimo notebook, a project's notebooks/ folder, or a function in a package that notebooks import. Not for driving a live kernel (that is marimo-pair).
+description: Rules for writing or editing marimo notebooks used for scientific or data-science research (data collection, analysis, figures), where the notebooks are the lab record. Use whenever starting a new research question, or creating, restructuring, or editing a research marimo notebook (a primer that teaches a subject from papers included), a project's notebooks/ folder, or a function in a package that notebooks import. Not for driving a live kernel (that is marimo-pair).
 ---
 
 # Research marimo notebooks
@@ -43,7 +43,9 @@ own gets a folder inside. The path carries the lineage, so a child's
 name does not repeat its parent's.
 Name notebooks by role, one per question, without stage numbers. A prefix
 per role is fine (`fig_` for notebooks that write figures, `tool_` for
-debugging).
+debugging). A primer (`primer_<subject>.py`) explains a subject from the
+literature that question notebooks link to instead of carrying a long
+background; read `references/primer-notebook.md` before you write one.
 A notebook's title names its subject, as its file name does, and is not
 a question.
 
@@ -154,6 +156,7 @@ abstraction) is the writing-functions skill.
 - A cell with a display equation has braces, so keep it a raw
   `mo.md(r"...")` and put interpolated sentences in their own
   `mo.md(rf"...")` cell.
+
 ## Question notebooks
 
 For a question notebook (its question, background, expectations, analysis

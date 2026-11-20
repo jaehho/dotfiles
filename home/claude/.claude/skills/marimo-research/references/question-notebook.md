@@ -10,7 +10,10 @@ Limitations and Open questions, each only when it has content).
 
 - **Question**: one plain sentence, no definitions or notation, and the
   only question the opening poses.
-- **Background**: only what bears on the question.
+- **Background**: only what bears on the question, in a few sentences.
+  A method or body of work that takes longer to explain goes in a primer
+  (`primer-notebook.md`), and the background says what the question
+  takes from it, linked to the primer's section.
   Each exclusion or data quirk the analysis handles gets one sentence
   saying where it comes from.
   Quote where a passage carries the claim, link where none does.
