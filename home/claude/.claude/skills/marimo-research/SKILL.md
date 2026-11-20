@@ -59,6 +59,13 @@ and loaders in separate modules of pure readers.
 
 - A constant is defined once; reference the symbol, never restate a path,
   id, or threshold. A knob used by one notebook stays in that notebook.
+- A constant sits where the notebook introduces it, not in the setup
+  cell. A fact about a data source sits with the source in the project's
+  config, read from the data where the data carries it. A value from a
+  paper sits beside its quote. A setting sits next to the first cell
+  that uses it, since a setting usually tunes several. Its comment says
+  where the value comes from. An `@app.function` sees only the setup
+  cell, so it takes such a value as an argument.
 - Opening or batch-running a notebook never fetches.
   A cell that fetches sits behind `mo.ui.run_button`;
   secrets come from the environment.
@@ -192,9 +199,9 @@ before you write or restructure it.
   with what it does and why, not with a run of facts.
 - Explanatory text is a markdown cell in complete sentences, not a comment
   at the top of a code cell.
-  Comments stay for a choice at its site and stay short; a setup constant's
-  comment is one line naming its role, and the options considered go in the
-  markdown where the reader meets the choice.
+  Comments stay for a choice at its site and stay short; a constant's
+  comment names its role and where its value comes from, and the options
+  considered go in the markdown where the reader meets the choice.
 - Say each thing once, where it is used.
   A figure's intro says what is drawn and what to look at, not what the
   legend and axis labels already say.
