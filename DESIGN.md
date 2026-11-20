@@ -86,13 +86,11 @@ components:
     rounded: "{rounded.surface}"
     padding: "12px"
   button:
-    textColor: "{colors.blue}"
+    textColor: "{colors.fg}"
     typography: "{typography.control-label}"
     rounded: "{rounded.pill}"
     padding: "0 12px"
     height: "30px"
-  button-neutral:
-    textColor: "{colors.grey2}"
   icon-button:
     textColor: "{colors.grey2}"
     rounded: "{rounded.pill}"
@@ -227,7 +225,7 @@ One widget also uses hues to tell meters apart rather than to report state: the 
 
 The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` tints and `aqua`) are not chrome colors; `aqua` appears only as the RAM label in the bar's load tip and in hypr-confetti's paper.
 
-**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines in speaker-eq. PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows. The shell's tonal pills set their labels in their own tint, against the Tint Rule: on a card in the notification center blue measures 4.39:1 (3.75:1 under the pointer), `grey2` 4.00:1 and red 3.70:1; only blue on a popup holds 4.5:1 (5.10:1).
+**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines in speaker-eq. PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
 
 ### Color Rules
 
@@ -332,7 +330,7 @@ A dark card that appears on demand and holds the keyboard.
 On the shell base, tonal pills and round icon buttons that wash under the pointer; on the surfaces not yet moved, quiet tiles that brighten under the pointer and ring under the keyboard.
 
 - **State layer** (`StateLayer.qml`): the shell's one hover, press and keyboard feedback, a wash of the control's tint over its own shape at `Theme.state`'s strengths: 0.08 under the pointer, 0.10 on the keyboard's row, 0.18 pressed, fading over 150ms. A button inside a clickable card takes the click before the card does.
-- **Tonal pill** (`PillButton.qml`): 30px tall, 12px inline padding, its tint at 0.14 behind, a Control label and an optional 16px icon in the tint, centered, cut with an ellipsis when narrow. A key hint sits at its right end in Mono 11px `grey2`. Blue for the actions something offers (red when it is critical), `grey2` for a sheet's own housekeeping ("Clear all"). Pills in one row share its width equally.
+- **Tonal pill** (`PillButton.qml`): 30px tall, 12px inline padding, its tint at 0.14 behind, an optional 16px icon in the tint and a Control label in `fg`, centered, cut with an ellipsis when narrow. The label stays `fg` by the Tint Rule: no tone holds 4.5:1 on its own wash over a card (red 3.70:1, `grey2` 4.00:1, blue 4.39:1), where `fg` holds 4.8:1 or more even under the pointer. A key hint sits at its right end in Mono 11px `grey2`. Blue for the actions something offers (red when it is critical), `grey2` for a sheet's own housekeeping ("Clear all"). Pills in one row share its width equally.
 - **Icon button** (`IconButton.qml`): a round 36px target around a 20px icon (16px in a card's corner), `grey2` at rest and `fg` under the pointer. On, a toggle fills its icon and lays its tone at 0.14 under it: Do Not Disturb in `red`.
 - **Older controls** (the GTK4 sheets, the polkit prompt, quick settings and the bar's menus, until they move):
   - **Shape:** 8px corners.

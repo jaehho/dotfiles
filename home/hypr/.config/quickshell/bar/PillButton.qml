@@ -1,5 +1,7 @@
-// A tonal pill button (#89): a label, and an optional Material Symbol
-// before it, in `tint` on a faint wash of the same. `badge` is a dim
+// A tonal pill button (#89): a faint wash of `tint`, an optional
+// Material Symbol in it, and the label in fg, since no tone holds
+// 4.5:1 on its own wash over a card (DESIGN.md, the Tint Rule; Material
+// 3's tonal buttons do the same). `badge` is a dim
 // keyboard hint in its corner. Laid out wider than its text, it centers
 // the text; narrower, the text is cut with an ellipsis.
 import QtQuick
@@ -54,7 +56,7 @@ Rectangle {
             text: button.text
             size: Theme.font.smaller
             weight: Font.Medium
-            color: button.tint
+            color: Theme.colors.fg
         }
     }
 
