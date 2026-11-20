@@ -241,9 +241,12 @@ function M.toggle()
       -- --no-token registers the server; --headless stops marimo opening
       -- its own tab at the bare root URL, since show_marimo opens one with
       -- show-code=true.
+      -- It serves the notebook's folder, not the file: marimo resolves a
+      -- ?file= link against the server's root, and notebooks link to
+      -- each other relative to the linking notebook's folder.
       local cmd = vim.fn.shellescape(marimo_bin)
         .. ' run --watch --include-code --no-token --headless '
-        .. vim.fn.shellescape(src)
+        .. vim.fn.shellescape(vim.fs.dirname(src))
       local result = vim.system {
         'tmux', 'split-window', '-v', '-d', '-l', '10', '-P', '-F', '#{pane_id}',
         cmd,
