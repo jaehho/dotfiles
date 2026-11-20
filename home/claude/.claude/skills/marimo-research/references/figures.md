@@ -112,8 +112,8 @@ schematic next to it.
   connects to several targets.
   Use the fewest units that can carry all of that.
   One color per role, gray for context the definition excludes.
-- Follow it with a one-line interpolated caption that says what the toy
-  example shows.
+- Follow it with a one-line interpolated caption that says what the
+  schematic shows.
 - manim draws a still.
   Build the mobjects in the cell and show them through a shared helper that
   renders a PNG for `mo.image`.

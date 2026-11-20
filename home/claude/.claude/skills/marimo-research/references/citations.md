@@ -40,5 +40,5 @@ left out.
 - A passage with no highlight gets one when you cite it:
   create the highlight (`zotero_create_annotation`, tag `claude`, no
   recoloring) and put its key in `annotation=`.
-  No `annotation=` is left in a notebook.
+  No link is left with an empty `annotation=`.
 - In running text, cite `[Author et al. year](https://doi.org/<doi>)`.

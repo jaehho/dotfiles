@@ -227,10 +227,11 @@ before you write or restructure it.
   keep tables for exact values a reader will look up.
 - Axis limits follow the data.
   Show groups side by side; a dropdown that shows one group at a time hides
-  the comparison.
+  the comparison. A slider or dropdown fits only where changing a
+  parameter is the lesson (a noise level, a sample size).
 - Before drawing a schematic or describing a published result, look for
-  the paper's own figure, and show it where it serves the point and its
-  license allows.
+  the paper's own figure, and show it where it serves the point (the
+  figures reference says when its license matters).
 - The chart library, selectable figures, schematics, figures from papers,
   and the base-look code: read `references/figures.md`.
 
