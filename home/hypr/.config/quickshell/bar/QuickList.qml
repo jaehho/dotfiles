@@ -36,11 +36,11 @@ Flickable {
         gradient: Gradient {
             GradientStop {
                 position: 0
-                color: scroller.colors.withAlpha(scroller.colors.bg_dim, 0)
+                color: Theme.colors.withAlpha(Theme.colors.bg_dim, 0)
             }
             GradientStop {
                 position: 1
-                color: scroller.colors.withAlpha(scroller.colors.bg_dim, 0.985)
+                color: Theme.surface.sheet
             }
         }
     }
@@ -52,6 +52,6 @@ Flickable {
         width: 3
         height: scroller.visibleArea.heightRatio * scroller.height
         radius: 1.5
-        color: scroller.colors.bg3
+        color: Theme.colors.bg3
     }
 }

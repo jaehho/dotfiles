@@ -27,21 +27,23 @@ Column {
         return node ? node.nickname || node.description || node.name : "";
     }
 
-    function glyph(node, input) {
+    // Its Material Symbol: Bluetooth audio, a mic, a screen's speakers,
+    // headphones, else a speaker.
+    function icon(node, input) {
         const api = node?.properties["device.api"] ?? "";
         const words = `${node?.name ?? ""} ${node?.description ?? ""}`.toLowerCase();
         if (api === "bluez5")
-            return input ? 0xf02ce : 0xf00b0;
+            return input ? "headset_mic" : "headphones";
         if (input)
-            return 0xf036c;
+            return "mic";
         if (words.includes("hdmi") || words.includes("displayport"))
-            return 0xf0379;
+            return "monitor";
         if (words.includes("headphone"))
-            return 0xf02cb;
-        return 0xf04c3;
+            return "headphones";
+        return "speaker";
     }
 
-    spacing: 8
+    spacing: Theme.space.sm
 
     PwObjectTracker {
         objects: sound.shown ? sound.devices : []
@@ -52,20 +54,21 @@ Column {
         title: "Sound"
     }
 
-    // In line with the rows' glyphs, further from the group above than
-    // from its own.
+    // In line with the rows' icons, further from the group above than
+    // from its own: the main page's "Open" heading.
     component Heading: Line {
-        x: 13
-        topPadding: 6
-        bottomPadding: 4
-        size: 11
+        x: 3 + Theme.space.md
+        topPadding: Theme.space.sm
+        bottomPadding: Theme.space.xs
+        size: Theme.font.small
         weight: Font.Bold
         font.capitalization: Font.AllUppercase
+        color: Theme.colors.grey2
     }
 
-    // A device row: its glyph, its name, and "Default" on the tint. It
-    // takes the page it lists for as a property.
-    component Device: QuickControl {
+    // A device row, "Default" on the tint. It takes the page it lists
+    // for as a property.
+    component Device: QuickRow {
         id: device
 
         required property var page
@@ -73,44 +76,17 @@ Column {
         property bool input: false
         readonly property bool chosen: node === (input ? device.page.source : device.page.sink)
 
-        flat: true
         on: chosen
         x: 3
         width: parent.width - 6
-        height: 34
+        icon: device.page.icon(device.node, device.input)
+        text: device.page.name(device.node)
+        note: chosen ? "Default" : ""
         onActivated: {
             if (input)
                 Pipewire.preferredDefaultAudioSource = node;
             else
                 Pipewire.preferredDefaultAudioSink = node;
-        }
-
-        Line {
-            x: 10
-            anchors.verticalCenter: parent.verticalCenter
-            mono: true
-            size: 16
-            text: String.fromCodePoint(device.page.glyph(device.node, device.input))
-            color: device.on ? device.colors.blue : device.colors.fg
-        }
-
-        Line {
-            x: 38
-            width: parent.width - x - mark.width - 22
-            anchors.verticalCenter: parent.verticalCenter
-            elide: Text.ElideRight
-            text: device.page.name(device.node)
-            color: device.colors.fg
-        }
-
-        Line {
-            id: mark
-            anchors.right: parent.right
-            anchors.rightMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            size: 11
-            text: device.chosen ? "Default" : ""
-            color: device.colors.blue
         }
     }
 
@@ -121,7 +97,6 @@ Column {
 
         Heading {
             text: "Output"
-            color: sound.colors.grey2
         }
 
         Repeater {
@@ -143,7 +118,6 @@ Column {
 
         Heading {
             text: "Input"
-            color: sound.colors.grey2
         }
 
         // The default mic's level. Its steps are the sheet's own 5%:

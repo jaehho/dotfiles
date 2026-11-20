@@ -33,32 +33,33 @@ Column {
         bt.order = bt.live.filter(d => d.paired || d.bonded).sort((a, b) => (b.connected - a.connected) || a.name.localeCompare(b.name));
     }
 
-    // BlueZ's icon names, as freedesktop's device icons.
-    function glyph(device) {
-        const icon = device?.icon ?? "";
-        if (icon.includes("headset"))
-            return 0xf02ce;
-        if (icon.includes("headphones"))
-            return 0xf02cb;
-        if (icon.startsWith("audio"))
-            return 0xf04c3;
-        if (icon.includes("mouse"))
-            return 0xf037d;
-        if (icon.includes("keyboard"))
-            return 0xf030c;
-        if (icon.includes("gaming"))
-            return 0xf0297;
-        if (icon.includes("tablet"))
-            return 0xf04f6;
-        if (icon.includes("phone"))
-            return 0xf011c;
-        if (icon.includes("computer"))
-            return 0xf0322;
-        if (icon.includes("video") || icon.includes("display"))
-            return 0xf0379;
-        if (icon.includes("printer"))
-            return 0xf042a;
-        return 0xf00af;
+    // Its Material Symbol, from BlueZ's icon name (freedesktop's device
+    // icons).
+    function icon(device) {
+        const name = device?.icon ?? "";
+        if (name.includes("headset"))
+            return "headset_mic";
+        if (name.includes("headphones"))
+            return "headphones";
+        if (name.startsWith("audio"))
+            return "speaker";
+        if (name.includes("mouse"))
+            return "mouse";
+        if (name.includes("keyboard"))
+            return "keyboard";
+        if (name.includes("gaming"))
+            return "sports_esports";
+        if (name.includes("tablet"))
+            return "tablet";
+        if (name.includes("phone"))
+            return "smartphone";
+        if (name.includes("computer"))
+            return "computer";
+        if (name.includes("video") || name.includes("display"))
+            return "monitor";
+        if (name.includes("printer"))
+            return "print";
+        return "bluetooth";
     }
 
     function status(device) {
@@ -123,7 +124,7 @@ Column {
             bt.fail(bt.trying)
     }
 
-    spacing: 8
+    spacing: Theme.space.sm
 
     QuickBack {
         id: head
@@ -135,9 +136,10 @@ Column {
         onSwitched: bt.adapter.enabled = !bt.adapter.enabled
     }
 
+    // Why the list is empty, in line with the rows' icons.
     Line {
-        x: 13
-        width: parent.width - 26
+        x: 3 + Theme.space.md
+        width: parent.width - x * 2
         visible: text !== ""
         wrapMode: Text.Wrap
         text: bt.adapter === null ? "There is no Bluetooth adapter." : bt.blocked ? "Bluetooth is blocked; rfkill unblock bluetooth lifts it." : !bt.adapter.enabled ? "Bluetooth is off." : bt.order.length === 0 ? "No paired devices yet." : ""
@@ -161,7 +163,7 @@ Column {
                 property alias rowItem: row
 
                 width: scroller.rowWidth
-                spacing: 4
+                spacing: Theme.space.xs
 
                 Connections {
                     target: entry.device
@@ -189,77 +191,26 @@ Column {
                     }
                 }
 
-                QuickControl {
+                QuickRow {
                     id: row
 
                     readonly property var device: entry.device
 
                     sheet: bt.sheet
-                    flat: true
                     on: entry.device?.connected ?? false
                     width: parent.width
-                    height: 34
+                    icon: bt.icon(entry.device)
+                    text: entry.device?.name || entry.device?.deviceName || ""
+                    note: bt.status(entry.device)
                     onActivated: if (entry.device)
                         bt.choose(entry.device)
-
-                    Line {
-                        x: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        mono: true
-                        size: 16
-                        text: String.fromCodePoint(bt.glyph(entry.device))
-                        color: row.on ? bt.colors.blue : bt.colors.fg
-                    }
-
-                    Line {
-                        x: 38
-                        width: parent.width - x - note.width - 22
-                        anchors.verticalCenter: parent.verticalCenter
-                        elide: Text.ElideRight
-                        text: entry.device?.name || entry.device?.deviceName || ""
-                        color: bt.colors.fg
-                    }
-
-                    Line {
-                        id: note
-                        anchors.right: parent.right
-                        anchors.rightMargin: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        size: 11
-                        text: bt.status(entry.device)
-                        color: row.on ? bt.colors.blue : bt.colors.grey2
-                    }
                 }
 
-                // As the Wi-Fi page's failure: red in the glyph, fill and
-                // edge, words fg.
-                Rectangle {
+                QuickBand {
                     visible: bt.failed !== null && bt.failed === entry.device
-                    x: 38
-                    width: parent.width - x - 4
-                    height: words.implicitHeight + 14
-                    radius: 8
-                    color: bt.colors.withAlpha(bt.colors.red, 0.14)
-                    border.width: 1
-                    border.color: bt.colors.withAlpha(bt.colors.red, 0.45)
-
-                    Line {
-                        x: 10
-                        y: 7
-                        mono: true
-                        text: String.fromCodePoint(0xf0028)
-                        color: bt.colors.red
-                    }
-
-                    Line {
-                        id: words
-                        x: 32
-                        y: 7
-                        width: parent.width - x - 10
-                        wrapMode: Text.Wrap
-                        text: "Couldn't connect. Check that it's on and in range."
-                        color: bt.colors.fg
-                    }
+                    x: row.textX
+                    width: parent.width - x - Theme.space.xs
+                    text: "Couldn't connect. Check that it's on and in range."
                 }
             }
         }

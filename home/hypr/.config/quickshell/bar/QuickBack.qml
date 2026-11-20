@@ -1,6 +1,6 @@
 // A page's top row on the quick settings sheet: back to the main page
 // under the page's name, and at the right an on/off switch for pages
-// that have one.
+// that have one. The arrow is a Material Symbol (#89).
 import QtQuick
 
 Item {
@@ -14,36 +14,36 @@ Item {
     signal switched
 
     width: parent.width
-    height: 32
+    height: 36
 
+    // The arrow in line with the rows' icons below (QuickRow).
     QuickControl {
         sheet: head.sheet
         hintText: "Back"
         flat: true
-        width: label.implicitWidth + 20
-        height: 32
+        x: 3
+        width: label.implicitWidth + Theme.space.md * 2
+        height: parent.height
         onActivated: head.sheet.back()
 
         Row {
             id: label
-            x: 6
+            x: Theme.space.md
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 4
+            spacing: Theme.space.sm
 
-            Line {
+            Icon {
                 anchors.verticalCenter: parent.verticalCenter
-                mono: true
-                size: 16
-                text: String.fromCodePoint(0xf0141)
-                color: head.sheet.colors.grey2
+                name: "arrow_back"
+                color: Theme.colors.grey2
             }
 
             Line {
                 anchors.verticalCenter: parent.verticalCenter
-                size: 15
+                size: Theme.font.title
                 weight: Font.DemiBold
                 text: head.title
-                color: head.sheet.colors.fg
+                color: Theme.colors.fg
             }
         }
     }
@@ -54,7 +54,7 @@ Item {
         hintText: "Toggle"
         visible: head.switchable
         anchors.right: parent.right
-        anchors.rightMargin: 4
+        anchors.rightMargin: Theme.space.xs
         anchors.verticalCenter: parent.verticalCenter
         onActivated: head.switched()
     }

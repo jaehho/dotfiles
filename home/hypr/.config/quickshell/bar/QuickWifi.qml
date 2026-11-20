@@ -41,11 +41,12 @@ Column {
         wifi.order = wifi.live.filter(n => n.name !== "").sort((a, b) => (b.connected - a.connected) || (b.known - a.known) || (b.signalStrength - a.signalStrength));
     }
 
-    function glyph(net) {
+    // Its Material Symbol: the signal in four steps, locked unless open.
+    function icon(net) {
         if (!net)
-            return 0xf092f;
+            return "signal_wifi_off";
         const lock = !wifi.openTypes.includes(net.security);
-        const steps = lock ? [0xf0921, 0xf0924, 0xf0927, 0xf092a] : [0xf091f, 0xf0922, 0xf0925, 0xf0928];
+        const steps = lock ? ["network_wifi_1_bar_locked", "network_wifi_2_bar_locked", "network_wifi_3_bar_locked", "signal_wifi_4_bar_lock"] : ["network_wifi_1_bar", "network_wifi_2_bar", "network_wifi_3_bar", "signal_wifi_4_bar"];
         return steps[Math.max(0, Math.min(3, Math.floor(net.signalStrength * 4)))];
     }
 
@@ -160,7 +161,7 @@ Column {
         value: true
     }
 
-    spacing: 8
+    spacing: Theme.space.sm
 
     QuickBack {
         id: head
@@ -172,10 +173,11 @@ Column {
         onSwitched: Networking.wifiEnabled = !Networking.wifiEnabled
     }
 
-    // Why the list is empty, and a wired link, in a quiet line each.
+    // Why the list is empty, and a wired link, in a quiet line each, in
+    // line with the rows' icons.
     Line {
-        x: 13
-        width: parent.width - 26
+        x: 3 + Theme.space.md
+        width: parent.width - x * 2
         visible: text !== ""
         wrapMode: Text.Wrap
         text: wifi.device === null ? "There is no Wi-Fi device." : !Networking.wifiHardwareEnabled ? "Wi-Fi is off at the hardware switch." : !Networking.wifiEnabled ? "Wi-Fi is off." : wifi.order.length === 0 ? "Looking for networks…" : ""
@@ -183,8 +185,8 @@ Column {
     }
 
     Line {
-        x: 13
-        width: parent.width - 26
+        x: 3 + Theme.space.md
+        width: parent.width - x * 2
         visible: wifi.wired !== null
         elide: Text.ElideRight
         text: `Wired: ${wifi.wired?.name ?? ""} is connected.`
@@ -209,7 +211,7 @@ Column {
                 property alias fieldItem: field
 
                 width: scroller.rowWidth
-                spacing: 4
+                spacing: Theme.space.xs
 
                 Connections {
                     target: entry.net
@@ -229,50 +231,23 @@ Column {
                     }
                 }
 
-                QuickControl {
+                QuickRow {
                     id: row
 
                     readonly property var net: entry.net
 
                     sheet: wifi.sheet
-                    flat: true
                     on: entry.net?.connected ?? false
                     width: parent.width
-                    height: 34
+                    icon: wifi.icon(entry.net)
+                    text: entry.net?.name ?? ""
+                    note: wifi.status(entry.net)
                     onActivated: if (entry.net)
                         wifi.choose(entry.net)
-
-                    Line {
-                        id: strength
-                        x: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        mono: true
-                        size: 16
-                        text: String.fromCodePoint(wifi.glyph(entry.net))
-                        color: row.on ? wifi.colors.blue : wifi.colors.fg
-                    }
-
-                    Line {
-                        x: 38
-                        width: parent.width - x - note.width - 22
-                        anchors.verticalCenter: parent.verticalCenter
-                        elide: Text.ElideRight
-                        text: entry.net?.name ?? ""
-                        color: wifi.colors.fg
-                    }
-
-                    Line {
-                        id: note
-                        anchors.right: parent.right
-                        anchors.rightMargin: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        size: 11
-                        text: wifi.status(entry.net)
-                        color: row.on ? wifi.colors.blue : wifi.colors.grey2
-                    }
                 }
 
-                // The password, masked and kept out of the input method.
+                // The password, masked and kept out of the input method:
+                // DESIGN.md's field, under the network's name.
                 QuickControl {
                     id: field
 
@@ -280,10 +255,12 @@ Column {
 
                     sheet: wifi.sheet
                     visible: wifi.asking === entry.net
-                    x: 38
-                    width: parent.width - x - 4
+                    x: row.textX
+                    width: parent.width - x - Theme.space.xs
                     height: 36
+                    radius: Theme.radius.control
                     color: wifi.colors.bg0
+                    border.width: 1
                     border.color: input.activeFocus ? wifi.colors.blue : wifi.colors.bg2
                     onActivated: input.forceActiveFocus()
                     onActiveFocusChanged: if (activeFocus)
@@ -292,8 +269,8 @@ Column {
                     TextInput {
                         id: input
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
+                        anchors.leftMargin: Theme.space.md
+                        anchors.rightMargin: Theme.space.md
                         verticalAlignment: TextInput.AlignVCenter
                         clip: true
                         echoMode: TextInput.Password
@@ -303,7 +280,7 @@ Column {
                         selectionColor: wifi.colors.withAlpha(wifi.colors.blue, 0.35)
                         selectedTextColor: wifi.colors.fg
                         selectByMouse: true
-                        font.family: "Adwaita Sans"
+                        font.family: Theme.font.sans
                         font.pixelSize: 14
                         renderType: Text.NativeRendering
                         text: wifi.password
@@ -347,35 +324,12 @@ Column {
                 }
 
                 // The failure, as the polkit sheet bands a wrong
-                // password: red in the glyph, fill and edge, words fg.
-                Rectangle {
+                // password: red in the icon, fill and edge, words fg.
+                QuickBand {
                     visible: wifi.failed !== null && wifi.failed === entry.net && wifi.why !== ""
-                    x: 38
-                    width: parent.width - x - 4
-                    height: words.implicitHeight + 14
-                    radius: 8
-                    color: wifi.colors.withAlpha(wifi.colors.red, 0.14)
-                    border.width: 1
-                    border.color: wifi.colors.withAlpha(wifi.colors.red, 0.45)
-
-                    Line {
-                        id: mark
-                        x: 10
-                        y: 7
-                        mono: true
-                        text: String.fromCodePoint(0xf0028)
-                        color: wifi.colors.red
-                    }
-
-                    Line {
-                        id: words
-                        x: 32
-                        y: 7
-                        width: parent.width - x - 10
-                        wrapMode: Text.Wrap
-                        text: wifi.why
-                        color: wifi.colors.fg
-                    }
+                    x: row.textX
+                    width: parent.width - x - Theme.space.xs
+                    text: wifi.why
                 }
             }
         }

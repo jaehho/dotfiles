@@ -3,37 +3,14 @@
 // its entry, opened on a press.
 import QtQuick
 
-QuickControl {
+QuickRow {
     id: foot
 
     property string entry: ""
-    property int glyph: 0xf018d
-    property string text: ""
 
-    flat: true
+    icon: "terminal"
     visible: sheet.entries.some(e => e.id === foot.entry)
     x: 3
     width: parent.width - 6
-    height: 32
     onActivated: sheet.launch(foot.entry)
-
-    Row {
-        x: 10
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 12
-
-        Line {
-            anchors.verticalCenter: parent.verticalCenter
-            mono: true
-            size: 16
-            text: String.fromCodePoint(foot.glyph)
-            color: foot.colors.fg
-        }
-
-        Line {
-            anchors.verticalCenter: parent.verticalCenter
-            text: foot.text
-            color: foot.colors.fg
-        }
-    }
 }
