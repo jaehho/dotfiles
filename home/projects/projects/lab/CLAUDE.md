@@ -25,7 +25,7 @@ Fly visual system and locomotion.
 - A question notebook opens with `# Title`, `## Introduction`, `### Question`, and the home page card shows the paragraph under `### Question`. A reference notebook such as `data.py` opens with `# Title` and a paragraph, which its card shows.
 - `pyproject.toml` ignores `E501` in `notebooks/` (markdown cells are one line per paragraph), so keep code lines under 79 by hand or with `ruff format`. `W505` runs only under `src/`.
 - Name another notebook in prose as a link whose path is relative to the linking notebook's folder, as the site resolves it: `` [`eye_map`](?file=eye_map.py) ``, `` [`data`](?file=../data.py#section) ``. `uv run python tools/link_notebooks.py --fix` rewrites bare names and warns about links to notebooks that no longer exist. Links may be cyclic.
-- A notebook links to the notebook it belongs to: its folder's main notebook, or for a main notebook, the main notebook of the folder above (`tools/link_notebooks.py` checks it). A notebook still at the top of `notebooks/` keeps the older rule until it moves: a follow-up carries its parent's stem as a prefix and links to it.
+- A notebook links to the notebook it belongs to: its folder's main notebook, or for a main notebook, the main notebook of the folder above (`tools/link_notebooks.py` checks it). A data notebook and a primer (`primer_<subject>.py`, the marimo-research skill's reference notebook on a subject from the literature) belong to no one and name none of their readers. A notebook still at the top of `notebooks/` keeps the older rule until it moves: a follow-up carries its parent's stem as a prefix and links to it.
 
 ## Package (`src/lab/connectome`)
 
