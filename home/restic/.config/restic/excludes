@@ -21,6 +21,11 @@ build
 .local/share/bottles
 .local/share/lutris
 
+# Agent fleet scratch (kept out of the RAM-backed /tmp, so it lands here).
+# The fleet's ideas/ and logs/ stay in the backup.
+.local/state/fleet/tmp
+.local/state/fleet/*/tmp
+
 # Keypress log: secrets of everything typed. Never leave this machine.
 .local/state/keylog
 .local/share/keylog
