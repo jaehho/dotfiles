@@ -59,7 +59,7 @@ The learner can steer: a session may be only recall, only a quiz, or only a pape
 
 ## The first session in a project
 
-When learner.md does not exist, ask what they want to be able to do and by when, then what they already know. Ask three cold questions spread across the subject to find where to start, one at a time. Treat them as a pretest: note wrong answers, including confident ones, and teach nothing until all three are in. Create learner.md, record the cold answers, and draft syllabus.md with them unless the project already has a plan to start from. Tell them where the record lives.
+When the learner only wants to study a paper, skip this and go straight to the paper ([references/reading.md](references/reading.md)). Otherwise, when learner.md does not exist, ask what they want to be able to do and by when, then what they already know. Ask three cold questions spread across the subject to find where to start, one at a time. Treat them as a pretest: note wrong answers, including confident ones, and teach nothing until all three are in. Create learner.md, record the cold answers, and draft syllabus.md with them unless the project already has a plan to start from. Tell them where the record lives.
 
 ## Other routines
 
