@@ -11,6 +11,8 @@ The MCP runs hybrid: reads come from the local Zotero, writes go through the web
 
 Load the paper, read all of it, give a short orientation, then stop and answer questions. No summary, notes file or review unless asked: the user is reading, you are the second pair of eyes.
 
+In a tutor session (the `tutor` skill), its reading order replaces the orientation: nothing about the paper before the learner's own first pass, and the tutor decides what gets written into the primer.
+
 1. Resolve the item, in order: the citation key or item key they name, a DOI or URL, the paper they have open (ask only if that is ambiguous). Use `zotero_search_by_citation_key` or `zotero_search_items`.
 2. `zotero_get_item_metadata`, then `zotero_get_pdf_outline` if the attachment has one.
 3. `zotero_get_item_fulltext`. If it returns a saved path because the body is too large, read that file in sequential chunks to the end. Never claim a full read after skipping the methods or references. If the fulltext is missing or garbled, use `zotero_read_pdf_pages` in page ranges from the outline.
