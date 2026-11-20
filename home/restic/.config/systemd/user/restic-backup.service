@@ -20,6 +20,10 @@ ExecCondition=/usr/bin/curl -s -o /dev/null --max-time 10 \
 # RESTIC_REPOSITORY and the rest-server login; not in the repo.
 EnvironmentFile=%h/.config/restic/rest.env
 Environment=RESTIC_PASSWORD_FILE=%h/.config/restic/password
+# A run killed by shutdown leaves its lock behind, and `forget --prune` then
+# refuses to start (five of them blocked every run 2026-11-18..20). unlock
+# removes only locks restic judges stale, so a live run elsewhere is safe.
+ExecStartPre=-/usr/bin/restic unlock
 # A steno meeting recorded in a room stays on this laptop until everyone
 # in it agreed (steno writes .steno-kept beside it until then); a snapshot
 # would put it on wonlab for months, past any deletion.
