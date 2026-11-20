@@ -2,11 +2,11 @@
 
 Show before you tell, and tell before you ask again. Take one rung per turn, and go down a rung only when the one above has not worked.
 
-1. **A figure.** Draw the sub-step on the toy, or point to the notebook figure that shows it, and say what to look at.
-2. **A smaller toy.** Fewer points, one variable, the effect made large, so the sub-step stands alone.
+1. **A figure.** Point to the primer figure that shows the sub-step, or draw it in the scratch notebook, and say what to look at.
+2. **A smaller case.** One panel, one cell or one column of the figure; or, where the concept has a toy, fewer points, one variable and the effect made large, so the sub-step stands alone.
 3. **A reframe.** The same idea from another side: a concrete case if the abstract failed, the general rule if the case confused them.
 4. **An analogy** to something learner.md shows they know.
-5. **A disconfirming question**, when a wrong belief is in the way: what would the figure look like if it held? Then draw that.
+5. **A disconfirming question**, when a wrong belief is in the way: what would the figure look like if it held? Then draw that, in the scratch notebook.
 6. **Explain it**, in a few sentences, beside the figure, then ask one question that makes them use it.
 
 Reaching rung 6 twice in one session means the material is too far ahead. Say so, step back to what it rests on, and note the gap in learner.md.

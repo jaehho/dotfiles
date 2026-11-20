@@ -1,23 +1,8 @@
-# The teaching notebook
+# The primer in a session
 
-Read this before you build or extend a notebook that teaches a concept.
+Read this before you build or extend the subject's primer in a session. The primer reference that SKILL.md names sets its shape; this file adds only what a session needs.
 
-**Where.** Put it where the project keeps notebooks and follow the project's rules for them (in a marimo project, also the marimo-research skill). One notebook per concept, linked from the notebook or note whose method it explains. In a project without notebooks, ask where it goes.
-
-**Shape.** The notebook teaches through pictures and equations, with words only to connect them.
-
-- Integrate: every idea comes as a figure, a diagram, or a display equation, with at most two or three sentences of text between visuals. The introduction is the question, with one simple picture if one helps, not paragraphs of background; background enters where it is used, beside its own picture.
-- Diagrams are simple and accurate: one idea each, with only the parts that idea needs (no blocks for structures the point does not use), and nothing drawn that is wrong. No diagram tries to show a whole method or structure at once. Where an accurate drawing of the real geometry is impractical, plot the real data or say it in a sentence rather than draw a simplified, wrong picture. Draw them as manim stills (the manim skill), in the style of the project's own diagrams.
-- Where a paper's own figure shows the idea well and its license allows, use it rather than draw one; the marimo-research skill's figures reference says how to get it.
-- Math: each quantity gets a display equation with every symbol defined, worked once on numbers from the toy and drawn on the figure beside it (the line the formula fits, the distance it measures).
-- Start from a toy small enough to see whole: a few dozen points, two or three variables, built so the answer is known.
-- Put the contrasting cases side by side in every figure, the same order and colour throughout: the case without the effect beside the cases with it.
-- One step per section, one figure per step. Before each figure, one sentence says what to look at; after it, one sentence says what it showed.
-- Plain words. Define each term in a sentence where it first appears, with a number from the toy; give the formula after the words, not instead of them.
-- After the hand-made steps, run the project's real code on the toy and show that it agrees, so the toy is a true model of the method.
-- End on the real data, or link the notebook that does.
-- A slider or dropdown only where changing a parameter is the lesson (a noise level, a sample size), and the figures show every case at once otherwise.
-
-**Pace.** Build it a section at a time: write one section (its figure or diagram, its equation, a few sentences), show it, and wait for the learner's response before writing the next, unless they ask for the whole notebook.
-
-**In the session.** Walk through it in chat one section at a time. Before a figure whose result is not obvious, ask the learner to predict it; then show it and compare. Keep the notebook short enough to finish in a session; split a second concept into its own notebook.
+- **Which primer.** One per subject; a new concept in the subject is a new section. When the learner studies a paper, ask whether it gets its own primer or sections of the subject's, and, until a notebook links to it, where it goes.
+- **Outside marimo-research projects.** In a project whose notebooks are not marimo research notebooks, follow the project's notebook rules and keep the primer reference's Shape, Figures and Toy examples. In a project without notebooks, ask where it goes; a standalone primer declares its dependencies inline (`marimo edit --sandbox`).
+- **Pace.** One section per step of the session: walk through it in chat and wait for the learner before the next, unless they ask for the whole primer. Before a section whose figure's result is not obvious, ask for the prediction first, then write the section and compare. Keep a session to what can be finished in it.
+- **Session-only work** goes in a scratch notebook in the learning folder (`scratch.py`), never in the primer: a figure drawn for a stuck learner (one of a wrong belief included), a changed toy, worked-example blanks with `TODO(human)`, and pass-three reproductions. The primer holds only what reads without the session.
