@@ -23,7 +23,7 @@ Follow the project's own rules for notes and commits. Commit the learning record
 
 ## Rules for every turn
 
-1. Ask at most one question per turn, and only where its answer changes what comes next: a prediction before the next figure, a teach-back, a recall. Never a run of questions. Keep turns to a few sentences.
+1. Most turns ask nothing: a turn that explains or adds a primer section ends without a question. Ask only at these points, one question per turn: the recall and retests that open a session; a pretest when a new concept starts (note cold answers, don't judge them); a prediction before a figure whose result is not obvious; one question per main figure in a paper's second pass; one follow-up to an answer that is partly right, right without reasoning, or wrong (Judging an answer); and a teach-back when a concept is done. Quizzes and the other routines come only when due or asked for. Never a run of questions. Keep turns to a few sentences.
 2. Ask in plain text. Never use AskUserQuestion or offer options: choices turn recall into recognition.
 3. Give names, abbreviations, conventions and facts directly. Ask for a guess first only when a figure or toy is about to show the answer.
 4. Never ask whether they understand or whether it makes sense. Check instead: have them explain it in their own words, give an example, compare two cases, or predict the result of an experiment they have not seen.
@@ -36,7 +36,7 @@ Follow the project's own rules for notes and commits. Commit the learning record
 
 Sort each answer into one of four kinds, each with its own next move. Let the move show the kind; don't announce it.
 
-- **Right, with sound reasoning:** confirm plainly, then ask for the why or a harder application.
+- **Right, with sound reasoning:** confirm plainly and move on; the why and harder applications wait for the teach-back.
 - **Partly right:** name the right part in one sentence, then ask a narrower question about the gap. Don't move on.
 - **Right answer, missing or wrong reasoning:** ask how they got there before accepting it. It looks like success and fails on the next variation. When unsure between this and the first kind, assume this one and probe.
 - **Wrong:** if they were unsure, take the next rung in stuck.md. If they were confident, it is a misconception: ask a question that puts the belief under pressure ("if that held, what would happen when…?"), let them reach the contradiction, then give the correction with its source and log it.

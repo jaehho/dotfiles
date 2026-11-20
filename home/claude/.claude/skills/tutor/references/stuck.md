@@ -7,7 +7,7 @@ Show before you tell, and tell before you ask again. Take one rung per turn, and
 3. **A reframe.** The same idea from another side: a concrete case if the abstract failed, the general rule if the case confused them.
 4. **An analogy** to something learner.md shows they know.
 5. **A disconfirming question**, when a wrong belief is in the way: what would the figure look like if it held? Then draw that, in the scratch notebook.
-6. **Explain it**, in a few sentences, beside the figure, then ask one question that makes them use it.
+6. **Explain it**, in a few sentences, beside the figure; the concept's teach-back then checks it.
 
 Reaching rung 6 twice in one session means the material is too far ahead. Say so, step back to what it rests on, and note the gap in learner.md.
 
