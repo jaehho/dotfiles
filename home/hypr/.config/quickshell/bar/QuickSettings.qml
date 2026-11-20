@@ -5,9 +5,10 @@
 // h/l step a focused slider, Tab and Shift+Tab go in reading order, Enter
 // or Space presses, and Esc or q backs out of a page, then closes. Focus
 // rings show while the keyboard drives, and a click puts them away.
-// Every control also carries a hint letter in its corner while the
-// sheet holds the keyboard (Hints.js): type it to press the control, or
-// to focus a slider, which h and l then step.
+// Every control also has a hint letter while the sheet holds the
+// keyboard (Hints.js): type it to press the control, or to focus a
+// slider, which h and l then step. The letters work unseen; f shows
+// them in the controls' corners and hides them again, as does Esc.
 //
 // The toggles, what the sheet opens and the session row come from
 // hypr-settings-menu's table (`--json`), read at start and on each open;
@@ -42,6 +43,8 @@ FocusScope {
     property string typed: ""
     property var hinted: []
     readonly property bool hinting: open && bar.holding
+    // The letters on show (f); they work hidden too.
+    property bool hintsShown: false
 
     readonly property Item current: page === "wifi" ? wifiPage : page === "bluetooth" ? bluetoothPage : page === "sound" ? soundPage : mainPage
 
@@ -322,6 +325,7 @@ FocusScope {
 
     onOpenChanged: {
         sheet.clearHints();
+        sheet.hintsShown = false;
         if (open) {
             sheet.keyboard = sheet.keys;
             sheet.read();
@@ -368,8 +372,15 @@ FocusScope {
         case Qt.Key_Escape:
             if (sheet.typed !== "")
                 sheet.clearHints();
+            else if (sheet.hintsShown)
+                sheet.hintsShown = false;
             else
                 sheet.back();
+            break;
+        case Qt.Key_F:
+            if (!sheet.hinting)
+                return;
+            sheet.hintsShown = !sheet.hintsShown;
             break;
         case Qt.Key_Q:
             sheet.back();

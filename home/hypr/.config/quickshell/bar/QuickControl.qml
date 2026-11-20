@@ -79,7 +79,7 @@ Rectangle {
         colors: control.colors
         code: control.hint
         typed: control.sheet.typed
-        shown: control.sheet.hinting
+        shown: control.sheet.hinting && control.sheet.hintsShown
         inset: control.hintInset
     }
 }

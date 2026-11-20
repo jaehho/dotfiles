@@ -6,9 +6,11 @@
 // number of apps. A hovered app's tooltip (unread counts and the like)
 // is the bar's tip, under the island.
 //
-// From the keyboard (Super+'), each app carries a hint letter (Hints.js):
-// type it to bring the app up, Shift and it to open its menu. Esc closes.
-// A grid opened by hover has no keyboard, so it shows no letters.
+// From the keyboard (Super+'), each app has a hint letter (Hints.js):
+// type it to bring the app up, Shift and it to open its menu. The
+// letters work unseen; f shows them on the apps and hides them again,
+// as does Esc, which otherwise closes. A grid opened by hover has no
+// keyboard, so it takes no letters.
 import QtQuick
 import Quickshell.Services.SystemTray
 import "Hints.js" as Hints
@@ -22,6 +24,8 @@ Item {
     property bool open: false
     property string typed: ""
     readonly property bool hinting: open && bar.holding
+    // The letters on show (f); they work hidden too.
+    property bool hintsShown: false
     readonly property var codes: Hints.named(items.map(item => bar.trayName(item)), Hints.ALL)
 
     readonly property int columns: 5
@@ -32,6 +36,7 @@ Item {
 
     onOpenChanged: {
         typed = "";
+        hintsShown = false;
         if (open)
             forceActiveFocus();
     }
@@ -60,8 +65,14 @@ Item {
         if (event.key === Qt.Key_Escape) {
             if (grid.typed !== "")
                 grid.typed = "";
+            else if (grid.hintsShown)
+                grid.hintsShown = false;
             else
                 grid.bar.trayOpen = false;
+        } else if (event.key === Qt.Key_F && !(event.modifiers & Qt.ShiftModifier)) {
+            if (!grid.hinting)
+                return;
+            grid.hintsShown = !grid.hintsShown;
         } else if (event.key === Qt.Key_Backspace && grid.typed !== "") {
             grid.typed = grid.typed.slice(0, -1);
         } else {
@@ -105,7 +116,7 @@ Item {
                     item: cell.modelData
                     hint: grid.codes[cell.index] ?? ""
                     typed: grid.typed
-                    hinting: grid.hinting
+                    hinting: grid.hinting && grid.hintsShown
                     // A click leaves the sheet; a right click's menu
                     // takes its place.
                     onUsed: grid.bar.trayOpen = false
