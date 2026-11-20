@@ -188,14 +188,14 @@ local function marimo_serve_dir(src)
   return root, root
 end
 
--- Servers <leader>tp started, by the folder they serve: their tmux pane
--- and the notebook that started them. They stop with nvim, not with a
--- buffer, since other notebooks in the project use them.
+-- tmux panes of the servers <leader>tp started, by the folder they
+-- serve. A server stops when nvim quits or when its pane is stopped or
+-- killed by hand; killing a pane that is already gone does nothing.
 local spawned = {}
 vim.api.nvim_create_autocmd('VimLeavePre', {
   callback = function()
-    for _, s in pairs(spawned) do
-      vim.system({ 'tmux', 'kill-pane', '-t', s.pane }):wait()
+    for _, pane in pairs(spawned) do
+      vim.system({ 'tmux', 'kill-pane', '-t', pane }):wait()
     end
   end,
 })
@@ -237,17 +237,8 @@ function M.toggle()
       local src = vim.api.nvim_buf_get_name(0)
       local root, dir = marimo_serve_dir(src)
 
-      -- The notebook that started a server stops it.
-      local own = spawned[dir]
-      if own and own.src == src then
-        vim.system({ 'tmux', 'kill-pane', '-t', own.pane }):wait()
-        spawned[dir] = nil
-        vim.notify('Preview stopped', vim.log.levels.INFO)
-        return
-      end
-
       -- Any live server that serves this notebook, ours or one started in
-      -- a terminal: open the notebook there, never stop it.
+      -- a terminal: open the notebook there. <leader>tp never stops one.
       local server = find_marimo_workspace(src)
       if server then
         show_marimo(server, src)
@@ -275,7 +266,7 @@ function M.toggle()
         'tmux', 'split-window', '-v', '-d', '-l', '10', '-c', root,
         '-P', '-F', '#{pane_id}', cmd,
       }:wait()
-      spawned[dir] = { pane = vim.trim(result.stdout or ''), src = src }
+      spawned[dir] = vim.trim(result.stdout or '')
       for _ = 1, 20 do
         vim.wait(100)
         server = find_marimo_workspace(src)
