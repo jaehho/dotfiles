@@ -200,10 +200,13 @@ vim.api.nvim_create_autocmd('VimLeavePre', {
   end,
 })
 
--- Open the notebook in the default browser (Firefox tab). marimo-view
--- (home/laptop) is an unused WebKit experiment. show-code=true starts a
--- run-mode tab with the code shown (hidden by default even with
--- --include-code); edit mode always shows it.
+-- Open the notebook in Firefox. tabctl (~/projects/tabctl) brings
+-- forward a tab already showing it, matched on server and file since
+-- marimo rewrites its other query parameters, or opens a new one;
+-- without tabctl, or when it cannot reach Firefox, xdg-open opens a
+-- tab. marimo-view (home/laptop) is an unused WebKit experiment.
+-- show-code=true starts a run-mode tab with the code shown (hidden by
+-- default even with --include-code); edit mode always shows it.
 local function show_marimo(server, src)
   local host = marimo_url_host(server.host)
   local file = server.file_key or src
@@ -213,7 +216,18 @@ local function show_marimo(server, src)
     server.base_url or '',
     vim.uri_encode(file, true)
   )
-  vim.fn.jobstart({ 'xdg-open', url }, { detach = true })
+  local function xdg_open()
+    vim.fn.jobstart({ 'xdg-open', url }, { detach = true })
+  end
+  if vim.fn.executable 'tabctl' == 1 then
+    vim.system({ 'tabctl', 'open', url, '--match-param', 'file' }, { text = true }, function(out)
+      if out.code ~= 0 then
+        vim.schedule(xdg_open)
+      end
+    end)
+  else
+    xdg_open()
+  end
   return url
 end
 
