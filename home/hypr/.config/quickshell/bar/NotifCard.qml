@@ -57,22 +57,20 @@ Item {
     implicitHeight: content.implicitHeight
 
     // Keep the entry this card was made for: a list drops the model
-    // value to null while the card is still fading out.
+    // value to null while the card is still fading out. And hold it, so
+    // a dismissed entry lives until the last card drawing it has gone
+    // (Notifs.drop): the center's exit animation stops while the center
+    // is unmapped, so a card closed with it outlives the dismissal until
+    // the next open (#90).
     Component.onCompleted: {
         card.entry = card.entry;
-        card.tag = `${card.popup ? "popup" : "center"} "${card.entry?.summary}"`;
-        console.log(`notif-debug ${Date.now() % 1e6} card made ${card.tag}`);
+        card.entry.cards++;
     }
 
-    // notif-debug (#90): what nulls a card's entry. Remove once found.
-    property string tag: ""
-    onEntryChanged: {
+    Component.onDestruction: {
         if (card.entry)
-            return;
-        console.log(`notif-debug ${Date.now() % 1e6} card entry set null ${card.tag} visible=${card.visible} opacity=${card.opacity} window=${card.Window.window?.visible}`);
-        console.trace();
+            card.entry.cards--;
     }
-    Component.onDestruction: console.log(`notif-debug ${Date.now() % 1e6} card gone ${card.tag} entryNull=${card.entry === null}`)
 
     onHoveredChanged: card.entry.held = hovered
 
@@ -120,7 +118,7 @@ Item {
 
             StateLayer {
                 selected: card.selected
-                onClicked: Notifs.activate(card.entry, "default")
+                onClicked: () => Notifs.activate(card.entry, "default")
             }
         }
 

@@ -138,12 +138,12 @@ Singleton {
             e.n?.dismiss();
     }
 
-    // Leaves the list, then the object goes once the exit animation that
-    // still draws it is over.
+    // Leaves the list, then the object goes once no card draws it: an
+    // exit animation can outlast the dismissal by any time, since it
+    // stops while the center is unmapped (#90).
     function drop(e) {
-        console.log(`notif-debug ${Date.now() % 1e6} drop "${e.summary}" popup=${e.popup} centerOpen=${centerOpen}`);
         list = list.filter(x => x !== e);
-        e.destroy(1000);
+        e.dropped = true;
     }
 
     PersistentProperties {
@@ -273,8 +273,20 @@ Singleton {
             }
         }
 
+        // The cards drawing it (NotifCard). Once dropped, it goes with
+        // the last of them.
+        property int cards: 0
+        property bool dropped: false
+
+        function release() {
+            if (dropped && cards <= 0)
+                destroy();
+        }
+
+        onCardsChanged: release()
+        onDroppedChanged: release()
+
         Component.onCompleted: sync()
-        Component.onDestruction: console.log(`notif-debug ${Date.now() % 1e6} entry destroyed "${e.summary}"`)
 
         readonly property Timer timer: Timer {
             interval: notifs.timeout(e)
