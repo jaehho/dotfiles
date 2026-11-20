@@ -66,6 +66,6 @@ Rectangle {
         text: button.badge
         mono: true
         size: Theme.font.small
-        color: Theme.colors.grey0
+        color: Theme.colors.grey2
     }
 }

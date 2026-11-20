@@ -189,21 +189,21 @@ Item {
                         elide: Text.ElideRight
                         text: card.entry.appName || "Notification"
                         size: Theme.font.small
-                        color: Theme.colors.grey1
+                        color: Theme.colors.grey2
                     }
 
                     Line {
                         id: dot
                         text: "·"
                         size: Theme.font.small
-                        color: Theme.colors.grey0
+                        color: Theme.colors.grey2
                     }
 
                     Line {
                         id: age
                         text: Notifs.ago(card.entry.time)
                         size: Theme.font.small
-                        color: Theme.colors.grey0
+                        color: Theme.colors.grey2
                     }
                 }
 

@@ -113,7 +113,7 @@ Sheet {
                 implicitHeight: 20
                 implicitWidth: Math.max(implicitHeight, countText.implicitWidth + Theme.space.sm * 2)
                 radius: Theme.radius.pill
-                color: Theme.colors.withAlpha(Theme.colors.blue, 0.14)
+                color: Theme.colors.bg1
 
                 Line {
                     id: countText
@@ -121,7 +121,7 @@ Sheet {
                     text: Notifs.count
                     size: Theme.font.small
                     weight: Font.Medium
-                    color: Theme.colors.blue
+                    color: Theme.colors.fg
                 }
             }
 
@@ -245,7 +245,7 @@ Sheet {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "No notifications"
                     size: Theme.font.body
-                    color: Theme.colors.grey1
+                    color: Theme.colors.grey2
                 }
             }
         }
