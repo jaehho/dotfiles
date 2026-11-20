@@ -141,6 +141,7 @@ Singleton {
     // Leaves the list, then the object goes once the exit animation that
     // still draws it is over.
     function drop(e) {
+        console.log(`notif-debug ${Date.now() % 1e6} drop "${e.summary}" popup=${e.popup} centerOpen=${centerOpen}`);
         list = list.filter(x => x !== e);
         e.destroy(1000);
     }
@@ -273,6 +274,7 @@ Singleton {
         }
 
         Component.onCompleted: sync()
+        Component.onDestruction: console.log(`notif-debug ${Date.now() % 1e6} entry destroyed "${e.summary}"`)
 
         readonly property Timer timer: Timer {
             interval: notifs.timeout(e)

@@ -58,7 +58,21 @@ Item {
 
     // Keep the entry this card was made for: a list drops the model
     // value to null while the card is still fading out.
-    Component.onCompleted: card.entry = card.entry
+    Component.onCompleted: {
+        card.entry = card.entry;
+        card.tag = `${card.popup ? "popup" : "center"} "${card.entry?.summary}"`;
+        console.log(`notif-debug ${Date.now() % 1e6} card made ${card.tag}`);
+    }
+
+    // notif-debug (#90): what nulls a card's entry. Remove once found.
+    property string tag: ""
+    onEntryChanged: {
+        if (card.entry)
+            return;
+        console.log(`notif-debug ${Date.now() % 1e6} card entry set null ${card.tag} visible=${card.visible} opacity=${card.opacity} window=${card.Window.window?.visible}`);
+        console.trace();
+    }
+    Component.onDestruction: console.log(`notif-debug ${Date.now() % 1e6} card gone ${card.tag} entryNull=${card.entry === null}`)
 
     onHoveredChanged: card.entry.held = hovered
 
