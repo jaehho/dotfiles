@@ -31,7 +31,7 @@ Rectangle {
     StateLayer {
         id: layer
         tint: button.tint
-        onClicked: button.clicked()
+        onClicked: () => button.clicked()
     }
 
     Row {

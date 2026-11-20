@@ -30,7 +30,7 @@ Item {
         StateLayer {
             id: layer
             tint: button.active ? button.activeTint : Theme.colors.fg
-            onClicked: button.clicked()
+            onClicked: () => button.clicked()
         }
     }
 

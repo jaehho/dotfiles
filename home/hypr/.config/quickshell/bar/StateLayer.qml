@@ -5,6 +5,11 @@
 //
 // `selected` is the keyboard's pointer (a list's current row), shown
 // at focus strength. Disabled, it neither tints nor takes clicks.
+//
+// Handle `clicked` with a function (`onClicked: () => ...`): a bare
+// handler gets the signal's `button` argument injected, which hides an
+// id named `button` and made every pill and icon button throw instead
+// of clicking (#90).
 import QtQuick
 
 Item {
