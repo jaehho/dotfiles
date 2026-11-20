@@ -128,21 +128,30 @@ schematic next to it.
 
 ## Figures from papers
 
-- Look first in the papers the notebook cites (the Zotero library), then
-  online where a source is of high quality: the publisher's article page,
-  PubMed Central, eLife.
-- The best copy is the full-resolution image on the publisher's article
-  page.
-  Fetch it when the host serves it to scripts.
-  Most publisher hosts and PubMed Central block scripts; then give the user
-  the figure's page URL and the file name to save it as, and wait for the
-  file.
-- From a PDF in Zotero, `zotero_get_page_layout` returns each figure's box
-  and caption on a page; render that box at 300 dpi with pdftoppm
-  (`pdftoppm -png -r 300 -f P -l P -x X -y Y -W W -H H`, the normalized
-  box times the page size in pixels).
-  `pdfimages` extracts only embedded raster images and misses vector art
-  and labels.
+Take the copy with the most detail, even when getting it needs the
+user's hands. Try these in order, and keep the first that is not beaten
+by a later one:
+
+1. The published PDF of the version the notebook cites, from Zotero.
+   `pdfimages -list -f P -l P` gives each embedded image's pixel size
+   and ppi, and text and lines drawn as vectors are sharp at any
+   resolution. `zotero_get_page_layout` gives the figure's box; render it
+   at the embedded images' ppi (600 dpi when the figure is mostly vector)
+   with `pdftoppm -png -r R -f P -l P -x X -y Y -W W -H H`, the
+   normalized box times the page size in pixels at R. `pdfimages` alone
+   extracts only the embedded rasters and misses vector art and labels.
+2. The publisher's full-size figure file, when it has more pixels at the
+   figure's printed width than the PDF embeds, in a lossless format
+   (TIFF, PNG) where the page offers one. Most publisher hosts and PubMed
+   Central block scripts; then give the user the figure's page URL and the
+   path to save it at, and wait for the file.
+3. PubMed Central's figure image, then the preprint's figure, then a
+   300 dpi render of a scanned or downsampled PDF.
+
+Compare two candidates by looking at the same small text in each at one
+scale. Crop the panels the notebook needs from the chosen copy; panels
+that do not sit side by side may be cropped separately and stacked, and
+the credit names the panels.
 - Credit an embedded figure under the image: authors, year, figure and
   panel, and a link.
   A notebook published openly embeds only figures whose license allows
