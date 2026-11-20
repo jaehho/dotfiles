@@ -101,8 +101,17 @@ ShellRoot {
         function onFocusedMonitorChanged() {
             const name = Hyprland.focusedMonitor?.name ?? "";
             console.log("notif-debug focused monitor", name, "notifOn", root.notifOn);
-            if (root.notifOn !== "" && name !== "" && name !== root.notifOn)
-                root.notifOn = name;
+            // Close first and open on the next turn, so the old surface
+            // is gone before the new one maps and takes the keyboard;
+            // the other order let the old one's unmap hand it to a
+            // window (NotifCenter.qml).
+            if (root.notifOn !== "" && name !== "" && name !== root.notifOn) {
+                root.notifOn = "";
+                Qt.callLater(() => {
+                    if (root.notifOn === "")
+                        root.notifOn = Hyprland.focusedMonitor?.name ?? name;
+                });
+            }
         }
     }
 

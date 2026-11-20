@@ -14,8 +14,7 @@ pragma ComponentBehavior: Bound
 // before Hyprland records it as the focused surface; mouse refocus then
 // checks only that record (InputManager.cpp, allowKeyboardRefocus) and
 // gave the window under the pointer the keyboard while the center
-// stayed open (#90, Hyprland debug log 2026-11-20). The close fade is
-// short, so the keyboard comes back quickly.
+// stayed open (#90, Hyprland debug log 2026-11-20).
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
@@ -42,8 +41,12 @@ PanelWindow {
     margins.right: Theme.space.sm - gutter
     implicitWidth: sheetWidth + gutter * 2
     color: "transparent"
-    // Mapped while it slides, so the close animation is seen.
-    visible: open || sheet.opacity > 0
+    // Mapped exactly while open, so every open is a fresh map, which is
+    // when Hyprland gives a layer the keyboard: one reopened while still
+    // fading out never took it, and the closing one's unmap then gave it
+    // to the window under the pointer (refocus ignores exclusive layers
+    // when called from onUnmap). No close fade.
+    visible: open
     mask: Region {
         item: sheet
     }
@@ -93,16 +96,13 @@ PanelWindow {
         Behavior on x {
             Anim {
                 speed: "slow"
-                curve: center.open ? "enter" : "exit"
+                curve: "enter"
             }
         }
 
-        // Closing is quick: the surface keeps the keyboard until it is
-        // gone.
         Behavior on opacity {
             Anim {
-                speed: center.open ? "normal" : "fast"
-                curve: center.open ? "enter" : "exit"
+                curve: "enter"
             }
         }
 

@@ -56,6 +56,10 @@ Item {
 
     implicitHeight: content.implicitHeight
 
+    // Keep the entry this card was made for: a list drops the model
+    // value to null while the card is still fading out.
+    Component.onCompleted: card.entry = card.entry
+
     onHoveredChanged: card.entry.held = hovered
 
     HoverHandler {
