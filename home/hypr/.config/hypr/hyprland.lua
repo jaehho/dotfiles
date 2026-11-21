@@ -456,11 +456,15 @@ hl.bind(mainMod .. " + j", hl.dsp.focus({ direction = "down" }))
 hl.bind(mainMod .. " + ALT + F", hl.dsp.window.cycle_next({ floating = true }))
 hl.bind(mainMod .. " + ALT + F", hl.dsp.window.bring_to_top())
 
--- Swap windows with mainMod + SHIFT + hjkl
-hl.bind(mainMod .. " + SHIFT + h", hl.dsp.window.swap({ direction = "left" }))
-hl.bind(mainMod .. " + SHIFT + l", hl.dsp.window.swap({ direction = "right" }))
-hl.bind(mainMod .. " + SHIFT + k", hl.dsp.window.swap({ direction = "up" }))
-hl.bind(mainMod .. " + SHIFT + j", hl.dsp.window.swap({ direction = "down" }))
+-- Move a window with mainMod + SHIFT + hjkl (into the other monitor's workspace, no swap); swap with mainMod + ALT + hjkl
+hl.bind(mainMod .. " + SHIFT + h", hl.dsp.window.move({ direction = "left" })) -- move window left
+hl.bind(mainMod .. " + SHIFT + l", hl.dsp.window.move({ direction = "right" })) -- move window right
+hl.bind(mainMod .. " + SHIFT + k", hl.dsp.window.move({ direction = "up" })) -- move window up
+hl.bind(mainMod .. " + SHIFT + j", hl.dsp.window.move({ direction = "down" })) -- move window down
+hl.bind(mainMod .. " + ALT + h", hl.dsp.window.swap({ direction = "left" })) -- swap window left
+hl.bind(mainMod .. " + ALT + l", hl.dsp.window.swap({ direction = "right" })) -- swap window right
+hl.bind(mainMod .. " + ALT + k", hl.dsp.window.swap({ direction = "up" })) -- swap window up
+hl.bind(mainMod .. " + ALT + j", hl.dsp.window.swap({ direction = "down" })) -- swap window down
 
 -- Switch workspaces / move active window with mainMod (+ SHIFT) + [1-9]
 -- Super+N is workspace id N (holes allowed; the closed set is 1-9). Each id is locked to its monitor's block by
