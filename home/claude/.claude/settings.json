@@ -151,6 +151,7 @@
   "editorMode": "vim",
   "preferredNotifChannel": "notifications_disabled",
   "switchModelsOnFlag": false,
+  "cleanupPeriodDays": 3650,
   "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true,
   "autoMode": {
