@@ -19,7 +19,10 @@ left out.
 - Find the item with `zotero_search_items`, its highlights with
   `zotero_get_annotations`, an unmarked passage with
   `zotero_read_pdf_pages`.
-  Quote exactly; never paraphrase inside quotation marks.
+  Quote exactly; never paraphrase inside quotation marks. A quote leaves
+  out the paper's reference numbers ("connectome39" is quoted as
+  "connectome"), and the Zotero highlight's text is edited to match
+  (`zotero_update_annotation`).
 - Quote as a blockquote of the highlight, then
   `> — Author year, p. N · [PDF p. N](zotero://open-pdf/library/items/<attachment key>?page=<PDF position>&annotation=<annotation key>) · [<doi>](https://doi.org/<doi>)`,
   on one line.
