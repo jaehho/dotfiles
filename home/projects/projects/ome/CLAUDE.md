@@ -8,4 +8,5 @@ The owner's always-on assistant on wonlab: a web app in Firefox (phone and deskt
 - Initiative policy (`POLICY.md` in the workspace): reading runs freely; drafts, calendar adds and starting a laptop session are approval cards; sending, deleting and paying never run.
 - Secrets live in `~/.config/ome/` (mode 600), never in the repo or the workspace.
 - Names and paths follow ~/dotfiles/docs/app-contract.md: command `ome`, environment `OME_*`, config `~/.config/ome/`, state `~/.local/state/ome/`.
+- Similar products and the features worth borrowing from them are in `docs/landscape.md`. When a change adds or plans a feature, update its table and list there. If one product then does everything ome does that the owner uses (on a model they accept, self-hosted without a relay), tell the owner before building more: they may switch to it.
 - OpenClaw keeps running until a job has moved, and a job never runs in both, except the read-only `papers` digest during its comparison week. No Telegram anywhere (#8).
