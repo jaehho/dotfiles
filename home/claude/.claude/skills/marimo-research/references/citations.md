@@ -23,14 +23,13 @@ Decide for each statement from a source, in this order:
    step, or to know a limit of the result. What a source says about
    itself (how its sample was prepared, counts the notebook never uses)
    is left out.
-2. Quote it when the exact words carry the point: a definition or a
-   method step the notebook relies on, a number it uses, a limit the
-   authors state, or a claim a reader may doubt. Quote only the sentence
-   that carries it.
-3. Otherwise say it in your own sentence and cite the source in running
-   text (below); the sentence claims no more than the source does.
-
-A figure from the paper that shows the point takes the place of a quote.
+2. Quote it. The paper's own sentence is usually stated more clearly
+   than a paraphrase of it. Quote only the sentence that carries the
+   point.
+3. Paraphrase only where no one passage carries the point, because it is
+   spread over several sentences or sections: say it in your own
+   sentence and cite the source in running text (below), claiming no more
+   than the source does.
 
 - Find the item with `zotero_search_items`, its highlights with
   `zotero_get_annotations`, an unmarked passage with
