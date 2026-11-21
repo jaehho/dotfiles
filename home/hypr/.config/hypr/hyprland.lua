@@ -758,6 +758,20 @@ hl.window_rule({
     focus_on_activate = false,
 })
 
+-- Test windows Claude parks on special:claude (the gui-testing skill). Each
+-- harness's own rule places its windows there with no_initial_focus, which
+-- covers only the first map. A later activation request (a dialog, or
+-- present() after a sent key) would focus the window, and focusing a window
+-- on a special workspace opens it over the screen. Matching the workspace
+-- keeps that one key here for every harness: Hyprland re-checks a
+-- workspace-matched rule when a window lands on the workspace.
+hl.window_rule({
+    name  = "claude-tests-stay-hidden",
+    match = { workspace = "special:claude" },
+
+    focus_on_activate = false,
+})
+
 -- Inhibit idle when fullscreen (browsers, media players)
 hl.window_rule({
     name  = "idle-inhibit-fullscreen",
