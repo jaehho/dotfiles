@@ -16,7 +16,8 @@ Limitations and Open questions, each only when it has content).
   takes from it, linked to the primer's section.
   Each exclusion or data quirk the analysis handles gets one sentence
   saying where it comes from.
-  Quote where a passage carries the claim, link where none does.
+  Whether a claim is quoted, paraphrased or left out follows the
+  citations reference.
   A claim the notebook cannot test becomes an open question.
 - **Expectations** come before the methods and are stated as posed.
   An expectation says what the data would look like without the effect, and

@@ -16,6 +16,22 @@ name as personal communication, without a date.
 A claim with no source is computed from the data in the notebook or
 left out.
 
+Decide for each statement from a source, in this order:
+
+1. Leave it out unless the reader needs it for what the notebook
+   teaches or answers: to read a figure that follows, to follow a later
+   step, or to know a limit of the result. What a source says about
+   itself (how its sample was prepared, counts the notebook never uses)
+   is left out.
+2. Quote it when the exact words carry the point: a definition or a
+   method step the notebook relies on, a number it uses, a limit the
+   authors state, or a claim a reader may doubt. Quote only the sentence
+   that carries it.
+3. Otherwise say it in your own sentence and cite the source in running
+   text (below); the sentence claims no more than the source does.
+
+A figure from the paper that shows the point takes the place of a quote.
+
 - Find the item with `zotero_search_items`, its highlights with
   `zotero_get_annotations`, an unmarked passage with
   `zotero_read_pdf_pages`.
