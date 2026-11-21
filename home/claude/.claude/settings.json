@@ -1,7 +1,7 @@
 {
   "env": {
     "CLAUDE_CODE_NATIVE_CURSOR": "1",
-  "PLAYWRIGHT_MCP_CONFIG": "/home/jaeho/.claude/playwright-mcp.json",
+    "PLAYWRIGHT_MCP_CONFIG": "/home/jaeho/.claude/playwright-mcp.json",
     "CLAUDE_CODE_SUBAGENT_EFFORT": "xhigh"
   },
   "attribution": {
@@ -26,9 +26,9 @@
       "mcp__claude_ai_Google_Slides__update_presentation"
     ],
     "ask": [],
-    "defaultMode": "auto"
+    "defaultMode": "bypassPermissions"
   },
-  "model": "sonnet",
+  "model": "opus",
   "skillOverrides": {
     "built-in-browser": "off",
     "chrome-browser": "off",
@@ -126,6 +126,7 @@
       }
     }
   },
+  "outputStyle": "Concise",
   "effortLevel": "high",
   "modelSettings": {
     "claude-opus-5": {
@@ -145,11 +146,11 @@
     }
   },
   "tui": "fullscreen",
-  "outputStyle": "Concise",
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "editorMode": "vim",
   "preferredNotifChannel": "notifications_disabled",
+  "switchModelsOnFlag": false,
   "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true,
   "autoMode": {
