@@ -5,7 +5,7 @@ The owner's always-on assistant on wonlab: a web app in Firefox (phone and deskt
 - Runs on wonlab as `jaeho`, a systemd user service. Build and test on the laptop. Anything on wonlab goes through the wonlab skill; services, Caddy blocks and secrets are staged scripts the owner runs.
 - The model is a child process behind the `Harness` interface: `claude -p` (stream-json) now, an any-model CLI (opencode) later. No provider SDK in the core.
 - A job is `jobs/<name>.toml` plus a gate script that prints `{"wakeAgent": true|false, "message": ...}`; the model runs only on true, with the message after the prompt. Every run goes to the run log, and every failure writes an inbox item, which Web Push will carry to the phone.
-- Initiative policy (`POLICY.md` in the workspace): reading runs freely; drafts, calendar adds and starting a laptop session are approval cards; sending, deleting and paying never run.
+- Initiative policy (`POLICY.md` in the workspace): reading, writing mail drafts and what the owner asks for directly run freely; what ome proposes on its own (calendar adds, tasks, starting a laptop session) is an approval card; sending, deleting and paying never run.
 - Secrets live in `~/.config/ome/` (mode 600), never in the repo or the workspace.
 - Names and paths follow ~/dotfiles/docs/app-contract.md: command `ome`, environment `OME_*`, config `~/.config/ome/`, state `~/.local/state/ome/`.
 - Similar products and the features worth borrowing from them are in `docs/landscape.md`. When a change adds or plans a feature, update its table and list there. If one product then does everything ome does that the owner uses (on a model they accept, self-hosted without a relay), tell the owner before building more: they may switch to it.
