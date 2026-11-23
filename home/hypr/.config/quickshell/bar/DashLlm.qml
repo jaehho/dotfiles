@@ -70,6 +70,7 @@ DashCard {
     }
 
     title: "LLM"
+    icon: "data_usage"
     dimmed: feed.boardDown
     alert: feed.board ? [late("claude", c), or && or.month_limit ? late("openrouter", or) : ""].filter(s => s).join(" · ") : ""
 

@@ -51,7 +51,9 @@ DashCard {
     }
 
     // "11-18 close", or the fetch's age for a snapshot without its day.
-    title: "MARKET" + (!m || m.error || !m.ts ? "" : "  ·  " + (m.as_of ? m.as_of.slice(5) + " close" : feed.ago(m.ts)))
+    title: "Market"
+    icon: "show_chart"
+    detail: !m || m.error || !m.ts ? "" : m.as_of ? m.as_of.slice(5) + " close" : feed.ago(m.ts)
     url: "https://portal.interactivebrokers.com"
     dimmed: feed.boardDown
 

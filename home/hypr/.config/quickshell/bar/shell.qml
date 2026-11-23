@@ -186,7 +186,6 @@ ShellRoot {
             required property var modelData
 
             screen: modelData
-            colors: everforest
             feed: dashFeed
             open: root.dashOn === modelData.name && root.shown
             onCloseRequested: root.dashOn = ""

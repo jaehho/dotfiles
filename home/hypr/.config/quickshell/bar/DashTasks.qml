@@ -34,7 +34,9 @@ DashCard {
         return (d < card.today ? "overdue " : "due ") + d.slice(5);
     }
 
-    title: "TASKS" + (tasks.length ? "  ·  " + tasks.length : "")
+    title: "Tasks"
+    icon: "task_alt"
+    detail: tasks.length ? String(tasks.length) : ""
     cmd: [Quickshell.env("HOME") + "/.local/bin/asst-gtk"]
     dimmed: feed.boardDown
 

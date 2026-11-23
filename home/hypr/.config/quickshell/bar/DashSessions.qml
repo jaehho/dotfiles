@@ -1,9 +1,12 @@
-// The SESSIONS card: the live Claude Code sessions, one line each and
+// The SESSIONS card: the live Claude Code sessions, one row each and
 // six at most, waiting ones first (they need you). Waiting is red, with
 // what it waits for in place of the project, and its clock turns red
 // too after 10 min, so a stuck session is not mistaken for one that only
 // just asked. A row focuses its kitty and tmux pane (dash-focus-session);
 // the card opens tmux's session tree.
+//
+// On the shell base (#89): a status dot, the session's name and project
+// in Mono (identifiers), its status in words, how long in Mono.
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -25,7 +28,7 @@ DashCard {
     readonly property int restWaiting: rest.filter(i => i.status === "waiting").length
 
     function tint(status) {
-        return status === "waiting" ? card.colors.red : card.colors.grey2;
+        return status === "waiting" ? Theme.colors.red : Theme.colors.grey2;
     }
 
     // "…and 8 more · 7 busy · 1 idle"
@@ -39,18 +42,20 @@ DashCard {
         return "…and " + card.rest.length + " more" + (bits.length ? " · " + bits.join(" · ") : "");
     }
 
-    title: "SESSIONS" + (sess && sess.total ? "  ·  " + sess.total : "")
+    title: "Sessions"
+    icon: "terminal"
+    detail: sess && sess.total ? String(sess.total) : ""
     cmd: ["kitty", "-e", "tmux", "choose-tree", "-Zs"]
     dimmed: feed.boardDown
 
     ColumnLayout {
         Layout.fillWidth: true
-        spacing: 6
+        spacing: 2
 
         Repeater {
             model: card.items.slice(0, card.cap)
 
-            delegate: Item {
+            delegate: DashRow {
                 id: sessionRow
 
                 required property var modelData
@@ -60,25 +65,24 @@ DashCard {
                 // lane only when it is not the default (native).
                 readonly property string meta: [modelData.project && !(modelData.name || "").startsWith(modelData.project) ? modelData.project : "", modelData.lane !== "native" ? modelData.lane : ""].filter(x => x).join(" · ")
 
-                Layout.fillWidth: true
-                implicitHeight: line.implicitHeight
+                interactive: true
+                onClicked: card.launch("", [Quickshell.env("HOME") + "/.local/bin/dash-focus-session", "" + modelData.pid])
 
                 RowLayout {
-                    id: line
-                    width: parent.width
-                    spacing: 8
+                    anchors.fill: parent
+                    spacing: Theme.space.sm
 
                     Rectangle {
-                        Layout.preferredWidth: 7
-                        Layout.preferredHeight: 7
-                        radius: 3.5
+                        Layout.preferredWidth: 8
+                        Layout.preferredHeight: 8
+                        radius: Theme.radius.pill
                         color: card.tint(sessionRow.modelData.status)
                     }
 
                     Line {
                         text: sessionRow.modelData.name
                         mono: true
-                        color: card.colors.fg
+                        color: Theme.colors.fg
                         elide: Text.ElideRight
                         Layout.maximumWidth: 150
                     }
@@ -89,50 +93,43 @@ DashCard {
                         Layout.fillWidth: true
                         text: sessionRow.waiting ? (sessionRow.modelData.waitingFor || "") : sessionRow.meta
                         mono: true
-                        size: 12
-                        color: sessionRow.waiting ? card.colors.red : card.colors.grey1
+                        size: Theme.font.smaller
+                        color: sessionRow.waiting ? Theme.colors.red : Theme.colors.grey2
                         elide: Text.ElideRight
                     }
 
                     Line {
                         text: sessionRow.modelData.status
-                        mono: true
-                        size: 12
+                        size: Theme.font.small
                         color: card.tint(sessionRow.modelData.status)
                     }
 
                     // How long in this status: busy means running, not
                     // finished.
                     Line {
-                        Layout.preferredWidth: 44
+                        Layout.preferredWidth: 40
                         horizontalAlignment: Text.AlignRight
                         text: card.feed.dur(card.feed.since(sessionRow.modelData.statusAt || sessionRow.modelData.startedAt))
                         mono: true
-                        size: 12
-                        color: sessionRow.stuck ? card.colors.red : card.colors.grey2
+                        size: Theme.font.smaller
+                        color: sessionRow.stuck ? Theme.colors.red : Theme.colors.grey2
                     }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: card.launch("", [Quickshell.env("HOME") + "/.local/bin/dash-focus-session", "" + sessionRow.modelData.pid])
                 }
             }
         }
 
         Line {
             visible: text !== ""
+            Layout.topMargin: Theme.space.xs
             text: card.more()
-            mono: true
-            size: 12
-            color: card.restWaiting > 0 ? card.colors.red : card.colors.grey2
+            size: Theme.font.small
+            color: card.restWaiting > 0 ? Theme.colors.red : Theme.colors.grey2
         }
 
         Line {
             visible: card.items.length === 0
-            text: card.feed.board ? "no live sessions" : "…"
-            color: card.colors.grey2
+            text: card.feed.board ? "No live sessions" : "…"
+            color: Theme.colors.grey2
         }
     }
 }
