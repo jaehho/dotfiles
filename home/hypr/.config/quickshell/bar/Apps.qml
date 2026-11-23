@@ -3,9 +3,10 @@ pragma Singleton
 // The launcher's apps (#89): the desktop entries rofi's drun listed,
 // searched as it searched them (fuzzy, over the name, generic name,
 // command and keywords; Fuzzy.js) and ordered by how often each was
-// launched. The counts live in the shell's state directory
-// (launcher.json); the first run starts them from rofi's own history
-// (~/.cache/rofi3.druncache), so the order carries over.
+// launched, and each app's category for the categorized view. The
+// counts and the chosen view live in the shell's state directory
+// (launcher.json); the first run starts the counts from rofi's own
+// history (~/.cache/rofi3.druncache), so the order carries over.
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -20,6 +21,63 @@ Singleton {
     property var counts: ({})
     // No launcher.json yet: read rofi's history once.
     property bool seed: false
+    // The launcher's view: "list", "grid" or "categories".
+    property string view: "list"
+    readonly property var views: ["list", "grid", "categories"]
+
+    // freedesktop's main categories, as the categorized view names them.
+    readonly property var names: ({
+            AudioVideo: "Media",
+            Audio: "Media",
+            Video: "Media",
+            Development: "Development",
+            Education: "Education",
+            Game: "Games",
+            Graphics: "Graphics",
+            Network: "Internet",
+            Office: "Office",
+            Science: "Science",
+            Settings: "Settings",
+            System: "System",
+            Utility: "Utilities"
+        })
+    readonly property var icons: ({
+            Media: "play_circle",
+            Development: "code",
+            Education: "school",
+            Games: "sports_esports",
+            Graphics: "palette",
+            Internet: "public",
+            Office: "description",
+            Science: "science",
+            Settings: "settings",
+            System: "memory",
+            Utilities: "build",
+            Other: "apps"
+        })
+
+    // The first main category the app lists, which is its own choice of
+    // where it belongs (Neovim lists Utility before Development).
+    function category(entry) {
+        for (const c of Array.from(entry.categories)) {
+            const name = apps.names[c];
+            if (name)
+                return name;
+        }
+        return "Other";
+    }
+
+    function setView(view) {
+        apps.view = view;
+        apps.save();
+    }
+
+    function save() {
+        store.setText(JSON.stringify({
+            counts: apps.counts,
+            view: apps.view
+        }, null, 1));
+    }
 
     // The best of the fields' scores, the name weighing most.
     function scoreOf(query, entry) {
@@ -45,9 +103,7 @@ Singleton {
         const next = Object.assign({}, apps.counts);
         next[entry.id] = (next[entry.id] ?? 0) + 1;
         apps.counts = next;
-        store.setText(JSON.stringify({
-            counts: next
-        }, null, 1));
+        apps.save();
         // Terminal apps open in kitty, as rofi's sensible-terminal did.
         if (entry.runInTerminal)
             Quickshell.execDetached({
@@ -64,7 +120,10 @@ Singleton {
         printErrors: false
         onLoaded: {
             try {
-                apps.counts = JSON.parse(text()).counts ?? {};
+                const saved = JSON.parse(text());
+                apps.counts = saved.counts ?? {};
+                if (apps.views.includes(saved.view))
+                    apps.view = saved.view;
             } catch (error) {
                 console.warn("launcher.json unreadable:", error);
             }
