@@ -469,8 +469,8 @@ FocusScope {
         enabled: sheet.page === "main"
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 150
+            Anim {
+                speed: "fast"
             }
         }
     }
@@ -485,8 +485,8 @@ FocusScope {
         enabled: sheet.page === "wifi"
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 150
+            Anim {
+                speed: "fast"
             }
         }
     }
@@ -501,8 +501,8 @@ FocusScope {
         enabled: sheet.page === "bluetooth"
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 150
+            Anim {
+                speed: "fast"
             }
         }
     }
@@ -517,8 +517,8 @@ FocusScope {
         enabled: sheet.page === "sound"
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 150
+            Anim {
+                speed: "fast"
             }
         }
     }

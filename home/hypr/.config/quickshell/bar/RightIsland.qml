@@ -49,24 +49,29 @@ Item {
     width: restWidth + (openWidth - restWidth) * progress
     height: open ? openHeight : trayOpen ? trayHeight : restHeight
 
+    // The Calm Motion Rule: a sheet arrives over 400ms, slowing into
+    // place, and leaves over 250ms; a page resizing the open sheet moves
+    // at 250ms on the standard curve.
+    readonly property bool shown: open || trayOpen
+
     Behavior on grow {
-        NumberAnimation {
-            duration: rightIsland.grow ? 260 : 200
-            easing.type: rightIsland.grow ? Easing.OutExpo : Easing.InOutCubic
+        Anim {
+            speed: rightIsland.shown ? "slow" : "normal"
+            curve: rightIsland.shown ? "enter" : "exit"
         }
     }
 
     Behavior on progress {
-        NumberAnimation {
-            duration: rightIsland.open ? 260 : 200
-            easing.type: rightIsland.open ? Easing.OutExpo : Easing.InOutCubic
+        Anim {
+            speed: rightIsland.open ? "slow" : "normal"
+            curve: rightIsland.open ? "enter" : "exit"
         }
     }
 
     Behavior on height {
-        NumberAnimation {
-            duration: rightIsland.open ? 260 : 200
-            easing.type: rightIsland.open ? Easing.OutExpo : Easing.InOutCubic
+        Anim {
+            speed: rightIsland.shown && rightIsland.grow < 1 ? "slow" : "normal"
+            curve: !rightIsland.shown ? "exit" : rightIsland.grow < 1 ? "enter" : "standard"
         }
     }
 
@@ -245,14 +250,9 @@ Item {
             enabled: rightIsland.trayOpen
 
             Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation {
-                        duration: rightIsland.trayOpen ? 80 : 0
-                    }
-                    NumberAnimation {
-                        duration: rightIsland.trayOpen ? 180 : 100
-                        easing.type: Easing.OutCubic
-                    }
+                Anim {
+                    speed: rightIsland.trayOpen ? "normal" : "fast"
+                    curve: rightIsland.trayOpen ? "enter" : "exit"
                 }
             }
         }
@@ -282,14 +282,9 @@ Item {
             onCloseRequested: rightIsland.bar.closeRequested()
 
             Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation {
-                        duration: rightIsland.open ? 80 : 0
-                    }
-                    NumberAnimation {
-                        duration: rightIsland.open ? 180 : 100
-                        easing.type: Easing.OutCubic
-                    }
+                Anim {
+                    speed: rightIsland.open ? "normal" : "fast"
+                    curve: rightIsland.open ? "enter" : "exit"
                 }
             }
         }

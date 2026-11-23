@@ -44,17 +44,19 @@ Item {
     width: open ? openWidth : restWidth
     height: open ? openHeight : restHeight
 
+    // The Calm Motion Rule: the sheet arrives over 400ms, slowing into
+    // place, and leaves over 250ms.
     Behavior on width {
-        NumberAnimation {
-            duration: island.open ? 260 : 200
-            easing.type: island.open ? Easing.OutExpo : Easing.InOutCubic
+        Anim {
+            speed: island.open ? "slow" : "normal"
+            curve: island.open ? "enter" : "exit"
         }
     }
 
     Behavior on height {
-        NumberAnimation {
-            duration: island.open ? 260 : 200
-            easing.type: island.open ? Easing.OutExpo : Easing.InOutCubic
+        Anim {
+            speed: island.open ? "slow" : "normal"
+            curve: island.open ? "enter" : "exit"
         }
     }
 
@@ -202,14 +204,9 @@ Item {
             enabled: island.open
 
             Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation {
-                        duration: island.open ? 80 : 0
-                    }
-                    NumberAnimation {
-                        duration: island.open ? 180 : 100
-                        easing.type: Easing.OutCubic
-                    }
+                Anim {
+                    speed: island.open ? "normal" : "fast"
+                    curve: island.open ? "enter" : "exit"
                 }
             }
 
