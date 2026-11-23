@@ -128,6 +128,9 @@ ShellRoot {
 
     NotifPopups {}
 
+    // The hangul hint (HangulHint.qml), which runs hypr-hangul-hint.
+    HangulHint {}
+
     // One sheet at a time: the launcher closes the others, the tray grid
     // included.
     function launcher(name) {

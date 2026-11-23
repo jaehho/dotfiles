@@ -89,7 +89,6 @@ hl.on("hyprland.start", function()
     -- Hyprland left held goes too (hypr-idle-toggle).
     hl.exec_cmd("~/.local/bin/hypr-idle-toggle off")
     hl.exec_cmd("fcitx5 -d")                       -- Korean input, the AI key toggles (home/fcitx5)
-    hl.exec_cmd("~/.local/bin/hypr-hangul-hint")   -- key hint, shown while typing Hangul
     -- Night light on the schedule in hyprsunset.conf. Not the packaged user
     -- unit: it requires graphical-session.target, which Hyprland never starts.
     hl.exec_cmd("hyprsunset")
@@ -692,7 +691,7 @@ hl.bind(mainMod .. " + SHIFT + F23", hl.dsp.exec_cmd("fcitx5-remote -t")) -- AI 
 -- Ctrl + the AI key: the Korean key hint's look. The hint shows and hides
 -- itself with the language (started at login above); this only picks a
 -- floating overlay or a docked strip the windows tile around. Remembered.
-hl.bind(mainMod .. " + SHIFT + CTRL + F23", hl.dsp.exec_cmd("~/.local/bin/hypr-hangul-hint --dock")) -- Ctrl + AI key: Korean key hint overlay / docked
+hl.bind(mainMod .. " + SHIFT + CTRL + F23", hl.dsp.exec_cmd("qs -c bar ipc call hangul dock")) -- Ctrl + AI key: Korean key hint overlay / docked
 
 --------------------------------
 ---- WINDOWS AND WORKSPACES ----

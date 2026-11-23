@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""hypr-hangul-hint -- the Korean 2-set (dubeolsik) layout over the QWERTY keys.
+"""hypr-hangul-hint -- what the bar's hangul hint shows, as JSON lines.
 
-A layer-shell surface at the bottom of the screen that takes no keyboard and
-no pointer, so you type and click through it. Two looks, and the choice is
-remembered:
+The hint is the Korean 2-set (dubeolsik) layout over the QWERTY keys, drawn
+by the bar (HangulHint.qml, #89), which runs this as a child and reads one
+JSON object per line from it:
 
-  overlay  translucent, floating over your windows, clearing around the mouse
-  docked   a strip across the bottom that reserves its own space, so windows
-           tile around it like they do around the bar and nothing is covered
+  {"layout": {"rows": ..., "offsets": ..., "bumps": ...}}   first, once
+  {"hangul": true}       whether the focused window is typing Hangul
+  {"key": "q", "down": true}   a letter key going down or up, while Hangul
+  {"cursor": [x, y]}     the pointer in global pixels, while Hangul
 
 It follows fcitx5: the hint shows while the focused window is typing Hangul
 and goes away when you switch back, so there is no key to remember. fcitx5
 keeps input state per window, so the hint follows focus too.
 
-    hypr-hangul-hint            start the follower (at login)
-    hypr-hangul-hint --dock     switch between overlay and docked
-    hypr-hangul-hint --always   show it regardless of fcitx5 (for testing)
+    hypr-hangul-hint            the feed (the bar starts it)
+    hypr-hangul-hint --always   Hangul regardless of fcitx5 (for testing)
 
 The layout table is what fcitx5-hangul's "2" keyboard produces, and
 tests/test_hangul_hint.py checks it against libhangul, so it cannot drift.
@@ -61,44 +61,13 @@ KEY_CODES = {  # linux/input-event-codes.h
 }
 
 
-# The overlay has no input region, so it cannot hear the pointer. Hyprland can
-# say where the cursor is, and where this layer sits, over its IPC socket.
-# Where the cursor is over the board, the board clears around it.
-# HANGUL_HINT_CURSOR="x,y" pins the cursor (global pixels), for tests.
-HOLE_RADIUS = 96
+# The hint has no input region, so it cannot hear the pointer. Hyprland can
+# say where the cursor is over its IPC socket; the bar clears the board around
+# it. HANGUL_HINT_CURSOR="x,y" pins the cursor (global pixels), for tests.
 CURSOR_MS = 33
-GEOMETRY_EVERY = 15  # cursor polls between looks at where the layer sits
-NAMESPACE = "hangul-hint"
 
-# Two ways to show the board. The overlay floats over your windows. The dock is
-# a strip across the bottom that reserves its own space, so windows tile around
-# it the way they do around the bar and nothing is covered. `--dock` flips
-# between them, and the choice is remembered.
-MODES = ("overlay", "docked")
-DOCK_PADDING = 8
-
-
-def mode_file():
-    state = os.environ.get("XDG_STATE_HOME") or f"{Path.home()}/.local/state"
-    return Path(state) / "hypr-hangul-hint" / "mode"
-
-
-def read_mode():
-    try:
-        mode = mode_file().read_text().strip()
-    except OSError:
-        return MODES[0]
-    return mode if mode in MODES else MODES[0]
-
-
-def write_mode(mode):
-    path = mode_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(mode + "\n")
-
-
-def other_mode(mode):
-    return MODES[1] if mode == MODES[0] else MODES[0]
+# The keys with a tactile bump on a real keyboard.
+HOME_BUMPS = ("f", "j")
 
 
 def hypr_request(command):
@@ -128,34 +97,6 @@ def cursor_position():
         return float(x), float(y)
     answer = hypr_request("j/cursorpos")
     return (answer["x"], answer["y"]) if answer else None
-
-
-def find_overlay(layers, monitors):
-    """(x, y, width, height) of this overlay in global pixels, or None.
-
-    `layers` and `monitors` are Hyprland's 'j/layers' and 'j/monitors'; a
-    layer's position is relative to the monitor it is on.
-    """
-    origins = {m["name"]: (m["x"], m["y"]) for m in monitors or []}
-    for name, monitor in (layers or {}).items():
-        for found in monitor.get("levels", {}).values():
-            for layer in found:
-                if layer.get("namespace") == NAMESPACE:
-                    ox, oy = origins.get(name, (0, 0))
-                    return (ox + layer["x"], oy + layer["y"],
-                            layer["w"], layer["h"])
-    return None
-
-
-def hole_centre(cursor, overlay, radius=HOLE_RADIUS):
-    """The cursor in the overlay's own pixels while it is near enough to
-    matter (within `radius` of the overlay), else None."""
-    if cursor is None or overlay is None:
-        return None
-    x, y = cursor[0] - overlay[0], cursor[1] - overlay[1]
-    if -radius < x < overlay[2] + radius and -radius < y < overlay[3] + radius:
-        return round(x), round(y)
-    return None
 
 
 def keyboard_device():
@@ -204,405 +145,101 @@ class Visibility:
         return self.always or self.hangul
 
 
-def palette():
-    """name -> '#rrggbb' from the shared Everforest file."""
-    colors = {}
-    path = Path.home() / ".config/hypr/themes/foliage.conf"
+def layout_message():
+    """The board, for the bar to draw: rows of (latin, jamo, shifted)."""
+    return {"layout": {"rows": ROWS, "offsets": ROW_OFFSETS,
+                       "bumps": list(HOME_BUMPS)}}
+
+
+def emit(message):
+    """One JSON object per line; a closed pipe (the bar gone) ends the feed."""
     try:
-        for line in path.read_text().splitlines():
-            name, _, val = line.strip().partition("=")
-            val = val.strip()
-            if (name.startswith("$") and not name.endswith("Alpha")
-                    and val.startswith("rgb(")):
-                colors[name[1:].strip()] = "#" + val[4:-1]
-    except OSError:
-        pass
-    return colors
+        print(json.dumps(message, ensure_ascii=False), flush=True)
+    except BrokenPipeError:
+        # Nothing left to flush to; leave without the interpreter trying.
+        os._exit(0)
 
 
-PITCH = 62
-GAP = 6
-KEY = PITCH - GAP
+def feed(always):
+    from gi.repository import Gio, GLib
 
-# The keys with a tactile bump on a real keyboard.
-HOME_BUMPS = ("f", "j")
+    state = Visibility(always)
+    device = {"fd": None, "watch": None}
+    last = {"cursor": None}
 
-
-def board_size():
-    """(width, height) of the keys exactly: no slack on any side, so the
-    board's padding is the same all round."""
-    width = max((len(row) - 1 + offset) * PITCH + KEY
-                for row, offset in zip(ROWS, ROW_OFFSETS))
-    height = (len(ROWS) - 1) * PITCH + KEY
-    return int(width), int(height)
-
-
-# The board is dark glass the layer rule blurs behind; the keys sit on it
-# nearly solid so the glyphs read over any window.
-CSS = """
-window.hangul-hint {{ background: transparent; }}
-
-.board {{
-  background: alpha({bg_dim}, 0.72);
-  border: 1px solid alpha({bg3}, 0.7);
-  border-radius: 12px;
-  padding: 16px;
-}}
-
-/* Docked: a full-width strip that owns its space, so no glass and no card. */
-window.docked .board {{
-  background: {bg_dim};
-  border: none;
-  border-top: 1px solid {bg2};
-  border-radius: 0;
-  padding: {dock_padding}px 0;
-}}
-
-.key {{
-  background: alpha({bg2}, 0.94);
-  border: 1px solid {bg3};
-  border-bottom: 3px solid {bg_dim};
-  border-radius: 8px;
-}}
-
-.jamo {{
-  font-family: "Noto Sans CJK KR", sans-serif;
-  font-size: 28px;
-  font-weight: 600;
-  color: {fg};
-}}
-
-.latin {{
-  font-family: "JetBrainsMono Nerd Font", monospace;
-  font-size: 10px;
-  font-weight: 700;
-  color: {grey1};
-}}
-.shifted {{
-  font-family: "Noto Sans CJK KR", sans-serif;
-  font-size: 13px;
-  font-weight: 500;
-  color: {grey2};
-}}
-
-.bump {{
-  background: {grey1};
-  border-radius: 2px;
-}}
-
-/* A key lights the instant it goes down and fades out when it is let go. */
-.key {{ transition: background-color 220ms ease-out, border-color 220ms ease-out; }}
-.key.lit {{
-  transition: none;
-  background: {green};
-  border-color: {green};
-  border-bottom-color: shade({green}, 0.6);
-}}
-.key.lit .jamo {{ color: {bg_dim}; }}
-.key.lit .latin, .key.lit .shifted {{ color: alpha({bg_dim}, 0.7); }}
-.key.lit .bump {{ background: alpha({bg_dim}, 0.6); }}
-"""
-
-
-def gui(always):
-    # gtk4-layer-shell must be loaded before libwayland-client, and PyGObject
-    # pulls libwayland in the moment Gdk is imported, so re-exec once with the
-    # library preloaded. Not liblayer-shell-preload.so, which ships alongside
-    # it: that one auto-inits every window under its own namespace, taking
-    # the blur layerrule with it.
-    preload = "/usr/lib/libgtk4-layer-shell.so"
-    if (os.path.exists(preload)
-            and preload not in os.environ.get("LD_PRELOAD", "")):
-        existing = os.environ.get("LD_PRELOAD", "")
-        os.environ["LD_PRELOAD"] = f"{preload}:{existing}".rstrip(":")
-        os.execv(sys.executable, [sys.executable, *sys.argv])
-
-    import cairo
-    import gi
-
-    gi.require_version("Gtk", "4.0")
-    gi.require_version("Gdk", "4.0")
-    gi.require_version("Gtk4LayerShell", "1.0")
-    gi.require_version("Gsk", "4.0")
-    gi.require_version("Graphene", "1.0")
-    from gi.repository import Gdk, Gio, GLib, Graphene, Gsk, Gtk
-    from gi.repository import Gtk4LayerShell as LayerShell
-
-    class Fader(Gtk.Widget):
-        """Draws its child, nearly clear around `hole` (a point, or None).
-
-        The clear patch is a radial mask: almost see-through at the cursor,
-        back to solid at HOLE_RADIUS, so the board never has an edge to it.
-        """
-
-        __gtype_name__ = "HangulHintFader"
-        # (offset from the cursor, how much of the board still shows)
-        PROFILE = [(0.0, 0.07), (0.4, 0.1), (0.7, 0.55), (1.0, 1.0)]
-
-        def __init__(self, child, docked=False):
-            super().__init__(
-                halign=Gtk.Align.FILL if docked else Gtk.Align.CENTER,
-                valign=Gtk.Align.END)
-            self.set_layout_manager(Gtk.BinLayout())
-            self.child = child
-            child.set_parent(self)
-            self.hole = None
-
-        def set_hole(self, hole):
-            if hole != self.hole:
-                self.hole = hole
-                self.queue_draw()
-
-        def do_snapshot(self, snapshot):
-            if self.hole is None:
-                self.snapshot_child(self.child, snapshot)
-                return
-            stops = []
-            for offset, alpha in self.PROFILE:
-                # Build the colour, then assign it: PyGObject hands back a
-                # copy of a struct field, so `stop.color.alpha = x` is lost.
-                colour = Gdk.RGBA()
-                colour.alpha = alpha
-                stop = Gsk.ColorStop()
-                stop.offset = offset
-                stop.color = colour
-                stops.append(stop)
-            bounds = Graphene.Rect().init(
-                0, 0, self.get_width(), self.get_height())
-            centre = Graphene.Point().init(*self.hole)
-            snapshot.push_mask(Gsk.MaskMode.ALPHA)
-            snapshot.append_radial_gradient(
-                bounds, centre, HOLE_RADIUS, HOLE_RADIUS, 0.0, 1.0, stops)
-            snapshot.pop()
-            self.snapshot_child(self.child, snapshot)
-            snapshot.pop()
-
-        def do_dispose(self):
-            self.child.unparent()
-            Gtk.Widget.do_dispose(self)
-
-    def key_widget(latin, jamo, shifted):
-        box = Gtk.Overlay()
-        box.add_css_class("key")
-        box.set_size_request(KEY, KEY)
-        main = Gtk.Label(label=jamo, halign=Gtk.Align.CENTER,
-                         valign=Gtk.Align.CENTER)
-        main.add_css_class("jamo")
-        box.set_child(main)
-        small = Gtk.Label(label=latin.upper(), halign=Gtk.Align.START,
-                          valign=Gtk.Align.END, margin_start=6,
-                          margin_bottom=3)
-        small.add_css_class("latin")
-        box.add_overlay(small)
-        if latin in HOME_BUMPS:
-            bump = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.END,
-                           margin_bottom=5)
-            bump.set_size_request(20, 3)
-            bump.add_css_class("bump")
-            box.add_overlay(bump)
-        if shifted:
-            top = Gtk.Label(label=shifted, halign=Gtk.Align.END,
-                            valign=Gtk.Align.START, margin_end=6,
-                            margin_top=3)
-            top.add_css_class("shifted")
-            box.add_overlay(top)
-        return box
-
-    def build(keys, docked):
-        """The board; `keys` is filled with each key's widget by letter."""
-        board = Gtk.Box(
-            halign=Gtk.Align.FILL if docked else Gtk.Align.CENTER,
-            valign=Gtk.Align.END)
-        board.add_css_class("board")
-        fixed = Gtk.Fixed(halign=Gtk.Align.CENTER, hexpand=True)
-        for top, (row, offset) in enumerate(zip(ROWS, ROW_OFFSETS)):
-            for col, (latin, jamo, shifted) in enumerate(row):
-                keys[latin] = key_widget(latin, jamo, shifted)
-                fixed.put(keys[latin], (col + offset) * PITCH, top * PITCH)
-        fixed.set_size_request(*board_size())
-        board.append(fixed)
-        return Fader(board, docked)
-
-    class Hint(Gtk.Application):
-        def __init__(self):
-            super().__init__(application_id="dev.jaeho.hangulhint",
-                             flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
-            self.window = None
-            self.mode = read_mode()
-            self.state = Visibility(always)
-            self.bus = None
-            self.keys = {}      # letter -> key widget
-            self.fader = None   # the board, which can clear around the cursor
-            self.fd = None      # the keyboard device, open while visible
-            self.watch = None
-            self.tick = None    # the cursor poll, running while visible
-            self.polls = 0
-            self.overlay = None  # where this layer sits, global pixels
-
-        def do_command_line(self, command_line):
-            # The first run starts the follower; later runs reach it here.
-            # --dock flips between overlay and dock.
-            dock = "--dock" in command_line.get_arguments()[1:]
-            if self.window is None:
-                self.start()
-            if dock:
-                self.set_mode(other_mode(self.mode))
-            return 0
-
-        def start(self):
-            self.hold()
-            provider = Gtk.CssProvider()
-            provider.load_from_string(CSS.format(
-                dock_padding=DOCK_PADDING, **palette()))
-            Gtk.StyleContext.add_provider_for_display(
-                Gdk.Display.get_default(), provider,
-                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-            self.make_window()
-
-            if always:
-                self.sync()
-            else:
-                self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-                GLib.timeout_add(POLL_MS, self.poll)
-
-        def make_window(self):
-            """The layer surface for the current mode.
-
-            Overlay: floats at the bottom over the windows. Dock: a strip
-            across the bottom edge whose exclusive zone is its own height, so
-            windows tile around it like they do around the bar.
-            """
-            docked = self.mode == "docked"
-            self.keys = {}
-            self.window = Gtk.ApplicationWindow(application=self)
-            self.window.add_css_class("hangul-hint")
-            self.window.add_css_class(self.mode)
-
-            LayerShell.init_for_window(self.window)
-            LayerShell.set_namespace(self.window, NAMESPACE)
-            LayerShell.set_keyboard_mode(
-                self.window, LayerShell.KeyboardMode.NONE)
-            LayerShell.set_anchor(self.window, LayerShell.Edge.BOTTOM, True)
-            if docked:
-                LayerShell.set_layer(self.window, LayerShell.Layer.TOP)
-                LayerShell.set_anchor(self.window, LayerShell.Edge.LEFT, True)
-                LayerShell.set_anchor(self.window, LayerShell.Edge.RIGHT, True)
-                LayerShell.auto_exclusive_zone_enable(self.window)
-            else:
-                LayerShell.set_layer(self.window, LayerShell.Layer.OVERLAY)
-                LayerShell.set_margin(
-                    self.window, LayerShell.Edge.BOTTOM, 56)
-
-            # No input region: clicks fall through to what is underneath.
-            self.window.connect("realize", self.pass_input_through)
-            self.fader = build(self.keys, docked)
-            self.window.set_child(self.fader)
-
-        def set_mode(self, mode):
-            """Rebuild the surface in `mode`: a layer's anchors and zone are
-            fixed once it is mapped, so it is made again, not edited."""
-            self.track(False)
-            self.window.destroy()
-            self.mode = mode
-            write_mode(mode)
-            self.make_window()
-            self.sync()
-
-        def sync(self):
-            if self.state.visible:
-                self.window.present()
-            else:
-                self.window.set_visible(False)
-            self.listen(self.state.visible)
-            # The dock covers nothing, so only the overlay clears for the mouse.
-            self.track(self.state.visible and self.mode == "overlay")
-
-        def track(self, on):
-            """Follow the cursor while the overlay is up, to clear around it."""
-            if on and self.tick is None:
-                self.polls = 0
-                self.overlay = None
-                self.tick = GLib.timeout_add(CURSOR_MS, self.follow_cursor)
-            elif not on and self.tick is not None:
-                GLib.source_remove(self.tick)
-                self.tick = None
-                self.fader.set_hole(None)
-
-        def follow_cursor(self):
-            if self.overlay is None or self.polls % GEOMETRY_EVERY == 0:
-                self.overlay = find_overlay(hypr_request("j/layers"),
-                                            hypr_request("j/monitors"))
-            self.polls += 1
-            self.fader.set_hole(hole_centre(cursor_position(), self.overlay))
-            return True
-
-        def listen(self, on):
-            """Read the keyboard while the hint is up, and only then."""
-            if on and self.fd is None:
-                path = keyboard_device()
-                try:
-                    self.fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
-                except (OSError, TypeError):
-                    return  # no device or no permission: the hint just stays plain
-                self.watch = GLib.io_add_watch(
-                    self.fd, GLib.PRIORITY_DEFAULT,
-                    GLib.IOCondition.IN | GLib.IOCondition.HUP
-                    | GLib.IOCondition.ERR, self.on_keys)
-            elif not on and self.fd is not None:
-                GLib.source_remove(self.watch)
-                self.close_device()
-
-        def close_device(self):
-            os.close(self.fd)
-            self.fd = self.watch = None
-            for key in self.keys.values():
-                key.remove_css_class("lit")
-
-        def on_keys(self, fd, condition):
-            data = b""
-            if not condition & (GLib.IOCondition.HUP | GLib.IOCondition.ERR):
-                try:
-                    data = os.read(fd, INPUT_EVENT.size * 64)
-                except BlockingIOError:
-                    return True
-                except OSError:
-                    pass
-            if not data:  # device gone or end of file: stop reading
-                self.close_device()
-                return False
-            for letter, down in key_events(data):
-                if down:
-                    self.keys[letter].add_css_class("lit")
-                else:
-                    self.keys[letter].remove_css_class("lit")
-            return True
-
-        def poll(self):
-            # NO_AUTO_START: an fcitx5 that is not running stays that way.
-            self.bus.call(
-                "org.fcitx.Fcitx5", "/controller",
-                "org.fcitx.Fcitx.Controller1", "CurrentInputMethod", None,
-                GLib.VariantType("(s)"), Gio.DBusCallFlags.NO_AUTO_START,
-                200, None, self.on_input_method)
-            return True
-
-        def on_input_method(self, bus, result):
+    def listen(on):
+        """Read the keyboard while Hangul is on, and only then."""
+        if on and device["fd"] is None:
+            path = keyboard_device()
             try:
-                name = bus.call_finish(result).unpack()[0]
-            except GLib.Error:
-                name = ""
-            if self.state.update(name == HANGUL_IM):
-                self.sync()
+                device["fd"] = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+            except (OSError, TypeError):
+                return  # no device or no permission: the hint stays plain
+            device["watch"] = GLib.io_add_watch(
+                device["fd"], GLib.PRIORITY_DEFAULT,
+                GLib.IOCondition.IN | GLib.IOCondition.HUP
+                | GLib.IOCondition.ERR, on_keys)
+        elif not on and device["fd"] is not None:
+            GLib.source_remove(device["watch"])
+            close_device()
 
-        @staticmethod
-        def pass_input_through(window):
-            window.get_surface().set_input_region(cairo.Region())
+    def close_device():
+        os.close(device["fd"])
+        device["fd"] = device["watch"] = None
 
-    return Hint().run(sys.argv)
+    def on_keys(fd, condition):
+        data = b""
+        if not condition & (GLib.IOCondition.HUP | GLib.IOCondition.ERR):
+            try:
+                data = os.read(fd, INPUT_EVENT.size * 64)
+            except BlockingIOError:
+                return True
+            except OSError:
+                pass
+        if not data:  # device gone or end of file: stop reading
+            close_device()
+            return False
+        for letter, down in key_events(data):
+            emit({"key": letter, "down": down})
+        return True
+
+    def follow_cursor():
+        if state.visible:
+            cursor = cursor_position()
+            if cursor is not None and cursor != last["cursor"]:
+                last["cursor"] = cursor
+                emit({"cursor": [round(cursor[0]), round(cursor[1])]})
+        return True
+
+    def poll():
+        # NO_AUTO_START: an fcitx5 that is not running stays that way.
+        bus.call("org.fcitx.Fcitx5", "/controller",
+                 "org.fcitx.Fcitx.Controller1", "CurrentInputMethod", None,
+                 GLib.VariantType("(s)"), Gio.DBusCallFlags.NO_AUTO_START,
+                 200, None, on_input_method)
+        return True
+
+    def on_input_method(connection, result):
+        try:
+            name = connection.call_finish(result).unpack()[0]
+        except GLib.Error:
+            name = ""
+        if state.update(name == HANGUL_IM):
+            emit({"hangul": state.visible})
+            listen(state.visible)
+
+    emit(layout_message())
+    emit({"hangul": state.visible})
+    listen(state.visible)
+    if not always:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        GLib.timeout_add(POLL_MS, poll)
+    GLib.timeout_add(CURSOR_MS, follow_cursor)
+    GLib.MainLoop().run()
 
 
 def main():
-    sys.exit(gui("--always" in sys.argv[1:]))
+    feed("--always" in sys.argv[1:])
 
 
 if __name__ == "__main__":

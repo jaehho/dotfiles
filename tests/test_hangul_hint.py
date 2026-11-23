@@ -2,14 +2,13 @@
 
 import ctypes
 import ctypes.util
+import json
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
 import re
 import string
-import tempfile
 import unittest
-import unittest.mock
 
 SCRIPT = (Path(__file__).resolve().parent.parent
           / "home/hypr/.local/bin/hypr-hangul-hint")
@@ -163,87 +162,22 @@ class Lighting(unittest.TestCase):
         self.assertEqual(self.hint.key_events(data), [("j", True)])
 
 
-class Cursor(unittest.TestCase):
-    """Where the cursor is against the overlay, from Hyprland's IPC."""
+class Feed(unittest.TestCase):
+    """The bar draws what the feed says, so the layout it sends is ROWS."""
 
     @classmethod
     def setUpClass(cls):
         cls.hint = load_script()
 
-    def layers(self, namespace="hangul-hint"):
-        return {"eDP-1": {"levels": {
-            "0": [{"namespace": "waybar", "x": 0, "y": 0, "w": 1920, "h": 40}],
-            "3": [{"namespace": namespace, "x": 636, "y": 810,
-                   "w": 648, "h": 214}]}}}
+    def test_the_layout_is_the_table(self):
+        layout = json.loads(json.dumps(self.hint.layout_message()))["layout"]
+        self.assertEqual(layout["rows"],
+                         [[list(key) for key in row] for row in self.hint.ROWS])
+        self.assertEqual(layout["offsets"], self.hint.ROW_OFFSETS)
 
-    def test_finds_the_layer_by_namespace(self):
-        monitors = [{"name": "eDP-1", "x": 0, "y": 0}]
-        self.assertEqual(self.hint.find_overlay(self.layers(), monitors),
-                         (636, 810, 648, 214))
-
-    def test_the_namespace_matches_the_one_the_window_sets(self):
-        # hyprland.lua's blur rule and the IPC lookup both key on it.
-        source = SCRIPT.read_text()
-        self.assertIn("set_namespace(self.window, NAMESPACE)", source)
-        self.assertEqual(self.hint.NAMESPACE, "hangul-hint")
-
-    def test_a_monitor_offset_is_added(self):
-        monitors = [{"name": "eDP-1", "x": 2560, "y": 100}]
-        self.assertEqual(self.hint.find_overlay(self.layers(), monitors),
-                         (3196, 910, 648, 214))
-
-    def test_no_layer_no_position(self):
-        self.assertIsNone(self.hint.find_overlay(self.layers("other"), []))
-        self.assertIsNone(self.hint.find_overlay(None, None))
-
-    def test_cursor_over_the_board_is_in_its_own_pixels(self):
-        overlay = (636, 810, 648, 214)
-        self.assertEqual(self.hint.hole_centre((700, 900), overlay), (64, 90))
-
-    def test_cursor_just_outside_still_clears_its_edge(self):
-        overlay = (636, 810, 648, 214)
-        self.assertEqual(self.hint.hole_centre((600, 900), overlay),
-                         (-36, 90))
-
-    def test_cursor_far_away_clears_nothing(self):
-        overlay = (636, 810, 648, 214)
-        self.assertIsNone(self.hint.hole_centre((100, 100), overlay))
-        self.assertIsNone(self.hint.hole_centre((700, 100), overlay))
-
-    def test_unknown_cursor_or_layer_clears_nothing(self):
-        self.assertIsNone(self.hint.hole_centre(None, (0, 0, 10, 10)))
-        self.assertIsNone(self.hint.hole_centre((5, 5), None))
-
-
-class Mode(unittest.TestCase):
-    """The overlay/docked choice survives restarts, in a state file."""
-
-    def setUp(self):
-        self.hint = load_script()
-        self.dir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.dir.cleanup)
-        patcher = unittest.mock.patch.dict(
-            "os.environ", {"XDG_STATE_HOME": self.dir.name})
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def test_overlay_until_told_otherwise(self):
-        self.assertEqual(self.hint.read_mode(), "overlay")
-
-    def test_the_choice_is_remembered(self):
-        self.hint.write_mode("docked")
-        self.assertEqual(self.hint.read_mode(), "docked")
-
-    def test_a_garbled_file_falls_back_to_overlay(self):
-        self.hint.write_mode("sideways")
-        self.assertEqual(self.hint.read_mode(), "overlay")
-
-    def test_flipping_goes_both_ways(self):
-        self.assertEqual(self.hint.other_mode("overlay"), "docked")
-        self.assertEqual(self.hint.other_mode("docked"), "overlay")
-
-    def test_the_state_stays_under_the_state_dir(self):
-        self.assertTrue(str(self.hint.mode_file()).startswith(self.dir.name))
+    def test_the_bumps_are_on_the_board(self):
+        board = {latin for row in self.hint.ROWS for latin, _, _ in row}
+        self.assertLessEqual(set(self.hint.HOME_BUMPS), board)
 
 
 if __name__ == "__main__":
