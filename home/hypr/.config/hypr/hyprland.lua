@@ -111,9 +111,6 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user start swayosd-server && systemctl --user restart awatcher && systemctl --user restart aw-watcher-terminal")
     hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
     hl.exec_cmd("~/.local/bin/laptop-watchdog &")
-    -- Tray item for OpenClaw: terminal chat, agent browser, Control UI.
-    -- It needs the watcher above, so start it after the bar's own startup line.
-    hl.exec_cmd("~/.local/bin/openclaw-browser-tray")
     hl.exec_cmd("playerctld daemon")
 
     -- Tray apps: all started here, none from ~/.config/autostart (this session
