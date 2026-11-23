@@ -5,7 +5,7 @@ description: Writes, reloads, restarts and captures Quickshell (QML) shells on t
 
 # Quickshell
 
-Instances: `quickshell -c bar` and `quickshell -c polkit` (dotfiles `home/hypr/.config/quickshell/`, started from `hyprland.lua`). dash's desktop overlay was retired 2026-11-18; its data feeds the bar's dash panel (Super+D). The package is AUR `quickshell-git`: Quickshell 0.3.2 ignores Hyprland's `changeworkspaceid`, so after `workspace_pack.lua` renumbers with `change_id` the bar loses window icons. Upstream 4befab5 fixes it; the user chose to stay on `-git` (2026-11-12).
+Instances: `quickshell -c bar` and `quickshell -c polkit` (dotfiles `home/hypr/.config/quickshell/`, started from `hyprland.lua`), and `quickshell -c lock` while the session is locked (one per lock, started by `hypr-lock`, hypridle's lock_cmd). Never start the lock to test it: it takes the user's screen; test `Auth.qml` and `LockScreen.qml` in a harness with throwaway PAM stacks (`pinDirectory`, `faceDirectory`). dash's desktop overlay was retired 2026-11-18; its data feeds the bar's dash panel (Super+D). The package is AUR `quickshell-git`: Quickshell 0.3.2 ignores Hyprland's `changeworkspaceid`, so after `workspace_pack.lua` renumbers with `change_id` the bar loses window icons. Upstream 4befab5 fixes it; the user chose to stay on `-git` (2026-11-12).
 
 ## Run and reload
 

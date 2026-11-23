@@ -185,7 +185,7 @@ components:
 <!-- markdownlint-disable-next-line MD036 -->
 **Creative North Star: "The Dark Cockpit"**
 
-This is the chrome of one Arch Linux laptop running Hyprland: window borders and shadows, the Quickshell shell (the bar, its sheets, the notifications, the keybind sheet, the clipboard history and the hangul hint), rofi's share menu, hyprlock, hypr-confetti and the Quickshell polkit prompt. Every surface is a native Wayland client styled in its own language: GTK4 CSS loaded from Python through gtk4-layer-shell for hypr-confetti, rasi for rofi, QML for Quickshell (`home/hypr/.config/quickshell/bar/` and `polkit/`) and Hyprland's Lua config (`home/hypr/.config/hypr/hyprland.lua`). There are no web pages. The terminal and CLI tools share the palette through vendored ports (`home/theme/.config/theme/README.md`); GUI apps that are not the owner's keep their stock colors (`docs/gui-app-colors.md`), and nothing in this system restyles them.
+This is the chrome of one Arch Linux laptop running Hyprland: window borders and shadows, the Quickshell shell (the bar, its sheets, the notifications, the keybind sheet, the clipboard history and the hangul hint), the Quickshell lock screen and polkit prompt, rofi's share menu, hypr-confetti, and hyprlock as the lock's fallback. Every surface is a native Wayland client styled in its own language: GTK4 CSS loaded from Python through gtk4-layer-shell for hypr-confetti, rasi for rofi, QML for Quickshell (`home/hypr/.config/quickshell/bar/` and `polkit/`) and Hyprland's Lua config (`home/hypr/.config/hypr/hyprland.lua`). There are no web pages. The terminal and CLI tools share the palette through vendored ports (`home/theme/.config/theme/README.md`); GUI apps that are not the owner's keep their stock colors (`docs/gui-app-colors.md`), and nothing in this system restyles them.
 
 The name comes from the aviation principle that a normal state lights nothing. At rest the chrome is parchment and gray on dark green-gray grounds; a hue appears when it carries news, and a state hue means the same thing on every surface: blue is focus, "you are here" and the action on offer, orange is worth a glance, red is act now, green is charging or approved, purple is a special workspace, yellow is caution. Overlays appear when called, say what they need in plain words, and leave; a sheet that takes the keyboard holds it only while open, and nothing takes focus unasked.
 
@@ -199,7 +199,7 @@ Density is compact and keyboard-paced: 13px words, 11px labels, controls 8px apa
 - Gray at rest; a hue only for news or an action on offer, with one meaning per state hue.
 - Dark `bg_dim` sheets with a 1px hairline; on them, tonal pill buttons, and one state-layer wash for hover, press and the keyboard's row; a 2px `blue` ring only for the keyboard's stop on a sheet walked in two directions.
 - State as a tint of its tone; a solid tone fill only for the one active marker in a row.
-- Adwaita Sans for words; Material Symbols Rounded for the shell's icons; JetBrainsMono Nerd Font for identifiers, key names, the bar's words and numbers, rofi's menus and the lock screen.
+- Adwaita Sans for words; Material Symbols Rounded for the shell's icons; JetBrainsMono Nerd Font for identifiers, key names, the bar's words and numbers, rofi's share menu and the lock screen's clock.
 - Radii of 12, 8 and pill; square where a surface meets a screen edge.
 - Material 3 standard motion, calm: 150, 250 and 400ms, no overshoot.
 - A tight 4px edge shadow and blur behind translucent layers; no lift.
@@ -208,11 +208,11 @@ Density is compact and keyboard-paced: 13px words, 11px labels, controls 8px apa
 
 Everforest Dark Medium (sainnhe/everforest): dark green-gray grounds, warm parchment text and muted role hues, chosen over Catppuccin Mocha because its text is warmer, about 5,100 K against 8,900 K (decision #71).
 
-**Where the values live.** `home/hypr/.config/hypr/themes/foliage.conf` defines each of the 24 tokens once, as `$name = rgb(rrggbb)` under Everforest's own names. hyprlock sources it; hypr-confetti and the Quickshell bar's and polkit prompt's `Colors.qml` parse it at runtime and use token names, never hexes. Two packages keep same-named copies in their own formats, as decision #71 and the theme README record (hand recolors, no palette compiler): `themes/foliage.lua` for `hyprland.lua` and `themes/foliage.rasi` for rofi. Both matched every token on 2026-11-05; nothing checks them. The frontmatter above is one more copy, for DESIGN.md tooling only.
+**Where the values live.** `home/hypr/.config/hypr/themes/foliage.conf` defines each of the 24 tokens once, as `$name = rgb(rrggbb)` under Everforest's own names. hyprlock sources it; hypr-confetti and the Quickshell bar's, lock screen's and polkit prompt's `Colors.qml` parse it at runtime and use token names, never hexes. Two packages keep same-named copies in their own formats, as decision #71 and the theme README record (hand recolors, no palette compiler): `themes/foliage.lua` for `hyprland.lua` and `themes/foliage.rasi` for rofi. Both matched every token on 2026-11-05; nothing checks them. The frontmatter above is one more copy, for DESIGN.md tooling only.
 
 ### Primary
 
-- **Fern Green** (`green`): Everforest's accent. The focused window's 2px border (at `ee` alpha), hyprlock's accent (input outline, greeting), and success: the polkit "Approved" band and lens, a lit key on the hangul hint, the charging battery on the bar. 7.28:1 on `bg_dim`.
+- **Fern Green** (`green`): Everforest's accent. The focused window's 2px border (at `ee` alpha), and success: the polkit "Approved" band and lens, face unlock's match on the lock screen, a lit key on the hangul hint, the charging battery on the bar. 7.28:1 on `bg_dim`.
 
 ### Secondary
 
@@ -234,7 +234,7 @@ One widget also uses hues to tell meters apart rather than to report state: the 
 
 - **Forest Shade** (`bg_dim`): the darkest plane. Overlay sheets (at 0.985), notification cards, the docked hangul strip, text on solid tone fills, keycap lips, and the color of every shadow.
 - **Dark Slate** (`bg0`): controls on sheets, the bar's islands (at 0.88), menus, tooltips and rofi's window.
-- **Raised Slate** (`bg1`): control edges, hover fill, slider and meter tracks, hyprlock's input fill, the shell's cards and quick settings' controls on a sheet (at 0.55) and its count pill.
+- **Raised Slate** (`bg1`): control edges, hover fill, slider and meter tracks, the shell's cards and quick settings' controls on a sheet (at 0.55) and its count pill.
 - **Hairline Slate** (`bg2`): sheet and card hairlines, a resting field's edge, rofi's window edge and list separator, the hangul hint's keys.
 - **Lifted Slate** (`bg3`): hover edges and raised keycap faces.
 - **Parchment** (`fg`): primary text and glyphs. 8.62:1 on `bg_dim`, 7.38:1 on `bg0`.
@@ -264,7 +264,7 @@ The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` 
 
 **Hangul Font:** Noto Sans CJK KR, for the jamo on the hangul hint.
 
-**Character:** A plain humanist sans for anything read as words, rounded Material Symbols for icons, and a monospace for everything glyph-like: key names, identifiers and numbers. There is no display face; the largest type is hyprlock's clock, JetBrainsMono Nerd Font at `font_size = 120`. On the overlays, hierarchy comes from weight and color across 11 to 15px.
+**Character:** A plain humanist sans for anything read as words, rounded Material Symbols for icons, and a monospace for everything glyph-like: key names, identifiers and numbers. There is no display face; the largest type is the lock screen's clock, JetBrainsMono Nerd Font at 120px. On the overlays, hierarchy comes from weight and color across 11 to 15px.
 
 ### Hierarchy
 
@@ -279,11 +279,11 @@ The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` 
 - **Bar** (JetBrainsMono Nerd Font 400, 13px; the clock bold, the window title italic): the bar's words and numbers: the clock, the track, the window title, workspace numbers, counts, the battery's time and the load ramps. Its icons are Material Symbols at 18px.
 - **Hangul** (Noto Sans CJK KR 600, 28px; shifted jamo 500, 13px): the jamo on the hint's keycaps.
 
-rofi sets its share menu in JetBrainsMono Nerd Font 11 with Papirus-Dark app icons; hyprlock sets every label in JetBrainsMono Nerd Font.
+rofi sets its share menu in JetBrainsMono Nerd Font 11 with Papirus-Dark app icons; The lock screen sets its clock, network and battery in JetBrainsMono Nerd Font and its words in Adwaita Sans.
 
 ### Type Rules
 
-**The Two Faces Rule.** Words are Adwaita Sans. JetBrainsMono Nerd Font sets identifiers, key names and numerals; it is the whole voice of rofi and hyprlock, and the bar's words and numbers. Icons are Material Symbols Rounded everywhere the shell draws. A new sheet sets its words in Adwaita Sans and its icons in Material Symbols.
+**The Two Faces Rule.** Words are Adwaita Sans. JetBrainsMono Nerd Font sets identifiers, key names and numerals; it is the whole voice of rofi, and the bar's words and numbers. Icons are Material Symbols Rounded everywhere the shell draws. A new sheet sets its words in Adwaita Sans and its icons in Material Symbols.
 
 **The Readable Gray Rule.** Text that has to be read is `fg` or `grey2`. `grey1` (4.49:1 on `bg_dim`) and `grey0` (3.74:1) carry no such text; `grey0` marks off.
 
@@ -320,9 +320,9 @@ Depth is tone and edge, not lift. A sheet is the darkest plane on screen (`bg_di
 
 ## Shapes
 
-Corners follow one scale: 12px for windows and containers (Hyprland's `decoration.rounding`, with `rounding_power` 2), 8px for controls nested inside them, and a pill for anything fully round. A corner that meets a screen edge stays square: the polkit sheet's top corners, the docked hangul strip. `Theme.radius` names them `surface`, `control` and `pill`. Edges are 1px hairlines; the only heavier lines are the 2px window border, the 2px focus ring, the keycap lip and hyprlock's 3px input outline.
+Corners follow one scale: 12px for windows and containers (Hyprland's `decoration.rounding`, with `rounding_power` 2), 8px for controls nested inside them, and a pill for anything fully round. A corner that meets a screen edge stays square: the polkit sheet's top corners, the docked hangul strip. `Theme.radius` names them `surface`, `control` and `pill`. Edges are 1px hairlines; the only heavier lines are the 2px window border, the 2px focus ring, and the keycap lip.
 
-On the scale today: the polkit sheet, the keybind sheet, the hangul board, the bar islands, the bar's menus and open sheets, the notification popups, center and the cards in it, the launcher's sheet, the clipboard history and its preview card, the dash panel and its cards, quick settings' session buttons, rofi's window and hyprlock's input field at 12px; the polkit field and band, the Wi-Fi page's field and the join failure bands, the keybind sheet's filter, keys and caps, the hangul keys, the bar's workspace pills, menu rows, tips and cover art, the tray grid's cells, the launcher's field and grid cells, the dash panel's quota blocks, rofi's input bar and rows at 8px; the shell's buttons, icon buttons, count pill, avatars and progress bars, the bar's buttons and the tray's attention slots, the player sheet's buttons, today's marker and progress meter, the polkit lens dot and buttons, the keybind sheet's mode switch and its segments, quick settings' tiles, rows, "Open" buttons, sliders and switch, the launcher's and the clipboard's list rows, the dash panel's row washes, quota meters and status dots, and the hangul home-key bumps as pills.
+On the scale today: the polkit sheet, the keybind sheet, the hangul board, the bar islands, the bar's menus and open sheets, the notification popups, center and the cards in it, the launcher's sheet, the clipboard history and its preview card, the dash panel and its cards, quick settings' session buttons, and rofi's window at 12px; the polkit field and band, the lock screen's PIN field and band, the Wi-Fi page's field and the join failure bands, the keybind sheet's filter, keys and caps, the hangul keys, the bar's workspace pills, menu rows, tips and cover art, the tray grid's cells, the launcher's field and grid cells, the dash panel's quota blocks, rofi's input bar and rows at 8px; the shell's buttons, icon buttons, count pill, avatars and progress bars, the bar's buttons and the tray's attention slots, the player sheet's buttons, today's marker and progress meter, the polkit lens dot and buttons, the keybind sheet's mode switch and its segments, quick settings' tiles, rows, "Open" buttons, sliders and switch, the launcher's and the clipboard's list rows, the dash panel's row washes, quota meters and status dots, and the hangul home-key bumps as pills.
 
 **Drift.** rofi keeps the stock theme's 2px dashed list separator, a heavier line than a hairline.
 
@@ -461,9 +461,15 @@ The signature surface (`home/hypr/.config/quickshell/polkit/`), an approval shee
 
 ### Lock Screen
 
-hyprlock: a blurred screenshot of the session (3 passes, size 8, brightness 0.6) behind a clock in `fg`, the date in `grey2` and a greeting in `green`; a 300×50 input with a 3px `green` outline on `bg1` and 12px corners, whose `check_color` is `green`, `fail_color` `red` and `capslock_color` `yellow`; battery and network in the top right.
+The shell's own lock (`home/hypr/.config/quickshell/lock/`, #89), version A ("Lens") of the designs; `hypr-lock` starts it for hypridle and falls back to hyprlock if it hasn't locked within 3 s.
 
-**Drift.** The hangul hint's Latin letters and shifted jamo measure 3.97:1 on their keys. hyprlock shows the battery in `green` at any charge, where the bar keeps `green` for charging.
+- **Composition:** the session blurred and dimmed behind it (`bg_dim` if the capture never comes); the time in Mono 120px `fg` 23% down, the date under it in 20px `grey2`; the PIN field 52% down; the network and battery in Mono 13px `grey2` with their 18px symbols in the top right corner.
+- **PIN field:** the Inputs field at 320×48, its edge `blue`, `green` on a face match, `red` after a wrong PIN; the typed PIN as 8px `fg` dots (drawn, so no input method stands in the way), "PIN" in `grey2` while empty. Enter checks it, Backspace takes one back, Esc or Ctrl+U clears.
+- **Face unlock:** never in the PIN's way. Howdy runs beside the PIN check when the lock takes hold and on each wake; while it looks, the lens dot breathes at the laptop panel's top edge under the IR camera (as on the polkit sheet) and a `face` symbol breathes at the field's end; a match turns both `green` (`check_circle`), says "Recognized. Unlocking." and unlocks; a miss stops quietly.
+- **Lines under the field:** Label `grey2` for what face unlock is doing and "Checking…"; `yellow` "Caps Lock is on" with its symbol; a wrong PIN (or faillock's lockout) is the red Status Band with its words in `fg`, and the field shakes as the polkit sheet does.
+- **Unlock:** the content fades over 150ms (exit), then the lock lets go.
+
+**Drift.** The hangul hint's Latin letters and shifted jamo measure 3.97:1 on their keys.
 
 ### Component Rules
 
