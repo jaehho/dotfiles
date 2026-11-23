@@ -181,7 +181,7 @@ components:
 <!-- markdownlint-disable-next-line MD036 -->
 **Creative North Star: "The Dark Cockpit"**
 
-This is the chrome of one Arch Linux laptop running Hyprland: window borders and shadows, the Quickshell shell (the bar, its sheets, the notifications, the keybind sheet, the clipboard history and the hangul hint), the Quickshell lock screen and polkit prompt, hypr-confetti, and hyprlock as the lock's fallback. Every surface is a native Wayland client styled in its own language: GTK4 CSS loaded from Python through gtk4-layer-shell for hypr-confetti, QML for Quickshell (`home/hypr/.config/quickshell/bar/` and `polkit/`) and Hyprland's Lua config (`home/hypr/.config/hypr/hyprland.lua`). There are no web pages. The terminal and CLI tools share the palette through vendored ports (`home/theme/.config/theme/README.md`); GUI apps that are not the owner's keep their stock colors (`docs/gui-app-colors.md`), and nothing in this system restyles them.
+This is the chrome of one Arch Linux laptop running Hyprland: window borders and shadows, the Quickshell shell (the bar, its sheets, the notifications, the keybind sheet, the clipboard history and the hangul hint), the Quickshell lock screen and polkit prompt, and hyprlock as the lock's fallback. Every surface is a native Wayland client styled in its own language: QML for Quickshell (`home/hypr/.config/quickshell/bar/` and `polkit/`) and Hyprland's Lua config (`home/hypr/.config/hypr/hyprland.lua`). There are no web pages. The terminal and CLI tools share the palette through vendored ports (`home/theme/.config/theme/README.md`); GUI apps that are not the owner's keep their stock colors (`docs/gui-app-colors.md`), and nothing in this system restyles them.
 
 The name comes from the aviation principle that a normal state lights nothing. At rest the chrome is parchment and gray on dark green-gray grounds; a hue appears when it carries news, and a state hue means the same thing on every surface: blue is focus, "you are here" and the action on offer, orange is worth a glance, red is act now, green is charging or approved, purple is a special workspace, yellow is caution. Overlays appear when called, say what they need in plain words, and leave; a sheet that takes the keyboard holds it only while open, and nothing takes focus unasked.
 
@@ -204,7 +204,7 @@ Density is compact and keyboard-paced: 13px words, 11px labels, controls 8px apa
 
 Everforest Dark Medium (sainnhe/everforest): dark green-gray grounds, warm parchment text and muted role hues, chosen over Catppuccin Mocha because its text is warmer, about 5,100 K against 8,900 K (decision #71).
 
-**Where the values live.** `home/hypr/.config/hypr/themes/foliage.conf` defines each of the 24 tokens once, as `$name = rgb(rrggbb)` under Everforest's own names. hyprlock sources it; hypr-confetti and the Quickshell bar's, lock screen's and polkit prompt's `Colors.qml` parse it at runtime and use token names, never hexes. Two packages keep same-named copies in their own formats, as decision #71 and the theme README record (hand recolors, no palette compiler): `themes/foliage.lua` for `hyprland.lua`. It matched every token on 2026-11-05; nothing checks it. The frontmatter above is one more copy, for DESIGN.md tooling only.
+**Where the values live.** `home/hypr/.config/hypr/themes/foliage.conf` defines each of the 24 tokens once, as `$name = rgb(rrggbb)` under Everforest's own names. hyprlock sources it; the Quickshell bar's, lock screen's and polkit prompt's `Colors.qml` parse it at runtime and use token names, never hexes. Two packages keep same-named copies in their own formats, as decision #71 and the theme README record (hand recolors, no palette compiler): `themes/foliage.lua` for `hyprland.lua`. It matched every token on 2026-11-05; nothing checks it. The frontmatter above is one more copy, for DESIGN.md tooling only.
 
 ### Primary
 
@@ -238,9 +238,9 @@ One widget also uses hues to tell meters apart rather than to report state: the 
 - **Lichen Gray** (`grey1`): the inactive window border (at `aa` alpha) and a resting special workspace. 4.49:1 on `bg_dim`, so not for text.
 - **Moss Gray** (`grey0`): off: muted audio, Bluetooth off, a display that is switched off, a disabled control, the empty notification center's bell. 3.74:1 on `bg_dim`, 3.21:1 on `bg0`.
 
-The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` tints and `aqua`) are not chrome colors; `aqua` appears only as the RAM label in the bar's load tip and in hypr-confetti's paper.
+The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` tints and `aqua`) are not chrome colors; `aqua` appears only as the RAM label in the bar's load tip.
 
-**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
+**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
 
 ### Color Rules
 

@@ -589,8 +589,8 @@ end
 hl.bind(mainMod .. " + CTRL + comma",  hl.dsp.exec_cmd("~/.local/bin/hypr-move-ws-monitor -1")) -- workspace to the left monitor
 hl.bind(mainMod .. " + CTRL + period", hl.dsp.exec_cmd("~/.local/bin/hypr-move-ws-monitor +1")) -- workspace to the right monitor
 
--- Smiley key (F2), sent by the firmware as Ctrl+Alt+Shift+Super+Space.
-hl.bind("CTRL + ALT + SHIFT + SUPER + space", hl.dsp.exec_cmd("hypr-confetti")) -- smiley key: confetti
+-- Smiley key (F2), sent by the firmware as Ctrl+Alt+Shift+Super+Space: free
+-- since confetti was dropped (2026-11-23).
 
 -- Re-apply monitor layout + workspace assignments (fixes stranded workspaces)
 hl.bind(mainMod .. " + CTRL + R", function() monitors.apply() end) -- re-apply monitor layout
