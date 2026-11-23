@@ -45,7 +45,7 @@ One-offs inside packages:
 - `mime` — `mimeapps.list` is an absolute symlink (GLib safe-write).
 - `tmux` — TPM is a git clone under `~/.tmux`.
 - `theme` — run `bat cache --build` after it lands.
-- `hypr` — user units (wallhelper-fetch, swayosd, awatcher, …) are
+- `hypr` — user units (wallhelper-fetch, awatcher, …) are
   `systemctl --user enable --now` the first time.
 - `ssh` — `~/.ssh/jump_pass` is a real file, not in the repo
   (`chmod 600`); the config comment says how to create it.

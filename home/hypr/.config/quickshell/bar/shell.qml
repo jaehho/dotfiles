@@ -138,6 +138,10 @@ ShellRoot {
     // The hangul hint (HangulHint.qml), which runs hypr-hangul-hint.
     HangulHint {}
 
+    // The level pop-up the volume, mic and brightness keys show
+    // (hypr-level calls it).
+    Osd {}
+
     // One sheet at a time: the launcher closes the others, the tray grid
     // included.
     function launcher(name) {

@@ -1,21 +1,23 @@
 #!/bin/bash
-# Step volume or brightness, finer the lower it is, and show it on SwayOSD.
+# Step volume or brightness, finer the lower it is, or toggle a mute, and
+# show it on the bar's level pop-up (Osd.qml).
 #   hypr-level volume|brightness up|down
+#   hypr-level volume|mic mute
 #
 # Both move on a perceptual scale: wpctl's volume is already cubic, and
 # brightness is mapped as raw = max * p^EXP (brightnessctl's -e). The step is a
 # fraction of the current level (DIV), between MIN and MAX percent, so low
 # levels creep and high ones keep the old 5%.
 #
-# The change is made here, not by swayosd-client, so the keys still work when
-# the server refuses calls (issue #14); SwayOSD only draws the bar, and it
-# can't draw a sub-percent step through its own volume/brightness actions.
+# The change is made here and the bar only draws it, so the keys work
+# whether or not the bar is up, and a sub-percent step shows as such.
 
 MIN=0.5 MAX=5
 VOL_DIV=10 BRI_DIV=12 BRI_EXP=4 BRI_MIN_RAW=1
 
+usage() { echo "usage: hypr-level volume|brightness up|down, or hypr-level volume|mic mute" >&2; exit 2; }
 what=$1 dir=$2
-[[ $dir == up || $dir == down ]] || { echo "usage: hypr-level volume|brightness up|down" >&2; exit 2; }
+[[ $dir == up || $dir == down || $dir == mute ]] || usage
 
 # step CURRENT DIV -> new level in percent, clamped to 0..100
 step() {
@@ -29,10 +31,26 @@ step() {
 
 label() { awk -v p="$1" 'BEGIN { printf (p < 10 && p != int(p)) ? "%.1f%%" : "%d%%", p }'; }
 
-osd() {  # icon percent
-    swayosd-client --custom-icon "$1" --custom-progress "$(awk -v p="$2" 'BEGIN { print p / 100 }')" \
-        --custom-progress-text "$(label "$2")" >/dev/null 2>&1
+osd() {  # kind percent muted
+    qs -c bar ipc call osd level "$1" "$2" "$(label "$2")" "$3" >/dev/null 2>&1
 }
+
+# wpctl's "Volume: 0.36 [MUTED]" -> "36 true"
+level_of() {
+    wpctl get-volume "$1" | awk '{ printf "%.2f %s", $2 * 100, ($3 == "[MUTED]") ? "true" : "false" }'
+}
+
+if [[ $dir == mute ]]; then
+    case $what in
+    volume) node=@DEFAULT_AUDIO_SINK@ ;;
+    mic)    node=@DEFAULT_AUDIO_SOURCE@ ;;
+    *)      usage ;;
+    esac
+    wpctl set-mute "$node" toggle
+    read -r level muted < <(level_of "$node")
+    osd "$what" "$level" "$muted"
+    exit 0
+fi
 
 case $what in
 volume)
@@ -42,8 +60,8 @@ volume)
     new=$(step "$cur" "$VOL_DIV")
     wpctl set-volume @DEFAULT_AUDIO_SINK@ "$(awk -v p="$new" 'BEGIN { print p / 100 }')"
     [[ $dir == up ]] && wpctl set-mute @DEFAULT_AUDIO_SINK@ 0
-    icon=$(awk -v p="$new" 'BEGIN { print p == 0 ? "muted" : p < 34 ? "low" : p < 67 ? "medium" : "high" }')
-    osd "audio-volume-$icon-symbolic" "$new"
+    read -r _ muted < <(level_of @DEFAULT_AUDIO_SINK@)
+    osd volume "$new" "$muted"
     ;;
 brightness)
     IFS=, read -r _ _ raw _ max < <(brightnessctl -m)
@@ -60,8 +78,8 @@ brightness)
     }')
     brightnessctl -q set "$raw_new"
     shown=$(awk -v r="$raw_new" -v m="$max" -v e="$BRI_EXP" 'BEGIN { printf "%.2f", 100 * (r / m) ^ (1 / e) }')
-    osd display-brightness-symbolic "$shown"
+    osd brightness "$shown" false
     ;;
 *)
-    echo "usage: hypr-level volume|brightness up|down" >&2; exit 2 ;;
+    usage ;;
 esac

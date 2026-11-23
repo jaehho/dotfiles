@@ -97,17 +97,15 @@ hl.on("hyprland.start", function()
     -- Polkit prompt: the Quickshell config in quickshell/polkit/, which
     -- shows the Howdy face check, then the password if PAM asks.
     hl.exec_cmd("quickshell -c polkit")
-    -- swayosd-server is a user unit; a copy launched here grabs its app id and
-    -- makes the unit crash-loop "already running" (issue #14). Start the unit
-    -- only once WAYLAND_DISPLAY is in the manager, or its condition skips it.
-    -- awatcher is the same: asst track reads its :5600 sensor, and Hyprland
-    -- never starts graphical-session.target, so the unit needs this kick.
+    -- awatcher is a user unit that needs WAYLAND_DISPLAY in the manager:
+    -- asst track reads its :5600 sensor, and Hyprland never starts
+    -- graphical-session.target, so the unit needs this kick.
     -- awatcher is restarted, not started: after a compositor restart the old
     -- process is still "active" but its Wayland socket is dead, so a plain
     -- start is a no-op and it logs Broken pipe every second (issue #64).
     -- aw-watcher-terminal has the same ConditionEnvironment=WAYLAND_DISPLAY
     -- gate and is otherwise skipped at login (dead since 2026-10-08).
-    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user start swayosd-server && systemctl --user restart awatcher && systemctl --user restart aw-watcher-terminal")
+    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user restart awatcher && systemctl --user restart aw-watcher-terminal")
     hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
     hl.exec_cmd("~/.local/bin/laptop-watchdog &")
     hl.exec_cmd("playerctld daemon")
@@ -632,23 +630,15 @@ hl.define_submap("resize", "reset", function()
     hl.bind("catchall", hl.dsp.submap("reset"))
 end)
 
--- Volume and brightness (SwayOSD, with a partial fallback)
---
--- The `|| ...` fallbacks only cover SwayOSD being *absent*. swayosd-client
--- exits non-zero when nothing owns the bus name, but exits 0 when a server
--- answers and refuses the call -- which is what a server still running a
--- binary that an upgrade deleted does, so these keys go silently dead until it
--- restarts. `make sync` now handles that; see issue #14.
---
--- Do not "fix" this by calling busctl with a literal signature here: the
--- signature is what moved in swayosd 0.3.1 -> 0.3.2, so pinning it just
--- re-breaks on the next bump. Probing the server costs more than the keypress.
+-- Volume, mic and brightness: hypr-level makes each change with wpctl or
+-- brightnessctl and then shows it on the bar's level pop-up (Osd.qml), so the
+-- keys work whether or not the bar answers. SwayOSD, which went silently dead
+-- whenever its server outlived pipewire-pulse (issue #14), is gone (#89).
 -- Declared as a function because a Hyprland submap is exclusive: while one is
 -- active *only* its own binds fire, so a submap that must keep the media keys
 -- calls this too.
 local function bind_media_keys()
-    -- Volume steps go through hypr-level (finer at low levels), which sets it
-    -- with wpctl, so only the mute keys depend on the server answering.
+    -- Volume steps are finer at low levels.
     hl.bind("XF86AudioRaiseVolume", -- volume up
         hl.dsp.exec_cmd("hypr-level volume up"),
         { locked = true, repeating = true })
@@ -656,14 +646,13 @@ local function bind_media_keys()
         hl.dsp.exec_cmd("hypr-level volume down"),
         { locked = true, repeating = true })
     hl.bind("XF86AudioMute", -- mute output
-        hl.dsp.exec_cmd("swayosd-client --output-volume mute-toggle 2>/dev/null || wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),
+        hl.dsp.exec_cmd("hypr-level volume mute"),
         { locked = true, repeating = true })
     hl.bind("XF86AudioMicMute", -- mute the mic
-        hl.dsp.exec_cmd("swayosd-client --input-volume mute-toggle 2>/dev/null || wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"),
+        hl.dsp.exec_cmd("hypr-level mic mute"),
         { locked = true, repeating = true })
 
-    -- Brightness. hypr-level makes the change itself and only draws on SwayOSD,
-    -- with steps that shrink at low levels.
+    -- Brightness, with steps that shrink at low levels.
     hl.bind("XF86MonBrightnessUp", -- brighter
         hl.dsp.exec_cmd("hypr-level brightness up"),
         { locked = true, repeating = true })
