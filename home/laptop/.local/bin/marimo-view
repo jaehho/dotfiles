@@ -19,7 +19,7 @@ gi.require_version("WebKit2", "4.1")
 from gi.repository import Gio, GLib, Gtk, WebKit2  # noqa: E402
 
 # D-Bus well-known names cannot contain hyphens; keep this in sync with
-# speaker-eq / hypr-settings-menu.
+# hypr-settings-menu.
 APP_ID = "dev.jaeho.marimoview"
 MAX_PAGES = 12
 

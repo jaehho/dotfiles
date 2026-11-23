@@ -839,16 +839,6 @@ hl.window_rule({
     center = true,
 })
 
--- Speaker EQ (speaker-eq): opened to tune by ear while music plays, then closed
-hl.window_rule({
-    name  = "speaker-eq-float",
-    match = { class = [[^(dev\.jaeho\.speakereq)$]] },
-
-    float  = true,
-    size   = "1080 880",
-    center = true,
-})
-
 -- Easel opens and comes back floating at 80% of the monitor, centred: from
 -- the launcher, its tray icon, Super+E (hypr-easel-toggle) or overlay mode
 -- (Ctrl+Shift+O). Hiding takes the window off the screen, so each

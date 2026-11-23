@@ -55,13 +55,8 @@ The measurement is only valid near the volume it was taken at, because the
 protection DSP is level-dependent: measure at the level you actually listen at.
 The sink volume in force is recorded in meta.json for exactly this reason.
 
-Tuning by ear
--------------
 A fit is only as right as the mic behind it, and two honest mics can disagree
-by as much as the defects being corrected. speaker-eq settles it by ear: a
-window that plots the EQ over the saved measurements and moves its bands on
-the live speaker sink while music plays. It loads this script for everything
-below about building the EQ into the sink.
+by as much as the defects being corrected.
 """
 import argparse
 import itertools

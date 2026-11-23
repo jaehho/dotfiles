@@ -195,8 +195,6 @@ ITEMS = [
          run=tui("bluetui"), needs=["kitty", "bluetui"]),
     dict(id="audio", kind="open", icon="tune", label="Audio",
          run=tui("wiremix"), needs=["kitty", "wiremix"]),
-    dict(id="speaker-eq-tune", kind="open", icon="equalizer", label="Tune speakers",
-         run="speaker-eq", needs=["speaker-eq"]),
     dict(id="displays", kind="open", icon="monitor", label="Displays",
          run="nwg-displays", needs=["nwg-displays"]),
     # screens.lua's set_primary, for the display the sheet is on.
