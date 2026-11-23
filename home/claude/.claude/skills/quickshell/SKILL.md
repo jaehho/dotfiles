@@ -13,6 +13,7 @@ Instances: `quickshell -c bar` and `quickshell -c polkit` (dotfiles `home/hypr/.
 - Hot reload stops without an error after a few saves (seen on stow-symlinked files; cause not proven). After each save, look for "Reloading configuration..." in the log. If it is missing, restart: `qs kill -i <id>`, then `hyprctl dispatch 'hl.dsp.exec_cmd("quickshell -c bar")'` (the Lua config rejects `hyprctl dispatch exec`).
 - A reload caught halfway through a multi-file edit logs errors, such as a ReferenceError for an id the next edit adds. Judge the log after the last edit.
 - A new `.qml` in a stowed config is "not a type" until it is stowed (`stow --no-folding -d ~/dotfiles/home -t ~ hypr`). A deleted one leaves a dangling link in `~/.config/quickshell/bar` to remove.
+- `polkit/` holds repo symlinks to the bar's `Theme.qml`, `Colors.qml`, `Anim`, `CAnim`, `Icon`, `Line`, `StateLayer` and `PillButton`: saving one reloads both instances, so read both logs. Restart polkit only while no request is pending (`qs kill -c polkit`, then `quickshell -c polkit` through the compositor).
 - After a Qt update, the AUR hook's `quickshell --private-check-compat` warning means `paru -S quickshell-git` must run again (the user, in a real terminal), then restart bar and polkit.
 
 ## QML traps
