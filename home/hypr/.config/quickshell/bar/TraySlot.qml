@@ -1,9 +1,9 @@
-// One tray item: its icon on a 24px pill. Icons rest grey, since an
-// app's own colours are not news; they take their colours under the
-// pointer, or while the app asks for attention, on an orange pill.
-// Left click brings up the app, middle click does its second action,
-// right click opens its menu under the bar (a click on an app that only
-// has a menu opens that).
+// A tray app on the bar, beside the tray's chevron while it asks for
+// attention: its icon on a 24px pill. Icons rest grey, since an app's
+// own colours are not news; they take their colours under the pointer,
+// or while the app asks for attention, on an orange pill. A click does
+// what one in the grid does (Bar.trayClick). The grid draws its apps
+// as TrayCell.
 import QtQuick
 import QtQuick.Effects
 import Quickshell.Services.SystemTray
@@ -13,34 +13,14 @@ Rectangle {
 
     required property var bar
     required property var item
-    // Show the bar's tip under the bar on hover. The grid says it in
-    // its footer instead, being in the tip's way.
-    property bool tips: true
     readonly property string tip: item.tooltipTitle || item.title || item.id
     readonly property int tipFormat: Text.PlainText
     readonly property bool calling: item.status === Status.NeedsAttention
     readonly property bool hovered: area.containsMouse
-    // The hint key that clicks it (shift: its menu), while hinting.
-    property string hint: ""
-    property string typed: ""
-    property bool hinting: false
     readonly property bool lit: hovered || calling
 
-    // After a click, for the grid to close.
-    signal used
-
-    // What a click does, shared with the keyboard's Enter.
     function click(button) {
-        slot.bar.unhint(slot);
-        if (button === Qt.MiddleButton) {
-            slot.item.secondaryActivate();
-        } else if (button === Qt.RightButton || slot.item.onlyMenu) {
-            if (slot.item.hasMenu)
-                slot.bar.openTrayMenu(slot, slot.item.menu);
-        } else {
-            slot.item.activate();
-        }
-        slot.used();
+        slot.bar.trayClick(slot.item, button, slot);
     }
 
     width: 24
@@ -78,24 +58,13 @@ Rectangle {
         }
     }
 
-    HintBadge {
-        colors: slot.bar.colors
-        code: slot.hint
-        typed: slot.typed
-        shown: slot.hinting
-        inset: -5
-    }
-
     MouseArea {
         id: area
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         cursorShape: Qt.PointingHandCursor
-        onContainsMouseChanged: {
-            if (slot.tips)
-                containsMouse ? slot.bar.hint(slot) : slot.bar.unhint(slot);
-        }
+        onContainsMouseChanged: containsMouse ? slot.bar.hint(slot) : slot.bar.unhint(slot)
         onClicked: mouse => slot.click(mouse.button)
         onWheel: wheel => slot.item.scroll(wheel.angleDelta.y, false)
     }

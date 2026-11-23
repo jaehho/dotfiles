@@ -1,4 +1,4 @@
-// The tray's sheet: the apps in a grid, each with its name, laid out
+// The tray's sheet: the apps in a grid of cells (TrayCell.qml), laid out
 // under the right island's header row, which grows to hold it as it
 // does for quick settings (RightIsland.qml). The island is the sheet's
 // glass; this only fills it. It opens from the status cluster's
@@ -29,10 +29,10 @@ Item {
     readonly property var codes: Hints.named(items.map(item => bar.trayName(item)), Hints.ALL)
 
     readonly property int columns: 5
-    readonly property real cellWidth: (width - 8) / columns
-    readonly property int cellHeight: 54
+    readonly property real cellWidth: (width - tiles.spacing * (columns - 1)) / columns
+    readonly property int cellHeight: 68
 
-    implicitHeight: tiles.implicitHeight + 8
+    implicitHeight: tiles.implicitHeight
 
     onOpenChanged: {
         typed = "";
@@ -83,56 +83,34 @@ Item {
             grid.typed = r.typed;
             pause.restart();
             if (r.hit >= 0)
-                cells.itemAt(r.hit)?.slot.click(event.modifiers & Qt.ShiftModifier ? Qt.RightButton : Qt.LeftButton);
+                cells.itemAt(r.hit)?.click(event.modifiers & Qt.ShiftModifier ? Qt.RightButton : Qt.LeftButton);
         }
         event.accepted = true;
     }
 
     Grid {
         id: tiles
-        x: 4
-        y: 4
         columns: grid.columns
+        spacing: Theme.space.xs
 
         Repeater {
             id: cells
             model: grid.items
 
-            Item {
-                id: cell
-
+            TrayCell {
                 required property var modelData
                 required property int index
-                readonly property alias slot: slot
 
                 width: grid.cellWidth
                 height: grid.cellHeight
-
-                TraySlot {
-                    id: slot
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    y: 3
-                    bar: grid.bar
-                    item: cell.modelData
-                    hint: grid.codes[cell.index] ?? ""
-                    typed: grid.typed
-                    hinting: grid.hinting && grid.hintsShown
-                    // A click leaves the sheet; a right click's menu
-                    // takes its place.
-                    onUsed: grid.bar.trayOpen = false
-                }
-
-                Line {
-                    anchors.top: slot.bottom
-                    anchors.topMargin: 4
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: parent.width - 4
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
-                    size: 11
-                    text: grid.bar.trayName(cell.modelData)
-                    color: slot.calling ? grid.colors.orange : slot.hovered ? grid.colors.fg : grid.colors.grey2
-                }
+                bar: grid.bar
+                item: modelData
+                hint: grid.codes[index] ?? ""
+                typed: grid.typed
+                hinting: grid.hinting && grid.hintsShown
+                // A click leaves the sheet; a right click's menu takes
+                // its place.
+                onUsed: grid.bar.trayOpen = false
             }
         }
     }

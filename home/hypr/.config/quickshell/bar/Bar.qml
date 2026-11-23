@@ -143,6 +143,22 @@ PanelWindow {
         menu.show(anchor, [], handle);
     }
 
+    // A click on a tray app, on the bar (TraySlot) or in the grid
+    // (TrayCell): left brings the app up, middle does its second action,
+    // right opens its menu under `anchor`, as does a click on an app that
+    // only has a menu.
+    function trayClick(item, button, anchor) {
+        bar.unhint(anchor);
+        if (button === Qt.MiddleButton) {
+            item.secondaryActivate();
+        } else if (button === Qt.RightButton || item.onlyMenu) {
+            if (item.hasMenu)
+                bar.openTrayMenu(anchor, item.menu);
+        } else {
+            item.activate();
+        }
+    }
+
     // Nothing open, nothing to have been opened by hover.
     function settle() {
         if (!trayOpen && !quickOpen && !open)
