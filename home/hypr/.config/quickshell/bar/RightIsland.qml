@@ -105,18 +105,18 @@ Item {
     // giving way to the sheets' bg_dim.
     RectangularShadow {
         anchors.fill: parent
-        radius: 12
+        radius: Theme.radius.surface
         blur: 6
-        color: rightIsland.colors.withAlpha(rightIsland.colors.bg_dim, 0.93)
+        color: Theme.surface.shadow
         opacity: rightIsland.grow
     }
 
     Rectangle {
         anchors.fill: parent
-        radius: 12
-        color: rightIsland.blend(rightIsland.colors.withAlpha(rightIsland.colors.bg0, 0.88), rightIsland.colors.withAlpha(rightIsland.colors.bg_dim, 0.985), rightIsland.grow)
+        radius: Theme.radius.surface
+        color: rightIsland.blend(Theme.surface.glass, Theme.surface.sheet, rightIsland.grow)
         border.width: 1
-        border.color: rightIsland.colors.withAlpha(rightIsland.colors.blue, 0.18)
+        border.color: Theme.surface.outline
     }
 
     Row {
@@ -162,7 +162,7 @@ Item {
         BarButton {
             id: quickGlyph
             bar: rightIsland.bar
-            text: String.fromCodePoint(0xf1542)
+            icon: "tune"
             tint: rightIsland.open ? rightIsland.colors.fg : rightIsland.colors.grey2
             tip: "Quick settings (Super+;)"
             onClicked: {
@@ -192,8 +192,7 @@ Item {
             }
 
             bar: rightIsland.bar
-            size: 15
-            text: "⏻"
+            icon: "power_settings_new"
             hoverTint: rightIsland.colors.red
             wash: rightIsland.colors.red
             onClicked: rightIsland.bar.toggleMenu(power, [

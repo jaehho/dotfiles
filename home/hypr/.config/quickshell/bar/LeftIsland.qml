@@ -143,22 +143,20 @@ Island {
                     y: 3
                     width: content.width + (slot.windows.length > 0 ? 10 : 14)
                     height: 18
-                    radius: 8
-                    color: slot.current ? (slot.special ? leftIsland.colors.purple : leftIsland.colors.blue) : slot.workspace.urgent ? leftIsland.colors.red : hover.hovered ? leftIsland.colors.withAlpha(slot.special ? leftIsland.colors.purple : leftIsland.colors.blue, 0.14) : "transparent"
+                    radius: Theme.radius.control
+                    color: slot.current ? (slot.special ? leftIsland.colors.purple : leftIsland.colors.blue) : slot.workspace.urgent ? leftIsland.colors.red : "transparent"
 
                     Behavior on color {
-                        ColorAnimation {
-                            duration: 200
+                        CAnim {
+                            speed: "fast"
                         }
                     }
 
-                    HoverHandler {
+                    // On a solid pill the wash is its text's colour.
+                    StateLayer {
                         id: hover
-                        cursorShape: Qt.PointingHandCursor
-                    }
-
-                    TapHandler {
-                        onTapped: leftIsland.go(slot.workspace)
+                        tint: slot.current || slot.workspace.urgent ? Theme.colors.bg0 : Theme.colors.fg
+                        onClicked: () => leftIsland.go(slot.workspace)
                     }
 
                     Row {
@@ -173,8 +171,8 @@ Island {
                             color: slot.current || slot.workspace.urgent ? leftIsland.colors.bg0 : hover.hovered ? leftIsland.colors.fg : slot.special ? leftIsland.colors.grey1 : leftIsland.colors.grey2
 
                             Behavior on color {
-                                ColorAnimation {
-                                    duration: 200
+                                CAnim {
+                                    speed: "fast"
                                 }
                             }
                         }
@@ -208,8 +206,8 @@ Island {
                                     opacity: iconArea.containsMouse ? 1 : entry.focused ? 0.88 : slot.current ? 0.68 : 0.45
 
                                     Behavior on opacity {
-                                        NumberAnimation {
-                                            duration: 200
+                                        Anim {
+                                            speed: "fast"
                                         }
                                     }
                                 }

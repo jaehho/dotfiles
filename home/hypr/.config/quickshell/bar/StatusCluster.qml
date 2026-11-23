@@ -8,7 +8,8 @@
 // opened from the chevron by resting the pointer on it, a click or
 // Super+'. An app asking for attention comes out beside the chevron by
 // itself, on an orange pill, until the grid is opened; every other
-// tray icon rests grey (TraySlot.qml).
+// tray icon rests grey (TraySlot.qml). Icons are Material Symbols (#89),
+// filled while they report something on.
 import QtQuick
 import QtQuick.Effects
 import Quickshell
@@ -79,7 +80,7 @@ Row {
         id: chevron
 
         bar: attention.bar
-        text: String.fromCodePoint(attention.bar.trayOpen ? 0xf0143 : 0xf0140)
+        icon: attention.bar.trayOpen ? "expand_less" : "expand_more"
         tip: attention.bar.trayOpen ? "Hide the tray" : "Tray (Super+')"
         onClicked: attention.bar.toggleTray()
 
@@ -136,7 +137,8 @@ Row {
                 visible: privacy.using.screen.length > 0
                 bar: attention.bar
                 interactive: false
-                text: String.fromCodePoint(0xf0379)
+                icon: "screen_share"
+                fill: 1
                 tint: attention.colors.red
                 tip: `Sharing the screen: ${privacy.using.screen.join(", ")}`
             }
@@ -145,7 +147,8 @@ Row {
                 visible: privacy.using.mic.length > 0
                 bar: attention.bar
                 interactive: false
-                text: String.fromCodePoint(0xf036c)
+                icon: "mic"
+                fill: 1
                 tint: attention.colors.orange
                 tip: `Using the mic: ${privacy.using.mic.join(", ")}`
             }
@@ -165,7 +168,8 @@ Row {
         readonly property bool on: lidHeld
 
         bar: attention.bar
-        text: String.fromCodePoint(on ? 0xf0176 : 0xf0faa)
+        icon: "coffee"
+        fill: on ? 1 : 0
         tint: idleOff ? attention.colors.red : on ? attention.colors.orange : attention.colors.grey2
         tip: idleOff ? `hypridle is not running, so Lock does nothing. Click to start it${on ? "; stay awake stays on" : ""}` : on ? "Stay awake: ON (no suspend; the screen still dims and turns off)" : "Stay awake: OFF"
         onClicked: attention.run([attention.bin + "hypr-settings-menu", "awake"])
@@ -211,7 +215,9 @@ Row {
         readonly property bool waiting: !quiet && Notifs.count > 0
 
         bar: attention.bar
-        text: String.fromCodePoint(quiet ? 0xf009b : 0xf009a) + (quiet || Notifs.count === 0 ? "" : ` ${Notifs.count}`)
+        icon: quiet ? "notifications_off" : "notifications"
+        fill: waiting ? 1 : 0
+        text: waiting ? String(Notifs.count) : ""
         tint: quiet ? attention.colors.red : waiting ? attention.colors.orange : attention.colors.grey2
         tip: quiet ? "Do Not Disturb is on" : Notifs.count === 0 ? "No notifications" : Notifs.count === 1 ? "1 notification" : `${Notifs.count} notifications`
         onClicked: Notifs.toggleRequested(attention.bar.screen.name)
@@ -266,7 +272,8 @@ Row {
         visible: kernel !== ""
         bar: attention.bar
         bold: true
-        text: String.fromCodePoint(0xf0709) + " Reboot"
+        icon: "restart_alt"
+        text: "Reboot"
         tint: attention.colors.red
         hoverTint: tint
         wash: attention.colors.red
@@ -309,7 +316,9 @@ Row {
 
         visible: system + user > 0
         bar: attention.bar
-        text: `${String.fromCodePoint(0xf0028)} ${system + user}`
+        icon: "error"
+        fill: 1
+        text: String(system + user)
         tint: attention.colors.red
         tip: `Failed units: ${system} system, ${user} user`
         onClicked: attention.run([attention.bin + "hypr-failed-units"])

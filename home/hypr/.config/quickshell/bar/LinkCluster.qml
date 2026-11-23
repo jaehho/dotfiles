@@ -80,7 +80,7 @@ Row {
 
                 anchors.right: parent.right
                 bar: link.bar
-                text: String.fromCodePoint(PowerProfiles.profile === PowerProfile.Performance ? 0xf140b : PowerProfiles.profile === PowerProfile.PowerSaver ? 0xf032a : 0xf05d1)
+                icon: PowerProfiles.profile === PowerProfile.Performance ? "speed" : PowerProfiles.profile === PowerProfile.PowerSaver ? "eco" : "balance"
                 tip: `Profile: ${names[PowerProfiles.profile] ?? "unknown"}`
                 onClicked: cycle(1)
                 onRightClicked: cycle(-1)
@@ -101,12 +101,14 @@ Row {
             readonly property real seconds: charging ? device?.timeToFull ?? 0 : device?.timeToEmpty ?? 0
             property bool detail: false
 
-            readonly property string glyph: String.fromCodePoint(charging ? 0xf0084 : plugged ? 0xf06a5 : [0xf007a, 0xf007b, 0xf007c, 0xf007d, 0xf007e, 0xf007f, 0xf0080, 0xf0081, 0xf0082, 0xf0079][Math.max(0, Math.min(9, Math.floor(percent / 10)))])
+            // Material's eight steps, full from 88%.
+            readonly property string level: ["battery_0_bar", "battery_1_bar", "battery_2_bar", "battery_3_bar", "battery_4_bar", "battery_5_bar", "battery_6_bar", "battery_full"][Math.max(0, Math.min(7, Math.floor(percent * 8 / 100)))]
 
             x: drawer.width
             visible: device?.isPresent ?? false
             bar: link.bar
-            text: detail ? `${glyph} ${seconds > 0 ? link.span(seconds) : ""}`.trim() : low && !plugged ? `${glyph} ${percent}%` : glyph
+            icon: charging ? "battery_charging_full" : plugged ? "power" : level
+            text: detail ? (seconds > 0 ? link.span(seconds) : "") : low && !plugged ? `${percent}%` : ""
             tint: charging ? link.colors.green : critical ? (blink.on ? link.colors.fg : link.colors.red) : low ? link.colors.orange : link.colors.grey2
             hoverTint: charging ? link.colors.green : critical || low ? tint : link.colors.fg
             tip: {
@@ -139,7 +141,8 @@ Row {
         property bool detail: false
 
         bar: link.bar
-        text: detail ? `${String.fromCodePoint(0xf00af)} ${linked.length}` : String.fromCodePoint(off ? 0xf00b2 : linked.length > 0 ? 0xf00b1 : 0xf00af)
+        icon: detail ? "bluetooth" : off ? "bluetooth_disabled" : linked.length > 0 ? "bluetooth_connected" : "bluetooth"
+        text: detail ? String(linked.length) : ""
         tint: off ? link.colors.grey0 : link.colors.grey2
         tip: !adapter ? "No adapter" : [adapter.name, ...(linked.length > 0 ? ["", ...linked.map(d => d.batteryAvailable ? `${d.name}\t${Math.round(d.battery * 100)}%` : d.name)] : [])].join("\n")
         onClicked: detail = !detail
@@ -162,7 +165,9 @@ Row {
         property real down: 0
 
         bar: link.bar
-        text: detail && active ? `${active.name}  ${address.ip ?? "?"}/${address.prefix ?? "?"}` : String.fromCodePoint(wired ? 0xf0200 : wifi ? 0xf0928 : 0xf092d)
+        // The signal in four steps, as quick settings' Wi-Fi tile has it.
+        icon: detail && active ? "" : wired ? "lan" : !wifi ? "signal_wifi_off" : ["network_wifi_1_bar", "network_wifi_2_bar", "network_wifi_3_bar", "signal_wifi_4_bar"][Math.max(0, Math.min(3, Math.floor((station?.signalStrength ?? 1) * 4)))]
+        text: detail && active ? `${active.name}  ${address.ip ?? "?"}/${address.prefix ?? "?"}` : ""
         tint: active ? link.colors.grey2 : link.colors.red
         tip: {
             if (!active)

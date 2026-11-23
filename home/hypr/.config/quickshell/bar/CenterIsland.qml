@@ -1,5 +1,5 @@
 // The bar's center island. At rest it shows what waybar's center showed:
-// the player glyph with the title and artist, then the date and time.
+// the player's icon with the title and artist, then the date and time.
 // Rested on, clicked (or toggled over IPC) it opens into a sheet with the media
 // controls beside the month. It grows out of the island itself, width
 // and height together, and its header row never moves, so what the owner
@@ -23,7 +23,7 @@ Item {
     // (Bar.qml: short of the right island). Centered, it keeps both halves
     // in by cutting the track first, and drops it under 40px.
     property real room: Infinity
-    readonly property real mediaRoom: Math.min(360, 2 * room - 12 - 4 - (timeText.width + 14) - 14)
+    readonly property real mediaRoom: Math.min(360, 2 * room - 12 - Theme.space.xs - time.width - Theme.space.sm * 2)
 
     readonly property bool hovered: pointer.hovered
 
@@ -122,9 +122,9 @@ Item {
     // draws it; only the open sheet casts it.
     RectangularShadow {
         anchors.fill: parent
-        radius: 12
+        radius: Theme.radius.surface
         blur: 6
-        color: island.colors.withAlpha(island.colors.bg_dim, 0.93)
+        color: Theme.surface.shadow
         opacity: island.progress
     }
 
@@ -133,114 +133,54 @@ Item {
     // controls step lighter, as on the other overlays.
     Rectangle {
         anchors.fill: parent
-        radius: 12
-        color: island.blend(island.colors.withAlpha(island.colors.bg0, 0.88), island.colors.withAlpha(island.colors.bg_dim, 0.985), island.progress)
+        radius: Theme.radius.surface
+        color: island.blend(Theme.surface.glass, Theme.surface.sheet, island.progress)
         border.width: 1
-        border.color: island.colors.withAlpha(island.colors.blue, 0.18)
+        border.color: Theme.surface.outline
     }
 
     Row {
         id: header
         anchors.horizontalCenter: parent.horizontalCenter
         y: 1
-        spacing: 4
+        spacing: Theme.space.xs
 
         // Waybar's mpris: a click opens the island; right is next track,
-        // middle the previous one, as before.
-        Rectangle {
+        // middle the previous one, as before. Material Symbols have no
+        // brands, so the player shows as what it plays (#89).
+        BarButton {
             id: media
+
+            function iconFor(player) {
+                if (!player.isPlaying)
+                    return "pause";
+                const name = (player.desktopEntry || player.identity || "").toLowerCase();
+                if (name.includes("mpv") || name.includes("vlc"))
+                    return "movie";
+                if (name.includes("firefox") || name.includes("chrome"))
+                    return "public";
+                return "music_note";
+            }
+
             visible: island.hasTrack && island.mediaRoom >= 40
-            width: mediaText.width + 14
-            height: 24
-            radius: 8
-            color: mediaHover.hovered ? island.colors.withAlpha(island.colors.blue, 0.14) : "transparent"
-
-            Behavior on color {
-                ColorAnimation {
-                    duration: 200
-                }
-            }
-
-            HoverHandler {
-                id: mediaHover
-                cursorShape: Qt.PointingHandCursor
-            }
-
-            TapHandler {
-                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                onTapped: (eventPoint, button) => {
-                    if (button === Qt.RightButton)
-                        island.player.next();
-                    else if (button === Qt.MiddleButton)
-                        island.player.previous();
-                    else
-                        island.toggleRequested();
-                }
-            }
-
-            Line {
-                id: mediaText
-                anchors.centerIn: parent
-                // Waybar cut its line at 45 characters.
-                width: Math.min(implicitWidth, island.mediaRoom)
-                elide: Text.ElideRight
-                mono: true
-                text: island.hasTrack ? String.fromCodePoint(island.player.isPlaying ? glyphFor(island.player) : 0xf03e4) + " " + [island.player.trackTitle, island.player.trackArtist].filter(s => s !== "").join(" · ") : ""
-                color: island.player?.isPlaying || mediaHover.hovered ? island.colors.fg : island.colors.grey2
-
-                // The player icons waybar's mpris module used.
-                function glyphFor(player) {
-                    const name = (player.desktopEntry || player.identity || "").toLowerCase();
-                    if (name.includes("spotify"))
-                        return 0xf04c7;
-                    if (name.includes("mpv") || name.includes("vlc"))
-                        return 0xf040c;
-                    if (name.includes("vesktop") || name.includes("discord"))
-                        return 0xf066f;
-                    if (name.includes("firefox"))
-                        return 0xf0239;
-                    if (name.includes("chrome"))
-                        return 0xf02af;
-                    return 0xf040a;
-                }
-
-                Behavior on color {
-                    ColorAnimation {
-                        duration: 200
-                    }
-                }
-            }
+            bar: island.bar
+            icon: island.hasTrack ? iconFor(island.player) : ""
+            text: island.hasTrack ? [island.player.trackTitle, island.player.trackArtist].filter(s => s !== "").join(" · ") : ""
+            // Waybar cut its line at 45 characters.
+            maxWidth: island.mediaRoom - iconSize - Theme.space.xs
+            tint: island.player?.isPlaying ? Theme.colors.fg : Theme.colors.grey2
+            onClicked: island.toggleRequested()
+            onRightClicked: island.player.next()
+            onMiddleClicked: island.player.previous()
         }
 
-        Rectangle {
-            width: timeText.width + 14
-            height: 24
-            radius: 8
-            color: timeHover.hovered ? island.colors.withAlpha(island.colors.blue, 0.14) : "transparent"
-
-            Behavior on color {
-                ColorAnimation {
-                    duration: 200
-                }
-            }
-
-            HoverHandler {
-                id: timeHover
-                cursorShape: Qt.PointingHandCursor
-            }
-
-            TapHandler {
-                onTapped: island.toggleRequested()
-            }
-
-            Line {
-                id: timeText
-                anchors.centerIn: parent
-                mono: true
-                weight: Font.Bold
-                text: Qt.formatDateTime(island.now, "ddd MMM dd  HH:mm")
-                color: island.colors.fg
-            }
+        BarButton {
+            id: time
+            bar: island.bar
+            bold: true
+            text: Qt.formatDateTime(island.now, "ddd MMM dd  HH:mm")
+            tint: Theme.colors.fg
+            onClicked: island.toggleRequested()
         }
     }
 
