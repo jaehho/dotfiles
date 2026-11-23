@@ -54,12 +54,12 @@ DashCard {
     function tint(used, pace) {
         const level = pace && pace.level ? pace.level : "";
         if (used >= 100 || level === "exhaust")
-            return card.colors.red;
+            return Theme.colors.red;
         if (level === "risk")
-            return card.colors.yellow;
+            return Theme.colors.yellow;
         if (level === "ok" || level === "reserve" || used === null || used === undefined)
-            return card.colors.fg;
-        return used >= 80 ? card.colors.red : used >= 50 ? card.colors.yellow : card.colors.fg;
+            return Theme.colors.fg;
+        return used >= 80 ? Theme.colors.red : used >= 50 ? Theme.colors.yellow : Theme.colors.fg;
     }
 
     function late(name, src) {
@@ -76,10 +76,9 @@ DashCard {
 
     ColumnLayout {
         Layout.fillWidth: true
-        spacing: 12
+        spacing: Theme.space.md
 
         DashQuota {
-            colors: card.colors
             name: "claude " + (card.c && card.c.plan ? card.c.plan : "max")
             win: "week"
             url: "https://claude.ai/settings/usage"
@@ -95,7 +94,6 @@ DashCard {
         // name, not a plan tier.
         DashQuota {
             visible: !!card.or && !!card.or.month_limit
-            colors: card.colors
             name: "openrouter $" + (card.or && card.or.month_limit ? (card.or.month_limit % 1 === 0 ? card.or.month_limit : card.or.month_limit.toFixed(2)) : "")
             win: "month"
             url: "https://openrouter.ai/activity"
@@ -113,7 +111,6 @@ DashCard {
             DashQuota {
                 required property var modelData
 
-                colors: card.colors
                 name: modelData.model.toLowerCase()
                 win: "week"
                 value: card.line(modelData.pct, modelData.resets, modelData.pace)
@@ -128,7 +125,7 @@ DashCard {
             visible: !card.feed.board
             text: "…"
             mono: true
-            color: card.colors.grey2
+            color: Theme.colors.grey2
         }
     }
 }

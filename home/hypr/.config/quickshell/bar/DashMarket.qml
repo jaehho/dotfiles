@@ -47,7 +47,7 @@ DashCard {
     }
 
     function plTint(v) {
-        return v === null || v === undefined ? card.colors.grey2 : v >= 0 ? card.colors.green : card.colors.red;
+        return v === null || v === undefined ? Theme.colors.grey2 : v >= 0 ? Theme.colors.green : Theme.colors.red;
     }
 
     // "11-18 close", or the fetch's age for a snapshot without its day.
@@ -59,13 +59,14 @@ DashCard {
 
     ColumnLayout {
         Layout.fillWidth: true
-        spacing: 6
+        spacing: 0
 
         Line {
             visible: card.note !== ""
             Layout.fillWidth: true
+            Layout.bottomMargin: Theme.space.xs
             text: card.note
-            color: card.colors.yellow
+            color: Theme.colors.yellow
             wrapMode: Text.Wrap
             maximumLineCount: 2
             elide: Text.ElideRight
@@ -75,14 +76,14 @@ DashCard {
             visible: card.rows.length > 0
             opacity: card.body
             Layout.fillWidth: true
-            spacing: 10
+            spacing: Theme.space.sm
 
             Item {
                 Layout.fillWidth: true
             }
 
             Repeater {
-                model: ["last", "day", "total"]
+                model: ["Last", "Day", "Total"]
 
                 Line {
                     required property string modelData
@@ -90,9 +91,8 @@ DashCard {
                     Layout.preferredWidth: card.col
                     horizontalAlignment: Text.AlignRight
                     text: modelData
-                    mono: true
-                    size: 12
-                    color: card.colors.grey2
+                    size: Theme.font.small
+                    color: Theme.colors.grey2
                 }
             }
         }
@@ -100,70 +100,73 @@ DashCard {
         Repeater {
             model: card.rows
 
-            RowLayout {
+            DashRow {
                 id: position
 
                 required property var modelData
 
-                Layout.fillWidth: true
                 opacity: card.body
-                spacing: 10
 
-                Line {
-                    Layout.fillWidth: true
-                    // A cash balance (asset class CASH) is its currency;
-                    // its amount is in the account line.
-                    text: position.modelData.symbol + (position.modelData.asset === "CASH" ? " cash" : position.modelData.qty !== null ? " " + card.qty(position.modelData.qty) + "sh" : "")
-                    mono: true
-                    color: card.colors.fg
-                    elide: Text.ElideRight
-                }
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: Theme.space.sm
 
-                Line {
-                    Layout.preferredWidth: card.col
-                    horizontalAlignment: Text.AlignRight
-                    text: position.modelData.asset === "CASH" ? "" : card.money(position.modelData.last)
-                    mono: true
-                    color: card.colors.grey2
-                }
+                    Line {
+                        Layout.fillWidth: true
+                        // A cash balance (asset class CASH) is its currency;
+                        // its amount is in the account line.
+                        text: position.modelData.symbol + (position.modelData.asset === "CASH" ? " cash" : position.modelData.qty !== null ? " " + card.qty(position.modelData.qty) + "sh" : "")
+                        mono: true
+                        color: Theme.colors.fg
+                        elide: Text.ElideRight
+                    }
 
-                Line {
-                    Layout.preferredWidth: card.col
-                    horizontalAlignment: Text.AlignRight
-                    text: card.pl(position.modelData.dayPl)
-                    mono: true
-                    color: card.plTint(position.modelData.dayPl)
-                }
+                    Line {
+                        Layout.preferredWidth: card.col
+                        horizontalAlignment: Text.AlignRight
+                        text: position.modelData.asset === "CASH" ? "" : card.money(position.modelData.last)
+                        mono: true
+                        color: Theme.colors.grey2
+                    }
 
-                Line {
-                    Layout.preferredWidth: card.col
-                    horizontalAlignment: Text.AlignRight
-                    text: card.pl(position.modelData.totalPl)
-                    mono: true
-                    color: card.plTint(position.modelData.totalPl)
+                    Line {
+                        Layout.preferredWidth: card.col
+                        horizontalAlignment: Text.AlignRight
+                        text: card.pl(position.modelData.dayPl)
+                        mono: true
+                        color: card.plTint(position.modelData.dayPl)
+                    }
+
+                    Line {
+                        Layout.preferredWidth: card.col
+                        horizontalAlignment: Text.AlignRight
+                        text: card.pl(position.modelData.totalPl)
+                        mono: true
+                        color: card.plTint(position.modelData.totalPl)
+                    }
                 }
             }
         }
 
         Line {
             visible: card.all.length > card.rows.length
+            Layout.topMargin: Theme.space.xs
             opacity: card.body
             text: "…and " + (card.all.length - card.rows.length) + " more"
-            mono: true
-            size: 12
-            color: card.colors.grey2
+            size: Theme.font.small
+            color: Theme.colors.grey2
         }
 
         RowLayout {
             visible: !!card.acct && card.acct.netLiq !== undefined
             Layout.fillWidth: true
-            Layout.topMargin: 4
+            Layout.topMargin: Theme.space.sm
             opacity: card.body
-            spacing: 10
+            spacing: Theme.space.sm
 
             Line {
-                text: "account"
-                color: card.colors.grey2
+                text: "Account"
+                color: Theme.colors.grey2
             }
 
             Item {
@@ -175,11 +178,11 @@ DashCard {
                 horizontalAlignment: Text.AlignRight
                 text: card.acct ? card.money(card.acct.netLiq || 0) : ""
                 mono: true
-                color: card.colors.fg
+                color: Theme.colors.fg
             }
 
             Line {
-                Layout.preferredWidth: card.col * 2 + 10
+                Layout.preferredWidth: card.col * 2 + Theme.space.sm
                 horizontalAlignment: Text.AlignRight
                 text: !card.acct ? "" : card.pl(card.acct.dayPl) + (card.acct.dayPlPct !== null && card.acct.dayPlPct !== undefined ? " (" + (card.acct.dayPlPct >= 0 ? "+" : "") + card.acct.dayPlPct.toFixed(2) + "%)" : "")
                 mono: true
@@ -191,7 +194,7 @@ DashCard {
             visible: !card.feed.board
             text: "…"
             mono: true
-            color: card.colors.grey2
+            color: Theme.colors.grey2
         }
     }
 }

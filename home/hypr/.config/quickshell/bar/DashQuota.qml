@@ -4,17 +4,19 @@
 // to the reset); the span between use and tick is faint green when
 // under it (reserve), amber past it (risk), red when it burns to 100
 // before the reset (exhaust). A stale snapshot draws no pace and dims.
+//
+// On the shell base (#89): the name and value in Mono, the window in
+// words; one with a page to open washes as a block (DashRow).
 import QtQuick
 import QtQuick.Layouts
 
-Item {
+DashRow {
     id: row
 
-    required property var colors
     property string name
     property string win: ""
     property string value
-    property color valueColor: colors.fg
+    property color valueColor: Theme.colors.fg
     // 0 to 100, or -1 for no bar.
     property real pct: -1
     // The even-burn %, or -1 for no tick.
@@ -32,42 +34,43 @@ Item {
     // On pace, the bar is all use; off it, the core ends at the nearer
     // of use and tick and the span shows the difference.
     readonly property real core: !hasPace || paceLevel === "ok" ? used : Math.min(used, pace)
-    readonly property color deltaColor: paceLevel === "reserve" ? colors.withAlpha(colors.green, 0.4) : paceLevel === "risk" ? colors.yellow : paceLevel === "exhaust" ? colors.red : colors.grey2
+    readonly property color deltaColor: paceLevel === "reserve" ? Theme.colors.withAlpha(Theme.colors.green, 0.4) : paceLevel === "risk" ? Theme.colors.yellow : paceLevel === "exhaust" ? Theme.colors.red : Theme.colors.grey2
 
-    Layout.fillWidth: true
     implicitHeight: col.implicitHeight
+    radius: Theme.radius.control
+    bleed: Theme.space.xs
+    interactive: url !== ""
+    onClicked: row.launch(row.url, null)
 
     ColumnLayout {
         id: col
         width: parent.width
-        spacing: 5
+        spacing: Theme.space.xs
 
         RowLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: Theme.space.sm
 
             Line {
                 Layout.fillWidth: true
                 text: row.name
                 mono: true
-                color: row.colors.fg
+                color: Theme.colors.fg
                 elide: Text.ElideRight
             }
 
             Line {
                 visible: row.win !== ""
                 text: row.win
-                mono: true
-                size: 11
-                color: row.colors.grey2
-                font.letterSpacing: 1
+                size: Theme.font.small
+                color: Theme.colors.grey2
             }
 
-            // The widest value, so the window chips line up down the card.
+            // The widest value, so the windows line up down the card.
             TextMetrics {
                 id: slot
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 13
+                font.family: Theme.font.mono
+                font.pixelSize: Theme.font.body
                 text: "100% · 29d 23h left"
             }
 
@@ -76,23 +79,26 @@ Item {
                 horizontalAlignment: Text.AlignRight
                 text: row.value
                 mono: true
-                color: row.stale ? row.colors.yellow : row.valueColor
+                color: row.stale ? Theme.colors.yellow : row.valueColor
             }
         }
 
+        // The meter: a 4px pill, the use in grey2 on bg2.
         Rectangle {
             visible: row.pct >= 0
             Layout.fillWidth: true
-            Layout.preferredHeight: 5
-            radius: 2.5
-            color: row.colors.bg2
+            Layout.preferredHeight: 4
+            Layout.topMargin: 2
+            Layout.bottomMargin: 2
+            radius: Theme.radius.pill
+            color: Theme.colors.bg2
             opacity: row.stale ? 0.45 : 1
 
             Rectangle {
                 width: parent.width * row.core
                 height: parent.height
-                radius: 2.5
-                color: row.colors.grey2
+                radius: Theme.radius.pill
+                color: Theme.colors.grey2
             }
 
             Rectangle {
@@ -100,7 +106,7 @@ Item {
                 x: parent.width * Math.min(row.used, row.pace)
                 width: parent.width * Math.abs(row.used - row.pace)
                 height: parent.height
-                radius: 2.5
+                radius: Theme.radius.pill
                 color: row.deltaColor
             }
 
@@ -109,16 +115,9 @@ Item {
                 x: parent.width * row.pace - 0.5
                 y: -4
                 width: 1
-                height: 13
-                color: row.colors.grey2
+                height: 12
+                color: Theme.colors.grey2
             }
         }
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        enabled: row.url !== ""
-        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: row.launch(row.url, null)
     }
 }

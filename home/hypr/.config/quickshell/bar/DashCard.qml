@@ -12,8 +12,6 @@ import QtQuick.Layouts
 Rectangle {
     id: card
 
-    // The cards not yet on the shell base still read their colours here.
-    property var colors: Theme.colors
     property string title
     // A Material Symbols name.
     property string icon

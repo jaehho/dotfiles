@@ -42,62 +42,64 @@ DashCard {
 
     ColumnLayout {
         Layout.fillWidth: true
-        spacing: 6
+        spacing: 0
 
         Repeater {
             model: card.tasks.slice(0, card.cap)
 
-            RowLayout {
+            DashRow {
                 id: taskRow
 
                 required property var modelData
 
-                Layout.fillWidth: true
-                spacing: 8
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: Theme.space.sm
 
-                Rectangle {
-                    Layout.preferredWidth: 7
-                    Layout.preferredHeight: 7
-                    radius: 3.5
-                    color: card.overdue(taskRow.modelData) ? card.colors.red : card.colors.grey2
-                }
+                    Rectangle {
+                        Layout.preferredWidth: 8
+                        Layout.preferredHeight: 8
+                        radius: Theme.radius.pill
+                        color: card.overdue(taskRow.modelData) ? Theme.colors.red : Theme.colors.grey2
+                    }
 
-                Line {
-                    Layout.fillWidth: true
-                    text: taskRow.modelData.summary
-                    color: card.colors.fg
-                    elide: Text.ElideRight
-                }
+                    Line {
+                        Layout.fillWidth: true
+                        text: taskRow.modelData.summary
+                        color: Theme.colors.fg
+                        elide: Text.ElideRight
+                    }
 
-                Line {
-                    text: card.due(taskRow.modelData)
-                    mono: true
-                    size: 12
-                    color: card.overdue(taskRow.modelData) ? card.colors.red : card.colors.grey2
+                    Line {
+                        text: card.due(taskRow.modelData)
+                        mono: true
+                        size: Theme.font.smaller
+                        color: card.overdue(taskRow.modelData) ? Theme.colors.red : Theme.colors.grey2
+                    }
                 }
             }
         }
 
         Line {
             visible: card.tasks.length > card.cap
+            Layout.topMargin: Theme.space.xs
             text: "…and " + (card.tasks.length - card.cap) + " more"
-            mono: true
-            size: 12
-            color: card.colors.grey2
+            size: Theme.font.small
+            color: Theme.colors.grey2
         }
 
         // No board yet reads as loading, never as an empty list.
         Line {
             visible: !card.feed.board || (card.error === "" && card.tasks.length === 0)
-            text: card.feed.board ? "nothing due today" : "…"
-            color: card.colors.grey2
+            text: card.feed.board ? "Nothing due today" : "…"
+            color: Theme.colors.grey2
         }
 
         Line {
             visible: card.error !== ""
             Layout.fillWidth: true
-            text: "tasks unavailable: " + card.error
-            color: card.colors.yellow
+            text: "Tasks unavailable: " + card.error
+            color: Theme.colors.yellow
             wrapMode: Text.Wrap
             maximumLineCount: 2
             elide: Text.ElideRight
