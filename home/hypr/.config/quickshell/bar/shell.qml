@@ -15,7 +15,8 @@
 // monitor (Super+Space). The keybind sheet (KeybindsWindow.qml) is
 // `qs -c bar ipc call keybinds toggle` (Super+/), and the clipboard
 // history (ClipboardWindow.qml) `qs -c bar ipc call clipboard toggle`
-// (Super+V).
+// (Super+V), and the share menu (ShareWindow.qml) `qs -c bar ipc call
+// share toggle` (Super+S).
 //
 // The bar is also the notification daemon (Notifs.qml, #90): popups on
 // the focused monitor and a center that opens like the other sheets.
@@ -49,6 +50,9 @@ ShellRoot {
     // Super last closed it (as launcherClosedAt).
     property string clipboardOn: ""
     property real clipboardClosedAt: 0
+    // The same for the share menu.
+    property string shareOn: ""
+    property real shareClosedAt: 0
     // When Super last closed the center, in ms: the toggle that Super+
     // period sends right after is that close, not a reopen.
     property real superClosedAt: 0
@@ -62,6 +66,7 @@ ShellRoot {
         root.launcherOn = "";
         root.keybindsOn = "";
         root.clipboardOn = "";
+        root.shareOn = "";
         root.quickOn = "";
         root.dashOn = "";
         root.notifOn = "";
@@ -81,6 +86,7 @@ ShellRoot {
         root.launcherOn = "";
         root.keybindsOn = "";
         root.clipboardOn = "";
+        root.shareOn = "";
         root.quickKeys = keys;
         if (root.quickOn !== name)
             root.quickPage = page === "" ? "main" : page;
@@ -104,6 +110,7 @@ ShellRoot {
         root.launcherOn = "";
         root.keybindsOn = "";
         root.clipboardOn = "";
+        root.shareOn = "";
         root.notifOn = root.notifOn === name ? "" : name;
     }
 
@@ -140,6 +147,7 @@ ShellRoot {
         root.notifOn = "";
         root.keybindsOn = "";
         root.clipboardOn = "";
+        root.shareOn = "";
         for (const bar of bars.instances)
             bar.trayOpen = false;
         root.launcherOn = root.launcherOn === name ? "" : name;
@@ -154,6 +162,7 @@ ShellRoot {
         root.notifOn = "";
         root.launcherOn = "";
         root.clipboardOn = "";
+        root.shareOn = "";
         for (const bar of bars.instances)
             bar.trayOpen = false;
         if (root.keybindsOn !== name)
@@ -181,9 +190,52 @@ ShellRoot {
         root.notifOn = "";
         root.launcherOn = "";
         root.keybindsOn = "";
+        root.shareOn = "";
         for (const bar of bars.instances)
             bar.trayOpen = false;
         root.clipboardOn = root.clipboardOn === name ? "" : name;
+    }
+
+    // The share menu closes the others too.
+    function share(name) {
+        root.openOn = "";
+        root.quickOn = "";
+        root.dashOn = "";
+        root.notifOn = "";
+        root.launcherOn = "";
+        root.keybindsOn = "";
+        root.clipboardOn = "";
+        for (const bar of bars.instances)
+            bar.trayOpen = false;
+        root.shareOn = root.shareOn === name ? "" : name;
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        ShareWindow {
+            required property var modelData
+
+            screen: modelData
+            open: root.shareOn === modelData.name
+            onCloseRequested: root.shareOn = ""
+            onSuperPressed: {
+                root.shareClosedAt = Date.now();
+                root.shareOn = "";
+            }
+        }
+    }
+
+    IpcHandler {
+        target: "share"
+
+        function toggle(): void {
+            if (root.shareOn === "" && Date.now() - root.shareClosedAt < 1000) {
+                root.shareClosedAt = 0;
+                return;
+            }
+            root.share(Hyprland.focusedMonitor?.name ?? "");
+        }
     }
 
     Variants {
@@ -336,6 +388,7 @@ ShellRoot {
             root.launcherOn = "";
             root.keybindsOn = "";
             root.clipboardOn = "";
+            root.shareOn = "";
             root.dashOn = root.dashOn === name ? "" : name;
         }
 
@@ -347,6 +400,7 @@ ShellRoot {
             root.launcherOn = "";
             root.keybindsOn = "";
             root.clipboardOn = "";
+            root.shareOn = "";
             root.shown = !root.shown;
         }
 

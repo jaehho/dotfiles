@@ -68,7 +68,7 @@ local clr = {
 
 local terminal = "kitty"
 -- The bar's launcher (LauncherWindow.qml), which replaced rofi's drun
--- (#89); rofi still runs the share menu.
+-- (#89).
 local menu     = "qs -c bar ipc call launcher toggle"
 
 -------------------
@@ -440,7 +440,8 @@ hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("qs -c bar ipc call bar dash")) -- da
 hl.bind("CTRL + SHIFT + Escape", hl.dsp.exec_cmd("~/.local/bin/hypr-btop-toggle")) -- btop: show / hide (keeps running in tmux; the bar's load glyphs too)
 
 -- Share: Taildrop a file or the clipboard, or show the clipboard as a QR code
-hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("~/.local/bin/hypr-share-menu")) -- share menu
+-- (the bar's ShareWindow.qml)
+hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("qs -c bar ipc call share toggle")) -- share menu
 
 -- Clipboard history: the bar's (ClipboardWindow.qml) over cliphist; Enter
 -- copies an entry back to the clipboard
@@ -932,14 +933,14 @@ hl.layer_rule({
 })
 
 -- The bar's notification popups and center, its launcher, clipboard
--- history, keybind sheet and dash panel animate themselves (cards slide
--- in, the center and the dash slide from the edge, the launcher, the
--- clipboard and the keybind sheet drop in).
+-- history, share menu, keybind sheet and dash panel animate themselves
+-- (cards slide in, the center and the dash slide from the edge, the
+-- launcher, the clipboard, the share menu and the keybind sheet drop in).
 -- A rule's namespace is an RE2 full match, so each name is spelled whole:
 -- `^bar-notification` matched neither notification layer.
 hl.layer_rule({
     name  = "bar-notifications",
-    match = { namespace = "bar-(notifications|notification-center|launcher|clipboard|keybinds|dash)" },
+    match = { namespace = "bar-(notifications|notification-center|launcher|clipboard|share|keybinds|dash)" },
 
     no_anim = true,
 })
@@ -947,14 +948,6 @@ hl.layer_rule({
 hl.layer_rule({
     name  = "hangul-hint-blur",
     match = { namespace = "hangul-hint" },
-
-    blur         = true,
-    ignore_alpha = 0.5,
-})
-
-hl.layer_rule({
-    name  = "rofi-blur",
-    match = { namespace = "rofi" },
 
     blur         = true,
     ignore_alpha = 0.5,

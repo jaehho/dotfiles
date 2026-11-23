@@ -8,8 +8,8 @@
 #   taildrop-send --to NAME FILE...  skip the device picker
 #   taildrop-send --clip             send the clipboard (image → .png, else .txt)
 #
-# With one online target it just sends; with several it asks (rofi under a
-# launcher, a numbered prompt in a terminal).
+# With one online target it just sends; with several it asks (a zenity list
+# under a launcher, a numbered prompt in a terminal).
 
 set -euo pipefail
 
@@ -42,16 +42,6 @@ online_targets() {
     tailscale file cp --targets 2>/dev/null | awk -F'\t' 'NF == 2 { print $2 }'
 }
 
-# Column 4 of `tailscale status` is the peer OS.
-icon_for() {
-    case "$(tailscale status 2>/dev/null | awk -v n="$1" '$2 == n { print $4 }')" in
-        iOS|android) printf '󰄜' ;;
-        macOS)       printf '󰀵' ;;
-        windows)     printf '󰖳' ;;
-        *)           printf '󰌢' ;;
-    esac
-}
-
 pick_target() {
     local -a names
     mapfile -t names < <(online_targets)
@@ -70,13 +60,13 @@ pick_target() {
         exit 0
     fi
 
-    local name chosen
-    chosen=$(for name in "${names[@]}"; do
-                 printf '%s  %s\n' "$(icon_for "$name")" "$name"
-             done | rofi -dmenu -i -p "Send to" \
-                         -theme-str "listview { lines: ${#names[@]}; }") || exit 0
+    # The bar's share menu passes --to and never gets here; this is for
+    # Thunar's Send To and the desktop entry.
+    local chosen
+    chosen=$(zenity --list --title="Send over Taildrop" --text="Send to" \
+                    --column=Device "${names[@]}" 2>/dev/null) || exit 0
     [ -n "$chosen" ] || exit 0
-    printf '%s' "${chosen#*  }"
+    printf '%s' "$chosen"
 }
 
 clipboard_file() {
