@@ -941,12 +941,14 @@ hl.layer_rule({
     ignore_alpha = 0.5,
 })
 
--- The bar's notification popups and center, its launcher and its keybind
--- sheet animate themselves (cards slide in, the center slides from the
--- edge, the launcher and the keybind sheet drop in).
+-- The bar's notification popups and center, its launcher, keybind sheet
+-- and dash panel animate themselves (cards slide in, the center and the
+-- dash slide from the edge, the launcher and the keybind sheet drop in).
+-- A rule's namespace is an RE2 full match, so each name is spelled whole:
+-- `^bar-notification` matched neither notification layer.
 hl.layer_rule({
     name  = "bar-notifications",
-    match = { namespace = "^bar-(notification|launcher|keybinds)" },
+    match = { namespace = "bar-(notifications|notification-center|launcher|keybinds|dash)" },
 
     no_anim = true,
 })
