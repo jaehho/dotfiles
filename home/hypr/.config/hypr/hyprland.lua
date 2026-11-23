@@ -68,7 +68,7 @@ local clr = {
 
 local terminal = "kitty"
 -- The bar's launcher (LauncherWindow.qml), which replaced rofi's drun
--- (#89); rofi still runs the clipboard, share and settings menus.
+-- (#89); rofi still runs the share menu.
 local menu     = "qs -c bar ipc call launcher toggle"
 
 -------------------
@@ -443,8 +443,9 @@ hl.bind("CTRL + SHIFT + Escape", hl.dsp.exec_cmd("~/.local/bin/hypr-btop-toggle"
 -- Share: Taildrop a file or the clipboard, or show the clipboard as a QR code
 hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("~/.local/bin/hypr-share-menu")) -- share menu
 
--- Clipboard history (cliphist; pick copies the entry back to the clipboard)
-hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("~/.local/bin/hypr-cliphist")) -- clipboard history
+-- Clipboard history: the bar's (ClipboardWindow.qml) over cliphist; Enter
+-- copies an entry back to the clipboard
+hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("qs -c bar ipc call clipboard toggle")) -- clipboard history
 
 -- Move focus with mainMod + hjkl
 hl.bind(mainMod .. " + h", hl.dsp.focus({ direction = "left" }))
@@ -931,14 +932,15 @@ hl.layer_rule({
     ignore_alpha = 0.5,
 })
 
--- The bar's notification popups and center, its launcher, keybind sheet
--- and dash panel animate themselves (cards slide in, the center and the
--- dash slide from the edge, the launcher and the keybind sheet drop in).
+-- The bar's notification popups and center, its launcher, clipboard
+-- history, keybind sheet and dash panel animate themselves (cards slide
+-- in, the center and the dash slide from the edge, the launcher, the
+-- clipboard and the keybind sheet drop in).
 -- A rule's namespace is an RE2 full match, so each name is spelled whole:
 -- `^bar-notification` matched neither notification layer.
 hl.layer_rule({
     name  = "bar-notifications",
-    match = { namespace = "bar-(notifications|notification-center|launcher|keybinds|dash)" },
+    match = { namespace = "bar-(notifications|notification-center|launcher|clipboard|keybinds|dash)" },
 
     no_anim = true,
 })

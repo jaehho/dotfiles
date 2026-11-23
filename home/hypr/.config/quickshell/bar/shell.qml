@@ -13,7 +13,9 @@
 // The launcher (LauncherWindow.qml, #89) replaced rofi's drun:
 // `qs -c bar ipc call launcher toggle` opens or closes it on the focused
 // monitor (Super+Space). The keybind sheet (KeybindsWindow.qml) is
-// `qs -c bar ipc call keybinds toggle` (Super+/).
+// `qs -c bar ipc call keybinds toggle` (Super+/), and the clipboard
+// history (ClipboardWindow.qml) `qs -c bar ipc call clipboard toggle`
+// (Super+V).
 //
 // The bar is also the notification daemon (Notifs.qml, #90): popups on
 // the focused monitor and a center that opens like the other sheets.
@@ -43,6 +45,10 @@ ShellRoot {
     property string launcherOn: ""
     // The screen whose keybind sheet is open, or "" for none.
     property string keybindsOn: ""
+    // The screen whose clipboard history is open, or "" for none, and when
+    // Super last closed it (as launcherClosedAt).
+    property string clipboardOn: ""
+    property real clipboardClosedAt: 0
     // When Super last closed the center, in ms: the toggle that Super+
     // period sends right after is that close, not a reopen.
     property real superClosedAt: 0
@@ -55,6 +61,7 @@ ShellRoot {
     function toggle(name) {
         root.launcherOn = "";
         root.keybindsOn = "";
+        root.clipboardOn = "";
         root.quickOn = "";
         root.dashOn = "";
         root.notifOn = "";
@@ -73,6 +80,7 @@ ShellRoot {
         root.notifOn = "";
         root.launcherOn = "";
         root.keybindsOn = "";
+        root.clipboardOn = "";
         root.quickKeys = keys;
         if (root.quickOn !== name)
             root.quickPage = page === "" ? "main" : page;
@@ -95,6 +103,7 @@ ShellRoot {
         root.dashOn = "";
         root.launcherOn = "";
         root.keybindsOn = "";
+        root.clipboardOn = "";
         root.notifOn = root.notifOn === name ? "" : name;
     }
 
@@ -127,6 +136,7 @@ ShellRoot {
         root.dashOn = "";
         root.notifOn = "";
         root.keybindsOn = "";
+        root.clipboardOn = "";
         for (const bar of bars.instances)
             bar.trayOpen = false;
         root.launcherOn = root.launcherOn === name ? "" : name;
@@ -140,6 +150,7 @@ ShellRoot {
         root.dashOn = "";
         root.notifOn = "";
         root.launcherOn = "";
+        root.clipboardOn = "";
         for (const bar of bars.instances)
             bar.trayOpen = false;
         if (root.keybindsOn !== name)
@@ -156,6 +167,49 @@ ShellRoot {
             screen: modelData
             open: root.keybindsOn === modelData.name
             onCloseRequested: root.keybindsOn = ""
+        }
+    }
+
+    // The clipboard history closes the others too.
+    function clipboard(name) {
+        root.openOn = "";
+        root.quickOn = "";
+        root.dashOn = "";
+        root.notifOn = "";
+        root.launcherOn = "";
+        root.keybindsOn = "";
+        for (const bar of bars.instances)
+            bar.trayOpen = false;
+        root.clipboardOn = root.clipboardOn === name ? "" : name;
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        ClipboardWindow {
+            required property var modelData
+
+            screen: modelData
+            open: root.clipboardOn === modelData.name
+            onCloseRequested: root.clipboardOn = ""
+            // As the launcher: a Super chord closes it first, and Super+V's
+            // own toggle then finds it closed.
+            onSuperPressed: {
+                root.clipboardClosedAt = Date.now();
+                root.clipboardOn = "";
+            }
+        }
+    }
+
+    IpcHandler {
+        target: "clipboard"
+
+        function toggle(): void {
+            if (root.clipboardOn === "" && Date.now() - root.clipboardClosedAt < 1000) {
+                root.clipboardClosedAt = 0;
+                return;
+            }
+            root.clipboard(Hyprland.focusedMonitor?.name ?? "");
         }
     }
 
@@ -278,6 +332,7 @@ ShellRoot {
             root.notifOn = "";
             root.launcherOn = "";
             root.keybindsOn = "";
+            root.clipboardOn = "";
             root.dashOn = root.dashOn === name ? "" : name;
         }
 
@@ -288,6 +343,7 @@ ShellRoot {
             root.notifOn = "";
             root.launcherOn = "";
             root.keybindsOn = "";
+            root.clipboardOn = "";
             root.shown = !root.shown;
         }
 
