@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""hypr-keybind-cheatsheet — a layer-shell overlay of the keys this machine binds.
+"""hypr-keybind-cheatsheet — the keys this machine binds, as JSON for the
+bar's keybind sheet (KeybindsSheet.qml, Super+/).
 
 Every section is parsed from the config that owns it, so the sheet cannot drift:
 hyprland.lua for the WM, `tmux list-keys -N` for tmux. Kitty cannot report its
@@ -12,65 +13,27 @@ Labels come from, in order: the trailing `--` comment on the bind's own line,
 the comment block directly above it when that block covers only this one key,
 then the dispatcher itself. A bind that ends up with no label lands in
 "Unfiled" rather than being dropped, so it shows up and can be fixed.
+
+The sheet itself is the bar's (#89); this prints what it shows:
+
+- groups: the list view's groups in reading order, each with the keys you
+  hold to get there (head), a note, and rows of keys, label and chord;
+- columns: the groups packed into balanced columns, by index;
+- keys: the keyboard view's caps, placed in key units;
+- legends: what each cap says;
+- board: every bind filed by mode, held modifiers and cap;
+- modes: the mode chips (a submap, tmux's prefix).
 """
 
+import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 
-# gtk4-layer-shell must be loaded before libwayland-client, and PyGObject pulls
-# libwayland in the moment Gdk is imported, so re-exec once with the library
-# preloaded. Not liblayer-shell-preload.so, which ships alongside it: that one
-# auto-inits every window under its own namespace, taking the blur layerrule
-# with it.
-PRELOAD = "/usr/lib/libgtk4-layer-shell.so"
-if os.path.exists(PRELOAD) and PRELOAD not in os.environ.get("LD_PRELOAD", ""):
-    existing = os.environ.get("LD_PRELOAD", "")
-    os.environ["LD_PRELOAD"] = f"{PRELOAD}:{existing}".rstrip(":")
-    os.execv(sys.executable, [sys.executable, *sys.argv])
-
-import gi
-
-gi.require_version("Gtk", "4.0")
-gi.require_version("Gdk", "4.0")
-gi.require_version("Gtk4LayerShell", "1.0")
-from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
-from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
-
 HOME = os.path.expanduser("~")
 HYPR_CONFIG = f"{HOME}/.config/hypr/hyprland.lua"
 COLUMNS = 4
-
-
-# ── palette ──────────────────────────────────────────────────────────────────
-
-# Everforest Dark Medium, read from the hyprlock palette file.
-# Token names are Everforest's. Do not restate hexes here.
-def _palette_hex():
-    """name -> bare rrggbb, from hypr/themes/foliage.conf."""
-    path = Path.home() / ".config/hypr/themes/foliage.conf"
-    colors = {}
-    try:
-        for line in path.read_text().splitlines():
-            line = line.strip()
-            if not line.startswith("$") or "=" not in line:
-                continue
-            name, _, val = line.partition("=")
-            name = name.strip().lstrip("$")
-            val = val.strip()
-            if name.endswith("Alpha"):
-                continue
-            if val.startswith("rgb(") and val.endswith(")"):
-                colors[name] = val[4:-1]
-    except OSError:
-        pass
-    return colors
-
-
-def palette():
-    return {k: f"#{v}" for k, v in _palette_hex().items()}
 
 
 # ── key names ────────────────────────────────────────────────────────────────
@@ -547,20 +510,6 @@ GROUP_HEAD = {
 CHORD_ORDER = ("Super", "Ctrl", "Alt", "Shift")
 
 
-# Tracked as key presses and releases rather than through a modifier bitmask.
-# Under Hyprland neither GdkDevice's modifier-state nor the key controller's
-# "modifiers" signal moves when a modifier is held on its own -- the first never
-# updates for Super at all, the second only fires alongside some other key --
-# but the bare Super_L press itself is delivered.
-MOD_KEYS = {
-    Gdk.KEY_Super_L: "Super", Gdk.KEY_Super_R: "Super",
-    Gdk.KEY_Control_L: "Ctrl", Gdk.KEY_Control_R: "Ctrl",
-    Gdk.KEY_Alt_L: "Alt", Gdk.KEY_Alt_R: "Alt",
-    Gdk.KEY_Meta_L: "Alt", Gdk.KEY_Meta_R: "Alt",
-    Gdk.KEY_Shift_L: "Shift", Gdk.KEY_Shift_R: "Shift",
-}
-
-
 def pack(groups, columns=COLUMNS):
     """Balance the columns, then put each one back into reading order.
 
@@ -688,620 +637,70 @@ def board_binds(tmux_bindings):
     return board, legends
 
 
-# ── ui ───────────────────────────────────────────────────────────────────────
+# ── output ───────────────────────────────────────────────────────────────────
 
-# DESIGN.md's sheet: 12px corners and 8px controls, words in fg or grey2
-# (the Readable Gray Rule), and an on chip on the blue tint. Keys keep three
-# strengths: lit (solid blue), bound under another modifier (raised, fg)
-# and unbound (flat, grey2).
-CSS = """
-window.keybinds {{ background: transparent; }}
-
-.sheet {{
-  background: alpha({bg_dim}, 0.985);
-  border: 1px solid {bg2};
-  border-radius: 12px;
-  padding: 20px 26px 16px 26px;
-}}
-
-.filter {{
-  font-family: "Adwaita Sans", sans-serif;
-  font-size: 14px;
-  color: {fg};
-  background: {bg0};
-  border: 1px solid {bg2};
-  border-radius: 8px;
-  padding: 6px 12px;
-  min-height: 0;
-  caret-color: {blue};
-}}
-.filter:focus-within {{
-  border-color: {blue};
-  outline: 1px solid alpha({blue}, 0.35);
-  outline-offset: 0;
-}}
-.filter placeholder {{ color: {grey2}; }}
-.filter selection {{ color: {fg}; background: alpha({blue}, 0.4); }}
-
-.tally, .foot, .group-note, .empty {{
-  font-family: "Adwaita Sans", sans-serif;
-  font-size: 11px;
-  color: {grey2};
-}}
-
-.label {{
-  font-family: "Adwaita Sans", sans-serif;
-  font-size: 13px;
-  color: {grey2};
-}}
-
-.empty {{ font-size: 13px; }}
-
-/* What the key does with what is held now, over the binds that need
-   another modifier (group-note). */
-.detail .label {{ color: {fg}; }}
-
-.cap {{
-  font-family: "JetBrainsMono Nerd Font", monospace;
-  font-size: 11px;
-  font-weight: 700;
-  color: {fg};
-  background: linear-gradient(to bottom, {bg3}, {bg2});
-  border: 1px solid {bg3};
-  border-bottom: 2px solid {bg_dim};
-  border-radius: 8px;
-  padding: 1px 5px;
-  min-width: 10px;
-}}
-.cap.prefix {{
-  font-size: 12px;
-  color: {bg_dim};
-  background: linear-gradient(to bottom, {blue}, shade({blue}, 0.82));
-  border-color: {blue};
-  border-bottom-color: shade({blue}, 0.55);
-  padding: 2px 8px;
-}}
-
-button.key {{
-  font-family: "JetBrainsMono Nerd Font", monospace;
-  font-size: 11px;
-  font-weight: 700;
-  color: {grey2};
-  background: {bg0};
-  border: 1px solid {bg1};
-  border-bottom: 3px solid {bg_dim};
-  border-radius: 8px;
-  padding: 3px 6px;
-  min-height: 0;
-  min-width: 0;
-  box-shadow: none;
-}}
-button.key:hover {{ border-color: {grey0}; border-bottom-color: {bg_dim}; }}
-button.key.faint {{ color: {fg}; background: {bg1}; }}
-button.key.held {{ color: {fg}; background: {bg3}; border-color: {grey0}; }}
-button.key.bound {{
-  color: {bg_dim};
-  background: linear-gradient(to bottom, {blue}, shade({blue}, 0.82));
-  border-color: {blue};
-  border-bottom-color: shade({blue}, 0.55);
-}}
-button.key.bound:hover {{ border-color: {fg}; }}
-button.key.selected {{ outline: 2px solid {fg}; outline-offset: 1px; }}
-
-button.chip {{
-  font-family: "Adwaita Sans", sans-serif;
-  font-size: 12px;
-  color: {grey2};
-  background: {bg0};
-  border: 1px solid {bg1};
-  border-radius: 8px;
-  padding: 4px 10px;
-  min-height: 0;
-  box-shadow: none;
-}}
-button.chip:hover {{ color: {fg}; background: {bg1}; border-color: {bg3}; }}
-button.chip:checked {{
-  color: {fg};
-  background: alpha({blue}, 0.18);
-  border-color: alpha({blue}, 0.55);
-}}
-button.chip:checked:hover {{ background: alpha({blue}, 0.28); }}
-"""
-
-STATE = (os.environ.get("XDG_STATE_HOME", f"{HOME}/.local/state")
-         + "/hypr-keybind-cheatsheet/view")
+def chord(mods):
+    """A modifier set in the sheet's order."""
+    return [m for m in CHORD_ORDER if m in mods]
 
 
-def cap(text, prefix=False):
-    label = Gtk.Label(label=text, valign=Gtk.Align.CENTER)
-    label.add_css_class("cap")
-    if prefix:
-        label.add_css_class("prefix")
-    return label
+def board_keys(board):
+    """The keyboard's caps in key units, then the bound keys it has no cap
+    for (media keys, the mouse, PgUp) in rows under it, ten 1.5-unit caps
+    to a row so they span the same width."""
+    keys, placed = [], set()
+    for top, row in BOARD_ROWS:
+        left = 0.0
+        for cap_, width in row:
+            if cap_ == "updown":
+                keys.append({"cap": "up", "x": left, "y": top, "w": width, "h": 0.5})
+                keys.append({"cap": "down", "x": left, "y": top + 0.5, "w": width, "h": 0.5})
+                placed |= {"up", "down"}
+            elif cap_:
+                keys.append({"cap": cap_, "x": left, "y": top, "w": width, "h": 1})
+                placed.add(cap_)
+            left += width
+    bottom = max(top for top, _ in BOARD_ROWS) + 1.25
+    extras = dict.fromkeys(c for (_, _, c) in board if c not in placed)
+    for i, cap_ in enumerate(extras):
+        row_, col = divmod(i, 10)
+        keys.append({"cap": cap_, "x": col * 1.5, "y": bottom + row_, "w": 1.5, "h": 1})
+    return keys
 
 
-def caps(keys, prefix=False, align=Gtk.Align.START):
-    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=3, halign=align)
+def sheet_json():
+    tmux_bindings = tmux_keys()
+    groups = build_sheet(tmux_bindings)
+    index = {name: i for i, (name, _) in enumerate(groups)}
+    board, legends = board_binds(tmux_bindings)
+    keys = board_keys(board)
     for key in keys:
-        box.append(cap(key, prefix))
-    return box
-
-
-def set_class(widget, name, on):
-    if on:
-        widget.add_css_class(name)
-    else:
-        widget.remove_css_class(name)
-
-
-class Sheet(Gtk.Application):
-    def __init__(self, view=None):
-        super().__init__(application_id="dev.jaeho.keybinds",
-                         flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
-        self.window = None
-        self.rows = []
-        self.groups = []
-        self.held = frozenset()
-        # Keyboard view: modifiers clicked on (Super + click is Hyprland's window
-        # drag, so holding Super cannot be combined with clicking), the mode
-        # chip, and the key whose binds the detail panel shows.
-        self.latched = frozenset()
-        self.mode = ""
-        self.selected = None
-        self.hover = None
-        self.focused = False
-        self.view = view or self.saved_view()
-
-    @staticmethod
-    def saved_view():
-        try:
-            with open(STATE) as fh:
-                return "keyboard" if fh.read().strip() == "keyboard" else "list"
-        except OSError:
-            return "list"
-
-    def do_activate(self):
-        # A second press of the bind reaches the running instance rather than
-        # starting a new one, so the same key that opens the sheet closes it.
-        if self.window:
-            self.window.close()
-            return
-
-        provider = Gtk.CssProvider()
-        provider.load_from_string(CSS.format(**palette()))
-        Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(), provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-
-        self.window = Gtk.ApplicationWindow(application=self)
-        self.window.add_css_class("keybinds")
-        self.window.connect("close-request", self.on_close)
-
-        LayerShell.init_for_window(self.window)
-        LayerShell.set_namespace(self.window, "keybinds")
-        LayerShell.set_layer(self.window, LayerShell.Layer.OVERLAY)
-        LayerShell.set_keyboard_mode(self.window, LayerShell.KeyboardMode.EXCLUSIVE)
-
-        self.window.set_child(self.build())
-
-        keys = Gtk.EventControllerKey()
-        # Capture, not bubble: the filter entry has focus and swallows every
-        # printable key, so a controller on the window would otherwise only ever
-        # hear Escape -- and never the bare modifier presses.
-        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
-        keys.connect("key-pressed", self.on_key)
-        keys.connect("key-released", self.on_key_release)
-        self.window.add_controller(keys)
-
-        # If the sheet loses the keyboard while a modifier is down -- a bind
-        # that fires and hands focus to what it launched -- the release lands
-        # somewhere else and the chord would stay stuck on.
-        # `is-active`, not a focus controller: the controller's "enter" never
-        # fires for the focus the surface is mapped with.
-        self.window.connect("notify::is-active", self.on_focus)
-        self.window.present()
-
-    def on_focus(self, window, _pspec):
-        self.focused = window.is_active()
-        if not self.focused:
-            self.set_held(frozenset())
-        self.sync_capture()
-
-    # Hyprland acts on its binds before the sheet hears the key, so the keyboard
-    # view asks for them to be suspended (keyboard-shortcuts-inhibit): Super + Q
-    # then names Q instead of closing a window. The compositor ties the
-    # inhibitor to this surface and its focus, so nothing is left captured if
-    # the sheet loses the keyboard or dies. Every bind is suspended, the
-    # sheet's own Super + / included, which on_key closes on instead.
-    def sync_capture(self):
-        surface = self.window.get_surface() if self.window else None
-        if surface is None:
-            return
-        if self.focused and self.view == "keyboard":
-            surface.inhibit_system_shortcuts(None)
-        else:
-            surface.restore_system_shortcuts()
-
-    def set_held(self, held):
-        if held == self.held:
-            return
-        self.held = held
-        self.refresh()
-
-    def refresh(self):
-        chord = self.layer_mods() if self.view == "keyboard" else self.held
-        for child in list(self.chord):
-            self.chord.remove(child)
-        for name in CHORD_ORDER:
-            if name in chord:
-                self.chord.append(cap(name, prefix=True))
-        if self.view == "keyboard":
-            self.refresh_board()
-        else:
-            self.apply()
-
-    def layer_mods(self):
-        return self.held | self.latched
-
-    def set_view(self, view):
-        self.view = view
-        keyboard = view == "keyboard"
-        self.list_view.set_visible(not keyboard)
-        self.board_view.set_visible(keyboard)
-        self.entry.set_visible(not keyboard)
-        self.chip_row.set_visible(keyboard)
-        self.foot.set_label(
-            "Esc closes  ·  Tab switches to the list  ·  hold or click a modifier, "
-            "then hover or click a key" if keyboard else
-            "Esc closes  ·  Super + / toggles  ·  Tab switches to the keyboard  ·  "
-            "hold a modifier to narrow")
-        if not keyboard:
-            self.entry.grab_focus()
-        self.sync_capture()
-        self.refresh()
-        try:
-            os.makedirs(os.path.dirname(STATE), exist_ok=True)
-            with open(STATE, "w") as fh:
-                fh.write(view + "\n")
-        except OSError:
-            pass
-
-    def on_close(self, _window):
-        self.window = None
-        self.quit()
-        return False
-
-    def on_key(self, _controller, keyval, code, _state):
-        # Bare Esc and Tab drive the sheet; with a modifier held they are a
-        # chord to look up (Super + Esc locks the screen).
-        bare = not self.held or self.view == "list"
-        close = keyval == Gdk.KEY_slash and self.held == {"Super"}
-        if (keyval == Gdk.KEY_Escape and bare) or close:
-            self.window.close()
-            return True
-        if keyval in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab) and bare:
-            self.set_view("list" if self.view == "keyboard" else "keyboard")
-            return True
-        if keyval in MOD_KEYS:
-            self.set_held(self.held | {MOD_KEYS[keyval]})
-            return False
-        if self.view == "keyboard":
-            # Named by the unshifted keyval, so Shift + / still finds the / cap.
-            found, base, *_ = Gdk.Display.get_default().translate_key(
-                code, Gdk.ModifierType.NO_MODIFIER_MASK, 0)
-            if found:
-                cap_ = cap_id(Gdk.keyval_name(base) or "")
-                if cap_ in self.keycaps:
-                    self.selected, self.hover = cap_, None
-                    self.refresh_board()
-                    return True
-        return False
-
-    def on_key_release(self, _controller, keyval, _code, _state):
-        if keyval in MOD_KEYS:
-            self.set_held(self.held - {MOD_KEYS[keyval]})
-
-    def build(self):
-        sheet = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        sheet.add_css_class("sheet")
-
-        self.entry = Gtk.Entry(placeholder_text="Filter", width_chars=26,
-                               max_width_chars=26, hexpand=False)
-        self.entry.add_css_class("filter")
-        self.entry.connect("changed", self.on_filter)
-
-        self.tally = Gtk.Label(xalign=1.0)
-        self.tally.add_css_class("tally")
-
-        self.chord = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=3,
-                             halign=Gtk.Align.END, hexpand=True)
-
-        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
-        self.header = header
-        header.append(self.entry)
-        header.append(self.chord)
-        header.append(self.tally)
-        sheet.append(header)
-
-        tmux_bindings = tmux_keys()
-        body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=40,
-                       valign=Gtk.Align.START)
-        for column in pack(build_sheet(tmux_bindings)):
-            body.append(self.build_column(column))
-
-        scroller = Gtk.ScrolledWindow(hexpand=True)
-        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroller.set_propagate_natural_height(True)
-        scroller.set_propagate_natural_width(True)
-        scroller.set_max_content_height(self.content_cap())
-        scroller.set_child(body)
-
-        self.empty = Gtk.Label(xalign=0.0, visible=False)
-        self.empty.add_css_class("empty")
-
-        self.list_view = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        self.list_view.append(scroller)
-        self.list_view.append(self.empty)
-        sheet.append(self.list_view)
-
-        self.board_view = self.build_board(tmux_bindings)
-        sheet.append(self.board_view)
-
-        self.foot = Gtk.Label(xalign=0.0)
-        self.foot.add_css_class("foot")
-        sheet.append(self.foot)
-
-        self.retally()
-        self.set_view(self.view)
-        return sheet
-
-    def build_board(self, tmux_bindings):
-        self.board, self.legends = board_binds(tmux_bindings)
-        self.keycaps = {}
-        view = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14,
-                       halign=Gtk.Align.CENTER)
-
-        # The mode chips stand where the filter does in the list view.
-        self.chips = {}
-        self.chip_row = row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.header.insert_child_after(row, self.entry)
-        modes = [m for m in PREFIX_GROUP if any(k[0] == m for k in self.board)]
-        if modes:
-            for mode in modes:
-                group = PREFIX_GROUP[mode]
-                keys, _ = GROUP_HEAD.get(group, (None, None))
-                inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-                if keys:
-                    inner.append(caps(keys))
-                inner.append(Gtk.Label(label=group))
-                chip = Gtk.ToggleButton(child=inner, focusable=False)
-                chip.add_css_class("chip")
-                chip.connect("toggled", self.on_chip, mode)
-                row.append(chip)
-                self.chips[mode] = chip
-
-        pitch, gap = BOARD_PITCH, BOARD_GAP
-        fixed = Gtk.Fixed()
-        for top, keys in BOARD_ROWS:
-            left = 0.0
-            for cap_, width in keys:
-                if cap_ == "updown":
-                    self.place_key(fixed, "up", left * pitch, top * pitch,
-                                   width * pitch - gap, pitch / 2 - gap / 2)
-                    self.place_key(fixed, "down", left * pitch, (top + 0.5) * pitch,
-                                   width * pitch - gap, pitch / 2 - gap / 2)
-                elif cap_:
-                    self.place_key(fixed, cap_, left * pitch, top * pitch,
-                                   width * pitch - gap, pitch - gap)
-                left += width
-
-        # Keys this layout has no cap for (media keys, the mouse, PgUp) sit in
-        # rows under it, ten 1.5-unit caps to a row so they span the same width.
-        bottom = max(top for top, _ in BOARD_ROWS) + 1.25
-        extras = dict.fromkeys(c for (_, _, c) in self.board if c not in self.keycaps)
-        for i, cap_ in enumerate(extras):
-            row_, col = divmod(i, 10)
-            self.place_key(fixed, cap_, col * 1.5 * pitch, (bottom + row_) * pitch,
-                           1.5 * pitch - gap, pitch - gap)
-        view.append(fixed)
-
-        self.detail = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        self.detail.add_css_class("detail")
-        self.detail.set_size_request(-1, 6 * 24)
-        view.append(self.detail)
-        return view
-
-    def place_key(self, fixed, cap_, x, y, width, height):
-        label = Gtk.Label(label=self.legends.get(cap_, cap_legend(cap_)),
-                          xalign=0.0, yalign=0.0)
-        label.set_ellipsize(Pango.EllipsizeMode.END)
-        button = Gtk.Button(child=label, focusable=False)
-        button.add_css_class("key")
-        button.set_size_request(int(width), int(height))
-        button.connect("clicked", self.on_keycap, cap_)
-        motion = Gtk.EventControllerMotion()
-        motion.connect("enter", lambda *_: self.set_hover(cap_))
-        motion.connect("leave", lambda *_: self.set_hover(None, cap_))
-        button.add_controller(motion)
-        fixed.put(button, x, y)
-        self.keycaps.setdefault(cap_, []).append(button)
-
-    def on_chip(self, chip, mode):
-        if chip.get_active():
-            self.mode = mode
-            for other, button in self.chips.items():
-                if other != mode and button.get_active():
-                    button.set_active(False)
-        elif self.mode == mode:
-            self.mode = ""
-        self.refresh_board()
-
-    def on_keycap(self, _button, cap_):
-        if cap_ in MOD_CAPS:
-            self.latched ^= {MOD_CAPS[cap_]}
-            self.refresh()
-            return
-        self.selected = None if self.selected == cap_ else cap_
-        self.refresh_board()
-
-    def set_hover(self, cap_, leaving=None):
-        if leaving and self.hover != leaving:
-            return
-        self.hover = cap_
-        self.refresh_detail()
-
-    def refresh_board(self):
-        mods = self.layer_mods()
-        here = {c for (m, held, c) in self.board if m == self.mode and held == mods}
-        near = {c for (m, _, c) in self.board if m == self.mode}
-        for cap_, buttons in self.keycaps.items():
-            for button in buttons:
-                set_class(button, "bound", cap_ in here)
-                set_class(button, "faint", cap_ in near and cap_ not in here)
-                set_class(button, "held", MOD_CAPS.get(cap_) in mods)
-                set_class(button, "selected", cap_ == self.selected)
-        count = sum(len(v) for (m, held, _), v in self.board.items()
-                    if m == self.mode and held == mods)
-        self.tally.set_label(f"{count} binds on {len(here)} keys")
-        self.refresh_detail()
-        if self.window:
-            self.window.set_default_size(-1, -1)
-
-    def refresh_detail(self):
-        for child in list(self.detail):
-            self.detail.remove(child)
-        cap_ = self.hover or self.selected
-
-        def note(text):
-            label = Gtk.Label(label=text, xalign=0.0)
-            label.add_css_class("group-note")
-            self.detail.append(label)
-
-        if not cap_:
-            note("Lit keys do something with what is held now; dim ones need "
-                 "a different modifier.")
-            return
-        if cap_ in MOD_CAPS:
-            note(f"Click to {'release' if MOD_CAPS[cap_] in self.latched else 'latch'} "
-                 f"{MOD_CAPS[cap_]}.")
-            return
-
-        mods = self.layer_mods()
-        binds = sorted(((held != mods, len(held), b)
-                        for (m, held, c), bs in self.board.items()
-                        if m == self.mode and c == cap_ for b in bs),
-                       key=lambda t: t[:2])
-        if not binds:
-            note(f"Nothing is bound to {self.legends.get(cap_, cap_legend(cap_)) or 'Space'}"
-                 + (f" in {PREFIX_GROUP[self.mode].lower()}." if self.mode else "."))
-            return
-        grid = Gtk.Grid(column_spacing=11, row_spacing=4)
-        for i, (elsewhere, _, bind) in enumerate(binds):
-            grid.attach(caps(bind["combo"], align=Gtk.Align.END), 0, i, 1, 1)
-            label = Gtk.Label(label=bind["label"], xalign=0.0)
-            label.add_css_class("group-note" if elsewhere else "label")
-            grid.attach(label, 1, i, 1, 1)
-            if bind["note"]:
-                tag = Gtk.Label(label=bind["note"], xalign=0.0)
-                tag.add_css_class("group-note")
-                grid.attach(tag, 2, i, 1, 1)
-        self.detail.append(grid)
-
-    @staticmethod
-    def content_cap():
-        """Tallest the columns may grow before they start scrolling.
-
-        Sized off the shortest monitor rather than fixed: the sheet is meant to
-        sit clear of the screen edges, and this machine is docked to displays
-        shorter than its own panel.
-        """
-        monitors = Gdk.Display.get_default().get_monitors()
-        heights = [monitors.get_item(i).get_geometry().height
-                   for i in range(monitors.get_n_items())]
-        return int(min(heights or [1080]) * 0.86) - 120
-
-    def build_column(self, column):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=26,
-                      valign=Gtk.Align.START)
-        for name, rows in column:
-            box.append(self.build_group(name, rows))
-        return box
-
-    def build_group(self, name, rows):
-        """One group is a two-column grid: keys against the gutter, labels
-        against the spine. The heading rides the same two columns, so the
-        prefix keycap sits at the head of the key column it belongs to."""
+        legends.setdefault(key["cap"], cap_legend(key["cap"]))
+    out_groups = []
+    for name, rows in groups:
         prefix, note = GROUP_HEAD.get(name, (None, name.lower()))
-        grid = Gtk.Grid(column_spacing=11, row_spacing=4)
-
-        if prefix:
-            head = caps(prefix, prefix=True, align=Gtk.Align.END)
-            head.set_margin_bottom(9)
-            grid.attach(head, 0, 0, 1, 1)
-        if note:
-            text = Gtk.Label(label=note, xalign=0.0, valign=Gtk.Align.CENTER)
-            text.add_css_class("group-note")
-            text.set_margin_bottom(9)
-            grid.attach(text, 1, 0, 1, 1)
-
-        for i, row in enumerate(rows, start=1):
-            key_box = caps(row["keys"], align=Gtk.Align.END)
-            label = Gtk.Label(label=row["label"], xalign=0.0, hexpand=True)
-            label.add_css_class("label")
-            label.set_ellipsize(Pango.EllipsizeMode.END)
-            label.set_max_width_chars(34)
-            grid.attach(key_box, 0, i, 1, 1)
-            grid.attach(label, 1, i, 1, 1)
-            self.rows.append((key_box, label, row["chord"],
-                              f"{name} {' '.join(row['keys'])} {row['label']}".lower()))
-
-        self.groups.append((grid, name, len(self.rows) - len(rows), len(self.rows)))
-        return grid
-
-    def on_filter(self, _entry):
-        self.apply()
-
-    def apply(self):
-        """Text and held modifiers narrow the sheet; text wins when both apply.
-
-        Typing needs Shift for capitals, and reading that as "show me the
-        Super + Shift chord" would fight the search box, so a query in the
-        filter suspends the modifier reaction until it is cleared.
-        """
-        words = self.entry.get_text().strip().lower().split()
-        chord = frozenset() if words else self.held
-
-        for key_box, label, row_chord, haystack in self.rows:
-            visible = (all(word in haystack for word in words)
-                       and (not chord or row_chord == chord))
-            key_box.set_visible(visible)
-            label.set_visible(visible)
-        for grid, _, start, end in self.groups:
-            grid.set_visible(any(self.rows[i][0].get_visible()
-                                 for i in range(start, end)))
-        self.retally()
-
-    def describe_empty(self):
-        words = self.entry.get_text().strip()
-        if words:
-            return f"No bind matches \u201c{words}\u201d."
-        chord = " + ".join(n for n in CHORD_ORDER if n in self.held)
-        return f"Nothing is bound to {chord}." if chord else ""
-
-    def retally(self):
-        total = len(self.rows)
-        shown = sum(1 for grid, _, start, end in self.groups if grid.get_visible()
-                    for i in range(start, end) if self.rows[i][0].get_visible())
-        self.tally.set_label(f"{total} binds" if shown == total
-                             else f"{shown} of {total}")
-        self.empty.set_label(self.describe_empty())
-        self.empty.set_visible(shown == 0 and self.view == "list")
-        if self.window:
-            self.window.set_default_size(-1, -1)
+        out_groups.append({
+            "name": name, "head": prefix, "note": note,
+            "rows": [{"keys": r["keys"], "label": r["label"], "chord": chord(r["chord"])}
+                     for r in rows],
+        })
+    modes = []
+    for mode, name in PREFIX_GROUP.items():
+        if any(k[0] == mode for k in board):
+            modes.append({"mode": mode, "name": name,
+                          "keys": GROUP_HEAD.get(name, (None, None))[0]})
+    return {
+        "groups": out_groups,
+        "columns": [[index[name] for name, _ in col] for col in pack(groups)],
+        "keys": keys,
+        "legends": legends,
+        "board": [{"mode": m, "mods": chord(held), "cap": c, "binds": b}
+                  for (m, held, c), b in board.items()],
+        "modes": modes,
+        "chordOrder": list(CHORD_ORDER),
+    }
 
 
 if __name__ == "__main__":
-    # --keyboard / --list pick the view; otherwise the last one used opens.
-    VIEWS = {"--keyboard": "keyboard", "--list": "list"}
-    view = next((VIEWS[a] for a in sys.argv[1:] if a in VIEWS), None)
-    sys.exit(Sheet(view).run([a for a in sys.argv if a not in VIEWS]))
+    json.dump(sheet_json(), sys.stdout, ensure_ascii=False)
+    sys.stdout.write("\n")

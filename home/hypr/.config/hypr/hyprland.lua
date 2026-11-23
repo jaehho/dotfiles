@@ -432,8 +432,9 @@ hl.bind(mainMod .. " + G", hl.dsp.exec_cmd("~/.local/bin/hypr-gamemode"))
 -- Night light (blue light filter)
 hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("~/.local/bin/hypr-nightlight-toggle"))
 
--- Keybind cheatsheet
-hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("~/.local/bin/hypr-keybind-cheatsheet"))
+-- Keybind sheet: the bar's (KeybindsWindow.qml); hypr-keybind-cheatsheet
+-- parses this file and tmux for it
+hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("qs -c bar ipc call keybinds toggle"))
 
 -- Quick settings: the bar's right island opens into them; entries live in
 -- hypr-settings-menu
@@ -943,22 +944,14 @@ hl.layer_rule({
     ignore_alpha = 0.5,
 })
 
--- The bar's notification popups and center and its launcher animate
--- themselves (cards slide in, the center slides from the edge, the
--- launcher drops in).
+-- The bar's notification popups and center, its launcher and its keybind
+-- sheet animate themselves (cards slide in, the center slides from the
+-- edge, the launcher and the keybind sheet drop in).
 hl.layer_rule({
     name  = "bar-notifications",
-    match = { namespace = "^bar-(notification|launcher)" },
+    match = { namespace = "^bar-(notification|launcher|keybinds)" },
 
     no_anim = true,
-})
-
-hl.layer_rule({
-    name  = "keybind-cheatsheet-blur",
-    match = { namespace = "keybinds" },
-
-    blur         = true,
-    ignore_alpha = 0.5,
 })
 
 hl.layer_rule({

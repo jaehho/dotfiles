@@ -12,7 +12,8 @@
 //
 // The launcher (LauncherWindow.qml, #89) replaced rofi's drun:
 // `qs -c bar ipc call launcher toggle` opens or closes it on the focused
-// monitor (Super+Space).
+// monitor (Super+Space). The keybind sheet (KeybindsWindow.qml) is
+// `qs -c bar ipc call keybinds toggle` (Super+/).
 //
 // The bar is also the notification daemon (Notifs.qml, #90): popups on
 // the focused monitor and a center that opens like the other sheets.
@@ -40,6 +41,8 @@ ShellRoot {
     property string notifOn: ""
     // The screen whose launcher is open, or "" for none.
     property string launcherOn: ""
+    // The screen whose keybind sheet is open, or "" for none.
+    property string keybindsOn: ""
     // When Super last closed the center, in ms: the toggle that Super+
     // period sends right after is that close, not a reopen.
     property real superClosedAt: 0
@@ -51,6 +54,7 @@ ShellRoot {
 
     function toggle(name) {
         root.launcherOn = "";
+        root.keybindsOn = "";
         root.quickOn = "";
         root.dashOn = "";
         root.notifOn = "";
@@ -68,6 +72,7 @@ ShellRoot {
         root.dashOn = "";
         root.notifOn = "";
         root.launcherOn = "";
+        root.keybindsOn = "";
         root.quickKeys = keys;
         if (root.quickOn !== name)
             root.quickPage = page === "" ? "main" : page;
@@ -89,6 +94,7 @@ ShellRoot {
         root.quickOn = "";
         root.dashOn = "";
         root.launcherOn = "";
+        root.keybindsOn = "";
         root.notifOn = root.notifOn === name ? "" : name;
     }
 
@@ -120,9 +126,45 @@ ShellRoot {
         root.quickOn = "";
         root.dashOn = "";
         root.notifOn = "";
+        root.keybindsOn = "";
         for (const bar of bars.instances)
             bar.trayOpen = false;
         root.launcherOn = root.launcherOn === name ? "" : name;
+    }
+
+    // The keybind sheet closes the others too, and reads the binds again
+    // as it opens.
+    function keybinds(name) {
+        root.openOn = "";
+        root.quickOn = "";
+        root.dashOn = "";
+        root.notifOn = "";
+        root.launcherOn = "";
+        for (const bar of bars.instances)
+            bar.trayOpen = false;
+        if (root.keybindsOn !== name)
+            Keybinds.refresh();
+        root.keybindsOn = root.keybindsOn === name ? "" : name;
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        KeybindsWindow {
+            required property var modelData
+
+            screen: modelData
+            open: root.keybindsOn === modelData.name
+            onCloseRequested: root.keybindsOn = ""
+        }
+    }
+
+    IpcHandler {
+        target: "keybinds"
+
+        function toggle(): void {
+            root.keybinds(Hyprland.focusedMonitor?.name ?? "");
+        }
     }
 
     Variants {
@@ -235,6 +277,7 @@ ShellRoot {
             root.quickOn = "";
             root.notifOn = "";
             root.launcherOn = "";
+            root.keybindsOn = "";
             root.dashOn = root.dashOn === name ? "" : name;
         }
 
@@ -244,6 +287,7 @@ ShellRoot {
             root.dashOn = "";
             root.notifOn = "";
             root.launcherOn = "";
+            root.keybindsOn = "";
             root.shown = !root.shown;
         }
 
