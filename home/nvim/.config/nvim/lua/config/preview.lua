@@ -205,12 +205,10 @@ vim.api.nvim_create_autocmd('VimLeavePre', {
 -- marimo rewrites its other query parameters, or opens a new one;
 -- without tabctl, or when it cannot reach Firefox, xdg-open opens a
 -- tab. marimo-view (home/laptop) is an unused WebKit experiment.
--- show-code=true starts a run-mode tab with the code shown (hidden by
--- default even with --include-code); edit mode always shows it.
 local function show_marimo(server, src)
   local host = marimo_url_host(server.host)
   local file = server.file_key or src
-  local url = ('http://%s:%d%s/?file=%s&show-code=true'):format(
+  local url = ('http://%s:%d%s/?file=%s'):format(
     host,
     server.port,
     server.base_url or '',
@@ -268,10 +266,10 @@ function M.toggle()
       -- run --watch: the notebook as an app, reloaded on nvim saves. Run
       -- mode cannot write the file (marimo's save endpoint needs edit
       -- mode), so :w or Ctrl-S in the tab cannot rewrite it.
-      -- --include-code sends the source, which show_marimo's URL shows.
+      -- --include-code sends the source to the client.
       -- --no-token registers the server; --headless stops marimo opening
-      -- its own tab at the bare root URL, since show_marimo opens one with
-      -- show-code=true. It runs from the project root, as
+      -- its own tab at the bare root URL, since show_marimo opens one.
+      -- It runs from the project root, as
       -- `uv run marimo run notebooks/` from a terminal did.
       local cmd = vim.fn.shellescape(marimo_bin)
         .. ' run --watch --include-code --no-token --headless '
