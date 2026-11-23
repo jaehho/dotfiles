@@ -300,9 +300,12 @@ def emit_bind(text, comment, block_id, submap, loop, locals_):
     if "catchall" in key:
         return None
     tokens = key.split(" + ")
+    # A bind that enters a submap is how that mode's heading names its key.
+    enters = re.search(r'submap\("([^"]+)"\)', action)
     return {"key": key, "comment": comment, "block": block_id, "submap": submap,
             "mods": frozenset(KEY_NAMES[t] for t in tokens[:-1] if t in MODIFIERS),
-            "derived": humanize_action(action, locals_)}
+            "derived": humanize_action(action, locals_),
+            "enters": enters.group(1) if enters and enters.group(1) != "reset" else ""}
 
 
 # ── grouping ─────────────────────────────────────────────────────────────────
@@ -492,13 +495,14 @@ def build_sheet(tmux_bindings):
     return ordered
 
 
-# Every heading answers the same question: what do you hold to get here.
+# Every heading answers the same question: what do you hold to get here. A
+# Hyprland submap's keys come from the bind that enters it (submap_heads).
 GROUP_HEAD = {
     "Super": (["Super"], None),
     "Super + Shift": (["Super", "Shift"], None),
     "Super + Ctrl": (["Super", "Ctrl"], None),
     "Super + Alt": (["Super", "Alt"], None),
-    "Resize mode": (["Super", "A"], "resize mode, Esc to leave"),
+    "Resize mode": (None, "resize mode, Esc to leave"),
     "Notification panel": (["Super", "."], "while the panel is open"),
     "Tmux": (["Ctrl", "A"], "tmux"),
     "Kitty": (["Ctrl", "Shift"], "kitty"),
@@ -668,6 +672,18 @@ def board_keys(board):
     return keys
 
 
+# The modes the keyboard view's switch offers besides Normal. Resize mode
+# stays in the list view but off the switch (the owner's call, 2026-11-23).
+SWITCH = ("tmux",)
+
+
+def submap_heads():
+    """{group name: the keys that enter it}, from hyprland.lua's binds."""
+    return {SUBMAP_GROUPS.get(b["enters"], b["enters"].capitalize()):
+            [key_name(t) for t in b["key"].split(" + ")]
+            for b in parse_hyprland() if b["enters"]}
+
+
 def sheet_json():
     tmux_bindings = tmux_keys()
     groups = build_sheet(tmux_bindings)
@@ -676,19 +692,22 @@ def sheet_json():
     keys = board_keys(board)
     for key in keys:
         legends.setdefault(key["cap"], cap_legend(key["cap"]))
+    entered = submap_heads()
     out_groups = []
     for name, rows in groups:
         prefix, note = GROUP_HEAD.get(name, (None, name.lower()))
+        prefix = entered.get(name, prefix)
         out_groups.append({
             "name": name, "head": prefix, "note": note,
             "rows": [{"keys": r["keys"], "label": r["label"], "chord": chord(r["chord"])}
                      for r in rows],
         })
     modes = []
-    for mode, name in PREFIX_GROUP.items():
+    for mode in SWITCH:
+        name = PREFIX_GROUP[mode]
         if any(k[0] == mode for k in board):
             modes.append({"mode": mode, "name": name,
-                          "keys": GROUP_HEAD.get(name, (None, None))[0]})
+                          "keys": entered.get(name, GROUP_HEAD.get(name, (None, None))[0])})
     return {
         "groups": out_groups,
         "columns": [[index[name] for name, _ in col] for col in pack(groups)],

@@ -10,8 +10,9 @@ pragma ComponentBehavior: Bound
 // - keyboard: the binds filed by physical key. A key is solid blue when
 //   it does something with what is held now (or latched by a click on a
 //   modifier cap), raised when it needs another modifier, flat when
-//   unbound; the mode chips pick resize mode or tmux's prefix. Hovering,
-//   clicking or pressing a key lists its binds under the board.
+//   unbound. The switch above it picks Normal or a mode the board shows
+//   instead (tmux's prefix). Hovering, clicking or pressing a key lists
+//   its binds under the board.
 //
 // Bare Esc closes and bare Tab switches views; with a modifier held they
 // are chords to look up. In the keyboard view the window suspends
@@ -359,11 +360,9 @@ Sheet {
                     }
                 }
 
-                // The mode chips stand where the filter does.
-                Repeater {
-                    model: sheet.view === "keyboard" ? sheet.table?.modes ?? [] : []
-
-                    Chip {}
+                // The mode switch stands where the filter does.
+                ModeSwitch {
+                    visible: sheet.view === "keyboard"
                 }
 
                 Item {
@@ -650,54 +649,91 @@ Sheet {
         }
     }
 
-    // A mode chip: a pill on the card tone holding the mode's keys and
-    // name, on the blue tint when chosen.
-    component Chip: Rectangle {
-        id: chip
+    // The keyboard view's mode switch, Material 3's segmented button: one
+    // pill on the card tone, Normal and then each mode by name with the
+    // keys that enter it after in Mono, so the keys read as a note and not
+    // as a bind. The chosen segment sits on the blue tint, which slides to
+    // the next choice.
+    component ModeSwitch: Rectangle {
+        id: modes
 
-        required property var modelData
-        readonly property bool on: sheet.mode === modelData.mode
+        readonly property var choices: [{
+                mode: "",
+                name: "Normal",
+                keys: null
+            }].concat(sheet.table?.modes ?? [])
+        readonly property Item chosen: segments.count > 0 ? segments.itemAt(choices.findIndex(c => c.mode === sheet.mode)) : null
 
-        implicitWidth: chipRow.implicitWidth + Theme.space.md * 2
-        implicitHeight: 30
+        implicitWidth: row.implicitWidth + 4
+        implicitHeight: 32
         radius: Theme.radius.pill
-        color: on ? Theme.colors.withAlpha(Theme.colors.blue, 0.18) : Theme.surface.card
+        color: Theme.surface.card
 
-        Behavior on color {
-            CAnim {}
-        }
+        Rectangle {
+            x: (modes.chosen?.x ?? 0) + 2
+            y: 2
+            width: modes.chosen?.width ?? 0
+            height: parent.height - 4
+            radius: Theme.radius.pill
+            color: Theme.colors.withAlpha(Theme.colors.blue, 0.18)
 
-        StateLayer {
-            tint: chip.on ? Theme.colors.blue : Theme.colors.fg
-            onClicked: () => sheet.mode = chip.on ? "" : chip.modelData.mode
+            Behavior on x {
+                Anim {}
+            }
+
+            Behavior on width {
+                Anim {}
+            }
         }
 
         Row {
-            id: chipRow
-            anchors.centerIn: parent
-            spacing: Theme.space.sm
+            id: row
+            x: 2
+            y: 2
+            height: parent.height - 4
 
-            Row {
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 3
+            Repeater {
+                id: segments
+                model: modes.choices
 
-                Repeater {
-                    model: chip.modelData.keys ?? []
+                Item {
+                    id: segment
 
-                    Keycap {
-                        required property string modelData
+                    required property var modelData
+                    readonly property bool on: sheet.mode === modelData.mode
+                    readonly property real radius: Theme.radius.pill
 
-                        text: modelData
+                    implicitWidth: words.implicitWidth + Theme.space.md * 2
+                    height: row.height
+
+                    StateLayer {
+                        tint: segment.on ? Theme.colors.blue : Theme.colors.fg
+                        onClicked: () => sheet.mode = segment.modelData.mode
+                    }
+
+                    Row {
+                        id: words
+                        anchors.centerIn: parent
+                        spacing: Theme.space.sm
+
+                        Line {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: segment.modelData.name
+                            size: Theme.font.smaller
+                            weight: Font.Medium
+                            color: segment.on ? Theme.colors.fg : Theme.colors.grey2
+                        }
+
+                        Line {
+                            visible: text !== ""
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: (segment.modelData.keys ?? []).join("+")
+                            mono: true
+                            size: Theme.font.small
+                            color: Theme.colors.grey2
+                        }
                     }
                 }
-            }
-
-            Line {
-                anchors.verticalCenter: parent.verticalCenter
-                text: chip.modelData.name
-                size: Theme.font.smaller
-                weight: Font.Medium
-                color: chip.on ? Theme.colors.fg : Theme.colors.grey2
             }
         }
     }
