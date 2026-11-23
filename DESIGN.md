@@ -97,6 +97,18 @@ components:
     size: "36px"
   icon-button-hover:
     textColor: "{colors.fg}"
+  tile:
+    backgroundColor: "{colors.bg1}"
+    textColor: "{colors.fg}"
+    typography: "{typography.body}"
+    rounded: "{rounded.pill}"
+    height: "48px"
+  list-row:
+    textColor: "{colors.fg}"
+    typography: "{typography.body}"
+    rounded: "{rounded.pill}"
+    padding: "0 12px"
+    height: "36px"
   button-flat:
     backgroundColor: "{colors.bg0}"
     textColor: "{colors.fg}"
@@ -172,13 +184,13 @@ The name comes from the aviation principle that a normal state lights nothing. A
 
 Density is compact and keyboard-paced: 13px words, 11px labels, controls 8px apart. Surfaces are dark sheets edged by a 1px hairline; the controls on them are tonal pills and round icon buttons that wash with their tint under the pointer; corners follow a 12/8 scale; depth is an edge, not a lift. Motion is calm and serves state, on Material 3's standard curves with no overshoot: a wash fades in over 150ms, things move inside a surface over 250ms, and a surface arrives over 400ms, slowing into place. Beyond that and the compositor's pop-in and fades there is one authored moment, on the polkit prompt, whose sheet drops from the top edge under the IR camera, breathes its lens dot while the camera looks, and retracts after "Approved."
 
-**The shell base (decision #89).** The bar's Quickshell config is growing into one shell (bar, quick settings, dash, notifications, then a launcher) built to Caelestia's polish on Material 3's patterns, in foliage colors; Caelestia is a reference, not a dependency. Its tokens live in `home/hypr/.config/quickshell/bar/Theme.qml` (radii, spacing, type, icon sizes, motion, state-layer strengths and surface roles), and its primitives beside it: `Sheet`, `StateLayer`, `PillButton`, `IconButton`, `Icon`, `Line`, `Anim` and `CAnim`. The notifications are built on it. Quick settings, the tray and the islands move to it one at a time, then a launcher replaces rofi's drun; until a surface moves, it keeps the older controls this file describes beside the new ones (Buttons).
+**The shell base (decision #89).** The bar's Quickshell config is growing into one shell (bar, quick settings, dash, notifications, then a launcher) built to Caelestia's polish on Material 3's patterns, in foliage colors; Caelestia is a reference, not a dependency. Its tokens live in `home/hypr/.config/quickshell/bar/Theme.qml` (radii, spacing, type, icon sizes, motion, state-layer strengths and surface roles), and its primitives beside it: `Sheet`, `StateLayer`, `PillButton`, `IconButton`, `Icon`, `Line`, `Anim` and `CAnim`. The notifications and quick settings are built on it. The tray and the islands move to it next, one at a time, then a launcher replaces rofi's drun; until a surface moves, it keeps the older controls this file describes beside the new ones (Buttons).
 
 **Key Characteristics:**
 
 - Everforest Dark Medium (decision #71), read by token name from `home/hypr/.config/hypr/themes/foliage.conf`.
 - Gray at rest; a hue only for news or an action on offer, with one meaning per state hue.
-- Dark `bg_dim` sheets with a 1px hairline; on them, tonal pill buttons, and one state-layer wash for hover, press and the keyboard's row.
+- Dark `bg_dim` sheets with a 1px hairline; on them, tonal pill buttons, and one state-layer wash for hover, press and the keyboard's row; a 2px `blue` ring only for the keyboard's stop on a sheet walked in two directions.
 - State as a tint of its tone; a solid tone fill only for the one active marker in a row.
 - Adwaita Sans for words; Material Symbols Rounded for the shell's icons; JetBrainsMono Nerd Font for identifiers, key names, the older surfaces' glyphs, and all of the bar, launcher and lock screen.
 - Radii of 12, 8 and pill; square where a surface meets a screen edge.
@@ -215,7 +227,7 @@ One widget also uses hues to tell meters apart rather than to report state: the 
 
 - **Forest Shade** (`bg_dim`): the darkest plane. Overlay sheets (at 0.985), notification cards, the docked hangul strip, text on solid tone fills, keycap lips, and the color of every shadow.
 - **Dark Slate** (`bg0`): controls on sheets, the bar's islands (at 0.88), menus, tooltips and rofi's window.
-- **Raised Slate** (`bg1`): control edges, hover fill, slider and meter tracks, hyprlock's input fill, the shell's cards on a sheet (at 0.55) and its count pill.
+- **Raised Slate** (`bg1`): control edges, hover fill, slider and meter tracks, hyprlock's input fill, the shell's cards and quick settings' controls on a sheet (at 0.55) and its count pill.
 - **Hairline Slate** (`bg2`): sheet and card hairlines, a resting field's edge, rofi's window edge and list separator, the hangul hint's keys.
 - **Lifted Slate** (`bg3`): hover edges and raised keycap faces.
 - **Parchment** (`fg`): primary text and glyphs. 8.62:1 on `bg_dim`, 7.38:1 on `bg0`.
@@ -255,7 +267,7 @@ The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` 
 - **Control label** (Adwaita Sans 500, 12px): the shell's pill button labels; 400 for the line under the notification center's header.
 - **Label** (Adwaita Sans 400, 11px): the state under a tile's name ("On", "Balanced"), tallies, footers, a notification's "App · 5m" line; 500 in the notification center's count pill.
 - **Heading** (Adwaita Sans 700, 11px, uppercase): group headings on the display sheet, quick settings ("OPEN", "OUTPUT", "INPUT", in `grey2`) and in speaker-eq.
-- **Mono** (JetBrainsMono Nerd Font 400, 11px; 700 on keycaps; 10px for the key hint inside a button): identifiers such as the polkit action id, key names on keycaps, "Esc" and "Enter" beside button labels, the key hints on a notification's pills.
+- **Mono** (JetBrainsMono Nerd Font 400, 11px; 700 on keycaps; 10px for the key hint inside a button): identifiers such as the polkit action id, key names on keycaps, "Esc" and "Enter" beside button labels, the key hints on a notification's pills, a quick settings slider's level.
 - **Icon** (Material Symbols Rounded at 16, 20 or 24px, `Theme.icon`): outlined at rest (FILL 0), filled when on (FILL 1, animated), weight 400 with optical size following the size; the empty notification center's bell is 40px at weight 300. In `fg`, `grey2` or the state's tone.
 - **Glyph** (JetBrainsMono Nerd Font, 17px on tiles, 22px for the polkit shield, 16px for status glyphs): the older surfaces' Material Design Icons, in `fg` or the state's tone.
 - **Bar** (JetBrainsMono Nerd Font 400, 13px; the clock bold, the window title italic, the power glyph 15px): everything on the bar.
@@ -277,7 +289,7 @@ rofi sets its list in JetBrainsMono Nerd Font 11 with Papirus-Dark app icons; hy
 
 **Overlays.** The sheets are layer-shell surfaces on the overlay layer that take the keyboard while open. The display (520px) and keybind sheets center on screen; the keybind sheet sizes to its content. Quick settings is not one of them: the bar's right island grows into it, 460px wide, inside the bar's own surface. The polkit prompt covers the focused monitor with a 40% black scrim and hangs a 440px sheet flush from the top edge, centered under the IR camera. The hangul hint takes no input: it floats 56px above the bottom edge, or docks as a full-width strip that reserves its own height. The notification popups stack 380px cards 8px apart at the top right of the focused monitor, 8px under the bar and 8px from the edge, newest on top; they never take the keyboard. The notification center is a 400px sheet in the same corner of the screen it was opened on, as tall as its list (scrolling past the screen's height); it holds the keyboard exclusively while open, and any Super chord closes it before Hyprland acts on the chord.
 
-**Rhythm.** Controls and rows sit 8px apart in grids of equal columns (quick settings: three tile columns, two "Open" columns, a row of five session buttons, with 14px between groups). Stacked labels sit 1 to 4px apart and controls pad 12px inline. The shell base takes its gaps from `Theme.space` (4, 8, 12, 16, 24) and pads its sheets and cards 12px (`md`), with cards 8px apart. The older sheets pad about 20px at the sides (display 18/20/14/20, polkit 26/22/20, keybinds 20/26/16/26; the bar's open islands 16). The hangul board pads 16px all round.
+**Rhythm.** Controls and rows sit 8px apart in grids of equal columns (quick settings: three tile columns, two "Open" columns, a row of five session buttons, with 12px between groups). Stacked labels sit 1 to 4px apart and controls pad 12px inline. The shell base takes its gaps from `Theme.space` (4, 8, 12, 16, 24) and pads its sheets and cards 12px (`md`), with cards 8px apart. The older sheets pad about 20px at the sides (display 18/20/14/20, polkit 26/22/20, keybinds 20/26/16/26; the bar's open islands 16). The hangul board pads 16px all round.
 
 ## Elevation & Depth
 
@@ -305,13 +317,13 @@ Depth is tone and edge, not lift. A sheet is the darkest plane on screen (`bg_di
 
 Corners follow one scale: 12px for windows and containers (Hyprland's `decoration.rounding`, with `rounding_power` 2), 8px for controls nested inside them, and a pill for anything fully round. A corner that meets a screen edge stays square: the polkit sheet's top corners, the docked hangul strip. `Theme.radius` names them `surface`, `control` and `pill`. Edges are 1px hairlines; the only heavier lines are the 2px window border, the 2px focus ring, the keycap lip and hyprlock's 3px input outline.
 
-On the scale today: the polkit sheet, the keybind sheet, the hangul board, the bar islands, the bar's menus and open sheets, the notification popups, center and the cards in it, rofi's window and hyprlock's input field at 12px; the polkit buttons, field and band, the keybind sheet's filter, chips, keys and caps, the hangul keys, the bar's pills, menu rows, tips and quick settings controls, rofi's input bar and rows at 8px; the shell's buttons, icon buttons, count pill, avatars and progress bars, the polkit lens dot, the quick settings sliders and switch, and the hangul home-key bumps as pills.
+On the scale today: the polkit sheet, the keybind sheet, the hangul board, the bar islands, the bar's menus and open sheets, the notification popups, center and the cards in it, quick settings' session buttons, rofi's window and hyprlock's input field at 12px; the polkit buttons, field and band, the Wi-Fi page's field and the join failure bands, the keybind sheet's filter, chips, keys and caps, the hangul keys, the bar's pills, menu rows and tips, rofi's input bar and rows at 8px; the shell's buttons, icon buttons, count pill, avatars and progress bars, the polkit lens dot, quick settings' tiles, rows, "Open" buttons, sliders and switch, and the hangul home-key bumps as pills.
 
 **Drift.** speaker-eq's notices use 10px. rofi keeps the stock theme's 2px dashed list separator, a heavier line than a hairline.
 
 ### Shape Rules
 
-**The 12/8 Rule.** Windows and containers take 12px, controls nested in them 8px, fully round elements a pill, and a corner that meets a screen edge stays square. On the shell base a button is a pill and a card is a container. A new surface picks from this scale.
+**The 12/8 Rule.** Windows and containers take 12px, controls nested in them 8px, fully round elements a pill, and a corner that meets a screen edge stays square. On the shell base a button is a pill and a card is a container; a tall button that stacks its icon over its label (quick settings' session row) takes the container's 12px. A new surface picks from this scale.
 
 ## Components
 
@@ -332,19 +344,23 @@ On the shell base, tonal pills and round icon buttons that wash under the pointe
 - **State layer** (`StateLayer.qml`): the shell's one hover, press and keyboard feedback, a wash of the control's tint over its own shape at `Theme.state`'s strengths: 0.08 under the pointer, 0.10 on the keyboard's row, 0.18 pressed, fading over 150ms. A button inside a clickable card takes the click before the card does.
 - **Tonal pill** (`PillButton.qml`): 30px tall, 12px inline padding, its tint at 0.14 behind, an optional 16px icon in the tint and a Control label in `fg`, centered, cut with an ellipsis when narrow. The label stays `fg` by the Tint Rule: no tone holds 4.5:1 on its own wash over a card (red 3.70:1, `grey2` 4.00:1, blue 4.39:1), where `fg` holds 4.8:1 or more even under the pointer. A key hint sits at its right end in Mono 11px `grey2`. Blue for the actions something offers (red when it is critical), `grey2` for a sheet's own housekeeping ("Clear all"). Pills in one row share its width equally.
 - **Icon button** (`IconButton.qml`): a round 36px target around a 20px icon (16px in a card's corner), `grey2` at rest and `fg` under the pointer. On, a toggle fills its icon and lays its tone at 0.14 under it: Do Not Disturb in `red`.
-- **Older controls** (the GTK4 sheets, the polkit prompt, quick settings and the bar's menus, until they move):
+- **Quick settings controls** (`QuickControl.qml`): pills on the card tone (`bg1` at 0.55), or bare when flat (a list row), each over a `StateLayer` in its tint. On, `blue` at 0.18 behind; armed, `red` at 0.2; no edge. Under the keyboard, Material 3's focus indicator: a 2px `blue` ring 3px outside the control, shown only while the keyboard drives; a click puts it away.
+  - **Tile** (`QuickTile.qml`): 48px tall, a 20px icon centered in its round end, the name in Body `fg` over the state in Label `grey2`, and a 16px `grey2` chevron at the end when it opens a page. On, the icon fills and it and the state turn `blue` (4.69:1 on that tint); off, the icon rests in `grey0`.
+  - **Row** (`QuickRow.qml`): 36px tall and flat, a 20px icon 12px in, the name in Body `fg` from 44px, a note at the end in Label `grey2`; on, the tint, the icon filled and the icon and note in `blue`. The "Open" buttons are the same on the card tone, two to a row with an 18px icon.
+  - **Session button:** 56px tall with 12px corners, the icon over the label in Label `grey2`; armed, the icon fills in `red` and the label says "Again?" in `fg`.
+- **Older controls** (the GTK4 sheets, the polkit prompt and the bar's menus, until they move):
   - **Shape:** 8px corners.
   - **Default:** `bg0` fill, 1px `bg1` edge, `fg` names, a Material Design glyph icon at 17px.
-  - **Hover:** `bg1` fill with a `bg3` edge, on the GTK4 sheets, the polkit sheet and quick settings alike. A flat control (a list row) is bare at rest and takes the `bg1` fill under the pointer.
-  - **Focus:** an `fg` border plus a 2px `blue` outline offset 1px. On quick settings it shows only while the keyboard drives; a click puts it away.
+  - **Hover:** `bg1` fill with a `bg3` edge, on the GTK4 sheets and the polkit sheet alike. A flat control (a list row) is bare at rest and takes the `bg1` fill under the pointer.
+  - **Focus:** an `fg` border plus a 2px `blue` outline offset 1px.
   - **On:** `blue` at 0.18 behind (0.28 under the pointer) and 0.55 on the edge; the icon and state line turn `blue` (4.69:1 on that band).
   - **Primary:** the polkit Approve button: `blue` at 0.18 (0.28 on hover) behind and 0.55 on the edge, an `fg` label, 30px tall, 12px inline padding, and its key in Mono beside the label ("Enter"). Cancel is the default button with "Esc" beside it in `grey2`.
-- **Armed:** Log out, Reboot and Shut down take a second press. The first arms the button for 3 seconds: `red` at 0.2 behind and 0.55 on the edge, and the label "Again?" in `fg`, as the Tint Rule asks. Quick settings' session row and the bar's power menu arm alike.
+- **Armed:** Log out, Reboot and Shut down take a second press. The first arms the button for 3 seconds: `red` at 0.2 behind (and 0.55 on the edge, on the older controls), and the label "Again?" in `fg`, as the Tint Rule asks. Quick settings' session row and the bar's power menu arm alike.
 - **Disabled:** 0.5 opacity on the shell's pills (their wash drops to 0.06), the polkit sheet, quick settings and the display sheet's layout buttons; GTK's insensitive state elsewhere. A display card that can't be switched off (the last screen on) keeps its full strength, since it still marks the screen you are on.
 
 ### Inputs / Fields
 
-- **Style:** `bg0` fill, a 1px `bg2` edge, 8px corners, 12px inline padding, Field type in `fg`; 36px tall on the polkit sheet.
+- **Style:** `bg0` fill, a 1px `bg2` edge, 8px corners, 12px inline padding, Field type in `fg`; 36px tall on the polkit sheet and the Wi-Fi page, where it opens under the network's name.
 - **Focus:** the edge turns `blue` (the keybind filter adds a 1px `blue` outline at 0.35); the caret is `blue`; a selection is `blue` at 0.35 to 0.4 under `fg` text.
 - **Placeholder:** `grey2`: "Password for" and the user's name on the polkit sheet, the network's name on the Wi-Fi page, "Filter" on the keybind sheet.
 
@@ -356,7 +372,7 @@ A tinted line for the frames the owner must not miss.
 - **Approved and wrong password:** the tone at 0.14 behind and 0.45 on the edge. "Approved" sets its words in `green` DemiBold; a wrong password keeps `red` in the glyph, fill and edge and its words in `fg`.
 - **Looking and fallback:** plain status lines with a tone-colored glyph and no band: `blue` while the camera looks, `yellow` once the password takes over.
 - **Notices:** speaker-eq bands info, warning and error notices in `blue`, `yellow` and `red` at 0.12 behind and 0.45 to 0.5 on the edge.
-- **Join failures:** the wrong-password band under the row on the Wi-Fi and Bluetooth pages, saying why in plain words ("Wrong password, or the network turned it down.", "Couldn't connect. Check that it's on and in range.").
+- **Join failures** (`QuickBand.qml`): the wrong-password band under the row's name on the Wi-Fi and Bluetooth pages, padded 8px, with a filled 16px `error` icon in `red`, saying why in plain words ("Wrong password, or the network turned it down.", "Couldn't connect. Check that it's on and in range.").
 
 ### Navigation
 
@@ -368,8 +384,8 @@ The bar: three quiet islands, with only the active workspace filled.
 - **State:** glyphs change color by the Signal roles; critical load pulses opacity to 0.35 every 0.5s, and a critical battery blinks toward `fg`. Stay awake is `orange` while its inhibitor is held; its glyph turns `red` while hypridle is not running, since then nothing answers Lock, and its tip says so.
 - **Tray:** behind a chevron that points the way the drawer will move. Icons rest desaturated at 0.8 and take their colours under the pointer, or while the app asks for attention, on an `orange` pill at 0.18; with the drawer shut, such an app turns the chevron `orange`.
 - **Player sheet:** a click on the center island, or Super+Shift+B, grows it in place into the player beside the month; it fades from the island's glass to `bg_dim` at 0.985 as it opens. Esc or a click outside closes it.
-- **Quick settings:** Super+;, the sliders glyph left of the power glyph, or a right click on the speaker, Bluetooth or network glyph (at that glyph's page) grows the right island in place, leftward and down, into a 460px sheet; its glyph row stays put and live as the header, and it fades as the player sheet does. One sheet is open at a time. The main page holds the volume and brightness sliders, Wi-Fi, Bluetooth and Sound tiles, `hypr-settings-menu`'s toggles (its `--json` table), its "Open" rows and the session row; the Wi-Fi, Bluetooth and Sound pages open in place under a back row (a bold 15px title with a `grey2` chevron, and the radio's switch at the right), and the height follows the page. A page's list is flat rows, the connected or default one on the `blue` tint with "Connected" or "Default" in `blue`; a long list scrolls behind a 3px `bg3` bar and fades into the sheet at the bottom. Each page ends in a row to the tool that does the rest (nmtui, bluetui, wiremix). j/k and h/l (or the arrows) move between controls, h/l step a focused slider, Tab goes in reading order, Enter or Space presses, and Esc or q backs out of a page, then closes. Each control has a hint letter that presses it (or focuses a slider), typed whether the letters show or not; they open hidden, and f shows them in the controls' corners as small keycaps and hides them again, as does Esc. The tray's grid (Super+') takes the same letters and f.
-- **Sliders and switches:** a slider is a 6px `bg1` pill track filled in `fg` to the level, a 12px `fg` knob with a 2px `bg_dim` edge that grows to 16px under the pointer, its glyph at 16px and the level in Mono 11px `grey2`; muted, the glyph, fill and knob turn `grey0`. A switch is a 40×22 pill: on, the `blue` tint with an `fg` knob at the right; off, `bg0` with a `bg1` edge and a `grey0` knob at the left.
+- **Quick settings:** Super+;, the sliders glyph left of the power glyph, or a right click on the speaker, Bluetooth or network glyph (at that glyph's page) grows the right island in place, leftward and down, into a 460px sheet; its glyph row stays put and live as the header, and it fades as the player sheet does. One sheet is open at a time. The main page holds the volume and brightness sliders, Wi-Fi, Bluetooth and Sound tiles, `hypr-settings-menu`'s toggles (its `--json` table), its "Open" rows and the session row; the Wi-Fi, Bluetooth and Sound pages open in place under a back row (a `grey2` back arrow and the page's name in Headline, and the radio's switch at the right), and the height follows the page. A page's list is flat rows, the connected or default one on the `blue` tint with "Connected" or "Default" in `blue`; a long list scrolls behind a 3px `bg3` bar and fades into the sheet at the bottom. Headings, status lines and the back arrow line up with the rows' icons. Each page ends in a row, with a terminal icon, to the tool that does the rest (nmtui, bluetui, wiremix). j/k and h/l (or the arrows) move between controls, h/l step a focused slider, Tab goes in reading order, Enter or Space presses, and Esc or q backs out of a page, then closes. Each control has a hint letter that presses it (or focuses a slider), typed whether the letters show or not; they open hidden, and f shows them in the controls' corners as small keycaps and hides them again, as does Esc. The tray's grid (Super+') takes the same letters and f.
+- **Sliders and switches:** a slider is a 6px `bg1` pill track filled in `fg` to the level, a 12px `fg` knob with a 2px `bg_dim` edge that grows to 16px under the pointer, its 20px icon in a round 36px target (a click mutes the volume or mic) and the level in Mono 11px `grey2`; muted, the icon, fill and knob turn `grey0`. A switch is a 40×22 pill with a 14px knob: on, the `blue` tint with an `fg` knob at the right; off, the card tone with a `grey0` knob at the left.
 - **Menus:** the power menu, the reboot confirmation and tray menus drop from the control that opened them as small sheets: `bg_dim` at 0.985 over a shadow, a 1px `blue` edge at 0.18, 12px corners, 30px rows in Adwaita Sans with a `bg1` hover. A submenu opens in place under a back row. Log out, Reboot and Shut down arm on the first click and run on a second within 3 seconds (see Buttons, Armed).
 - **Tips:** after half a second's hover, `bg0` with mono `fg` text, a 1px `blue` edge at 0.28 and 8px corners, centered under the control and drawn inside the bar's own surface.
 
@@ -413,7 +429,7 @@ hyprlock: a blurred screenshot of the session (3 passes, size 8, brightness 0.6)
 
 **The Visible Approval Rule.** A face approval stays on screen as a green "Approved" band for 700ms before the sheet retracts, so a request the owner did not expect cannot pass unseen.
 
-**The One Wash Rule.** On the shell base, hover, press and the keyboard's row are one state layer in the control's tint; no control brightens its fill or draws a ring of its own.
+**The One Wash Rule.** On the shell base, hover, press and the keyboard's row are one state layer in the control's tint; no control brightens its fill. A ring is for one case only: the keyboard's stop on a sheet walked in two directions (quick settings) wears Material 3's focus indicator, a 2px `blue` ring 3px outside the control, since a wash alone doesn't show where you are in a grid.
 
 **The Calm Motion Rule.** Shell motion takes `Theme.motion` through `Anim` and `CAnim`: 150ms for washes, color and small fades, 250ms for moves and resizes inside a surface, 400ms for a surface arriving; the `enter` curve for what arrives, `exit` for what leaves, `standard` for what moves within the screen. Nothing overshoots or bounces.
 
