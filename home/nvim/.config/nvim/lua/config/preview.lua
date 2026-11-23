@@ -207,10 +207,12 @@ vim.api.nvim_create_autocmd('VimLeavePre', {
 -- marimo rewrites its other query parameters, or opens a new one;
 -- without tabctl, or when it cannot reach Firefox, xdg-open opens a
 -- tab. marimo-view (home/laptop) is an unused WebKit experiment.
+-- view-as=present opens an edit-mode tab in app view (code hidden);
+-- the toggle in the tab switches to the editor.
 local function show_marimo(server, src)
   local host = marimo_url_host(server.host)
   local file = server.file_key or src
-  local url = ('http://%s:%d%s/?file=%s'):format(
+  local url = ('http://%s:%d%s/?file=%s&view-as=present'):format(
     host,
     server.port,
     server.base_url or '',
