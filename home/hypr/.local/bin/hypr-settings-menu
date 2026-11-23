@@ -48,54 +48,6 @@ def tui(cmd):
 
 # ── state probes ─────────────────────────────────────────────────────────────
 
-EQ_PARAM = "audioconvert.filter-graph.0"
-EQ_BYPASS = "speaker-eq.bypassed"
-
-
-def speaker_eq_node():
-    """The speaker sink and the EQ graph built into it (see CLAUDE.md).
-
-    None while headphones are in: they replace the speaker sink.
-    """
-    try:
-        objects = json.loads(output(["pw-dump"]) or "[]")
-    except ValueError:
-        return None, None
-    for o in objects:
-        props = (o.get("info") or {}).get("props") or {}
-        if o.get("type") == "PipeWire:Interface:Node" and props.get(EQ_PARAM):
-            return o["id"], props[EQ_PARAM]
-    return None, None
-
-
-def speaker_eq_bypassed(node):
-    # A suspended node does not report its graph, so a bypass is recorded
-    # against its id, the same way speaker-measure does, and PipeWire drops
-    # the record along with the node.
-    meta = output(["pw-metadata", "-n", "default", str(node)])
-    return f"key:'{EQ_BYPASS}'" in meta
-
-
-def speaker_eq_on():
-    node, _ = speaker_eq_node()
-    return None if node is None else not speaker_eq_bypassed(node)
-
-
-def speaker_eq_toggle():
-    node, graph = speaker_eq_node()
-    if node is None:
-        return
-    on = not speaker_eq_bypassed(node)
-    # Props params are read into a 4096-byte buffer: drop the indentation.
-    value = "" if on else " ".join(graph.split())
-    subprocess.run(["pw-cli", "set-param", str(node), "Props",
-                    f'{{ params = [ "{EQ_PARAM}" {json.dumps(value)} ] }}'],
-                   capture_output=True)
-    args = [str(node), EQ_BYPASS, "true"] if on else ["-d", str(node), EQ_BYPASS]
-    subprocess.run(["pw-metadata", "-n", "default", *args], capture_output=True)
-    spawn(f"notify-send -u low 'Speaker EQ' '{'OFF — flat' if on else 'ON'}'")
-
-
 PROFILES = ["power-saver", "balanced", "performance"]
 
 
@@ -179,9 +131,6 @@ ITEMS = [
     dict(id="gamemode", kind="toggle", icon="sports_esports", label="Game mode",
          run=f"{BIN}/hypr-gamemode", needs=["hyprctl", "jq"],
          state=gamemode_on),
-    dict(id="speaker-eq", kind="toggle", icon="graphic_eq", label="Speaker EQ",
-         run=speaker_eq_toggle, needs=["pw-dump", "pw-cli", "pw-metadata"],
-         state=speaker_eq_on),
     dict(id="tablet", kind="toggle", icon="tablet", label="Tablet",
          run=f"{BIN}/tablet-display toggle", needs=["tablet-display", "hyprctl"],
          state=tablet_on),
@@ -245,8 +194,8 @@ def run(item):
 def listing(items):
     """The entries as the sheet reads them, with each one's state.
 
-    The probes run side by side, so the sheet waits for the slowest
-    (speaker-eq's pw-dump), not for their sum.
+    The probes run side by side, so the sheet waits for the slowest,
+    not for their sum.
     """
     with ThreadPoolExecutor() as pool:
         states = {i["id"]: pool.submit(i["state"])
