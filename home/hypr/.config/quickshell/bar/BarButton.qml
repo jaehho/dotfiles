@@ -1,20 +1,29 @@
-// A glyph on a bar island, as waybar drew its modules: 7px either side,
-// resting in its own colour (grey2 unless its state says otherwise),
-// brightening over a faint blue pill under the pointer. A tip below the
+// A control on a bar island, on the shell base (#89): a Material Symbol
+// (`icon`), words (`text`), or both, resting in its own colour (grey2
+// unless its state says otherwise) and brightening to `hoverTint` over
+// a pill-shaped state layer in `wash` under the pointer. A tip below the
 // bar says more after a moment's hover. Clicks, the wheel and what the
 // tip says belong to whoever places it.
+//
+// A cluster not yet on Material Symbols passes its Nerd Font glyph as
+// `text`, which is set in the bar's mono face.
 import QtQuick
 
-Rectangle {
-    id: button
+Item {
+    id: control
 
     required property var bar
+    // A Material Symbols name.
+    property string icon: ""
+    property int iconSize: Theme.icon.small + 2
+    property real fill: 0
     property string text: ""
     property int textFormat: Text.PlainText
-    property color tint: bar.colors.grey2
-    property color hoverTint: bar.colors.fg
-    property color pill: bar.colors.withAlpha(bar.colors.blue, 0.14)
-    property int size: 13
+    property color tint: Theme.colors.grey2
+    property color hoverTint: Theme.colors.fg
+    // The state layer's tint: fg, or red on a destructive control.
+    property color wash: Theme.colors.fg
+    property int size: Theme.font.body
     property bool bold: false
     property bool italic: false
     // Longer text is cut with an ellipsis; the tip keeps all of it.
@@ -23,9 +32,11 @@ Rectangle {
     property string tip: ""
     property int tipFormat: Text.PlainText
     readonly property bool hovered: hover.hovered
-    // Off for text that only reports, like the window title: no pill,
+    // Off for text that only reports, like the window title: no wash,
     // no pointer, no clicks. The tip still shows.
     property bool interactive: true
+    readonly property bool lit: interactive && hovered
+    readonly property color shade: lit ? hoverTint : tint
 
     signal clicked
     signal rightClicked
@@ -33,69 +44,85 @@ Rectangle {
     // One per wheel notch: +1 away from the user, -1 toward.
     signal scrolled(int steps)
 
-    implicitWidth: label.width + 14
+    // A lone icon sits in a near-round pill; words take room either side.
+    implicitWidth: content.width + (control.text === "" ? Theme.space.xs : Theme.space.sm) * 2
     implicitHeight: 24
-    radius: 8
-    color: button.interactive && hover.hovered ? button.pill : "transparent"
-
-    Behavior on color {
-        ColorAnimation {
-            duration: 200
-        }
-    }
 
     HoverHandler {
         id: hover
-        cursorShape: button.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onHoveredChanged: hovered ? button.bar.hint(button) : button.bar.unhint(button)
+        cursorShape: control.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onHoveredChanged: hovered ? control.bar.hint(control) : control.bar.unhint(control)
     }
 
-    TapHandler {
-        enabled: button.interactive
+    StateLayer {
+        radius: Theme.radius.pill
+        tint: control.wash
+        enabled: control.interactive
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onTapped: (eventPoint, pressed) => {
-            button.bar.unhint(button);
-            if (pressed === Qt.RightButton)
-                button.rightClicked();
-            else if (pressed === Qt.MiddleButton)
-                button.middleClicked();
+        onClicked: which => {
+            control.bar.unhint(control);
+            if (which === Qt.RightButton)
+                control.rightClicked();
+            else if (which === Qt.MiddleButton)
+                control.middleClicked();
             else
-                button.clicked();
+                control.clicked();
         }
     }
 
     WheelHandler {
-        enabled: button.interactive
+        enabled: control.interactive
         property real travel: 0
         onWheel: event => {
             travel += event.angleDelta.y;
             while (travel >= 120) {
                 travel -= 120;
-                button.scrolled(1);
+                control.scrolled(1);
             }
             while (travel <= -120) {
                 travel += 120;
-                button.scrolled(-1);
+                control.scrolled(-1);
             }
         }
     }
 
-    Line {
-        id: label
+    Row {
+        id: content
         anchors.centerIn: parent
-        width: Math.min(implicitWidth, button.maxWidth)
-        elide: Text.ElideRight
-        mono: true
-        size: button.size
-        weight: button.bold ? Font.Bold : Font.Normal
-        font.italic: button.italic
-        textFormat: button.textFormat
-        text: button.text
-        color: button.interactive && hover.hovered ? button.hoverTint : button.tint
+        spacing: Theme.space.xs
 
-        Behavior on color {
-            ColorAnimation {
-                duration: 200
+        Icon {
+            visible: control.icon !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            name: control.icon
+            size: control.iconSize
+            fill: control.fill
+            color: control.shade
+
+            Behavior on color {
+                CAnim {
+                    speed: "fast"
+                }
+            }
+        }
+
+        Line {
+            visible: control.text !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.min(implicitWidth, control.maxWidth)
+            elide: Text.ElideRight
+            mono: true
+            size: control.size
+            weight: control.bold ? Font.Bold : Font.Normal
+            font.italic: control.italic
+            textFormat: control.textFormat
+            text: control.text
+            color: control.shade
+
+            Behavior on color {
+                CAnim {
+                    speed: "fast"
+                }
             }
         }
     }

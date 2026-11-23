@@ -1,5 +1,6 @@
-// A resting island: bg0 glass at 0.88 with the faint blue edge, 26px
-// tall with 6px inside either end, as waybar's .modules-* boxes were.
+// A resting island: the shell's glass (bg0 at 0.88) with its faint blue
+// edge, 26px tall with 6px inside either end, as waybar's .modules-*
+// boxes were.
 // What sits in it goes in its row.
 import QtQuick
 
@@ -12,10 +13,10 @@ Rectangle {
 
     implicitWidth: row.implicitWidth + 12
     implicitHeight: 26
-    radius: 12
-    color: colors.withAlpha(colors.bg0, 0.88)
+    radius: Theme.radius.surface
+    color: Theme.surface.glass
     border.width: 1
-    border.color: colors.withAlpha(colors.blue, 0.18)
+    border.color: Theme.surface.outline
 
     Row {
         id: row

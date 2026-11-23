@@ -2,6 +2,8 @@
 // waybar's backlight and pulseaudio modules. The wheel steps both through
 // hypr-level, the same perceptual steps and OSD the keys use. A click
 // mutes the default sink; a right click opens quick settings at Sound.
+// Its icons are Material Symbols, as quick settings' sliders have them
+// (#89).
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -19,9 +21,9 @@ Row {
             Quickshell.execDetached([output.bin + "hypr-level", what, steps > 0 ? "up" : "down"]);
     }
 
-    // The ramp glyph for a 0..1 level, as waybar's format-icons picked it.
-    function pick(glyphs, level) {
-        return String.fromCodePoint(glyphs[Math.max(0, Math.min(glyphs.length - 1, Math.floor(level * glyphs.length)))]);
+    // The ramp icon for a 0..1 level, as quick settings picks it.
+    function pick(icons, level) {
+        return icons[Math.max(0, Math.min(icons.length - 1, Math.floor(level * icons.length)))];
     }
 
     BarButton {
@@ -34,7 +36,7 @@ Row {
 
         visible: device !== ""
         bar: output.bar
-        text: output.pick([0xf00de, 0xf00df, 0xf00e0], level)
+        icon: output.pick(["brightness_low", "brightness_medium", "brightness_high"], level)
         tip: `Brightness ${Math.round(level * 100)}%`
         onScrolled: steps => output.step("brightness", steps)
 
@@ -76,7 +78,7 @@ Row {
         readonly property bool bluetooth: (sink?.properties["device.api"] ?? "") === "bluez5" || (sink?.name ?? "").startsWith("bluez_output")
 
         bar: output.bar
-        text: muted ? String.fromCodePoint(0xf075f) : bluetooth ? String.fromCodePoint(0xf00b0) : output.pick([0xf057f, 0xf0580, 0xf057e], level)
+        icon: muted ? "volume_off" : bluetooth ? "headphones" : output.pick(["volume_mute", "volume_down", "volume_up"], level)
         tint: muted ? output.colors.grey0 : output.colors.grey2
         tip: sink ? `${sink.description || sink.nickname || sink.name}  ·  ${Math.round(level * 100)}%` : ""
         onClicked: Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])

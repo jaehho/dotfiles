@@ -195,7 +195,7 @@ Item {
             size: 15
             text: "⏻"
             hoverTint: rightIsland.colors.red
-            pill: rightIsland.colors.withAlpha(rightIsland.colors.red, 0.14)
+            wash: rightIsland.colors.red
             onClicked: rightIsland.bar.toggleMenu(power, [
                 {
                     text: "Lock",

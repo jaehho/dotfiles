@@ -269,7 +269,7 @@ Row {
         text: String.fromCodePoint(0xf0709) + " Reboot"
         tint: attention.colors.red
         hoverTint: tint
-        pill: attention.colors.withAlpha(attention.colors.red, 0.14)
+        wash: attention.colors.red
         tip: `Kernel upgrade pending reboot\nrunning: ${kernel}\ninstalled: ${installed}`
         onClicked: attention.bar.toggleMenu(reboot, [
             {
