@@ -1,0 +1,4 @@
+#%PAM-1.0
+# Face unlock for the lock screen (shell.qml): Howdy alone, run beside the
+# PIN check and never in its way. The PIN uses /etc/pam.d/hyprlock.
+auth    required    pam_howdy.so

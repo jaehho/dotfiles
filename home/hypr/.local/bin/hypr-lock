@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# hypr-lock: lock the session with the shell's lock screen
+# (~/.config/quickshell/lock, #89), as hypridle's lock_cmd. If it has not
+# taken the lock within 3 s (a config error, a crash on start), hyprlock
+# locks instead, so a Lock never leaves the session open.
+#
+#   hypr-lock          lock; nothing if a lock is already up
+#   hypr-lock --wake   a running lock screen looks for your face again
+#                      (hypridle calls it when you come back)
+#
+# The lock screen writes $XDG_RUNTIME_DIR/qs-lock.secure once the
+# compositor confirms the lock, and removes it as it unlocks.
+set -u
+
+secure=${XDG_RUNTIME_DIR:?}/qs-lock.secure
+
+running() {
+    qs list --all 2>/dev/null | grep -q '/quickshell/lock/shell.qml'
+}
+
+if [[ ${1:-} == --wake ]]; then
+    if running; then
+        qs -c lock ipc call lock wake >/dev/null 2>&1
+    fi
+    exit 0
+fi
+
+if running || pidof hyprlock >/dev/null; then
+    exit 0
+fi
+
+rm -f "$secure"
+setsid -f quickshell -c lock >/dev/null 2>&1
+for _ in $(seq 30); do
+    [[ -e $secure ]] && exit 0
+    sleep 0.1
+done
+
+echo "hypr-lock: the shell's lock screen did not lock within 3 s; hyprlock locks instead" >&2
+qs kill -c lock >/dev/null 2>&1
+exec hyprlock
