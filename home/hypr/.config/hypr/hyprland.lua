@@ -476,7 +476,7 @@ local function focus_workspace(n)
     hl.dispatch(hl.dsp.focus({ workspace = n }))
 end
 for i = 1, 9 do
-    hl.bind(mainMod .. " + " .. i, function() focus_workspace(i) end)
+    hl.bind(mainMod .. " + " .. i, function() focus_workspace(i) end) -- go to workspace
     hl.bind(mainMod .. " + SHIFT + " .. i, hl.dsp.window.move({ workspace = i })) -- send window to workspace
 end
 

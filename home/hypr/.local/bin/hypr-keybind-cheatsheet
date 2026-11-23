@@ -42,7 +42,7 @@ KEY_NAMES = {
     "SUPER": "Super", "SHIFT": "Shift", "CTRL": "Ctrl", "ALT": "Alt",
     "escape": "Esc", "BackSpace": "Backspace", "Tab": "Tab", "space": "Space",
     "Print": "Print", "slash": "/", "semicolon": ";", "period": ".",
-    "comma": ",", "bracketleft": "[", "bracketright": "]", "left": "←", "right": "→", "up": "↑", "down": "↓",
+    "comma": ",", "apostrophe": "'", "bracketleft": "[", "bracketright": "]", "left": "←", "right": "→", "up": "↑", "down": "↓",
     "mouse_down": "Wheel ↓", "mouse_up": "Wheel ↑",
     "mouse:272": "Drag LMB", "mouse:273": "Drag RMB",
     "XF86AudioRaiseVolume": "Vol +", "XF86AudioLowerVolume": "Vol −",
