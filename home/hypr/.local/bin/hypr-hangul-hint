@@ -307,7 +307,9 @@ window.docked .board {{
 def gui(always):
     # gtk4-layer-shell must be loaded before libwayland-client, and PyGObject
     # pulls libwayland in the moment Gdk is imported, so re-exec once with the
-    # library preloaded (see hypr-keybind-cheatsheet).
+    # library preloaded. Not liblayer-shell-preload.so, which ships alongside
+    # it: that one auto-inits every window under its own namespace, taking
+    # the blur layerrule with it.
     preload = "/usr/lib/libgtk4-layer-shell.so"
     if (os.path.exists(preload)
             and preload not in os.environ.get("LD_PRELOAD", "")):

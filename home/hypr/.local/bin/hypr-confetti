@@ -23,7 +23,7 @@ import subprocess
 import sys
 import wave
 
-# Same preload dance as hypr-keybind-cheatsheet: gtk4-layer-shell has to be
+# Same preload dance as hypr-hangul-hint: gtk4-layer-shell has to be
 # loaded before libwayland-client, which PyGObject pulls in on import.
 PRELOAD = "/usr/lib/libgtk4-layer-shell.so"
 if os.path.exists(PRELOAD) and PRELOAD not in os.environ.get("LD_PRELOAD", ""):
