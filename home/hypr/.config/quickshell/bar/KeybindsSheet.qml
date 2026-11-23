@@ -572,6 +572,8 @@ Sheet {
         id: group
 
         required property int modelData
+        // Undefined for a moment when a fresh read has fewer groups, until
+        // the columns catch up.
         readonly property var info: sheet.table.groups[modelData]
         readonly property var shownRows: sheet.kept[modelData] ?? []
 
@@ -588,7 +590,7 @@ Sheet {
             spacing: 3
 
             Repeater {
-                model: group.info.head ?? []
+                model: group.info?.head ?? []
 
                 Keycap {
                     required property string modelData
@@ -603,7 +605,7 @@ Sheet {
             Layout.row: 0
             Layout.column: 1
             Layout.bottomMargin: Theme.space.sm
-            text: group.info.note ?? ""
+            text: group.info?.note ?? ""
             size: Theme.font.small
             color: Theme.colors.grey2
         }
