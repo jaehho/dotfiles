@@ -7,9 +7,9 @@ A question notebook is the log of one question, two at most.
 The usual order: Introduction (the question, then the background with the
 expectations), Data, one section per analysis, Discussion (with
 Limitations and Open questions, each only when it has content).
-The Discussion, Limitations and Open questions are offered in the reply
-first (SKILL.md, step 3); the rules below say how to write the parts the
-user takes.
+The Introduction's parts, and the Discussion, Limitations and Open
+questions, are offered in the reply first (SKILL.md, step 3); the rules
+below say how to write the parts the user takes.
 
 - **Question**: one plain sentence, no definitions or notation, and the
   only question the opening poses.

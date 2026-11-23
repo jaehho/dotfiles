@@ -36,6 +36,10 @@ A new question starts as an exploration, not a notebook.
    The parts that interpret the results (discussion, limitations, open
    questions) are offered in the reply, drafted from the rendered
    output, and go into the notebook only when the user takes them.
+   The parts that frame the question (question, background,
+   expectations) are offered the same way, before the first analysis
+   section; without them, a notebook opens with its title and a line on
+   what it shows.
 
 ## Layout
 
