@@ -1,6 +1,6 @@
 // The open island's month: its name with previous and next, the weekday
 // initials, and the weeks the month spans, today in the one solid blue
-// marker. The week starts where the locale says.
+// marker, a pill. The week starts where the locale says.
 import QtQuick
 
 Item {
@@ -46,22 +46,20 @@ Item {
 
         Row {
             anchors.right: parent.right
-            spacing: 4
+            spacing: Theme.space.xs
 
             SheetButton {
-                colors: grid.colors
-                glyph: 0xf0141
-                glyphSize: 14
-                implicitWidth: 28
+                icon: "chevron_left"
+                iconSize: Theme.icon.small + 2
+                implicitWidth: 26
                 implicitHeight: 26
                 onClicked: grid.offset -= 1
             }
 
             SheetButton {
-                colors: grid.colors
-                glyph: 0xf0142
-                glyphSize: 14
-                implicitWidth: 28
+                icon: "chevron_right"
+                iconSize: Theme.icon.small + 2
+                implicitWidth: 26
                 implicitHeight: 26
                 onClicked: grid.offset += 1
             }
@@ -79,7 +77,7 @@ Item {
                 required property int index
                 width: grid.cellWidth
                 horizontalAlignment: Text.AlignHCenter
-                size: 11
+                size: Theme.font.small
                 text: Qt.locale().dayName((grid.weekStart + index) % 7, Locale.NarrowFormat)
                 color: grid.colors.grey2
             }
@@ -108,7 +106,7 @@ Item {
                     anchors.centerIn: parent
                     width: grid.cellWidth - 2
                     height: grid.cellHeight - 2
-                    radius: 8
+                    radius: Theme.radius.pill
                     color: grid.colors.blue
                     visible: cell.inMonth && cell.isToday
                 }

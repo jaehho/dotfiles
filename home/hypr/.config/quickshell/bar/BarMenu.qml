@@ -1,7 +1,9 @@
 // A menu that drops from the bar under the control that opened it: the
 // power menu, the reboot confirmation and tray items' menus, where waybar
 // used GTK popups. It is a sheet like the open center island (bg_dim at
-// 0.985 over a shadow), its rows in Adwaita Sans.
+// 0.985 over a shadow), its rows in Adwaita Sans on the shell base
+// (#89): a state-layer wash under the pointer, Material Symbols for the
+// back arrow, checks and submenus.
 //
 // Entries are plain objects ({ text, run } or { separator: true }) or a
 // tray item's DBus menu, whose submenus open in place under a row back.
@@ -100,15 +102,15 @@ Item {
     enabled: open
 
     Behavior on opacity {
-        NumberAnimation {
-            duration: 150
+        Anim {
+            speed: "fast"
         }
     }
 
     Behavior on y {
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        Anim {
+            speed: "fast"
+            curve: menu.open ? "enter" : "exit"
         }
     }
 
@@ -127,17 +129,17 @@ Item {
 
     RectangularShadow {
         anchors.fill: parent
-        radius: 12
+        radius: Theme.radius.surface
         blur: 6
-        color: menu.colors.withAlpha(menu.colors.bg_dim, 0.93)
+        color: Theme.surface.shadow
     }
 
     Rectangle {
         anchors.fill: parent
-        radius: 12
-        color: menu.colors.withAlpha(menu.colors.bg_dim, 0.985)
+        radius: Theme.radius.surface
+        color: Theme.surface.sheet
         border.width: 1
-        border.color: menu.colors.withAlpha(menu.colors.blue, 0.18)
+        border.color: Theme.surface.outline
     }
 
     Column {
@@ -153,7 +155,7 @@ Item {
             colors: menu.colors
             visible: menu.path.length > 0
             width: list.rowWidth
-            glyph: 0xf0141
+            symbol: "arrow_back"
             text: menu.path.length > 0 ? menu.path[menu.path.length - 1].text.replace(/_(?!_)/g, "") : ""
             onChosen: menu.path = menu.path.slice(0, -1)
         }
@@ -179,7 +181,7 @@ Item {
                     width: parent.width - 16
                     y: 4
                     height: 1
-                    color: menu.colors.bg1
+                    color: Theme.colors.bg1
                 }
 
                 MenuRow {
@@ -206,8 +208,10 @@ Item {
 
         required property var colors
         property string text
+        // The DBus menu's own icon, an image.
         property string icon: ""
-        property int glyph: 0
+        // A Material Symbols name, for the back row.
+        property string symbol: ""
         property bool checkable: false
         property bool checked: false
         property bool more: false
@@ -217,42 +221,38 @@ Item {
 
         signal chosen
 
-        implicitWidth: content.implicitWidth + 24 + (more ? 22 : 0)
+        implicitWidth: content.implicitWidth + Theme.space.md * 2 + (more ? 22 : 0)
         height: 30
-        radius: 8
+        radius: Theme.radius.control
         opacity: enabled ? 1 : 0.5
-        color: armed ? entry.colors.withAlpha(entry.colors.red, 0.2) : hover.hovered && enabled ? entry.colors.bg1 : "transparent"
-        border.width: armed ? 1 : 0
-        border.color: entry.colors.withAlpha(entry.colors.red, 0.55)
+        color: armed ? Theme.colors.withAlpha(Theme.colors.red, 0.2) : "transparent"
 
         Behavior on color {
-            ColorAnimation {
-                duration: 120
+            CAnim {
+                speed: "fast"
             }
         }
 
-        HoverHandler {
-            id: hover
+        StateLayer {
+            tint: entry.armed ? Theme.colors.red : Theme.colors.fg
             cursorShape: entry.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        }
-
-        TapHandler {
-            onTapped: if (entry.enabled)
-                entry.chosen()
+            onClicked: () => entry.chosen()
         }
 
         Row {
             id: content
-            x: 12
+            x: Theme.space.md
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 8
+            spacing: Theme.space.sm
 
-            Line {
-                visible: entry.glyph !== 0 || entry.checkable
+            // The back arrow, or a check's mark (blank room when off).
+            Icon {
+                visible: entry.symbol !== "" || entry.checkable
                 anchors.verticalCenter: parent.verticalCenter
-                mono: true
-                text: entry.glyph !== 0 ? String.fromCodePoint(entry.glyph) : entry.checked ? String.fromCodePoint(0xf012c) : " "
-                color: entry.colors.fg
+                name: entry.symbol !== "" ? entry.symbol : "check"
+                size: Theme.icon.small
+                opacity: entry.symbol !== "" || entry.checked ? 1 : 0
+                color: entry.symbol !== "" ? Theme.colors.grey2 : Theme.colors.fg
             }
 
             IconImage {
@@ -265,18 +265,18 @@ Item {
             Line {
                 anchors.verticalCenter: parent.verticalCenter
                 text: entry.text
-                color: entry.colors.fg
+                color: Theme.colors.fg
             }
         }
 
-        Line {
+        Icon {
             visible: entry.more
             anchors.right: parent.right
-            anchors.rightMargin: 10
+            anchors.rightMargin: Theme.space.sm
             anchors.verticalCenter: parent.verticalCenter
-            mono: true
-            text: String.fromCodePoint(0xf0142)
-            color: entry.colors.grey2
+            name: "chevron_right"
+            size: Theme.icon.small
+            color: Theme.colors.grey2
         }
     }
 }

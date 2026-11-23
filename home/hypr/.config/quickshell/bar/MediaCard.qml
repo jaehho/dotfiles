@@ -1,5 +1,6 @@
 // The open island's media column: cover art, the track, a progress meter
-// and the transport controls, for the player NowPlaying picked.
+// and the transport controls, for the player NowPlaying picked. Icons
+// are Material Symbols (#89).
 import QtQuick
 import Quickshell.Widgets
 
@@ -35,18 +36,18 @@ Item {
     Column {
         id: column
         width: parent.width
-        spacing: 12
+        spacing: Theme.space.md
 
         Row {
             width: parent.width
-            spacing: 14
+            spacing: Theme.space.md
 
             ClippingRectangle {
                 id: frame
                 width: 96
                 height: 96
-                radius: 8
-                color: card.colors.bg1
+                radius: Theme.radius.control
+                color: Theme.colors.bg1
 
                 Image {
                     id: art
@@ -59,25 +60,24 @@ Item {
                 }
 
                 // Music note, while the cover loads or when there is none.
-                Line {
+                Icon {
                     anchors.centerIn: parent
                     visible: art.status !== Image.Ready
-                    mono: true
-                    size: 28
-                    text: String.fromCodePoint(0xf075a)
-                    color: card.colors.grey2
+                    name: "music_note"
+                    size: 32
+                    color: Theme.colors.grey2
                 }
             }
 
             Column {
                 width: parent.width - frame.width - parent.spacing
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 4
+                spacing: Theme.space.xs
 
                 Line {
                     width: parent.width
                     text: card.player.trackTitle
-                    size: 15
+                    size: Theme.font.title
                     weight: Font.DemiBold
                     color: card.colors.fg
                     wrapMode: Text.Wrap
@@ -105,7 +105,7 @@ Item {
 
         Column {
             width: parent.width
-            spacing: 4
+            spacing: Theme.space.xs
             visible: card.player.lengthSupported
 
             // A 4px meter in a 12px hit strip; a click seeks when the
@@ -119,14 +119,14 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width
                     height: 4
-                    radius: 2
-                    color: card.colors.bg1
+                    radius: Theme.radius.pill
+                    color: Theme.colors.bg1
 
                     Rectangle {
                         width: track.width * card.fraction
                         height: parent.height
-                        radius: 2
-                        color: card.colors.fg
+                        radius: Theme.radius.pill
+                        color: Theme.colors.fg
                     }
                 }
 
@@ -149,7 +149,7 @@ Item {
                 Line {
                     id: times
                     mono: true
-                    size: 11
+                    size: Theme.font.small
                     text: card.clock(card.player.position)
                     color: card.colors.grey2
                 }
@@ -157,7 +157,7 @@ Item {
                 Line {
                     anchors.right: parent.right
                     mono: true
-                    size: 11
+                    size: Theme.font.small
                     text: card.clock(card.player.length)
                     color: card.colors.grey2
                 }
@@ -166,26 +166,26 @@ Item {
 
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
+            spacing: Theme.space.sm
 
             SheetButton {
-                colors: card.colors
-                glyph: 0xf04ae
+                icon: "skip_previous"
+                fill: 1
                 enabled: card.player.canGoPrevious
                 onClicked: card.player.previous()
             }
 
             SheetButton {
-                colors: card.colors
-                glyph: card.player.isPlaying ? 0xf03e4 : 0xf040a
-                implicitWidth: 52
+                icon: card.player.isPlaying ? "pause" : "play_arrow"
+                fill: 1
+                implicitWidth: 56
                 enabled: card.player.canTogglePlaying
                 onClicked: card.player.togglePlaying()
             }
 
             SheetButton {
-                colors: card.colors
-                glyph: 0xf04ad
+                icon: "skip_next"
+                fill: 1
                 enabled: card.player.canGoNext
                 onClicked: card.player.next()
             }

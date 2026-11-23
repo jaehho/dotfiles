@@ -1,45 +1,34 @@
-// A glyph control on the open island: bg0 with a bg1 edge, bg1 with a
-// bg3 edge under the pointer, half opacity when the player can't do it.
+// A control on the open center island's sheet, on the shell base (#89):
+// a pill on the card tone holding a Material Symbol, washing under the
+// pointer; half opacity when the player can't do it.
 import QtQuick
 
 Rectangle {
-    id: button
+    id: control
 
-    required property var colors
-    property int glyph
-    property int glyphSize: 16
+    // A Material Symbols name.
+    property string icon: ""
+    property int iconSize: Theme.icon.normal
+    property real fill: 0
 
     signal clicked
 
     implicitWidth: 40
-    implicitHeight: 30
-    radius: 8
+    implicitHeight: 32
+    radius: Theme.radius.pill
     opacity: enabled ? 1 : 0.5
-    color: hover.hovered && enabled ? colors.bg1 : colors.bg0
-    border.width: 1
-    border.color: hover.hovered && enabled ? colors.bg3 : colors.bg1
+    color: Theme.surface.card
 
-    Behavior on color {
-        ColorAnimation {
-            duration: 200
-        }
+    StateLayer {
+        cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onClicked: () => control.clicked()
     }
 
-    HoverHandler {
-        id: hover
-        cursorShape: button.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-    }
-
-    TapHandler {
-        onTapped: if (button.enabled)
-            button.clicked()
-    }
-
-    Line {
+    Icon {
         anchors.centerIn: parent
-        mono: true
-        size: button.glyphSize
-        text: String.fromCodePoint(button.glyph)
-        color: button.colors.fg
+        name: control.icon
+        size: control.iconSize
+        fill: control.fill
+        color: Theme.colors.fg
     }
 }

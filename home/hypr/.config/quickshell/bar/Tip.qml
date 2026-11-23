@@ -1,7 +1,8 @@
 // The tip under a hovered control. It is drawn in the bar's own surface,
 // below the islands where the input mask lets the pointer through, so it
 // needs no popup window and never takes focus. Waybar's tooltip look:
-// bg0, 8px corners, the blue edge at 0.28, the bar's mono face.
+// bg0, 8px corners, the blue edge at 0.28, the bar's mono face; its
+// motion is the shell's (#89).
 import QtQuick
 
 Rectangle {
@@ -35,7 +36,7 @@ Rectangle {
     y: bar.tipTop
     width: body.width + 20
     height: body.height + 12
-    radius: 8
+    radius: Theme.radius.control
     color: bar.colors.bg0
     border.width: 1
     border.color: bar.colors.withAlpha(bar.colors.blue, 0.28)
@@ -43,15 +44,12 @@ Rectangle {
     visible: opacity > 0
 
     Behavior on y {
-        NumberAnimation {
-            duration: 200
-            easing.type: Easing.OutCubic
-        }
+        Anim {}
     }
 
     Behavior on opacity {
-        NumberAnimation {
-            duration: 150
+        Anim {
+            speed: "fast"
         }
     }
 
