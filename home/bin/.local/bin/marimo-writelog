@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+# marimo, with every write to a notebook file logged.
+#
+#   <project>/.venv/bin/python marimo-writelog edit --watch notebooks/
+#
+# Takes marimo's own arguments, and must run on an interpreter that has
+# marimo installed. Each write appends a block to
+# $XDG_CACHE_HOME/marimo/logs/notebook-writes.log: the time, the file,
+# whether the contents changed, and the marimo frames that led to it.
+# The frames name the trigger: the `save` endpoint (Ctrl-S, :w in the
+# vim keymap, autosave), `save_app_config` (the app settings), or
+# `save_from_cells` (a code_mode edit, as marimo-pair makes).
+import os
+import sys
+import time
+import traceback
+from pathlib import Path
+
+from marimo._cli.cli import main
+from marimo._session.notebook.storage import FilesystemStorage
+
+CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+LOG = CACHE / "marimo" / "logs" / "notebook-writes.log"
+
+# Frames every request passes through, which say nothing of the trigger.
+PLUMBING = (
+    "/marimo/_cli/",
+    "/marimo/_server/start.py",
+    "/marimo/_server/router.py",
+    "/marimo/_server/api/auth.py",
+    "/marimo/_server/api/middleware.py",
+)
+
+_write = FilesystemStorage.write
+
+
+def _marimo_frames():
+    """The stack's marimo frames past the plumbing, outermost first."""
+    return [
+        f"{Path(f.filename).parent.name}/{Path(f.filename).name}"
+        f":{f.lineno} {f.name}"
+        for f in traceback.extract_stack()
+        if "/marimo/" in f.filename
+        and not any(part in f.filename for part in PLUMBING)
+    ]
+
+
+def _logged_write(self, path, content):
+    path = Path(path)
+    try:
+        before = path.read_text(encoding="utf-8")
+    except OSError:
+        before = None
+    changed = "unchanged" if before == content else "changed"
+    lines = [f"{time.strftime('%F %T')} {path} ({changed})"]
+    lines += [f"  {frame}" for frame in _marimo_frames()]
+    try:
+        LOG.parent.mkdir(parents=True, exist_ok=True)
+        with LOG.open("a", encoding="utf-8") as log:
+            log.write("\n".join(lines) + "\n")
+    except OSError as error:
+        print(f"marimo-writelog: {error}", file=sys.stderr)
+    _write(self, path, content)
+
+
+FilesystemStorage.write = _logged_write
+
+if __name__ == "__main__":
+    sys.exit(main())
