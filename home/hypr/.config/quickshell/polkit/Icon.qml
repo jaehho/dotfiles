@@ -1,0 +1,1 @@
+../bar/Icon.qml

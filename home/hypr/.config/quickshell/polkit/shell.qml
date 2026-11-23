@@ -46,10 +46,6 @@ ShellRoot {
         return screens.length > 0 ? screens[0] : null;
     }
 
-    Colors {
-        id: everforest
-    }
-
     Controller {
         id: ctl
         onAskedForResponse: prompt.sheet.focusField()
@@ -72,10 +68,10 @@ ShellRoot {
         onTriggered: root.close()
     }
 
-    // The sheet's slide-out (220 ms in Prompt.qml), then unmap.
+    // The sheet's slide-out (Prompt.qml), then unmap.
     Timer {
         id: hideTimer
-        interval: 260
+        interval: Theme.motion.normal + 40
         onTriggered: {
             root.shown = false;
             ctl.flow = null;
@@ -101,7 +97,6 @@ ShellRoot {
         Prompt {
             id: prompt
             anchors.fill: parent
-            colors: everforest
             controller: ctl
             open: root.open
         }

@@ -1,12 +1,13 @@
 // The full-screen layer: a dim over everything, and the sheet hanging from
 // the top edge, centred under the IR camera. One motion: the sheet drops
-// in, and goes back up into the edge when the request ends.
+// in, and goes back up into the edge when the request ends, on the
+// shell's timing (Theme.motion: arriving slow on `enter`, leaving normal
+// on `exit`).
 import QtQuick
 
 FocusScope {
     id: root
 
-    required property var colors
     required property var controller
     property bool open: false
     readonly property alias sheet: sheet
@@ -19,9 +20,8 @@ FocusScope {
         opacity: root.open ? 0.4 : 0
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 220
-                easing.type: Easing.OutCubic
+            Anim {
+                curve: root.open ? "enter" : "exit"
             }
         }
 
@@ -36,7 +36,6 @@ FocusScope {
         anchors.horizontalCenter: parent.horizontalCenter
         y: root.open ? 0 : -height - 2
         focus: true
-        colors: root.colors
         message: root.controller.message
         actionId: root.controller.actionId
         phase: root.controller.phase
@@ -48,9 +47,9 @@ FocusScope {
         onCancelled: root.controller.cancel()
 
         Behavior on y {
-            NumberAnimation {
-                duration: root.open ? 360 : 220
-                easing.type: root.open ? Easing.OutExpo : Easing.InCubic
+            Anim {
+                speed: root.open ? "slow" : "normal"
+                curve: root.open ? "enter" : "exit"
             }
         }
     }

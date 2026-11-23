@@ -1,0 +1,1 @@
+../bar/CAnim.qml
