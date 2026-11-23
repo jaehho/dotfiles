@@ -159,7 +159,17 @@ components:
     rounded: "{rounded.surface}"
     padding: "12px"
     width: "380px"
-  launcher-row-selected:
+  launcher-row:
+    textColor: "{colors.fg}"
+    typography: "{typography.body}"
+    rounded: "{rounded.pill}"
+    padding: "0 12px"
+    height: "40px"
+  launcher-cell:
+    textColor: "{colors.fg}"
+    rounded: "{rounded.control}"
+    height: "84px"
+  rofi-row-selected:
     backgroundColor: "{colors.fg}"
     textColor: "{colors.bg_dim}"
     rounded: "{rounded.control}"
@@ -184,7 +194,7 @@ The name comes from the aviation principle that a normal state lights nothing. A
 
 Density is compact and keyboard-paced: 13px words, 11px labels, controls 8px apart. Surfaces are dark sheets edged by a 1px hairline; the controls on them are tonal pills and round icon buttons that wash with their tint under the pointer; corners follow a 12/8 scale; depth is an edge, not a lift. Motion is calm and serves state, on Material 3's standard curves with no overshoot: a wash fades in over 150ms, things move inside a surface over 250ms, and a surface arrives over 400ms, slowing into place. Beyond that and the compositor's pop-in and fades there is one authored moment, on the polkit prompt, whose sheet drops from the top edge under the IR camera, breathes its lens dot while the camera looks, and retracts after "Approved."
 
-**The shell base (decision #89).** The bar's Quickshell config is growing into one shell (bar, quick settings, dash, notifications, then a launcher) built to Caelestia's polish on Material 3's patterns, in foliage colors; Caelestia is a reference, not a dependency. Its tokens live in `home/hypr/.config/quickshell/bar/Theme.qml` (radii, spacing, type, icon sizes, motion, state-layer strengths and surface roles), and its primitives beside it: `Sheet`, `StateLayer`, `PillButton`, `IconButton`, `Icon`, `Line`, `Anim` and `CAnim`. The notifications, quick settings, the tray's grid and the bar (its islands, menus, tips and player sheet) are built on it; a launcher replaces rofi's drun next. The GTK4 sheets and the polkit prompt keep the older controls this file describes beside the new ones (Buttons).
+**The shell base (decision #89).** The bar's Quickshell config is growing into one shell (bar, quick settings, dash, notifications, then a launcher) built to Caelestia's polish on Material 3's patterns, in foliage colors; Caelestia is a reference, not a dependency. Its tokens live in `home/hypr/.config/quickshell/bar/Theme.qml` (radii, spacing, type, icon sizes, motion, state-layer strengths and surface roles), and its primitives beside it: `Sheet`, `StateLayer`, `PillButton`, `IconButton`, `Icon`, `Line`, `Anim` and `CAnim`. The notifications, quick settings, the tray's grid, the bar (its islands, menus, tips and player sheet) and the launcher, which replaced rofi's drun, are built on it. The GTK4 sheets and the polkit prompt keep the older controls this file describes beside the new ones (Buttons).
 
 **Key Characteristics:**
 
@@ -192,7 +202,7 @@ Density is compact and keyboard-paced: 13px words, 11px labels, controls 8px apa
 - Gray at rest; a hue only for news or an action on offer, with one meaning per state hue.
 - Dark `bg_dim` sheets with a 1px hairline; on them, tonal pill buttons, and one state-layer wash for hover, press and the keyboard's row; a 2px `blue` ring only for the keyboard's stop on a sheet walked in two directions.
 - State as a tint of its tone; a solid tone fill only for the one active marker in a row.
-- Adwaita Sans for words; Material Symbols Rounded for the shell's icons; JetBrainsMono Nerd Font for identifiers, key names, the older surfaces' glyphs, the bar's words and numbers, the launcher and the lock screen.
+- Adwaita Sans for words; Material Symbols Rounded for the shell's icons; JetBrainsMono Nerd Font for identifiers, key names, the older surfaces' glyphs, the bar's words and numbers, rofi's menus and the lock screen.
 - Radii of 12, 8 and pill; square where a surface meets a screen edge.
 - Material 3 standard motion, calm: 150, 250 and 400ms, no overshoot.
 - A tight 4px edge shadow and blur behind translucent layers; no lift.
@@ -262,18 +272,18 @@ The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` 
 ### Hierarchy
 
 - **Headline** (Adwaita Sans 600, 15px): the line that says what a sheet is about; the polkit message.
-- **Field** (Adwaita Sans 400, 14px): text typed into a field: the polkit password, the keybind sheet's filter.
+- **Field** (Adwaita Sans 400, 14px): text typed into a field: the polkit password, the keybind sheet's filter, the launcher's search.
 - **Body** (Adwaita Sans 400, 13px): names on tiles and rows, status lines, the older button labels, keybind descriptions, a notification's body; its summary is the same size at 600.
 - **Control label** (Adwaita Sans 500, 12px): the shell's pill button labels; 400 for the line under the notification center's header.
 - **Label** (Adwaita Sans 400, 11px): the state under a tile's name ("On", "Balanced"), tallies, footers, a notification's "App · 5m" line; 500 in the notification center's count pill.
-- **Heading** (Adwaita Sans 700, 11px, uppercase): group headings on the display sheet, quick settings ("OPEN", "OUTPUT", "INPUT", in `grey2`) and in speaker-eq.
+- **Heading** (Adwaita Sans 700, 11px, uppercase): group headings on the display sheet, quick settings ("OPEN", "OUTPUT", "INPUT", in `grey2`), the launcher's categories and speaker-eq.
 - **Mono** (JetBrainsMono Nerd Font 400, 11px; 700 on keycaps; 10px for the key hint inside a button): identifiers such as the polkit action id, key names on keycaps, "Esc" and "Enter" beside button labels, the key hints on a notification's pills, a quick settings slider's level.
 - **Icon** (Material Symbols Rounded at 16, 20 or 24px, `Theme.icon`, and 18px on the bar): outlined at rest (FILL 0), filled when on (FILL 1, animated), weight 400 with optical size following the size; the empty notification center's bell is 40px at weight 300. In `fg`, `grey2` or the state's tone.
 - **Glyph** (JetBrainsMono Nerd Font, 17px on tiles, 22px for the polkit shield, 16px for status glyphs): the older surfaces' Material Design Icons, in `fg` or the state's tone.
 - **Bar** (JetBrainsMono Nerd Font 400, 13px; the clock bold, the window title italic): the bar's words and numbers: the clock, the track, the window title, workspace numbers, counts, the battery's time and the load ramps. Its icons are Material Symbols at 18px.
 - **Hangul** (Noto Sans CJK KR 600, 28px; shifted jamo 500, 13px): the jamo on the hint's keycaps.
 
-rofi sets its list in JetBrainsMono Nerd Font 11 with Papirus-Dark app icons; hyprlock sets every label in JetBrainsMono Nerd Font.
+rofi sets its menus (clipboard, share, settings) in JetBrainsMono Nerd Font 11 with Papirus-Dark app icons; hyprlock sets every label in JetBrainsMono Nerd Font.
 
 ### Type Rules
 
@@ -287,7 +297,7 @@ rofi sets its list in JetBrainsMono Nerd Font 11 with Papirus-Dark app icons; hy
 
 **Windows.** Dwindle tiling with a 2px border, `gaps_in` of 5 and `gaps_out` of 8 (6 under the bar), so tiled windows sit 10px apart and 10px below the islands, their edges in line with the islands' 8px inset. A gap table must be keyed (`top`, `right`, `bottom`, `left`): Hyprland reads a positional one as 0 without an error. Floating helper TUIs open centered at 800×600 (btop at 1400×900). Game mode (`hypr-gamemode`) drops gaps, rounding, blur, shadows and animations until a reload restores them.
 
-**Overlays.** The sheets are layer-shell surfaces on the overlay layer that take the keyboard while open. The display (520px) and keybind sheets center on screen; the keybind sheet sizes to its content. Quick settings is not one of them: the bar's right island grows into it, 460px wide, inside the bar's own surface. The polkit prompt covers the focused monitor with a 40% black scrim and hangs a 440px sheet flush from the top edge, centered under the IR camera. The hangul hint takes no input: it floats 56px above the bottom edge, or docks as a full-width strip that reserves its own height. The notification popups stack 380px cards 8px apart at the top right of the focused monitor, 8px under the bar and 8px from the edge, newest on top; they never take the keyboard. The notification center is a 400px sheet in the same corner of the screen it was opened on, as tall as its list (scrolling past the screen's height); it holds the keyboard exclusively while open, and any Super chord closes it before Hyprland acts on the chord.
+**Overlays.** The sheets are layer-shell surfaces on the overlay layer that take the keyboard while open. The display (520px) and keybind sheets center on screen; the keybind sheet sizes to its content. Quick settings is not one of them: the bar's right island grows into it, 460px wide, inside the bar's own surface. The polkit prompt covers the focused monitor with a 40% black scrim and hangs a 440px sheet flush from the top edge, centered under the IR camera. The hangul hint takes no input: it floats 56px above the bottom edge, or docks as a full-width strip that reserves its own height. The notification popups stack 380px cards 8px apart at the top right of the focused monitor, 8px under the bar and 8px from the edge, newest on top; they never take the keyboard. The notification center is a 400px sheet in the same corner of the screen it was opened on, as tall as its list (scrolling past the screen's height); it holds the keyboard exclusively while open, and any Super chord closes it before Hyprland acts on the chord. The launcher is a 560px sheet centered a fifth of the way down the screen it was opened on, eight rows tall at most and shorter when fewer apps match; it holds the keyboard as the center does.
 
 **Rhythm.** Controls and rows sit 8px apart in grids of equal columns (quick settings: three tile columns, two "Open" columns, a row of five session buttons, with 12px between groups). Stacked labels sit 1 to 4px apart and controls pad 12px inline. The shell base takes its gaps from `Theme.space` (4, 8, 12, 16, 24) and pads its sheets and cards 12px (`md`), with cards 8px apart. The older sheets pad about 20px at the sides (display 18/20/14/20, polkit 26/22/20, keybinds 20/26/16/26; the bar's open islands 16). The hangul board pads 16px all round.
 
@@ -301,7 +311,7 @@ Depth is tone and edge, not lift. A sheet is the darkest plane on screen (`bg_di
 - **Sheet edge** (QML `RectangularShadow`: blur 6, radius 12, `bg_dim` at 0.93): the polkit sheet and the shell's `Sheet` (each notification popup and the notification center), reproducing the window edge on a layer surface. A surface that draws it leaves an 8px gutter inside itself so the shadow is not cut.
 - **Keycap lip** (`border-bottom: 3px solid` in `bg_dim`; 2px on the keybind sheet's caps): a key's front edge, drawn as a border, on the hangul hint and the keybind sheet.
 
-**Blur and glass.** Hyprland blurs at size 5 with 2 passes and vibrancy 0.1696, popups included. Layer rules blur behind the bar (with xray; its surface runs 640px down for its two sheets, menus and tips, and `ignore_alpha` keeps the blur to what it draws), the keybind sheet, the hangul hint and rofi, each with `ignore_alpha 0.5`. The notification layers (`bar-notifications`, `bar-notification-center`) are not blurred, since their sheets are opaque, and have `no_anim`, as the polkit layer does, because they animate themselves. Glass shows only where a surface is translucent: the bar islands (`bg0` at 0.88) and the hangul board (`bg_dim` at 0.72, so the hint reads over any window). Sheets at 0.985 are effectively opaque.
+**Blur and glass.** Hyprland blurs at size 5 with 2 passes and vibrancy 0.1696, popups included. Layer rules blur behind the bar (with xray; its surface runs 640px down for its two sheets, menus and tips, and `ignore_alpha` keeps the blur to what it draws), the keybind sheet, the hangul hint and rofi, each with `ignore_alpha 0.5`. The notification layers (`bar-notifications`, `bar-notification-center`) and the launcher's (`bar-launcher`) are not blurred, since their sheets are opaque, and have `no_anim`, as the polkit layer does, because they animate themselves. Glass shows only where a surface is translucent: the bar islands (`bg0` at 0.88) and the hangul board (`bg_dim` at 0.72, so the hint reads over any window). Sheets at 0.985 are effectively opaque.
 
 **Scrim.** Only the polkit prompt dims the screen: black at 40%, faded in over 220ms.
 
@@ -317,7 +327,7 @@ Depth is tone and edge, not lift. A sheet is the darkest plane on screen (`bg_di
 
 Corners follow one scale: 12px for windows and containers (Hyprland's `decoration.rounding`, with `rounding_power` 2), 8px for controls nested inside them, and a pill for anything fully round. A corner that meets a screen edge stays square: the polkit sheet's top corners, the docked hangul strip. `Theme.radius` names them `surface`, `control` and `pill`. Edges are 1px hairlines; the only heavier lines are the 2px window border, the 2px focus ring, the keycap lip and hyprlock's 3px input outline.
 
-On the scale today: the polkit sheet, the keybind sheet, the hangul board, the bar islands, the bar's menus and open sheets, the notification popups, center and the cards in it, quick settings' session buttons, rofi's window and hyprlock's input field at 12px; the polkit buttons, field and band, the Wi-Fi page's field and the join failure bands, the keybind sheet's filter, chips, keys and caps, the hangul keys, the bar's workspace pills, menu rows, tips and cover art, the tray grid's cells, rofi's input bar and rows at 8px; the shell's buttons, icon buttons, count pill, avatars and progress bars, the bar's buttons and the tray's attention slots, the player sheet's buttons, today's marker and progress meter, the polkit lens dot, quick settings' tiles, rows, "Open" buttons, sliders and switch, and the hangul home-key bumps as pills.
+On the scale today: the polkit sheet, the keybind sheet, the hangul board, the bar islands, the bar's menus and open sheets, the notification popups, center and the cards in it, the launcher's sheet, quick settings' session buttons, rofi's window and hyprlock's input field at 12px; the polkit buttons, field and band, the Wi-Fi page's field and the join failure bands, the keybind sheet's filter, chips, keys and caps, the hangul keys, the bar's workspace pills, menu rows, tips and cover art, the tray grid's cells, the launcher's field and grid cells, rofi's input bar and rows at 8px; the shell's buttons, icon buttons, count pill, avatars and progress bars, the bar's buttons and the tray's attention slots, the player sheet's buttons, today's marker and progress meter, the polkit lens dot, quick settings' tiles, rows, "Open" buttons, sliders and switch, the launcher's list rows, and the hangul home-key bumps as pills.
 
 **Drift.** speaker-eq's notices use 10px. rofi keeps the stock theme's 2px dashed list separator, a heavier line than a hairline.
 
@@ -401,7 +411,20 @@ The bar's own daemon (`Notifs.qml`, #90) holds `org.freedesktop.Notifications` a
 
 ### Launcher
 
-rofi: a `bg0` window, 42em wide with 12px corners and a 1px `bg2` edge; the input bar and rows at 8px, with a dashed `bg2` line between them. The selected row is solid `fg` with `bg_dim` text (8.62:1); active entries are `blue` and urgent ones `red`; the placeholder and the match counts are `grey2`.
+Super+Space opens the shell's launcher (`LauncherWindow.qml`, `LauncherSheet.qml`, `Apps.qml`), which replaced rofi's drun (#89).
+
+- **Sheet:** a `Sheet`, 560px wide, that drops 24px into place over 400ms (enter) and fades in; its height follows the matches over 150ms. Super+Space, Esc, any Super chord or losing the keyboard close it.
+- **Field:** the Inputs field, 40px tall, with a 20px `grey2` search icon at its start, "Search apps" as the placeholder, and the three view toggles at its end: 34px icon buttons (`view_list`, `grid_view`, `category`), the current one filled on the `blue` tint.
+- **Search:** fuzzy in the manner of fzf (`Fuzzy.js`) over the name, then the generic name, command and keywords, a capital letter making it match case. Matches rank by score and then by how often each app was launched; with nothing typed, the most used lead. The counts and the chosen view live in Quickshell's state directory (`launcher.json`), first seeded from rofi's own history.
+- **List:** 40px pill rows 2px apart, a 24px app icon 12px in, the name in Body `fg` and the generic name ("Web Browser") at the end in Label `grey2`; eight rows show, and more scroll.
+- **Grid:** five apps to a row in cells with 8px corners, 84px tall, a 40px icon over the name in one 12px line, cut with an ellipsis.
+- **Categories:** the list under a Heading for each freedesktop main category (Internet, Office, Development, Media, Graphics, Games, Utilities, System, Settings, Education, Science, Other), each with its 16px Material Symbol in `grey2`, lined up with the app icons below. An app goes under the first main category it lists, and the categories follow the rank of their best app.
+- **Selection and keys:** the keyboard's app washes in `fg` at focus strength (0.10); a click on any app launches it. Typing filters; Down, Tab or Ctrl+n moves on, Up, Shift+Tab or Ctrl+p back, Page Down and Page Up a page, and in the grid Left and Right move along a row while Up and Down change rows. Ctrl+Tab and Ctrl+Shift+Tab cycle the views, Ctrl+1 to 3 pick one, and the choice is kept. Enter launches the app and closes; apps that run in a terminal open in kitty.
+- **Empty:** "No app matches." in Body `grey2`.
+
+**Drift.** The grid marks the keyboard's app with the wash alone; the One Wash Rule asks for the focus ring on a sheet walked in two directions.
+
+rofi still runs the clipboard, share and settings menus: a `bg0` window, 42em wide with 12px corners and a 1px `bg2` edge; the input bar and rows at 8px, with a dashed `bg2` line between them. The selected row is solid `fg` with `bg_dim` text (8.62:1); active entries are `blue` and urgent ones `red`; the placeholder and the match counts are `grey2`.
 
 ### Keycaps
 
