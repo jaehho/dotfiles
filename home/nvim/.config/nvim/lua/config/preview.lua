@@ -21,7 +21,7 @@ local function is_marimo_notebook()
   return false
 end
 
--- One uv pip install per interpreter so run --watch has real file events.
+-- One uv pip install per interpreter so edit --watch has real file events.
 local watchdog_checked = {}
 local function ensure_watchdog(py)
   if watchdog_checked[py] then
@@ -87,8 +87,9 @@ end
 -- What the server serves, from the registered pid: directory operand of
 -- `marimo edit [NAME]` or `marimo run [NAME]`, or the single file.
 -- Registry entries do not carry a root, and the workspace_files API wants
--- a skew-protection token. The subcommand must follow the marimo token,
--- so the `run` of a `uv run` wrapper is not taken for it.
+-- a skew-protection token. The subcommand must follow the marimo (or
+-- marimo-writelog) token, so the `run` of a `uv run` wrapper is not
+-- taken for it.
 local function marimo_workspace_root(server)
   local proc = '/proc/' .. server.pid
   local fd = vim.uv.fs_open(proc .. '/cmdline', 'r', 0)
@@ -103,7 +104,8 @@ local function marimo_workspace_root(server)
 
   local name
   for i, t in ipairs(tokens) do
-    if (t == 'edit' or t == 'run') and i > 1 and tokens[i - 1]:match 'marimo$' then
+    local prev = tokens[i - 1] or ''
+    if (t == 'edit' or t == 'run') and (prev:match 'marimo$' or prev:match 'marimo%-writelog$') then
       local j = i + 1
       while j <= #tokens do
         local a = tokens[j]
@@ -263,17 +265,24 @@ function M.toggle()
       local venv_python = root .. '/.venv/bin/python'
       local py = vim.uv.fs_stat(venv_python) and venv_python or 'python3'
       ensure_watchdog(py)
-      -- run --watch: the notebook as an app, reloaded on nvim saves. Run
-      -- mode cannot write the file (marimo's save endpoint needs edit
-      -- mode), so :w or Ctrl-S in the tab cannot rewrite it.
-      -- --include-code sends the source to the client.
+      -- edit --watch: on an nvim save, the editor patches the changed
+      -- cells in place and runs them and their dependents
+      -- (watcher_on_save), where run mode reloaded the whole page. Edit
+      -- mode can write the file: :w or Ctrl-S in the tab, the app
+      -- settings, and code_mode edits save (autosave is off).
+      -- marimo-writelog (home/bin) logs each write and what triggered it
+      -- to ~/.cache/marimo/logs/notebook-writes.log; without it, or
+      -- without a project venv, plain marimo runs.
       -- --no-token registers the server; --headless stops marimo opening
       -- its own tab at the bare root URL, since show_marimo opens one.
       -- It runs from the project root, as
-      -- `uv run marimo run notebooks/` from a terminal did.
-      local cmd = vim.fn.shellescape(marimo_bin)
-        .. ' run --watch --include-code --no-token --headless '
-        .. vim.fn.shellescape(dir)
+      -- `uv run marimo edit notebooks/` from a terminal would.
+      local writelog = vim.fn.exepath 'marimo-writelog'
+      local marimo_cmd = vim.fn.shellescape(marimo_bin)
+      if writelog ~= '' and vim.uv.fs_stat(venv_marimo) then
+        marimo_cmd = vim.fn.shellescape(venv_python) .. ' ' .. vim.fn.shellescape(writelog)
+      end
+      local cmd = marimo_cmd .. ' edit --watch --no-token --headless ' .. vim.fn.shellescape(dir)
       local result = vim.system {
         'tmux', 'split-window', '-v', '-d', '-l', '10', '-c', root,
         '-P', '-F', '#{pane_id}', cmd,
