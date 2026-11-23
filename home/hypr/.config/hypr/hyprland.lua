@@ -67,7 +67,9 @@ local clr = {
 ---------------------
 
 local terminal = "kitty"
-local menu     = "rofi -show drun"
+-- The bar's launcher (LauncherWindow.qml), which replaced rofi's drun
+-- (#89); rofi still runs the clipboard, share and settings menus.
+local menu     = "qs -c bar ipc call launcher toggle"
 
 -------------------
 ---- AUTOSTART ----
@@ -941,11 +943,12 @@ hl.layer_rule({
     ignore_alpha = 0.5,
 })
 
--- The bar's notification popups and center animate themselves (cards
--- slide in, the center slides from the edge).
+-- The bar's notification popups and center and its launcher animate
+-- themselves (cards slide in, the center slides from the edge, the
+-- launcher drops in).
 hl.layer_rule({
     name  = "bar-notifications",
-    match = { namespace = "^bar-notification" },
+    match = { namespace = "^bar-(notification|launcher)" },
 
     no_anim = true,
 })

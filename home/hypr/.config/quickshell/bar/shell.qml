@@ -10,6 +10,10 @@
 // at a page (wifi, bluetooth or sound), `tray` the tray grid (Super+'), and `refreshAwake` makes the stay-awake glyph look
 // again (hypr-idle-toggle calls it).
 //
+// The launcher (LauncherWindow.qml, #89) replaced rofi's drun:
+// `qs -c bar ipc call launcher toggle` opens or closes it on the focused
+// monitor (Super+Space).
+//
 // The bar is also the notification daemon (Notifs.qml, #90): popups on
 // the focused monitor and a center that opens like the other sheets.
 //
@@ -34,13 +38,19 @@ ShellRoot {
     property string dashOn: ""
     // The screen whose notification center is open, or "" for none.
     property string notifOn: ""
+    // The screen whose launcher is open, or "" for none.
+    property string launcherOn: ""
     // When Super last closed the center, in ms: the toggle that Super+
     // period sends right after is that close, not a reopen.
     property real superClosedAt: 0
+    // The same for the launcher and Super+Space, kept apart so that
+    // Super closing the center doesn't swallow the launcher's toggle.
+    property real launcherClosedAt: 0
     // Hidden, the bars unmap and give their 40px back to the windows.
     property bool shown: true
 
     function toggle(name) {
+        root.launcherOn = "";
         root.quickOn = "";
         root.dashOn = "";
         root.notifOn = "";
@@ -57,6 +67,7 @@ ShellRoot {
         root.openOn = "";
         root.dashOn = "";
         root.notifOn = "";
+        root.launcherOn = "";
         root.quickKeys = keys;
         if (root.quickOn !== name)
             root.quickPage = page === "" ? "main" : page;
@@ -77,6 +88,7 @@ ShellRoot {
         root.openOn = "";
         root.quickOn = "";
         root.dashOn = "";
+        root.launcherOn = "";
         root.notifOn = root.notifOn === name ? "" : name;
     }
 
@@ -100,6 +112,48 @@ ShellRoot {
     }
 
     NotifPopups {}
+
+    // One sheet at a time: the launcher closes the others, the tray grid
+    // included.
+    function launcher(name) {
+        root.openOn = "";
+        root.quickOn = "";
+        root.dashOn = "";
+        root.notifOn = "";
+        for (const bar of bars.instances)
+            bar.trayOpen = false;
+        root.launcherOn = root.launcherOn === name ? "" : name;
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        LauncherWindow {
+            required property var modelData
+
+            screen: modelData
+            open: root.launcherOn === modelData.name
+            onCloseRequested: root.launcherOn = ""
+            // Any Super chord closes it first, so the chord acts on the
+            // windows; Super+Space's own toggle then finds it closed.
+            onSuperPressed: {
+                root.launcherClosedAt = Date.now();
+                root.launcherOn = "";
+            }
+        }
+    }
+
+    IpcHandler {
+        target: "launcher"
+
+        function toggle(): void {
+            if (root.launcherOn === "" && Date.now() - root.launcherClosedAt < 1000) {
+                root.launcherClosedAt = 0;
+                return;
+            }
+            root.launcher(Hyprland.focusedMonitor?.name ?? "");
+        }
+    }
 
     Variants {
         model: Quickshell.screens
@@ -181,6 +235,7 @@ ShellRoot {
             root.openOn = "";
             root.quickOn = "";
             root.notifOn = "";
+            root.launcherOn = "";
             root.dashOn = root.dashOn === name ? "" : name;
         }
 
@@ -189,6 +244,7 @@ ShellRoot {
             root.quickOn = "";
             root.dashOn = "";
             root.notifOn = "";
+            root.launcherOn = "";
             root.shown = !root.shown;
         }
 
