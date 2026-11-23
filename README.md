@@ -1,8 +1,9 @@
 # Dotfiles
 
-Git tracking for the dotfiles of one machine (Arch, Hyprland). Stow
-packages under `home/`; nothing else. No timers, no package list, no
-`/etc` installer, no wrapper commands.
+Git tracking for the dotfiles of one machine (Arch, Hyprland), part of
+which wonlab, the home server, uses too. Stow packages under `home/`;
+nothing else. No timers, no package list, no `/etc` installer, no
+wrapper commands besides wonlab's `dotfiles-pull`.
 
 ## Layout
 
@@ -17,7 +18,7 @@ Linked files are already live. Edit under `home/` and the running tool
 sees the change.
 
 All commands run from `~/dotfiles`. `$P` below is a package name, or
-`$(ls home)` for all of them.
+`$(ls home | grep -vx wonlab)` for all of them.
 
 | Task | Command |
 |---|---|
@@ -34,7 +35,7 @@ with the live file.
 ```sh
 git clone https://github.com/jaehho/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-stow --no-folding -d home -t ~ $(ls home)
+stow --no-folding -d home -t ~ $(ls home | grep -vx wonlab)
 ```
 
 Install tools with `pacman`. They are not tracked here (`pacman -Qqe` is
@@ -49,6 +50,18 @@ One-offs inside packages:
   `systemctl --user enable --now` the first time.
 - `ssh` — `~/.ssh/jump_pass` is a real file, not in the repo
   (`chmod 600`); the config comment says how to create it.
+
+## wonlab
+
+wonlab, the home server, stows part of this repo so tmux, nvim and fish work the same over ssh (#95). Its checkout only pulls; edit here. The `wonlab` package is its alone: never stow it on the laptop. To set it up:
+
+```sh
+git clone https://github.com/jaehho/dotfiles.git ~/dotfiles
+cd ~/dotfiles
+stow --no-folding --ignore='arch\.fish' --ignore='btop\.conf' -d home -t ~ tmux nvim fish git theme wonlab
+```
+
+After that, the first interactive fish of each day runs `dotfiles-pull` in the background: it fast-forwards, restows those packages, and runs `Lazy! restore` when the lockfile changed. Ubuntu has no `delta` or `bat` without sudo, so their release binaries are in `~/.local/bin`, with `fd` linking `fdfind`.
 
 ## Claude
 

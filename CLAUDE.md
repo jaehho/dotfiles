@@ -12,9 +12,9 @@ Stow packages under `home/` only. No timers, no package manifests, no apply scri
 
 ## Ownership
 
-- One machine (omnibook, Arch). No per-host or per-distro branches.
+- One machine (omnibook, Arch). wonlab, the home server, only uses part of it (#95): it stows `tmux`, `nvim`, `fish`, `git`, `theme` and the `wonlab` package, which never gets stowed here, and pulls once a day. Edit here, never there. No per-host or per-distro branches or guards: a file only wonlab needs goes in `home/wonlab/`.
 - Scripts: `home/bin` for terminal tools, `home/laptop` for desktop helpers, `home/hypr` for compositor glue.
-- Each project's `CLAUDE.md` under `~/projects/` is a symlink into `home/projects/projects/<name>/`; edit it here. A session launched here never loads it: read it before the first command or edit in that project or its worktrees.
+- Each project's `CLAUDE.md` under `~/projects/` is a symlink into `home/projects/projects/<name>/` (on wonlab, `home/wonlab/projects/`); edit it here. A session launched here never loads it: read it before the first command or edit in that project or its worktrees.
 - Apps under `~/projects/` own their implementation. This repo owns their integration (hyprland.lua, Neovim lazy specs, stowed configs).
 - Notifications are the bar's own daemon (`quickshell/bar/Notifs.qml`, #90). There is no swaync; scripts go through `qs -c bar ipc call notifs`.
 - Hyprland's defaults place monitors (the catch-all rule in `hyprland.lua`). nwg-displays saves per-monitor rules to `~/.config/hypr/monitors.lua`, generated and untracked, keyed `desc:` (its use-desc setting). `screens.lua` only splits workspaces 1–9 into one block per monitor, left to right as placed; quick settings' Workspaces start here saves which display takes the first block per setup in `~/.config/hypr/screens_primary.lua` (generated, untracked). The scripts read the blocks back from `hyprctl workspacerules`, never recompute them. F1 opens nwg-displays for arrangement, resolution, scale, on/off and mirror. No layout daemon (#87).
