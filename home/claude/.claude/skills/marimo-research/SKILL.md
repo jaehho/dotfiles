@@ -33,6 +33,9 @@ A new question starts as an exploration, not a notebook.
    rendered output, and wait for the user before the next, unless they
    ask for the whole notebook. Restructure an existing notebook the same
    way. A function moves into the package when a notebook cell needs it.
+   The parts that interpret the results (discussion, limitations, open
+   questions) are offered in the reply, drafted from the rendered
+   output, and go into the notebook only when the user takes them.
 
 ## Layout
 
@@ -275,5 +278,5 @@ a test already checks needs only a pointer to the test.
 2. `uv run python notebooks/<file>.py` runs headless without fetching.
    Look at the rendered cells (`marimo edit`, or `marimo export html`), or
    say you only ran it headless.
-3. The Discussion matches the rendered outputs and types no number the code
-   computes.
+3. A Discussion, where the notebook has one, matches the rendered outputs
+   and types no number the code computes.
