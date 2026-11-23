@@ -19,6 +19,7 @@ Instances: `quickshell -c bar` and `quickshell -c polkit` (dotfiles `home/hypr/.
 ## QML traps
 
 - Never name an id `left`, `right`, `top`, `bottom`, `horizontalCenter`, `verticalCenter` or `baseline`: inside a child's binding the name resolves to the child's own anchor line ("Cannot read property 'x' of undefined"). `status` is risky too (Image and Loader have it).
+- Never name an `IpcHandler` function or target after a `qs ipc` subcommand (`show`, `call`, `wait`, `listen`, `prop`): `qs ipc call osd show …` fails with "The following arguments were not expected" before it reaches the shell.
 - Never name a function after an Item property (`focus`, `visible`, `enabled`, `state`, `opacity`). The property wins, and the call throws "is not a function" only when it runs, so only the log shows it.
 - A tray icon's `IconThemePath` is read as one flat folder holding a file named exactly as the icon. Apps that ship a hicolor theme there, or files with an extension, get the missing-icon square without an error; the bar's `TrayIcon.qml` looks those up file by file.
 - Child processes outlive a crashed Quickshell. Start a long-running one under `setpriv --pdeathsig TERM`.
