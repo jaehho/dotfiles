@@ -32,7 +32,7 @@ The laptop panel, sometimes with external monitors that Hyprland places by its d
 
 ## Brand Commitments
 
-- Everforest Dark Medium for all desktop chrome (decision #71), under Everforest's own token names. The `hypr-*` panels, the Quickshell bar and the polkit prompt read `home/hypr/.config/hypr/themes/foliage.conf` at runtime (one `$name = rgb(rrggbb)` per line); hyprland.lua and rofi keep same-named copies in their own packages, with no palette compiler (`home/theme/.config/theme/README.md`).
+- Everforest Dark Medium for all desktop chrome (decision #71), under Everforest's own token names. The `hypr-*` panels, the Quickshell bar and the polkit prompt read `home/hypr/.config/hypr/themes/foliage.conf` at runtime (one `$name = rgb(rrggbb)` per line); hyprland.lua keeps a same-named copy in its own package, with no palette compiler (`home/theme/.config/theme/README.md`).
 - Corner radii: 12px for windows and containers, 8px for nested controls, a pill when fully round.
 
 ## Product Principles
