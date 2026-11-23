@@ -185,7 +185,7 @@ components:
 <!-- markdownlint-disable-next-line MD036 -->
 **Creative North Star: "The Dark Cockpit"**
 
-This is the chrome of one Arch Linux laptop running Hyprland: window borders and shadows, the Quickshell shell (the bar, its sheets, the notifications and the keybind sheet), rofi, hyprlock, the hangul hint, speaker-eq and the Quickshell polkit prompt. Every surface is a native Wayland client styled in its own language: GTK4 CSS loaded from Python (the hangul hint through gtk4-layer-shell, `home/hypr/.local/bin/hypr-hangul-hint`; `home/laptop/.local/bin/speaker-eq`), rasi for rofi, QML for Quickshell (`home/hypr/.config/quickshell/bar/` and `polkit/`) and Hyprland's Lua config (`home/hypr/.config/hypr/hyprland.lua`). There are no web pages. The terminal and CLI tools share the palette through vendored ports (`home/theme/.config/theme/README.md`); GUI apps that are not the owner's keep their stock colors (`docs/gui-app-colors.md`), and nothing in this system restyles them.
+This is the chrome of one Arch Linux laptop running Hyprland: window borders and shadows, the Quickshell shell (the bar, its sheets, the notifications, the keybind sheet, the clipboard history and the hangul hint), rofi's share menu, hyprlock, hypr-confetti and the Quickshell polkit prompt. Every surface is a native Wayland client styled in its own language: GTK4 CSS loaded from Python through gtk4-layer-shell for hypr-confetti, rasi for rofi, QML for Quickshell (`home/hypr/.config/quickshell/bar/` and `polkit/`) and Hyprland's Lua config (`home/hypr/.config/hypr/hyprland.lua`). There are no web pages. The terminal and CLI tools share the palette through vendored ports (`home/theme/.config/theme/README.md`); GUI apps that are not the owner's keep their stock colors (`docs/gui-app-colors.md`), and nothing in this system restyles them.
 
 The name comes from the aviation principle that a normal state lights nothing. At rest the chrome is parchment and gray on dark green-gray grounds; a hue appears when it carries news, and a state hue means the same thing on every surface: blue is focus, "you are here" and the action on offer, orange is worth a glance, red is act now, green is charging or approved, purple is a special workspace, yellow is caution. Overlays appear when called, say what they need in plain words, and leave; a sheet that takes the keyboard holds it only while open, and nothing takes focus unasked.
 
@@ -208,7 +208,7 @@ Density is compact and keyboard-paced: 13px words, 11px labels, controls 8px apa
 
 Everforest Dark Medium (sainnhe/everforest): dark green-gray grounds, warm parchment text and muted role hues, chosen over Catppuccin Mocha because its text is warmer, about 5,100 K against 8,900 K (decision #71).
 
-**Where the values live.** `home/hypr/.config/hypr/themes/foliage.conf` defines each of the 24 tokens once, as `$name = rgb(rrggbb)` under Everforest's own names. hyprlock sources it; the `hypr-*` panels, speaker-eq and the Quickshell bar's and polkit prompt's `Colors.qml` parse it at runtime and use token names, never hexes. Two packages keep same-named copies in their own formats, as decision #71 and the theme README record (hand recolors, no palette compiler): `themes/foliage.lua` for `hyprland.lua` and `themes/foliage.rasi` for rofi. Both matched every token on 2026-11-05; nothing checks them. The frontmatter above is one more copy, for DESIGN.md tooling only.
+**Where the values live.** `home/hypr/.config/hypr/themes/foliage.conf` defines each of the 24 tokens once, as `$name = rgb(rrggbb)` under Everforest's own names. hyprlock sources it; hypr-confetti and the Quickshell bar's and polkit prompt's `Colors.qml` parse it at runtime and use token names, never hexes. Two packages keep same-named copies in their own formats, as decision #71 and the theme README record (hand recolors, no palette compiler): `themes/foliage.lua` for `hyprland.lua` and `themes/foliage.rasi` for rofi. Both matched every token on 2026-11-05; nothing checks them. The frontmatter above is one more copy, for DESIGN.md tooling only.
 
 ### Primary
 
@@ -226,7 +226,7 @@ Everforest Dark Medium (sainnhe/everforest): dark green-gray grounds, warm parch
 
 - **Soft Apricot** (`orange`): on and worth a glance: stay-awake engaged, the mic in use, pending notifications, low battery, busy load, a tray app asking for attention.
 - **Dusty Coral** (`red`): act now: screen sharing, failed units, critical battery, an urgent workspace, pegged CPU or RAM, do-not-disturb, a pending reboot, an armed destructive button, a critical notification (its edge, avatar wash and action pills), a wrong password, the power icon and its wash under the pointer, stay awake's icon while hypridle is not running. 5.31:1 on `bg_dim`, 4.55:1 on `bg0`.
-- **Straw** (`yellow`): caution: the polkit prompt when the camera gives up and the password takes over, Caps Lock on the lock screen, speaker-eq's warning notices.
+- **Straw** (`yellow`): caution: the polkit prompt when the camera gives up and the password takes over, Caps Lock on the lock screen.
 
 One widget also uses hues to tell meters apart rather than to report state: the per-metric labels in the bar's load tip (CPU `grey2`, RAM `aqua`, GPU `blue`).
 
@@ -244,7 +244,7 @@ One widget also uses hues to tell meters apart rather than to report state: the 
 
 The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` tints and `aqua`) are not chrome colors; `aqua` appears only as the RAM label in the bar's load tip and in hypr-confetti's paper.
 
-**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. `grey0` also carries text that has to be read: the 11px group headings and state lines in speaker-eq. PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
+**Drift.** Fallback palette hexes are restated in code: `hyprland.lua` (3, used if `foliage.lua` fails to load) and `hypr-confetti` (2). `Colors.qml` shows the intended pattern: neutral grays that are not palette values. PRODUCT.md says the palette is never restated; the package copies above are the exception decision #71 allows.
 
 ### Color Rules
 
@@ -273,13 +273,13 @@ The file's other tokens (`bg4`, `bg5`, `bg_visual`, the `bg_red` to `bg_purple` 
 - **Body** (Adwaita Sans 400, 13px): names on tiles and rows, status lines, keybind descriptions, a notification's body; its summary is the same size at 600.
 - **Control label** (Adwaita Sans 500, 12px): the shell's pill button labels; 400 for the line under the notification center's header.
 - **Label** (Adwaita Sans 400, 11px): the state under a tile's name ("On", "Balanced"), tallies, footers, a notification's "App · 5m" line; 500 in the notification center's count pill.
-- **Heading** (Adwaita Sans 700, 11px, uppercase): group headings in quick settings ("OPEN", "OUTPUT", "INPUT", in `grey2`), the launcher's categories, the dash panel's cards and speaker-eq.
+- **Heading** (Adwaita Sans 700, 11px, uppercase): group headings in quick settings ("OPEN", "OUTPUT", "INPUT", in `grey2`), the launcher's categories and the dash panel's cards.
 - **Mono** (JetBrainsMono Nerd Font 400, 11px; 700 on keycaps; 10px for the key hint inside a button): identifiers such as the polkit action id, key names on keycaps, "Esc" and "Enter" beside button labels, the key hints on a notification's pills, a quick settings slider's level.
 - **Icon** (Material Symbols Rounded at 16, 20 or 24px, `Theme.icon`, and 18px on the bar): outlined at rest (FILL 0), filled when on (FILL 1, animated), weight 400 with optical size following the size; the empty notification center's bell is 40px at weight 300. In `fg`, `grey2` or the state's tone.
 - **Bar** (JetBrainsMono Nerd Font 400, 13px; the clock bold, the window title italic): the bar's words and numbers: the clock, the track, the window title, workspace numbers, counts, the battery's time and the load ramps. Its icons are Material Symbols at 18px.
 - **Hangul** (Noto Sans CJK KR 600, 28px; shifted jamo 500, 13px): the jamo on the hint's keycaps.
 
-rofi sets its menus (clipboard, share, settings) in JetBrainsMono Nerd Font 11 with Papirus-Dark app icons; hyprlock sets every label in JetBrainsMono Nerd Font.
+rofi sets its share menu in JetBrainsMono Nerd Font 11 with Papirus-Dark app icons; hyprlock sets every label in JetBrainsMono Nerd Font.
 
 ### Type Rules
 
@@ -293,7 +293,7 @@ rofi sets its menus (clipboard, share, settings) in JetBrainsMono Nerd Font 11 w
 
 **Windows.** Dwindle tiling with a 2px border, `gaps_in` of 5 and `gaps_out` of 8 (6 under the bar), so tiled windows sit 10px apart and 10px below the islands, their edges in line with the islands' 8px inset. A gap table must be keyed (`top`, `right`, `bottom`, `left`): Hyprland reads a positional one as 0 without an error. Floating helper TUIs open centered at 800×600 (btop at 1400×900). Game mode (`hypr-gamemode`) drops gaps, rounding, blur, shadows and animations until a reload restores them.
 
-**Overlays.** The sheets are layer-shell surfaces on the overlay layer that take the keyboard while open. The keybind sheet centers on the screen it was opened on and sizes to its view, scrolling its list past 86% of the screen's height less 120px; it holds the keyboard as the notification center does. Quick settings is not one of them: the bar's right island grows into it, 460px wide, inside the bar's own surface. The polkit prompt covers the focused monitor with a 40% black scrim and hangs a 440px sheet flush from the top edge, centered under the IR camera. The hangul hint takes no input: it floats 56px above the bottom edge, or docks as a full-width strip that reserves its own height. The notification popups stack 380px cards 8px apart at the top right of the focused monitor, 8px under the bar and 8px from the edge, newest on top; they never take the keyboard. The notification center is a 400px sheet in the same corner of the screen it was opened on, as tall as its list (scrolling past the screen's height); it holds the keyboard exclusively while open, and any Super chord closes it before Hyprland acts on the chord. The launcher is a 560px sheet centered a fifth of the way down the screen it was opened on, eight rows tall at most and shorter when fewer apps match; it holds the keyboard as the center does. The dash panel is a 440px sheet down the right edge of the focused screen, from 8px under the bar to 8px above the bottom; open, it reserves its width, so tiled windows move aside rather than sit under it, and it never scrolls.
+**Overlays.** The sheets are layer-shell surfaces on the overlay layer that take the keyboard while open. The keybind sheet centers on the screen it was opened on and sizes to its view, scrolling its list past 86% of the screen's height less 120px; it holds the keyboard as the notification center does. Quick settings is not one of them: the bar's right island grows into it, 460px wide, inside the bar's own surface. The polkit prompt covers the focused monitor with a 40% black scrim and hangs a 440px sheet flush from the top edge, centered under the IR camera. The hangul hint takes no input: it floats 56px above the bottom edge of the focused screen, or docks as a full-width strip that reserves its own height. The notification popups stack 380px cards 8px apart at the top right of the focused monitor, 8px under the bar and 8px from the edge, newest on top; they never take the keyboard. The notification center is a 400px sheet in the same corner of the screen it was opened on, as tall as its list (scrolling past the screen's height); it holds the keyboard exclusively while open, and any Super chord closes it before Hyprland acts on the chord. The launcher is a 560px sheet centered a fifth of the way down the screen it was opened on, eight rows tall at most and shorter when fewer apps match; it holds the keyboard as the center does. The clipboard history is a 720px sheet in the launcher's place. The dash panel is a 440px sheet down the right edge of the focused screen, from 8px under the bar to 8px above the bottom; open, it reserves its width, so tiled windows move aside rather than sit under it, and it never scrolls.
 
 **Rhythm.** Controls and rows sit 8px apart in grids of equal columns (quick settings: three tile columns, two "Open" columns, a row of five session buttons, with 12px between groups). Stacked labels sit 1 to 4px apart and controls pad 12px inline. The shell base takes its gaps from `Theme.space` (4, 8, 12, 16, 24) and pads its sheets and cards 12px (`md`), with cards 8px apart. The polkit sheet pads 24px at the top and sides, under its lens, and 16px below; the bar's open islands 16. The hangul board pads 16px all round.
 
@@ -307,7 +307,7 @@ Depth is tone and edge, not lift. A sheet is the darkest plane on screen (`bg_di
 - **Sheet edge** (QML `RectangularShadow`: blur 6, radius 12, `bg_dim` at 0.93): the polkit sheet and the shell's `Sheet` (the notification popups and center, the launcher, the dash panel, the keybind sheet), reproducing the window edge on a layer surface. A surface that draws it leaves an 8px gutter inside itself so the shadow is not cut.
 - **Keycap lip** (3px of `bg_dim` under the face; 2px on the keybind sheet's caps): a key's front edge, on the hangul hint (a CSS `border-bottom`) and the keybind sheet (the face's shape in `bg_dim` under it).
 
-**Blur and glass.** Hyprland blurs at size 5 with 2 passes and vibrancy 0.1696, popups included. Layer rules blur behind the bar (with xray; its surface runs 640px down for its two sheets, menus and tips, and `ignore_alpha` keeps the blur to what it draws), the hangul hint and rofi, each with `ignore_alpha 0.5`. The notification layers (`bar-notifications`, `bar-notification-center`), the launcher's (`bar-launcher`) and the keybind sheet's (`bar-keybinds`) are not blurred, since their sheets are opaque, and have `no_anim`, as the polkit layer does, because they animate themselves. Glass shows only where a surface is translucent: the bar islands (`bg0` at 0.88) and the hangul board (`bg_dim` at 0.72, so the hint reads over any window). Sheets at 0.985 are effectively opaque.
+**Blur and glass.** Hyprland blurs at size 5 with 2 passes and vibrancy 0.1696, popups included. Layer rules blur behind the bar (with xray; its surface runs 640px down for its two sheets, menus and tips, and `ignore_alpha` keeps the blur to what it draws), the hangul hint and rofi, each with `ignore_alpha 0.5`. The notification layers (`bar-notifications`, `bar-notification-center`), the launcher's (`bar-launcher`), the clipboard history's (`bar-clipboard`), the keybind sheet's (`bar-keybinds`) and the dash panel's (`bar-dash`) are not blurred, since their sheets are opaque, and have `no_anim`, as the polkit layer does, because they animate themselves. A rule's namespace is a full match, so the rule names each layer whole. Glass shows only where a surface is translucent: the bar islands (`bg0` at 0.88) and the hangul board (`bg_dim` at 0.72, so the hint reads over any window). Sheets at 0.985 are effectively opaque.
 
 **Scrim.** Only the polkit prompt dims the screen: black at 40%, faded in over 250ms.
 
@@ -322,9 +322,9 @@ Depth is tone and edge, not lift. A sheet is the darkest plane on screen (`bg_di
 
 Corners follow one scale: 12px for windows and containers (Hyprland's `decoration.rounding`, with `rounding_power` 2), 8px for controls nested inside them, and a pill for anything fully round. A corner that meets a screen edge stays square: the polkit sheet's top corners, the docked hangul strip. `Theme.radius` names them `surface`, `control` and `pill`. Edges are 1px hairlines; the only heavier lines are the 2px window border, the 2px focus ring, the keycap lip and hyprlock's 3px input outline.
 
-On the scale today: the polkit sheet, the keybind sheet, the hangul board, the bar islands, the bar's menus and open sheets, the notification popups, center and the cards in it, the launcher's sheet, the dash panel and its cards, quick settings' session buttons, rofi's window and hyprlock's input field at 12px; the polkit field and band, the Wi-Fi page's field and the join failure bands, the keybind sheet's filter, keys and caps, the hangul keys, the bar's workspace pills, menu rows, tips and cover art, the tray grid's cells, the launcher's field and grid cells, the dash panel's quota blocks, rofi's input bar and rows at 8px; the shell's buttons, icon buttons, count pill, avatars and progress bars, the bar's buttons and the tray's attention slots, the player sheet's buttons, today's marker and progress meter, the polkit lens dot and buttons, the keybind sheet's mode switch and its segments, quick settings' tiles, rows, "Open" buttons, sliders and switch, the launcher's list rows, the dash panel's row washes, quota meters and status dots, and the hangul home-key bumps as pills.
+On the scale today: the polkit sheet, the keybind sheet, the hangul board, the bar islands, the bar's menus and open sheets, the notification popups, center and the cards in it, the launcher's sheet, the clipboard history and its preview card, the dash panel and its cards, quick settings' session buttons, rofi's window and hyprlock's input field at 12px; the polkit field and band, the Wi-Fi page's field and the join failure bands, the keybind sheet's filter, keys and caps, the hangul keys, the bar's workspace pills, menu rows, tips and cover art, the tray grid's cells, the launcher's field and grid cells, the dash panel's quota blocks, rofi's input bar and rows at 8px; the shell's buttons, icon buttons, count pill, avatars and progress bars, the bar's buttons and the tray's attention slots, the player sheet's buttons, today's marker and progress meter, the polkit lens dot and buttons, the keybind sheet's mode switch and its segments, quick settings' tiles, rows, "Open" buttons, sliders and switch, the launcher's and the clipboard's list rows, the dash panel's row washes, quota meters and status dots, and the hangul home-key bumps as pills.
 
-**Drift.** speaker-eq's notices use 10px. rofi keeps the stock theme's 2px dashed list separator, a heavier line than a hairline.
+**Drift.** rofi keeps the stock theme's 2px dashed list separator, a heavier line than a hairline.
 
 ### Shape Rules
 
@@ -340,7 +340,6 @@ A dark card that appears on demand and holds the keyboard.
 - **Content:** a Heading over each group, then a grid of controls 8px apart. On the shell base, an item in a list sits on a card: `bg1` at 0.55, 12px corners, no edge.
 - **Header (shell):** the sheet's name in Headline at the left with a count pill beside it, and the sheet's own controls at the right: icon buttons, then a neutral pill.
 - **Hanging variant:** the polkit sheet draws its hairline on the sides and bottom only and keeps square top corners, flush with the screen edge.
-- **Panels in app windows:** speaker-eq's panels are the same card on a `bg0` window: `bg_dim`, a 1px `bg1` edge, 12px corners, 12px padding.
 
 ### Buttons
 
@@ -355,7 +354,7 @@ Tonal pills and round icon buttons that wash under the pointer, and wear a ring 
   - **Session button:** 56px tall with 12px corners, the icon over the label in Label `grey2`; armed, the icon fills in `red` and the label says "Again?" in `fg`.
 - **With a key:** a pill whose key matters says it at its end in Mono 11px `grey2`, and its label centers in the room left of it: the polkit prompt's Approve (`blue`, "Enter") and Cancel (`grey2`, "Esc").
 - **Armed:** Log out, Reboot and Shut down take a second press. The first arms the button for 3 seconds: `red` at 0.2 behind and the label "Again?" in `fg`, as the Tint Rule asks. Quick settings' session row and the bar's power menu arm alike.
-- **Disabled:** 0.5 opacity on the shell's pills (their wash drops to 0.06), the polkit prompt's Approve while PAM checks, and quick settings; GTK's insensitive state in speaker-eq.
+- **Disabled:** 0.5 opacity on the shell's pills (their wash drops to 0.06), the polkit prompt's Approve while PAM checks, and quick settings.
 
 ### Inputs / Fields
 
@@ -370,7 +369,6 @@ A tinted line for the frames the owner must not miss.
 - **Shape:** 8px corners, reaching 10px past the text column at each side and 7px above and below.
 - **Approved and wrong password:** the tone at 0.14 behind and 0.45 on the edge. "Approved" sets its words in `green` DemiBold; a wrong password keeps `red` in the icon (filled), fill and edge and its words in `fg`.
 - **Looking and fallback:** plain status lines with a tone-colored icon (`face`, `key` while PAM checks) and no band: `blue` while the camera looks, `yellow` once the password takes over.
-- **Notices:** speaker-eq bands info, warning and error notices in `blue`, `yellow` and `red` at 0.12 behind and 0.45 to 0.5 on the edge.
 - **Join failures** (`QuickBand.qml`): the wrong-password band under the row's name on the Wi-Fi and Bluetooth pages, padded 8px, with a filled 16px `error` icon in `red`, saying why in plain words ("Wrong password, or the network turned it down.", "Couldn't connect. Check that it's on and in range.").
 
 ### Navigation
@@ -413,7 +411,17 @@ Super+Space opens the shell's launcher (`LauncherWindow.qml`, `LauncherSheet.qml
 
 **Drift.** The grid marks the keyboard's app with the wash alone; the One Wash Rule asks for the focus ring on a sheet walked in two directions.
 
-rofi still runs the clipboard, share and settings menus: a `bg0` window, 42em wide with 12px corners and a 1px `bg2` edge; the input bar and rows at 8px, with a dashed `bg2` line between them. The selected row is solid `fg` with `bg_dim` text (8.62:1); active entries are `blue` and urgent ones `red`; the placeholder and the match counts are `grey2`.
+### Clipboard History
+
+Super+V opens the clipboard history (`ClipboardWindow.qml`, `ClipboardSheet.qml`), which replaced rofi's cliphist menu (#89), where the launcher opens.
+
+- **Sheet:** a `Sheet`, 720px wide, dropping in as the launcher does; read afresh from `cliphist list` on every open.
+- **Field:** the launcher's field, "Search clipboard", the count at its end in Label `grey2` ("7", "2 of 7"); typing filters fuzzily (`Fuzzy.js`), newest first otherwise.
+- **List:** 36px pill rows, eight showing, the entry on one line in Body `fg`; an image is a 16px `image` symbol and "Image · 1920×1080 PNG · 12 KiB" in `grey2`.
+- **Preview:** beside the list, a card (the card tone, 12px corners and padding) holding the chosen entry in full, its text in Mono 12px wrapped, or its image fitted.
+- **Keys:** the launcher's, with Enter copying the entry back to the clipboard and closing, and Shift+Delete removing it from the history; a Label line under the list says so.
+
+rofi still runs the share menu (Super+S): a `bg0` window, 42em wide with 12px corners and a 1px `bg2` edge; the input bar and rows at 8px, with a dashed `bg2` line between them. The selected row is solid `fg` with `bg_dim` text (8.62:1); active entries are `blue` and urgent ones `red`; the placeholder and the match counts are `grey2`.
 
 ### Dash Panel
 
@@ -439,7 +447,7 @@ Super+/ opens the keybind sheet (`KeybindsWindow.qml`, `KeybindsSheet.qml`), whi
 
 ### Keycaps
 
-- **Hangul hint:** 56px keys on a 62px pitch, `bg2` at 0.94 with a `bg3` edge, a 3px `bg_dim` lip and 8px corners. The jamo is in Hangul type; the Latin letter sits in the corner in Mono 10px bold `grey1`, the shifted jamo in `grey2`. A pressed key lights at once in solid `green` with `bg_dim` jamo and fades back over 220ms on release. F and J carry a 20×3px pill bump.
+- **Hangul hint:** 56px keys on a 62px pitch, `bg2` at 0.94 with a `bg3` edge, a 3px `bg_dim` lip and 8px corners. The jamo is in Hangul type; the Latin letter sits in the corner in Mono 10px bold `grey2`, the shifted jamo opposite in `grey2`. A pressed key lights at once in solid `green` with `bg_dim` jamo and fades back over 250ms on release. F and J carry a 20×3px pill bump. The board (`HangulBoard.qml`, fed by `hypr-hangul-hint`) floats as glass, `bg_dim` at 0.72 with the shell's outline and 16px padding, and clears around the pointer: nearly see-through at it, solid again 96px out. Docked, it is a `bg_dim` strip with a `bg2` top hairline and 8px padding.
 - **Keybind sheet** (`Keycap.qml`): caps are Mono 11px bold `fg` on a `bg3` to `bg2` gradient with a 1px `bg3` edge, a 2px lip and 8px corners; the held prefix cap fills `blue` with `bg_dim` text, a size up. Keys on the keyboard map are 8px keys on a 50px pitch with a 3px lip in four strengths: unbound, `bg0` with a `grey2` legend; bound under another modifier, raised to `bg1` with an `fg` legend; bound under what is held now, solid `blue` with `bg_dim`; a held modifier, `bg3`. A key washes under the pointer (in `bg0` when solid), and the selected one wears the focus ring.
 
 ### Polkit Prompt
@@ -455,7 +463,7 @@ The signature surface (`home/hypr/.config/quickshell/polkit/`), an approval shee
 
 hyprlock: a blurred screenshot of the session (3 passes, size 8, brightness 0.6) behind a clock in `fg`, the date in `grey2` and a greeting in `green`; a 300×50 input with a 3px `green` outline on `bg1` and 12px corners, whose `check_color` is `green`, `fail_color` `red` and `capslock_color` `yellow`; battery and network in the top right.
 
-**Drift.** The hangul hint's Latin letters measure 2.98:1 and its shifted jamo 3.97:1 on their keys. hyprlock shows the battery in `green` at any charge, where the bar keeps `green` for charging.
+**Drift.** The hangul hint's Latin letters and shifted jamo measure 3.97:1 on their keys. hyprlock shows the battery in `green` at any charge, where the bar keeps `green` for charging.
 
 ### Component Rules
 
