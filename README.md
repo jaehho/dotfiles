@@ -44,6 +44,8 @@ the inventory).
 One-offs inside packages:
 
 - `mime` — `mimeapps.list` is an absolute symlink (GLib safe-write).
+- `bash` — the login shell: `chsh -s /usr/bin/bash`. Its
+  `.bash_profile` starts Hyprland on tty1; fish runs inside tmux.
 - `tmux` — TPM is a git clone under `~/.tmux`.
 - `theme` — run `bat cache --build` after it lands.
 - `hypr` — user units (wallhelper-fetch, awatcher, …) are
