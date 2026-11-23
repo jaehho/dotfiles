@@ -5,11 +5,9 @@
 // another, so a code is pressed the moment it is complete.
 .pragma library
 
-// Never f, which shows and hides the hints on both sheets.
-// Without the sheets' own keys (h j k l, and q), for the quick settings.
+// Without the sheets' own keys: h j k l move, q closes, and f shows and
+// hides the hints, on quick settings and the tray's grid alike.
 const KEYS = "asdgewrtyuiopzxcvbnm";
-// Every other letter, for the tray's grid.
-const ALL = "abcdeghijklmnopqrstuvwxyz";
 
 // One code per name, in order. A name's first letter goes to the first
 // of the names that starts with it; the rest take another initial or

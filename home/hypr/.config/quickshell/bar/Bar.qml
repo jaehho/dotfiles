@@ -23,6 +23,8 @@ PanelWindow {
     property bool quickKeys: false
     // The tray grid, grown out of the right island under its chevron.
     property bool trayOpen: false
+    // Opened from the keyboard (Super+'), so its ring shows at once.
+    property bool trayKeys: false
     // Opened by hovering, which takes neither the keyboard nor the
     // grab: it closes when the pointer leaves the island, and a click on
     // what opened it keeps it open (and takes both).
@@ -101,7 +103,8 @@ PanelWindow {
         byHover = true;
     }
 
-    function toggleTray() {
+    function toggleTray(keys) {
+        trayKeys = keys === true;
         if (trayOpen && byHover)
             byHover = false;
         else
@@ -117,6 +120,7 @@ PanelWindow {
     function hoverTray() {
         if (!hoverFree || trayOpen)
             return;
+        trayKeys = false;
         trayOpen = true;
         byHover = true;
     }

@@ -207,7 +207,7 @@ ShellRoot {
             root.shown = true;
             for (const bar of bars.instances)
                 if (bar.screen.name === Hyprland.focusedMonitor?.name)
-                    bar.toggleTray();
+                    bar.toggleTray(true);
         }
 
         function refreshAwake(): void {

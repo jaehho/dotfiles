@@ -7,7 +7,9 @@
 //
 // Left click brings the app up, middle click does its second action,
 // right click opens its menu (Bar.trayClick); the wheel scrolls it. Its
-// tooltip (unread counts and the like) is the bar's tip.
+// tooltip (unread counts and the like) is the bar's tip. The grid's
+// keyboard selection wears quick settings' focus ring (QuickControl):
+// 2px of blue 3px outside the cell.
 import QtQuick
 import QtQuick.Effects
 import Quickshell.Services.SystemTray
@@ -22,6 +24,7 @@ Rectangle {
     property string hint: ""
     property string typed: ""
     property bool hinting: false
+    property bool ringed: false
     readonly property string tip: item.tooltipTitle || item.title || item.id
     readonly property int tipFormat: Text.PlainText
     readonly property bool calling: item.status === Status.NeedsAttention
@@ -99,6 +102,23 @@ Rectangle {
 
         Behavior on color {
             CAnim {
+                speed: "fast"
+            }
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -3
+        radius: cell.radius + 3
+        color: "transparent"
+        border.width: 2
+        border.color: Theme.colors.blue
+        opacity: cell.ringed ? 1 : 0
+        visible: opacity > 0
+
+        Behavior on opacity {
+            Anim {
                 speed: "fast"
             }
         }
