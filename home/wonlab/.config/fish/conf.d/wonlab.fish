@@ -1,15 +1,6 @@
-# wonlab only. The first interactive shell of the day runs dotfiles-pull
-# in the background; a failed pull is reported by the next shell.
-status is-interactive; or return
-
-set -l state ~/.local/state/dotfiles
-if test -s $state/pull.err
-    echo "dotfiles-pull failed, see $state/pull.err" >&2
-end
-if not test -e $state/pulled
-    or test (math (date +%s) - (path mtime $state/pulled)) -gt 86400
-    mkdir -p $state
-    touch $state/pulled
-    fish -c dotfiles-pull >/dev/null 2>$state/pull.err &
-    disown
-end
+# wonlab's packages and stow ignores for dotfiles-pull (#95). arch.fish
+# starts Hyprland; btop rewrites its config, which would dirty the
+# checkout. Set for every fish, since dotfiles-pull runs in a
+# non-interactive one.
+set -g dotfiles_packages tmux nvim fish git theme wonlab
+set -g dotfiles_stow_ignore 'arch\.fish' 'btop\.conf'

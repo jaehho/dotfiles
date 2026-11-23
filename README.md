@@ -3,7 +3,7 @@
 Git tracking for the dotfiles of one machine (Arch, Hyprland), part of
 which wonlab, the home server, uses too. Stow packages under `home/`;
 nothing else. No timers, no package list, no `/etc` installer, no
-wrapper commands besides wonlab's `dotfiles-pull`.
+wrapper commands besides `dotfiles-pull`.
 
 ## Layout
 
@@ -53,7 +53,7 @@ One-offs inside packages:
 
 ## wonlab
 
-wonlab, the home server, stows part of this repo so tmux, nvim and fish work the same over ssh (#95). Its checkout only pulls; edit here. The `wonlab` package is its alone: never stow it on the laptop. To set it up:
+wonlab, the home server, stows part of this repo so tmux, nvim and fish work the same over ssh (#95). Edit on either machine, commit and push. The `wonlab` package is its alone: never stow it on the laptop. To set it up:
 
 ```sh
 git clone https://github.com/jaehho/dotfiles.git ~/dotfiles
@@ -61,7 +61,7 @@ cd ~/dotfiles
 stow --no-folding --ignore='arch\.fish' --ignore='btop\.conf' -d home -t ~ tmux nvim fish git theme wonlab
 ```
 
-After that, the first interactive fish of each day runs `dotfiles-pull` in the background: it fast-forwards, restows those packages, and runs `Lazy! restore` when the lockfile changed. Ubuntu has no `delta` or `bat` without sudo, so their release binaries are in `~/.local/bin`, with `fd` linking `fdfind`.
+On both machines, the first interactive fish of each day runs `dotfiles-pull` in the background: it fast-forwards, restows the machine's packages (wonlab's list and ignores are in `home/wonlab/.config/fish/conf.d/wonlab.fish`; the laptop's default is every package but `wonlab`), and runs `Lazy! restore` when the lockfile changed. If both machines committed since the last pull, the pull fails and every shell says so until `git pull --rebase` fixes it. Ubuntu has no `delta` or `bat` without sudo, so their release binaries are in `~/.local/bin`, with `fd` linking `fdfind`.
 
 ## Claude
 

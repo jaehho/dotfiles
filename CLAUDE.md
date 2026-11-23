@@ -5,14 +5,14 @@ Stow packages under `home/` only. No timers, no package manifests, no apply scri
 ## Working here
 
 - Repo files are the live configs through stow. Never discard uncommitted work (`git checkout`/`restore` on a file reverts the running system).
-- Commit straight to `main`; no topic branches or worktrees here. The global branch rule is off: a branch swaps the running configs.
+- Commit straight to `main` and push right after: the laptop and wonlab both edit this repo, and each pulls once a day (`dotfiles-pull`, from the first interactive fish). No topic branches or worktrees here. The global branch rule is off: a branch swaps the running configs.
 - Stow uses `--no-folding`. After adding a file to a package: `stow --no-folding -d home -t ~ <pkg>`.
 - Do not add a machine-setup or `/etc` layer back. Those tweaks live in git history and `gotcha` issues, not as a live source of truth here.
 - For privileged repairs, write a reviewed script in `/tmp/` for the owner; never run sudo.
 
 ## Ownership
 
-- One machine (omnibook, Arch). wonlab, the home server, only uses part of it (#95): it stows `tmux`, `nvim`, `fish`, `git`, `theme` and the `wonlab` package, which never gets stowed here, and pulls once a day. Edit here, never there. No per-host or per-distro branches or guards: a file only wonlab needs goes in `home/wonlab/`.
+- One machine (omnibook, Arch). wonlab, the home server, only uses part of it (#95): it stows `tmux`, `nvim`, `fish`, `git`, `theme` and the `wonlab` package, which never gets stowed here. Either machine edits, commits and pushes. No per-host or per-distro branches or guards: a file only wonlab needs goes in `home/wonlab/`.
 - Scripts: `home/bin` for terminal tools, `home/laptop` for desktop helpers, `home/hypr` for compositor glue.
 - Each project's `CLAUDE.md` under `~/projects/` is a symlink into `home/projects/projects/<name>/` (on wonlab, `home/wonlab/projects/`); edit it here. A session launched here never loads it: read it before the first command or edit in that project or its worktrees.
 - Apps under `~/projects/` own their implementation. This repo owns their integration (hyprland.lua, Neovim lazy specs, stowed configs).
