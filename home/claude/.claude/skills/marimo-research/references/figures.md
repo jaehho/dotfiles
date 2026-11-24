@@ -15,6 +15,11 @@ Read the section you need; `SKILL.md` has the rules that always apply.
 - altair for charts that map columns to encodings, up to a few thousand marks
   (aggregate first beyond that); matplotlib for figures placed mark by mark,
   large point clouds, and files in `figures/`; plotly for 3D and WebGL.
+- plotly also for a 2D chart the reader zooms into. Its default drag zooms
+  to a box, a thin box zooms one axis, and a double click resets;
+  `matches` links the panels' axes. Altair (Vega-Lite) only zooms on the
+  wheel and pans, so zooming to a dragged region there means a selection
+  sent to Python and the chart redrawn.
 
 ## Base look
 
@@ -45,6 +50,12 @@ def lab_theme() -> alt.theme.ThemeConfig:
             }
         }
     )
+
+
+template = go.layout.Template(pio.templates["simple_white"])
+template.layout.colorway = list(CATEGORY_COLORS.values())
+pio.templates["lab"] = template
+pio.templates.default = "lab"
 ```
 
 ## Selectable figures
