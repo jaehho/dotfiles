@@ -12,7 +12,7 @@ Stow packages under `home/` only. No timers, no package manifests, no apply scri
 
 ## Ownership
 
-- One machine (omnibook, Arch). wonlab, the home server, only uses part of it (#95): it stows `tmux`, `nvim`, `fish`, `git`, `theme` and the `wonlab` package, which never gets stowed here. Either machine edits, commits and pushes. No per-host or per-distro branches or guards: a file only wonlab needs goes in `home/wonlab/`.
+- One machine (omnibook, Arch). wonlab, the home server, only uses part of it (#95): it stows `tmux`, `nvim`, `fish`, `git`, `theme`, `claude` and the `wonlab` package, which never gets stowed here. Either machine edits, commits and pushes. No per-host or per-distro branches or guards: a file only wonlab needs goes in `home/wonlab/`.
 - Scripts: `home/bin` for terminal tools, `home/laptop` for desktop helpers, `home/hypr` for compositor glue.
 - Each project's `CLAUDE.md` under `~/projects/` is a symlink into `home/projects/projects/<name>/` (on wonlab, `home/wonlab/projects/`); edit it here. A session launched here never loads it: read it before the first command or edit in that project or its worktrees.
 - Apps under `~/projects/` own their implementation. This repo owns their integration (hyprland.lua, Neovim lazy specs, stowed configs).

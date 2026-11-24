@@ -55,12 +55,12 @@ One-offs inside packages:
 
 ## wonlab
 
-wonlab, the home server, stows part of this repo so tmux, nvim and fish work the same over ssh (#95). Edit on either machine, commit and push. The `wonlab` package is its alone: never stow it on the laptop. To set it up:
+wonlab, the home server, stows part of this repo so tmux, nvim, fish and Claude Code work the same over ssh (#95). Edit on either machine, commit and push. The `wonlab` package is its alone: never stow it on the laptop. To set it up:
 
 ```sh
 git clone https://github.com/jaehho/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-stow --no-folding --ignore='btop\.conf' -d home -t ~ tmux nvim fish git theme wonlab
+stow --no-folding --ignore='btop\.conf' -d home -t ~ tmux nvim fish git theme claude wonlab
 ```
 
 On both machines, the first interactive fish of each day runs `dotfiles-pull` in the background: it fast-forwards, restows the machine's packages (wonlab's list and ignores are in `home/wonlab/.config/fish/conf.d/wonlab.fish`; the laptop's default is every package but `wonlab`), and runs `Lazy! restore` when the lockfile changed. If both machines committed since the last pull, the pull fails and every shell says so until `git pull --rebase` fixes it. Ubuntu has no `delta` or `bat` without sudo, so their release binaries are in `~/.local/bin`, with `fd` linking `fdfind`.
