@@ -5,7 +5,7 @@ description: Writes, reloads, restarts and captures Quickshell (QML) shells on t
 
 # Quickshell
 
-Instances: `quickshell -c bar` and `quickshell -c polkit` (dotfiles `home/hypr/.config/quickshell/`, started from `hyprland.lua`), and `quickshell -c lock` while the session is locked (one per lock, started by `hypr-lock`, hypridle's lock_cmd). Never start the lock to test it: it takes the user's screen; test `Auth.qml` and `LockScreen.qml` in a harness with throwaway PAM stacks (`pinDirectory`, `faceDirectory`). dash's desktop overlay was retired 2026-11-18; its data feeds the bar's dash panel (Super+D). The package is AUR `quickshell-git`: Quickshell 0.3.2 ignores Hyprland's `changeworkspaceid`, so after `workspace_pack.lua` renumbers with `change_id` the bar loses window icons. Upstream 4befab5 fixes it; the user chose to stay on `-git` (2026-11-12).
+Instances: `quickshell -c bar` and `quickshell -c polkit` (dotfiles `home/hypr/.config/quickshell/`, started from `hyprland.lua`), and `quickshell -c lock` while the session is locked (one per lock, started by `hypr-lock`, hypridle's lock_cmd). Never start the lock to test it: it takes the user's screen; test `Auth.qml` and `LockScreen.qml` in a harness with throwaway PAM stacks (`pinDirectory`, `faceDirectory`). dash's desktop overlay was retired 2026-11-18; its data feeds the bar's dash panel (Super+D). The binary is `~/.local/bin/quickshell` (and its `qs` link): upstream `9b0f339` plus the stale-reply fix for phantom workspaces after hotplug (branch `hyprland-stale-replies` in `~/projects/upstream/quickshell`, dotfiles #98). It shadows AUR `quickshell-git` in PATH; delete both files once upstream fixes quickshell-mirror#1343. Under it stays `-git`, not the 0.3.2 release, which ignores Hyprland's `changeworkspaceid` and loses window icons after `workspace_pack.lua` renumbers (the user's choice, 2026-11-12).
 
 ## Run and reload
 
@@ -14,7 +14,7 @@ Instances: `quickshell -c bar` and `quickshell -c polkit` (dotfiles `home/hypr/.
 - A reload caught halfway through a multi-file edit logs errors, such as a ReferenceError for an id the next edit adds. Judge the log after the last edit.
 - A new `.qml` in a stowed config is "not a type" until it is stowed (`stow --no-folding -d ~/dotfiles/home -t ~ hypr`). A deleted one leaves a dangling link in `~/.config/quickshell/bar` to remove.
 - `polkit/` holds repo symlinks to the bar's `Theme.qml`, `Colors.qml`, `Anim`, `CAnim`, `Icon`, `Line`, `StateLayer` and `PillButton`: saving one reloads both instances, so read both logs. Restart polkit only while no request is pending (`qs kill -c polkit`, then `quickshell -c polkit` through the compositor).
-- After a Qt update, the AUR hook's `quickshell --private-check-compat` warning means `paru -S quickshell-git` must run again (the user, in a real terminal), then restart bar and polkit.
+- After a Qt update, the AUR hook's `quickshell --private-check-compat` warning means `paru -S quickshell-git` must run again (the user, in a real terminal), and the local build too: `cmake --build build` in the clone, then `install -m755 build/src/quickshell ~/.local/bin/quickshell` (needs `cli11` and `vulkan-headers`). Then restart bar and polkit.
 
 ## QML traps
 
