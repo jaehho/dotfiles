@@ -17,7 +17,7 @@
 - If `~/.agents/AGENTS.local.md` exists, read it for machine-local/private context not tracked in the public dotfiles repo.
 - Read files, logs, and command output yourself; don't ask me to paste them. Make config changes by writing files, not GUI walkthroughs.
 - Don't build a fix for a cause you haven't proven. Add logging that pins it down first, then fix what it shows. Never change a setting I chose (a resolution, frame rate, size) to chase a symptom. When a config edit answers my request, make it and stop; if it doesn't take effect where I'm looking, say why (stale process, a rule that applies only on map) instead of writing code around it.
-- Writing that goes out under my name (mail, messages, issue and PR text, posts): read `~/projects/writing/AGENTS.md` (or `CLAUDE.md`) and `STYLE.md` first and work in that repo, not `/tmp`.
+- Writing that goes out under my name (mail, messages, PR text, posts, and issues for repos that aren't mine): read `~/projects/writing/AGENTS.md` (or `CLAUDE.md`) and `STYLE.md` first and work in that repo, not `/tmp`. An issue in my own repo (`github.com/jaehho/`) needs no draft: file it directly.
 - When interacting with Cloudflare, use the `cf` CLI unless the project has a Wrangler configuration file.
 - Google services (Gmail, Calendar, Drive, Docs) go through the `gog` CLI; `gog auth list` shows the accounts, `gog --help` the commands. Pass `--readonly` unless I ask for a change, and never send mail without asking.
 - `!` commands have no TTY, so anything that prompts (sudo, `ssh -t`, pickers) needs a separate terminal.

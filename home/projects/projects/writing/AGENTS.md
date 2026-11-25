@@ -1,7 +1,8 @@
 # writing
 
-Drafts I write with Claude (mail, issues, messages) and, once delivered, what was actually sent. The history is a dataset of how I edit Claude's prose; keep it intact.
+Drafts I write with Claude (mail, issues for repos that aren't mine, messages) and, once delivered, what was actually sent. The history is a dataset of how I edit Claude's prose; keep it intact.
 
+- An issue in one of my own repos (`github.com/jaehho/`) needs no draft: write it and file it with `gh issue create`. Draft first only for an issue to a repo that isn't mine.
 - Read `STYLE.md` before drafting. When the same edit of mine recurs, propose it as a rule there with the commit it came from.
 - One file per piece: `drafts/YYYY-MM-DD-<slug>.md`, revised in place each round, never a new file per round. Front matter: `kind` (`mail`, `issue`, `message`), then for mail `account`, `to`, `subject`, `attach`. Paste the text in chat too.
 - Commit straight to `main`. Before revising, commit any change of mine as `user: <slug>`; then write the revision and commit it as `claude: <slug> rN`. I edit in nvim and diff with git.
