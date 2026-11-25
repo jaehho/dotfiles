@@ -1,7 +1,6 @@
--- Pick a git worktree of the current repository and open it in a new
--- tab whose directory is the worktree. A worktree whose branch adds an
--- explorations/<slug>/ folder that the main worktree lacks opens on
--- its README.
+-- Pick a git worktree of the current repository by its name (the
+-- folder's name) and open it in a new tab whose directory is the
+-- worktree.
 local M = {}
 
 local function list_worktrees()
@@ -9,60 +8,26 @@ local function list_worktrees()
   if vim.v.shell_error ~= 0 then
     return {}
   end
-  local worktrees, current = {}, nil
+  local worktrees = {}
   for _, line in ipairs(lines) do
     local path = line:match('^worktree (.+)$')
     if path then
-      current = { path = path, branch = '(detached)' }
-      table.insert(worktrees, current)
-    elseif current then
-      current.branch = line:match('^branch refs/heads/(.+)$') or current.branch
-      current.bare = current.bare or line == 'bare'
+      table.insert(worktrees, { path = path })
+    elseif line == 'bare' then
+      worktrees[#worktrees].bare = true
     end
   end
   return worktrees
 end
 
--- The README of each explorations/<slug>/ folder, by slug.
-local function find_explorations(root)
-  local readmes = {}
-  for _, readme in ipairs(vim.fn.glob(root .. '/explorations/*/README.md', false, true)) do
-    readmes[vim.fn.fnamemodify(readme, ':h:t')] = readme
-  end
-  return readmes
-end
-
 function M.items()
-  local worktrees = list_worktrees()
   local items = {}
-  if #worktrees == 0 then
-    return items
-  end
-  local in_main = find_explorations(worktrees[1].path)
-  for i, worktree in ipairs(worktrees) do
+  for _, worktree in ipairs(list_worktrees()) do
     if not worktree.bare then
-      local own = {}
-      if i > 1 then
-        for slug, readme in pairs(find_explorations(worktree.path)) do
-          if not in_main[slug] then
-            table.insert(own, { slug = slug, readme = readme })
-          end
-        end
-      end
-      table.sort(own, function(a, b) return a.slug > b.slug end)
-      local label = i == 1 and worktree.branch .. ' (main checkout)' or worktree.branch
-      if #own == 0 then
-        table.insert(items, { text = label, root = worktree.path })
-      end
-      for _, exploration in ipairs(own) do
-        table.insert(items, {
-          -- A branch normally holds one exploration; name the folder
-          -- only when it holds more, so the rows stay distinct.
-          text = #own > 1 and label .. '  ' .. exploration.slug or label,
-          root = worktree.path,
-          file = exploration.readme,
-        })
-      end
+      table.insert(items, {
+        text = vim.fn.fnamemodify(worktree.path, ':t'),
+        root = worktree.path,
+      })
     end
   end
   return items
@@ -78,11 +43,8 @@ function M.pick()
     title = 'Worktrees',
     items = items,
     format = 'text',
-    -- An item without a README previews its recent commits.
+    -- The preview shows the worktree's recent commits.
     preview = function(ctx)
-      if ctx.item.file then
-        return Snacks.picker.preview.file(ctx)
-      end
       ctx.item.preview = {
         text = vim.fn.system({ 'git', '-C', ctx.item.root, 'log', '--oneline', '-20' }),
         ft = 'git',
@@ -97,7 +59,7 @@ function M.pick()
       vim.schedule(function()
         vim.cmd.tabnew()
         vim.cmd.tcd(vim.fn.fnameescape(item.root))
-        vim.cmd.edit(vim.fn.fnameescape(item.file or item.root))
+        vim.cmd.edit(vim.fn.fnameescape(item.root))
       end)
     end,
   })
