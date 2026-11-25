@@ -41,8 +41,7 @@ vim.keymap.set('n', '<leader>tp', function() require('config.preview').toggle() 
 vim.keymap.set('n', '<leader>gw', function() require('config.worktrees').pick() end, { desc = '[G]it [W]orktrees' })
 
 -- Zotero annotation → markdown blockquote at cursor (stock local API :23119)
--- gz: same g-prefix as gB/gA/gC; <leader>zq was a three-key reach.
-vim.keymap.set('n', 'gz', function() require('zotero_quotes').pick() end, { desc = 'Zotero Quote' })
+vim.keymap.set('n', '<leader>zq', function() require('zotero_quotes').pick() end, { desc = 'Zotero Quote' })
 
 -- Claude Code memory and CLAUDE.md files across projects (<c-x> deletes, <c-g> toggles full-text grep)
 vim.api.nvim_create_user_command('ClaudeMemory', function() require('claude_memory').pick() end, {})
