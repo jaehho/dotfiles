@@ -1,0 +1,6 @@
+# Stow ignore list for the `agents` package.
+#
+# skills/ holds the real skill folders. Stow with --no-folding would link
+# each file inside them, and Codex ignores a SKILL.md that is a symlink, so
+# .agents/skills/<name> are symlinks to these folders instead.
+^/skills

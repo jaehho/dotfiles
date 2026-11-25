@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "zotero": {
+      "command": "uvx",
+      "args": ["--from", "zotero-mcp-server[all]", "zotero-mcp"]
+    }
+  }
+}

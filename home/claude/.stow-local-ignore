@@ -35,4 +35,3 @@
 # Installed by the plugin system
 ^/\.claude/plugins
 ^/\.claude/commands
-^/\.claude/skills

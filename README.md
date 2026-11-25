@@ -60,24 +60,16 @@ wonlab, the home server, stows part of this repo so tmux, nvim, fish and Claude 
 ```sh
 git clone https://github.com/jaehho/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-stow --no-folding --ignore='btop\.conf' -d home -t ~ tmux nvim fish git theme claude wonlab
+stow --no-folding --ignore='btop\.conf' -d home -t ~ tmux nvim fish git theme agents claude wonlab
 ```
 
 On both machines, the first interactive fish of each day runs `dotfiles-pull` in the background: it fast-forwards, restows the machine's packages (wonlab's list and ignores are in `home/wonlab/.config/fish/conf.d/wonlab.fish`; the laptop's default is every package but `wonlab`), and runs `Lazy! restore` when the lockfile changed. If both machines committed since the last pull, the pull fails and every shell says so until `git pull --rebase` fixes it. Ubuntu has no `delta` or `bat` without sudo, so their release binaries are in `~/.local/bin`, with `fd` linking `fdfind`.
 
-## Claude
+## Agents (Claude Code, Codex, Antigravity)
 
-`home/claude/` stows settings, hooks, and `CLAUDE.md`. The package's
-ignore list leaves `~/.claude/skills` to the plugin system, so each
-skill in `home/claude/.claude/skills/` is linked by hand:
-
-```sh
-ln -s ~/dotfiles/home/claude/.claude/skills/<name> ~/.claude/skills/<name>
-```
+`home/agents/` stows the shared global instructions (`~/.agents/AGENTS.md`) and skills (`~/.agents/skills/`). `home/claude/`, `home/codex/`, and `home/antigravity/` link each tool's global instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.gemini/config/AGENTS.md`) and each skill (`~/.claude/skills/<name>`, `~/.gemini/config/skills/<name>`) back to `home/agents/skills/<name>`, as directory symlinks (Codex ignores a symlinked `SKILL.md`, so the real folders are stow-ignored), keeping per-tool settings, hooks, and MCP configs in their own packages. Machine-local/private notes stay untracked in `~/.agents/AGENTS.local.md`.
 
 Manage plugins and MCP servers in `~/.claude` with `/plugin` and `/mcp`.
-Provider keys for `claude-open` (`~/.config/{zai,mimo,openrouter}.env`)
-are never in the repo.
 
 ## Machine /etc tweaks
 

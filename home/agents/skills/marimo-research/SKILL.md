@@ -8,7 +8,7 @@ description: Rules for writing or editing marimo notebooks used for scientific o
 Notebooks are the lab record.
 Every number traces to code, a data file, and a stated choice.
 Project facts (layout, datasets, ids, thresholds, palette) belong to the
-project. Read its `CLAUDE.md` and `.claude/rules/` first. Where they differ
+project. Read its `AGENTS.md` / `CLAUDE.md` and `.claude/rules/` first. Where they differ
 from this skill, follow the project.
 
 ## A new question: explore, then build

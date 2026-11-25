@@ -75,21 +75,27 @@ local function collect()
       file = file,
       project = project,
       kind = kind,
-      rank = kind:find('CLAUDE') and 1 or kind == 'index' and 2 or 3,
+      rank = (kind:find('AGENTS') or kind:find('CLAUDE')) and 1 or kind == 'index' and 2 or 3,
       label = label,
       desc = desc,
       text = table.concat({ project, kind, label, desc }, ' '),
     }
   end
 
-  local global = vim.uv.fs_realpath(CLAUDE .. '/CLAUDE.md')
-  if global then
-    add(global, 'global', 'CLAUDE.md')
+  for _, g in ipairs {
+    { HOME .. '/.agents/AGENTS.md', 'AGENTS.md' },
+    { HOME .. '/.agents/AGENTS.local.md', 'AGENTS.local.md' },
+    { CLAUDE .. '/CLAUDE.md', 'CLAUDE.md' },
+  } do
+    local global = vim.uv.fs_realpath(g[1]) or (exists(g[1]) and g[1] or nil)
+    if global then
+      add(global, 'global', g[2])
+    end
   end
 
   for _, p in ipairs(project_paths()) do
     by_slug[slug(p)] = p
-    for _, rel in ipairs { 'CLAUDE.md', 'CLAUDE.local.md', '.claude/CLAUDE.md' } do
+    for _, rel in ipairs { 'AGENTS.md', 'AGENTS.local.md', 'CLAUDE.md', 'CLAUDE.local.md', '.claude/CLAUDE.md' } do
       local f = p .. '/' .. rel
       if exists(f) then
         add(f, short(p), rel)
