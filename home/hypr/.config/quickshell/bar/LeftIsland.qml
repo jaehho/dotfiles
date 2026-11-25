@@ -33,12 +33,6 @@ Island {
     // Numbered workspaces by id, then named ones, then the specials.
     readonly property var workspaces: Hyprland.workspaces.values.filter(w => w.monitor === leftIsland.monitor && w.name !== "special:claude").sort((a, b) => leftIsland.rank(a) - leftIsland.rank(b) || a.id - b.id)
 
-    // Diagnostic for the stale-workspaces-after-hotplug report: one line
-    // per re-evaluation, so the log shows whether the list re-ran after a
-    // move and which monitor object each side held. Remove once pinned.
-    onWorkspacesChanged: console.log(`left[${leftIsland.monitor?.name}#${leftIsland.monitor?.id}] workspaces: ${leftIsland.workspaces.map(w => w.name + "@" + w.monitor?.name).join(" ")} | all: ${Hyprland.workspaces.values.map(w => w.name + "@" + w.monitor?.name).join(" ")}`)
-    onMonitorChanged: console.log(`left monitor changed: ${leftIsland.monitor?.name}#${leftIsland.monitor?.id}`)
-
     function rank(workspace) {
         return workspace.name.startsWith("special:") ? 2 : workspace.id > 0 ? 0 : 1;
     }
