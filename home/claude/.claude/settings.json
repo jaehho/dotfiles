@@ -1,4 +1,5 @@
 {
+  "cleanupPeriodDays": 3650,
   "env": {
     "CLAUDE_CODE_NATIVE_CURSOR": "1",
     "PLAYWRIGHT_MCP_CONFIG": "/home/jaeho/.claude/playwright-mcp.json",
@@ -28,7 +29,7 @@
     "ask": [],
     "defaultMode": "bypassPermissions"
   },
-  "model": "opus",
+  "model": "sonnet",
   "skillOverrides": {
     "built-in-browser": "off",
     "chrome-browser": "off",
@@ -151,7 +152,6 @@
   "editorMode": "vim",
   "preferredNotifChannel": "notifications_disabled",
   "switchModelsOnFlag": false,
-  "cleanupPeriodDays": 3650,
   "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true,
   "autoMode": {
