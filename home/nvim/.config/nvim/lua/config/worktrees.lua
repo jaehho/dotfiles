@@ -1,6 +1,5 @@
--- Pick a git worktree of the current repository by its name (the
--- folder's name) and open it in a new tab whose directory is the
--- worktree.
+-- Pick a git worktree of the current repository by its branch and open
+-- it in a new tab whose directory is the worktree.
 local M = {}
 
 local function list_worktrees()
@@ -12,20 +11,27 @@ local function list_worktrees()
   for _, line in ipairs(lines) do
     local path = line:match('^worktree (.+)$')
     if path then
-      table.insert(worktrees, { path = path })
+      table.insert(worktrees, { path = path, branch = '(detached)' })
     elseif line == 'bare' then
       worktrees[#worktrees].bare = true
+    else
+      local branch = line:match('^branch refs/heads/(.+)$')
+      if branch then
+        worktrees[#worktrees].branch = branch
+      end
     end
   end
   return worktrees
 end
 
+-- One row per worktree, named for its branch (git allows a branch in
+-- one worktree at a time). The first worktree is the main checkout.
 function M.items()
   local items = {}
-  for _, worktree in ipairs(list_worktrees()) do
+  for i, worktree in ipairs(list_worktrees()) do
     if not worktree.bare then
       table.insert(items, {
-        text = vim.fn.fnamemodify(worktree.path, ':t'),
+        text = i == 1 and worktree.branch .. ' (main checkout)' or worktree.branch,
         root = worktree.path,
       })
     end
