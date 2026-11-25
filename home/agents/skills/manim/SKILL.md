@@ -1,6 +1,6 @@
 ---
 name: manim
-description: Writes and renders Manim Community Edition scenes (the `manim` package, not 3Blue1Brown's `manimlib`): still diagrams for notebooks and figures, animations, 3D scenes of data, and explainer videos. Use for any task that imports `manim`, defines a `Scene`, uses `MathTex` or `Tex`, or runs the `manim` command.
+description: Plans, writes, renders and reviews Manim Community Edition scenes (the `manim` package, not 3Blue1Brown's `manimlib`): still diagrams for notebooks and figures, animations, 3D scenes of data, and explainer videos. Use for any task that imports `manim`, defines a `Scene`, uses `MathTex` or `Tex`, runs the `manim` command, or changes a manim video after feedback.
 ---
 
 # Manim
@@ -34,9 +34,19 @@ The project pins the version. Check it (`uv run python -c "import manim; print(m
 
 - Run it through the project's environment: `uv run manim ...`, with `</dev/null`: given an unknown scene name in a file of several scenes, manim waits for a choice on stdin (with none, it exits 1).
 - The default quality is 1080p60. Iterate with `-ql` (854x480, 15 fps) and use `-qh` only for a final the user asked for.
-- `-s` writes the last frame as a PNG without rendering motion. `-s -n 0,K` writes the frame after animation K, counting each `play` and each `wait` from 0. `-n A,B` renders animations A to B only. `--dry_run` runs the scene and writes nothing, to catch errors.
+- `-s` writes the last frame as a PNG without rendering motion. `-s -n 0,K` writes the frame after animation K, counting each `play` and each `wait` from 0, across sections. `-n A,B` renders animations A to B only. `--dry_run` runs the scene and writes nothing, to catch errors.
 - Output goes to `media/` in the current directory (`--media_dir` moves it). Do not commit it.
 - If `Text` or `MathTex` fails, run `manim checkhealth`. `Text` needs Pango. `Tex` and `MathTex` need a LaTeX install and `dvisvgm`.
+
+## Workflow
+
+Get each picture right as a still, then the motion, then the timing: each pass costs more to render than the one before, so settle what it cannot change first. For an animation of more than a few steps, or feedback on a render, read [references/workflow.md](references/workflow.md): the steps, their commands, and how to review a video.
+
+1. Beats: what the viewer should know at the end, then the steps in order, each with its caption and its end frame. Ask the user what the beats depend on before writing code.
+2. Data apart from drawing: a slow step (fetching, joining, projecting) writes a file the scene reads; the scene only draws.
+3. Stills: render each beat's end frame (`-s -n 0,K`) and look at it.
+4. Motion: one `next_section` per beat, so finished beats can be skipped.
+5. Review the video itself (a contact sheet, frames mid-transition), then timing, then the final quality.
 
 ## Stills
 
@@ -54,7 +64,7 @@ For a diagram in a notebook or a figure, look for a helper the project already h
 - `Transform(a, b)` changes `a` into a copy of `b`; `b` is not in the scene. Use `ReplacementTransform` when you keep using `b`.
 - A scene that ends on `FadeOut` has a blank last frame, so `-s` shows nothing.
 - In a `ThreeDScene`, add captions and other overlays with `add_fixed_in_frame_mobjects`, or they move with the camera.
-- A scene that renders can still clip, overlap, flash or go blank. Render with `-ql` or `-s`, then open the image or frames of the video and look at them before you report the result.
+- A scene that renders can still clip, overlap, flash or go blank. Open the image or frames of the video and look at them before you report the result ([references/workflow.md](references/workflow.md#review) has the commands).
 
 ## Videos
 
