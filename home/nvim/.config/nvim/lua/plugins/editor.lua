@@ -49,23 +49,6 @@ return {
     },
   },
 
-  { -- Explorer preview (<a-p>) in the main window, not the 40-column sidebar.
-    -- The explorer source sets `preview = false`, which drops the sidebar
-    -- preset's `preview = "main"`; restore it and keep the preview hidden
-    -- until toggled.
-    'folke/snacks.nvim',
-    optional = true,
-    opts = {
-      picker = {
-        sources = {
-          explorer = {
-            layout = { preset = 'sidebar', preview = 'main', hidden = { 'preview' } },
-          },
-        },
-      },
-    },
-  },
-
   { -- Diff viewer with word-level highlights
     -- Maps avoid snacks git_diff's <leader>gd / <leader>gD
     'sindrets/diffview.nvim',
