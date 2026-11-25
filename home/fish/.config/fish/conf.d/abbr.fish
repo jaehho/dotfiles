@@ -32,4 +32,3 @@ abbr -a print lp
 
 # ── Claude ───────────────────────────────────────────────────────────────────
 abbr -a c 'claude'
-abbr -a co 'claude-open --dangerously-skip-permissions'
