@@ -686,6 +686,9 @@ function M.pick(opts)
 
   picker.pick {
     title = 'Zotero quotes',
+    -- The cold fetch yields nothing for ~2 s; snacks would hold the window
+    -- back for its default 5000 ms show_delay, so show it at once.
+    show_delay = 0,
     -- item.preview table, not the file previewer (avoids "Item has no `file`")
     preview = 'preview',
     open_only = opts.open_only or false,
