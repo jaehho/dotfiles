@@ -4,7 +4,7 @@ What the apps in `~/projects` share at their edges, so they work together and a 
 
 An app that departs from a rule here has a gap. Track it as an issue in that app and close the gaps one app at a time. When a rule changes, change it here and open an issue in each app it leaves behind.
 
-Owned elsewhere: live `make install`, `packaging/PKGBUILD`, root docs and issues are in `~/.claude/CLAUDE.md`. Desktop integration (hyprland.lua, the Quickshell bar, units) lives in dotfiles (`~/dotfiles/CLAUDE.md`). How to test a GUI without taking the screen is the `gui-testing` skill.
+Owned elsewhere: live `make install`, `packaging/PKGBUILD`, root docs and issues are in `~/.agents/AGENTS.md`. Desktop integration (hyprland.lua, the Quickshell bar, units) lives in dotfiles (`~/dotfiles/AGENTS.md`). How to test a GUI without taking the screen is the `gui-testing` skill.
 
 ## Names
 

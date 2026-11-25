@@ -1,0 +1,10 @@
+# attune
+
+README covers what this is and how to use it. This file is agent rules only.
+
+- **`results/` is personal health data** (the owner's color-vision measurements). Keep the repo private; before any public remote, move `results/` out. Do not paste results into other projects' issues.
+- The pages in `web/` are served at https://attune.jaehho.com from wonlab (home LAN and tailnet only; `src/attune/server.py` keeps each run as a file). Publish with `bash deploy/wonlab/deploy.sh`, which never touches saved runs. Pull runs with `scripts/pull_runs.sh` into `results/trivector/<at, UTC>Z-<mode>.json` and `results/pairs/<at, UTC>Z-<palette>.json`, one file per run, as stored. The old artifacts (T6TtRZTGsHfFmNMqWLz1TG, LyrWGph8EgY1AWpmMjWTom, Sy5DUeoePWSykTyQdgu6Lw) are retired: do not republish to them.
+- Once a topic branch passes the tests, ruff and your own headless check, merge it `--no-ff` with a real message, delete it, deploy with `bash deploy/wonlab/deploy.sh` and compare the live sha256 with local, all without asking. This lifts the global wait-for-confirmation rule here only; still ask before a push or before filing or editing an issue. Deploying needs the wonlab ssh master (wonlab skill).
+- The age norms in the test page are typed from Paramei & Oakley 2014, Table 2. Do not commit the paper; its license forbids reproduction.
+- App theme files for the desktop belong to dotfiles (stow packages, decisions in dotfiles issues). This repo owns the palette and the measurements; do not write app configs here.
+- **Local & headless testing:** preview `web/` with `uv run python -m attune.server --site web --data <scratch dir> --port 18770` (`/api/pairruns` and `/api/runs` persist runs to `<scratch dir>`). Drive headless via Chrome CDP (`gui-testing` skill), never Playwright MCP; to run a full pair test quickly, scale `window.setTimeout` by 1/10 and drive `startRun(session)` with `respond(...)` (top-level `run`, `opts`, `sessionRuns` are reachable from evaluate; staircase helpers `makeStair`, `stairLevel`, `stairStep`, `summarizeStair` can be called directly).
