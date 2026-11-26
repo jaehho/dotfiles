@@ -55,6 +55,9 @@ return {
     cmd = { 'DiffviewOpen', 'DiffviewFileHistory' },
     keys = {
       { '<leader>gv', '<cmd>DiffviewOpen<cr>', desc = '[G]it diff [V]iew' },
+      -- HEAD~1 against the working tree: the last commit plus anything
+      -- uncommitted
+      { '<leader>gV', '<cmd>DiffviewOpen HEAD~1<cr>', desc = '[G]it diff [V]iew since HEAD~1' },
       { '<leader>gH', '<cmd>DiffviewFileHistory %<cr>', desc = '[G]it file [H]istory' },
       { '<leader>gF', '<cmd>DiffviewFileHistory<cr>', desc = '[G]it repo history ([F]ull)' },
     },
