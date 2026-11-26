@@ -42,10 +42,10 @@ The project pins the version. Check it (`uv run python -c "import manim; print(m
 
 Get each picture right as a still, then the motion, then the timing: each pass costs more to render than the one before, so settle what it cannot change first. For an animation of more than a few steps, or feedback on a render, read [references/workflow.md](references/workflow.md): the steps, their commands, and how to review a video.
 
-1. Beats: what the viewer should know at the end, then the steps in order, each with its caption and its end frame. Ask the user what the beats depend on before writing code.
+1. Keyframes: what the viewer should know at the end, then the held states in order, each with its picture, its caption (or none, where the picture says it) and its notes. A transition is the motion into a keyframe; a shot is a run of keyframes under one camera framing. Ask the user what the keyframes depend on before writing code.
 2. Data apart from drawing: a slow step (fetching, joining, projecting) writes a file the scene reads; the scene only draws.
-3. Stills: render each beat's end frame (`-s -n 0,K`) and look at it.
-4. Motion: one `next_section` per beat, so finished beats can be skipped.
+3. Stills: render each keyframe (`-s -n 0,K`), look at it, and have the user review the set before any transition is rendered.
+4. Transitions: one `next_section` per keyframe, so finished ones can be skipped.
 5. Review the video itself (a contact sheet, frames mid-transition), then timing, then the final quality.
 
 ## Stills

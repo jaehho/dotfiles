@@ -19,10 +19,10 @@ Run every command from that folder.
 
 ## Plan first
 
-If the user gave a plan, or used plan mode, write it to `plan.md` and go on. Otherwise write the beats (the Beats step of `workflow.md`) in `plan.md`, adding:
+If the user gave a plan, or used plan mode, write it to `plan.md` and go on. Otherwise write the keyframes (the Keyframes step of `workflow.md`) in `plan.md`, adding:
 
 - The audience and what they already know.
-- The scenes, each a run of beats, with its length and any narration with the animation it syncs to.
+- The scenes, each a run of keyframes, with its length and any narration with the animation it syncs to.
 - The shared elements (objects that return across scenes) and the palette.
 
 ## Scenes and subtitles
@@ -32,7 +32,7 @@ If the user gave a plan, or used plan mode, write it to `plan.md` and go on. Oth
 
 ## Narration
 
-- Write the narration before the animation, one line per beat, and time the beats to it: make or record the audio first, then give each `play` an explicit `run_time` and each subtitle its line's `duration`.
+- Write the narration before the animation, one line per keyframe, and time the transitions to it: make or record the audio first, then give each `play` an explicit `run_time` and each subtitle its line's `duration`.
 - manim-voiceover syncs animations to marks in the narration (`<bookmark mark='A'/>`, `wait_until_bookmark`); it is untested with 0.22.
 - Or render silent section clips and lay them against the audio in a video editor.
 

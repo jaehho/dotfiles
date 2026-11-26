@@ -2,40 +2,41 @@
 
 Read this for an animation of more than a few steps, or for feedback on a render. SKILL.md has the rules that always apply.
 
-Contents: [Beats](#beats), [Data apart from drawing](#data-apart-from-drawing), [Stills](#stills), [Motion](#motion), [Review](#review), [Feedback](#feedback), [Timing and the final](#timing-and-the-final), [By hand](#by-hand).
+Contents: [Keyframes](#keyframes), [Data apart from drawing](#data-apart-from-drawing), [Stills](#stills), [Motion](#motion), [Review](#review), [Feedback](#feedback), [Timing and the final](#timing-and-the-final), [By hand](#by-hand).
 
 The order matters because each pass costs more to render than the one before: a still takes seconds, a low-quality video minutes, a final much longer. Settle what a later pass cannot change before you start it.
 
-## Beats
+## Keyframes
 
 - Write what the viewer should know at the end that they did not know at the start, in one sentence.
-- List the beats in order. A beat is one idea, so its caption needs no "and". For each, write its caption, what is on screen at its end, and what moves during it.
+- List the keyframes in order: the held states the viewer stops on. A keyframe is one idea, so its caption needs no "and"; give it no caption where the picture says it alone. For each, write its caption, what is on screen, the transition into it (what moves), and its notes (what is drawn, its source, and the detail too dense to show). A run of keyframes under one camera framing is a shot.
 - Write this where the project keeps plans: the scene module's docstring, or `plan.md` beside a multi-scene video.
-- Settle the order, the content and the framing of each beat with the user before writing code. A question costs less now than after a render.
+- Settle the order, the content and the framing of each keyframe with the user before writing code. A question costs less now than after a render.
 
 ## Data apart from drawing
 
-- A function or script gathers the data, puts it in scene units, and writes it to a file (parquet, npz). The scene reads only that file. A render then costs only drawing, and a still of one beat does not fetch or join anything again.
-- Keep the style in one place: colors, widths, font sizes, run times, and the camera pose of each beat, named for what it shows (`WHOLE_BRAIN`, `LOBULA`).
+- A function or script gathers the data, puts it in scene units, and writes it to a file (parquet, npz). The scene reads only that file. A render then costs only drawing, and a still of one keyframe does not fetch or join anything again.
+- Keep the style in one place: colors, widths, font sizes, run times, and the camera pose of each keyframe, named for what it shows (`WHOLE_BRAIN`, `LOBULA`).
 - In 3D, compute a pose from the bounds of what it should frame, as neuVid's `frameCamera(bound=...)` does, rather than tuning angles and zoom by eye. A pose then still fits when the data changes.
 
 ## Stills
 
-- Render the end frame of each beat and look at it: `uv run manim -ql -s -n 0,K -o beat_K scene.py Scene </dev/null`, where K is the index of the beat's last `play` or `wait`, counted from 0.
+- Render each keyframe and look at it: `uv run manim -ql -s -n 0,K -o key_K scene.py Scene </dev/null`, where K is the index of the last `play` or `wait` of its transition, counted from 0.
 - Fix layout here: overlap, clipping, text too small to read, an object off frame, a camera that frames the wrong thing.
 - Show the user the stills of a new animation before rendering its motion.
 
 ## Motion
 
-- Keep one scene and give each beat a section: `self.next_section("lobula-pins")`. `self.next_section("intro", skip_animations=True)` builds a finished beat's state without rendering it, so a render covers only the beats being worked on.
+- Keep one scene and give each keyframe's transition a section: `self.next_section("lobula-pins")`. `self.next_section("intro", skip_animations=True)` builds a finished keyframe's state without rendering it, so a render covers only the transitions being worked on.
+- When a player steps through keyframes, a transition holds no still time at its end: the player holds the keyframe until the next key press.
 - `--save_sections` also writes a clip per section; take each file's name from the `video` field of the sections JSON.
 - Render at `-ql` until the motion is right.
 
-### Stepping through beats
+### Stepping through keyframes
 
-- manim-slides plays one beat per key press: subclass `Slide` (`ThreeDSlide` in 3D), call `self.next_slide()` at the end of each beat (`loop=True` loops a beat until the key), render with `manim-slides render`, and show it with `manim-slides present` or `manim-slides convert --to html --one-file` (a reveal.js page).
-- Going back in manim-slides' HTML deck jumps to the previous beat's start; its presenter's `V` plays the reversed clip once at a fixed rate. For back as a sped-up reverse that speeds up with repeated presses, the lab's `lab.connectome.animate.write_player` makes a page from a deck's JSON.
-- A `Slide` fails under `-s`. Keep the beats in a mixin and render stills from a plain-scene twin whose `next_slide` does nothing.
+- manim-slides plays one transition per key press: subclass `Slide` (`ThreeDSlide` in 3D), call `self.next_slide()` at each keyframe (`loop=True` loops a transition until the key), render with `manim-slides render`, and show it with `manim-slides present` or `manim-slides convert --to html --one-file` (a reveal.js page).
+- Going back in manim-slides' HTML page jumps to the start of the previous transition; its presenter's `V` plays the reversed clip once at a fixed rate. For back as a sped-up reverse that speeds up with repeated presses, with a timeline, notes and stills, the lab's `lab.connectome.animate.write_player` makes a page from a storyboard's JSON; the user's app cel is to replace it.
+- A `Slide` fails under `-s`. Keep the scene in a mixin and render stills from a plain-scene twin whose `next_slide` does nothing.
 - Clips made elsewhere (Blender) become a deck by writing `slides/<Name>.json` by hand: each slide's `file` and its reversed `rev_file`, as a rendered deck's JSON has them.
 - To put manim text over a full-frame clip, render the manim layer transparent (`-t --format mov`) and lay it on with ffmpeg (`[0][1]overlay=format=auto`). manim-videos draws its clip over all manim content.
 
@@ -56,8 +57,8 @@ A video that renders can still clip, flash, freeze or go blank. Look at it befor
 
 ## Feedback
 
-- Map each note to the beat and the constant it touches, and say which before changing anything.
-- Change it, render only the beats it touches (skip the others, or `-n A,B`), and look at the same frames as before.
+- Map each note to the keyframe and the constant it touches, and say which before changing anything.
+- Change it, render only the keyframes and transitions it touches (skip the others, or `-n A,B`), and look at the same frames as before.
 - Show the user the new frames next to the old ones.
 
 ## Timing and the final
