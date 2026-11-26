@@ -1,0 +1,5 @@
+{
+  "name": "prompt-jump",
+  "version": "0.1.0",
+  "description": "ctrl+up / ctrl+down scroll the transcript to your previous / next prompt."
+}

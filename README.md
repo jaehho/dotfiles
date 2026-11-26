@@ -69,7 +69,7 @@ On both machines, the first interactive fish of each day runs `dotfiles-pull` in
 
 `home/agents/` stows the shared global instructions (`~/.agents/AGENTS.md`) and skills (`~/.agents/skills/`). `home/claude/`, `home/codex/`, and `home/antigravity/` link each tool's global instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.gemini/config/AGENTS.md`) and each skill (`~/.claude/skills/<name>`, `~/.gemini/config/skills/<name>`) back to `home/agents/skills/<name>`, as directory symlinks (Codex ignores a symlinked `SKILL.md`, so the real folders are stow-ignored), keeping per-tool settings, hooks, and MCP configs in their own packages. Machine-local/private notes stay untracked in `~/.agents/AGENTS.local.md`.
 
-Manage plugins and MCP servers in `~/.claude` with `/plugin` and `/mcp`.
+Manage plugins and MCP servers in `~/.claude` with `/plugin` and `/mcp`. Own Claude Code mods live in `home/claude/mods/<name>/`, linked from `home/claude/.claude/skills/<name>` so every session loads them. `prompt-jump` scrolls to the previous or next prompt with `ctrl+up` / `ctrl+down`.
 
 ## Machine /etc tweaks
 
