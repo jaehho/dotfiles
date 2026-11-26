@@ -57,6 +57,7 @@ A video that renders can still clip, flash, freeze or go blank. Look at it befor
 
 ## Feedback
 
+- When the user reviews in cel, read the comments with `cel comments FOLDER --json`: each has `anchor.keyframe` (the id), `anchor.point` (`[x, y]` from 0 to 1, from the top-left) or `anchor.quote` (a passage of the notes), with its replies and whether it is resolved. Answer in the thread with `cel reply FOLDER ID "…" --author claude`, and `cel resolve FOLDER ID` once the change is rendered; the open window shows both at once and reloads on a re-render.
 - Map each note to the keyframe and the constant it touches, and say which before changing anything.
 - Change it, render only the keyframes and transitions it touches (skip the others, or `-n A,B`), and look at the same frames as before.
 - Show the user the new frames next to the old ones.
