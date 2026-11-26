@@ -35,6 +35,12 @@ A new question starts as an exploration, not a notebook.
    rendered output, and wait for the user before the next, unless they
    ask for the whole notebook. Restructure an existing notebook the same
    way. A function moves into the package when a notebook cell needs it.
+   Before each section, and before any edit to a notebook, read what
+   the user changed in it since your last commit (`git diff`) and search
+   it for their `@claude` comments: commit their changes alone first,
+   address every comment, take each one out once its point is in the
+   text, and say in the reply how each was addressed, answering a
+   question there as well.
    The parts that interpret the results (discussion, limitations, open
    questions) are offered in the reply, drafted from the rendered
    output, and go into the notebook only when the user takes them.
@@ -198,6 +204,10 @@ before you write or restructure it.
   A word with many senses across contexts (column, layer, depth) gets
   the specific one meant where it first appears, or a more specific
   word replaces it.
+  Name the specific thing ("the left lobula", "the eye map's columns"),
+  never a relative or a shorthand the reader has to resolve ("the other
+  lobula", "the grid"); a thing defined in another notebook or section
+  is named and linked there.
   Within a notebook keep one word per thing and one thing per word, across
   prose, code names, column names, and figure labels.
   Before coining a name, check the terms already defined.
