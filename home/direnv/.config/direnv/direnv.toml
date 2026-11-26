@@ -1,0 +1,4 @@
+# The lab and its worktrees load their .envrc without `direnv allow`.
+# Only add trees whose .envrc you trust: whatever it holds runs on cd.
+[whitelist]
+prefix = ["~/projects/lab/", "~/projects/lab.wt/"]
