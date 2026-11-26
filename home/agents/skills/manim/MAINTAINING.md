@@ -47,3 +47,7 @@ Not verified: `interactive_embed()` with `--renderer=opengl -l` (read in the sou
 ## Tested (2026-11-25)
 
 One request run by a fresh Opus 5.5 agent with the skill ("a three-step animation of a point rotated by 90 degrees, at low quality, and be confident it looks right"). It read SKILL.md and workflow.md, rendered a still per beat with `-s -n 0,K`, fixed four layout faults there, and caught captions that crossfaded unreadably only through the mid-transition frames (the one-a-second sheet missed them). It skipped asking about beats and showing stills, as the request gave the beats and asked for a finished result.
+
+## Blender (2026-11-26)
+
+`references/blender.md` comes from the lab's lobula columns movie, where the user chose Blender over manim's point clouds after seeing both versions of the opening. Its gotchas were each hit and fixed there (Blender 5.3, EEVEE, the distro package); the timing is from a 6 GB RTX 4050 laptop.

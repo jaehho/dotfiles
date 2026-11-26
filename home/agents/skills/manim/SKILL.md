@@ -68,6 +68,10 @@ For a diagram in a notebook or a figure, look for a helper the project already h
 - Cairo writes `PMobject` points without alpha blending: a faint point is its colour mixed toward the background, and a cloud fading by alpha covers what lies behind it. Fade a cloud in by revealing a growing random subset of its points.
 - A scene that renders can still clip, overlap, flash or go blank. Open the image or frames of the video and look at them before you report the result ([references/workflow.md](references/workflow.md#review) has the commands).
 
+## 3D data
+
+For meshes, point clouds or neurons in 3D, render the 3D part in Blender and only the captions and labels in manim: read [references/blender.md](references/blender.md).
+
 ## Videos
 
 For several scenes, subtitles, narration, or a stitched `final.mp4`, read [references/video.md](references/video.md).
