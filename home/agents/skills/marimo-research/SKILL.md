@@ -26,9 +26,11 @@ A new question starts as an exploration, not a notebook.
    every choice (data, filters, cutoffs, definitions, methods) with the
    alternatives tried and what each changes, then the dead ends, so the
    build revisits each choice instead of inheriting the first cut.
-   The user reads the report before any notebook exists. The folder is
-   merged when they say so and is not edited after: a later look at the
-   question is a new folder.
+   The folder stays unmerged while its notebook is built, since the
+   build is its review: a bug the build finds is fixed in the folder,
+   on its own branch, and the report says what changed. It merges just
+   before its notebook, or alone when the user ends it without one, and
+   is not edited after: a later look at the question is a new folder.
 3. Build the notebook a section at a time: write one section, show its
    rendered output, and wait for the user before the next, unless they
    ask for the whole notebook. Restructure an existing notebook the same
