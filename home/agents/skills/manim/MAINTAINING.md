@@ -35,6 +35,8 @@ Left out, because they are wrong for 0.22 or restate the docs: "`Text` is not a 
 - `scene.renderer.file_writer.final_file_path` is the PNG after a still render under `tempconfig`.
 - `Text(width=2)` scales one line to width 2 (no wrap).
 - The ffmpeg contact sheet (`tile`, `sheet_%02d.png` for several) and `freezedetect` commands run as written.
+- 2026-11-26, from the lab's lobula columns opening test: the doubled `frame_center` (a standalone `ThreeDCamera` matched the scene's own projection only with the world shifted; refresh it with `reset_rotation_matrix()` after setting angles), unblended `PMobject` colours (`Camera.display_point_cloud` writes RGBA into the pixel array), `-s` failing on a `ThreeDSlide`, a hand-written deck JSON converting and stepping in headless Chrome, and manim-videos covering manim text placed over its clip.
+- manim-slides 5.7.0 fails on 0.22 (`ManimConfig has no attribute write_to_movie`); the lab pins the branch of jeertmans/manim-slides PR #713 (commit 3b31cde) until a release has it. Recheck then.
 
 Not verified: `interactive_embed()` with `--renderer=opengl -l` (read in the source only; it needs a window), Manim Sideview and manim-voiceover with 0.22, and the reading-time figure (150 words a minute, from logan-gatlin).
 

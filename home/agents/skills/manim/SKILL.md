@@ -64,6 +64,8 @@ For a diagram in a notebook or a figure, look for a helper the project already h
 - `Transform(a, b)` changes `a` into a copy of `b`; `b` is not in the scene. Use `ReplacementTransform` when you keep using `b`.
 - A scene that ends on `FadeOut` has a blank last frame, so `-s` shows nothing.
 - In a `ThreeDScene`, add captions and other overlays with `add_fixed_in_frame_mobjects`, or they move with the camera.
+- In a `ThreeDScene` (Cairo), keep `frame_center` at the origin and move the world instead: a moved `frame_center` is applied twice and the scene slides off the frame. Set `focal_distance` to the camera's distance from what it frames; the default, 20 units, flings away anything larger.
+- Cairo writes `PMobject` points without alpha blending: a faint point is its colour mixed toward the background, and a cloud fading by alpha covers what lies behind it. Fade a cloud in by revealing a growing random subset of its points.
 - A scene that renders can still clip, overlap, flash or go blank. Open the image or frames of the video and look at them before you report the result ([references/workflow.md](references/workflow.md#review) has the commands).
 
 ## Videos
