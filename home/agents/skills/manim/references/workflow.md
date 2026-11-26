@@ -34,6 +34,7 @@ The order matters because each pass costs more to render than the one before: a 
 ### Stepping through beats
 
 - manim-slides plays one beat per key press: subclass `Slide` (`ThreeDSlide` in 3D), call `self.next_slide()` at the end of each beat (`loop=True` loops a beat until the key), render with `manim-slides render`, and show it with `manim-slides present` or `manim-slides convert --to html --one-file` (a reveal.js page).
+- Going back in manim-slides' HTML deck jumps to the previous beat's start; its presenter's `V` plays the reversed clip once at a fixed rate. For back as a sped-up reverse that speeds up with repeated presses, the lab's `lab.connectome.animate.write_player` makes a page from a deck's JSON.
 - A `Slide` fails under `-s`. Keep the beats in a mixin and render stills from a plain-scene twin whose `next_slide` does nothing.
 - Clips made elsewhere (Blender) become a deck by writing `slides/<Name>.json` by hand: each slide's `file` and its reversed `rev_file`, as a rendered deck's JSON has them.
 - To put manim text over a full-frame clip, render the manim layer transparent (`-t --format mov`) and lay it on with ffmpeg (`[0][1]overlay=format=auto`). manim-videos draws its clip over all manim content.
