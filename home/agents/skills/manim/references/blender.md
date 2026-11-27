@@ -21,6 +21,12 @@ Read this when a scene shows 3D data (meshes, point clouds, neurons) that manim'
 - A line that draws on: a curve with `bevel_factor_mapping_end = "SPLINE"` and keyed `bevel_factor_end`. A line that bends: a shape key keyed from 0 to 1.
 - A per-point colour on many balls: one mesh of icosahedra with a point-domain colour attribute read by an Attribute node.
 
+## Camera
+
+- Keep the world's up (dorsal, in anatomy) vertical while the camera moves, and do any roll in place before or after the move: a transition that orbits, pans, zooms and rolls at once disorients. Prefer framings that need little roll from a dorsal-up view.
+- Orbit about the vertical (a turntable), not about an oblique axis, which tumbles the up direction.
+- A still does not show 3D shape: give a keyframe that introduces a shape (neuropils, a cell) an orbit in its transition, a full turn when it should end where it began.
+
 ## Review
 
 - Render stills of chosen frames first (each keyframe, and mid-transition), with the overlay's matching frame laid on (`trim=start_frame=n:end_frame=n+1`), and look at them before rendering the whole movie.
