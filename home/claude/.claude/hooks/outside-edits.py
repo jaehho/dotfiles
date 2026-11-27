@@ -20,7 +20,9 @@ One script, by event:
 - PostToolUse on Edit, Write, MultiEdit, NotebookEdit and Bash: add
   the repos the tool touched to the session's list: the edited
   file's, or those of the absolute paths under $HOME in the Bash
-  command. The session's working directory is always on it.
+  command. The session's working directory is always on it. A
+  subagent's call (its input has ``agent_id``) also snapshots those
+  repos again, so its edits count as Claude's work.
 
 Informs only: it exits 0 and never blocks. With no snapshot yet (a
 session's first prompt), the uncommitted files of the working
@@ -276,16 +278,34 @@ def add_root(state: dict, folder: Path | None) -> None:
         roots.append(root)
 
 
-def track(state: dict, payload: dict) -> None:
-    """Add the repos a tool call touched."""
+def touched_roots(state: dict, payload: dict) -> list[str]:
+    """Add the repos a tool call touched to the session's list, and
+    give them."""
     tool_input = payload.get("tool_input") or {}
     if payload.get("tool_name") == "Bash":
-        for path in paths_in_command(tool_input.get("command") or ""):
-            add_root(state, nearest_folder(path))
-        return
-    edited = tool_input.get("file_path") or tool_input.get("notebook_path")
-    if edited:
-        add_root(state, nearest_folder(Path(edited)))
+        folders = [
+            nearest_folder(path)
+            for path in paths_in_command(tool_input.get("command") or "")
+        ]
+    else:
+        edited = tool_input.get("file_path") or tool_input.get(
+            "notebook_path"
+        )
+        folders = [nearest_folder(Path(edited))] if edited else []
+    for folder in folders:
+        add_root(state, folder)
+    known = state.get("folder_roots", {})
+    return sorted(
+        {known.get(str(f), "") for f in folders if f is not None} - {""}
+    )
+
+
+def track(state: dict, payload: dict) -> None:
+    """Add the repos a tool call touched; after a subagent's call,
+    snapshot them again so its edits are not reported."""
+    roots = touched_roots(state, payload)
+    if payload.get("agent_id") and "snapshot" in state:
+        state["snapshot"].update(snapshot(roots))
 
 
 def compare(state: dict, now: dict) -> tuple[dict[str, list[str]], bool]:
