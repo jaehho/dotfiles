@@ -53,6 +53,8 @@ MAX_LISTED = 20
 MAX_COMMENTS = 30
 MAX_COMMENT_CHARS = 200
 MARKER = "@claude"
+# The marker as a word: not "context7@claude-plugins-official".
+MARKER_WORD = re.compile(r"(?<![\w.-])@claude(?![\w-])")
 STATE_DAYS = 14
 TRACKED_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"}
 QUESTION_TOOL = "AskUserQuestion"
@@ -193,7 +195,7 @@ def marker_lines(root: str, paths: list[str]) -> list[str]:
             continue
         lines = data.decode(errors="replace").splitlines()
         for number, line in enumerate(lines, start=1):
-            if MARKER in line:
+            if MARKER_WORD.search(line):
                 text = line.strip()[:MAX_COMMENT_CHARS]
                 found.append(f"{path}:{number}: {text}")
     return found
