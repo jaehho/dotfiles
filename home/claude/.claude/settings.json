@@ -29,7 +29,7 @@
     "ask": [],
     "defaultMode": "bypassPermissions"
   },
-  "model": "sonnet",
+  "model": "opus",
   "skillOverrides": {
     "built-in-browser": "off",
     "chrome-browser": "off",
@@ -153,6 +153,7 @@
   "preferredNotifChannel": "notifications_disabled",
   "switchModelsOnFlag": false,
   "remoteControlAtStartup": false,
+  "crossSessionInbound": "accept",
   "agentPushNotifEnabled": true,
   "autoMode": {
     "soft_deny": [
