@@ -67,6 +67,21 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/notify.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/outside-edits.py"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/outside-edits.py"
           }
         ]
       }
@@ -91,6 +106,15 @@
             "command": "~/.claude/hooks/playwright-guard.py"
           }
         ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/outside-edits.py"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -104,6 +128,15 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/ruff-check.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/outside-edits.py"
           }
         ]
       }
